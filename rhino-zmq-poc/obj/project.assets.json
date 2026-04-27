@@ -1,0 +1,2806 @@
+{
+  "version": 3,
+  "targets": {
+    "net7.0": {
+      "AsyncIO/0.1.69": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.0/AsyncIO.dll": {
+            "related": ".pdb"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/AsyncIO.dll": {
+            "related": ".pdb"
+          }
+        }
+      },
+      "Grasshopper/8.0.23304.9001": {
+        "type": "package",
+        "dependencies": {
+          "RhinoCommon": "[8.0.23304.9001]"
+        },
+        "compile": {
+          "lib/net48/GH_IO.dll": {
+            "related": ".xml"
+          },
+          "lib/net48/Grasshopper.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net48/_._": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "build/net48/Grasshopper.targets": {}
+        }
+      },
+      "Microsoft.Bcl.AsyncInterfaces/5.0.0": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.1/Microsoft.Bcl.AsyncInterfaces.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.1/Microsoft.Bcl.AsyncInterfaces.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "Microsoft.Extensions.ObjectPool/5.0.10": {
+        "type": "package",
+        "compile": {
+          "lib/net5.0/Microsoft.Extensions.ObjectPool.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net5.0/Microsoft.Extensions.ObjectPool.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "Microsoft.NETCore.Platforms/5.0.0": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard1.0/_._": {}
+        },
+        "runtime": {
+          "lib/netstandard1.0/_._": {}
+        }
+      },
+      "Microsoft.NETFramework.ReferenceAssemblies.net48/1.0.3": {
+        "type": "package",
+        "build": {
+          "build/_._": {}
+        }
+      },
+      "Microsoft.Win32.SystemEvents/7.0.0": {
+        "type": "package",
+        "compile": {
+          "lib/net7.0/Microsoft.Win32.SystemEvents.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net7.0/Microsoft.Win32.SystemEvents.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "buildTransitive/net6.0/_._": {}
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/net7.0/Microsoft.Win32.SystemEvents.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      },
+      "NaCl.Net/0.1.13": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.1/NaCl.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.1/NaCl.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "NetMQ/4.0.1.9": {
+        "type": "package",
+        "dependencies": {
+          "AsyncIO": "0.1.69",
+          "NaCl.Net": "0.1.13",
+          "System.ServiceModel.Primitives": "4.9.0",
+          "System.ValueTuple": "4.5.0"
+        },
+        "compile": {
+          "lib/netstandard2.1/NetMQ.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.1/NetMQ.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "RhinoCommon/8.0.23304.9001": {
+        "type": "package",
+        "compile": {
+          "lib/net48/Ed.Eto.dll": {
+            "related": ".xml"
+          },
+          "lib/net48/Eto.dll": {
+            "related": ".xml"
+          },
+          "lib/net48/Rhino.UI.dll": {},
+          "lib/net48/RhinoCommon.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net48/_._": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "build/net48/RhinoCommon.targets": {}
+        }
+      },
+      "roslyn-language-server.linux-arm64/5.8.0-1.26252.1": {
+        "type": "package"
+      },
+      "System.Drawing.Common/7.0.0": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.Win32.SystemEvents": "7.0.0"
+        },
+        "compile": {
+          "lib/net7.0/System.Drawing.Common.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net7.0/_._": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "buildTransitive/net6.0/_._": {}
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/net7.0/_._": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      },
+      "System.Formats.Asn1/5.0.0": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.0/_._": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/System.Formats.Asn1.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "System.Numerics.Vectors/4.5.0": {
+        "type": "package",
+        "compile": {
+          "ref/netcoreapp2.0/_._": {}
+        },
+        "runtime": {
+          "lib/netcoreapp2.0/_._": {}
+        }
+      },
+      "System.Private.ServiceModel/4.9.0": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.Bcl.AsyncInterfaces": "5.0.0",
+          "Microsoft.Extensions.ObjectPool": "5.0.10",
+          "System.Numerics.Vectors": "4.5.0",
+          "System.Reflection.DispatchProxy": "4.7.1",
+          "System.Security.Cryptography.Xml": "5.0.0",
+          "System.Security.Principal.Windows": "5.0.0"
+        },
+        "compile": {
+          "ref/netstandard2.0/_._": {}
+        },
+        "runtime": {
+          "lib/netstandard2.0/System.Private.ServiceModel.dll": {
+            "related": ".pdb"
+          }
+        },
+        "resource": {
+          "lib/netstandard2.0/cs/System.Private.ServiceModel.resources.dll": {
+            "locale": "cs"
+          },
+          "lib/netstandard2.0/de/System.Private.ServiceModel.resources.dll": {
+            "locale": "de"
+          },
+          "lib/netstandard2.0/es/System.Private.ServiceModel.resources.dll": {
+            "locale": "es"
+          },
+          "lib/netstandard2.0/fr/System.Private.ServiceModel.resources.dll": {
+            "locale": "fr"
+          },
+          "lib/netstandard2.0/it/System.Private.ServiceModel.resources.dll": {
+            "locale": "it"
+          },
+          "lib/netstandard2.0/ja/System.Private.ServiceModel.resources.dll": {
+            "locale": "ja"
+          },
+          "lib/netstandard2.0/ko/System.Private.ServiceModel.resources.dll": {
+            "locale": "ko"
+          },
+          "lib/netstandard2.0/pl/System.Private.ServiceModel.resources.dll": {
+            "locale": "pl"
+          },
+          "lib/netstandard2.0/pt-BR/System.Private.ServiceModel.resources.dll": {
+            "locale": "pt-BR"
+          },
+          "lib/netstandard2.0/ru/System.Private.ServiceModel.resources.dll": {
+            "locale": "ru"
+          },
+          "lib/netstandard2.0/tr/System.Private.ServiceModel.resources.dll": {
+            "locale": "tr"
+          },
+          "lib/netstandard2.0/zh-Hans/System.Private.ServiceModel.resources.dll": {
+            "locale": "zh-Hans"
+          },
+          "lib/netstandard2.0/zh-Hant/System.Private.ServiceModel.resources.dll": {
+            "locale": "zh-Hant"
+          }
+        }
+      },
+      "System.Reflection.DispatchProxy/4.7.1": {
+        "type": "package",
+        "compile": {
+          "ref/netstandard2.0/System.Reflection.DispatchProxy.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp2.0/System.Reflection.DispatchProxy.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "System.Security.AccessControl/5.0.0": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.NETCore.Platforms": "5.0.0",
+          "System.Security.Principal.Windows": "5.0.0"
+        },
+        "compile": {
+          "ref/netstandard2.0/System.Security.AccessControl.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/System.Security.AccessControl.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/netcoreapp2.0/System.Security.AccessControl.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      },
+      "System.Security.Cryptography.Cng/5.0.0": {
+        "type": "package",
+        "dependencies": {
+          "System.Formats.Asn1": "5.0.0"
+        },
+        "compile": {
+          "ref/netcoreapp3.0/_._": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp3.0/System.Security.Cryptography.Cng.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/netcoreapp3.0/System.Security.Cryptography.Cng.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      },
+      "System.Security.Cryptography.Pkcs/5.0.0": {
+        "type": "package",
+        "dependencies": {
+          "System.Formats.Asn1": "5.0.0",
+          "System.Security.Cryptography.Cng": "5.0.0"
+        },
+        "compile": {
+          "ref/netcoreapp3.0/_._": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp3.0/System.Security.Cryptography.Pkcs.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/netcoreapp3.0/System.Security.Cryptography.Pkcs.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      },
+      "System.Security.Cryptography.Xml/5.0.0": {
+        "type": "package",
+        "dependencies": {
+          "System.Security.Cryptography.Pkcs": "5.0.0",
+          "System.Security.Permissions": "5.0.0"
+        },
+        "compile": {
+          "ref/netstandard2.0/System.Security.Cryptography.Xml.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/System.Security.Cryptography.Xml.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "System.Security.Permissions/5.0.0": {
+        "type": "package",
+        "dependencies": {
+          "System.Security.AccessControl": "5.0.0",
+          "System.Windows.Extensions": "5.0.0"
+        },
+        "compile": {
+          "ref/net5.0/System.Security.Permissions.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net5.0/System.Security.Permissions.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "System.Security.Principal.Windows/5.0.0": {
+        "type": "package",
+        "compile": {
+          "ref/netcoreapp3.0/System.Security.Principal.Windows.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/System.Security.Principal.Windows.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/unix/lib/netcoreapp2.1/System.Security.Principal.Windows.dll": {
+            "assetType": "runtime",
+            "rid": "unix"
+          },
+          "runtimes/win/lib/netcoreapp2.1/System.Security.Principal.Windows.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      },
+      "System.ServiceModel.Primitives/4.9.0": {
+        "type": "package",
+        "dependencies": {
+          "System.Private.ServiceModel": "4.9.0"
+        },
+        "compile": {
+          "ref/net6.0/System.ServiceModel.Primitives.dll": {},
+          "ref/net6.0/System.ServiceModel.dll": {}
+        },
+        "runtime": {
+          "lib/net6.0/System.ServiceModel.Primitives.dll": {
+            "related": ".pdb"
+          },
+          "lib/net6.0/System.ServiceModel.dll": {
+            "related": ".Primitives.pdb"
+          }
+        }
+      },
+      "System.ValueTuple/4.5.0": {
+        "type": "package",
+        "compile": {
+          "ref/netcoreapp2.0/_._": {}
+        },
+        "runtime": {
+          "lib/netcoreapp2.0/_._": {}
+        }
+      },
+      "System.Windows.Extensions/5.0.0": {
+        "type": "package",
+        "dependencies": {
+          "System.Drawing.Common": "5.0.0"
+        },
+        "compile": {
+          "ref/netcoreapp3.0/System.Windows.Extensions.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp3.0/System.Windows.Extensions.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/netcoreapp3.0/System.Windows.Extensions.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      }
+    },
+    "net7.0-windows7.0": {
+      "AsyncIO/0.1.69": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.0/AsyncIO.dll": {
+            "related": ".pdb"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/AsyncIO.dll": {
+            "related": ".pdb"
+          }
+        }
+      },
+      "Grasshopper/8.0.23304.9001": {
+        "type": "package",
+        "dependencies": {
+          "RhinoCommon": "[8.0.23304.9001]"
+        },
+        "compile": {
+          "lib/net48/GH_IO.dll": {
+            "related": ".xml"
+          },
+          "lib/net48/Grasshopper.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net48/_._": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "build/net48/Grasshopper.targets": {}
+        }
+      },
+      "Microsoft.Bcl.AsyncInterfaces/5.0.0": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.1/Microsoft.Bcl.AsyncInterfaces.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.1/Microsoft.Bcl.AsyncInterfaces.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "Microsoft.Extensions.ObjectPool/5.0.10": {
+        "type": "package",
+        "compile": {
+          "lib/net5.0/Microsoft.Extensions.ObjectPool.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net5.0/Microsoft.Extensions.ObjectPool.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "Microsoft.NETCore.Platforms/5.0.0": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard1.0/_._": {}
+        },
+        "runtime": {
+          "lib/netstandard1.0/_._": {}
+        }
+      },
+      "Microsoft.Win32.SystemEvents/5.0.0": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.NETCore.Platforms": "5.0.0"
+        },
+        "compile": {
+          "ref/netstandard2.0/_._": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/Microsoft.Win32.SystemEvents.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/netcoreapp3.0/Microsoft.Win32.SystemEvents.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      },
+      "NaCl.Net/0.1.13": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.1/NaCl.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.1/NaCl.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "NetMQ/4.0.1.9": {
+        "type": "package",
+        "dependencies": {
+          "AsyncIO": "0.1.69",
+          "NaCl.Net": "0.1.13",
+          "System.ServiceModel.Primitives": "4.9.0",
+          "System.ValueTuple": "4.5.0"
+        },
+        "compile": {
+          "lib/netstandard2.1/NetMQ.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.1/NetMQ.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "RhinoCommon/8.0.23304.9001": {
+        "type": "package",
+        "compile": {
+          "lib/net48/Ed.Eto.dll": {
+            "related": ".xml"
+          },
+          "lib/net48/Eto.dll": {
+            "related": ".xml"
+          },
+          "lib/net48/Rhino.UI.dll": {},
+          "lib/net48/RhinoCommon.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net48/_._": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "build/net48/RhinoCommon.targets": {}
+        }
+      },
+      "roslyn-language-server.linux-arm64/5.8.0-1.26252.1": {
+        "type": "package"
+      },
+      "System.Drawing.Common/5.0.0": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.Win32.SystemEvents": "5.0.0"
+        },
+        "compile": {
+          "ref/netcoreapp3.0/System.Drawing.Common.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp3.0/System.Drawing.Common.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/unix/lib/netcoreapp3.0/System.Drawing.Common.dll": {
+            "assetType": "runtime",
+            "rid": "unix"
+          },
+          "runtimes/win/lib/netcoreapp3.0/System.Drawing.Common.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      },
+      "System.Formats.Asn1/5.0.0": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.0/_._": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/System.Formats.Asn1.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "System.Numerics.Vectors/4.5.0": {
+        "type": "package",
+        "compile": {
+          "ref/netcoreapp2.0/_._": {}
+        },
+        "runtime": {
+          "lib/netcoreapp2.0/_._": {}
+        }
+      },
+      "System.Private.ServiceModel/4.9.0": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.Bcl.AsyncInterfaces": "5.0.0",
+          "Microsoft.Extensions.ObjectPool": "5.0.10",
+          "System.Numerics.Vectors": "4.5.0",
+          "System.Reflection.DispatchProxy": "4.7.1",
+          "System.Security.Cryptography.Xml": "5.0.0",
+          "System.Security.Principal.Windows": "5.0.0"
+        },
+        "compile": {
+          "ref/netstandard2.0/_._": {}
+        },
+        "runtime": {
+          "lib/netstandard2.0/System.Private.ServiceModel.dll": {
+            "related": ".pdb"
+          }
+        },
+        "resource": {
+          "lib/netstandard2.0/cs/System.Private.ServiceModel.resources.dll": {
+            "locale": "cs"
+          },
+          "lib/netstandard2.0/de/System.Private.ServiceModel.resources.dll": {
+            "locale": "de"
+          },
+          "lib/netstandard2.0/es/System.Private.ServiceModel.resources.dll": {
+            "locale": "es"
+          },
+          "lib/netstandard2.0/fr/System.Private.ServiceModel.resources.dll": {
+            "locale": "fr"
+          },
+          "lib/netstandard2.0/it/System.Private.ServiceModel.resources.dll": {
+            "locale": "it"
+          },
+          "lib/netstandard2.0/ja/System.Private.ServiceModel.resources.dll": {
+            "locale": "ja"
+          },
+          "lib/netstandard2.0/ko/System.Private.ServiceModel.resources.dll": {
+            "locale": "ko"
+          },
+          "lib/netstandard2.0/pl/System.Private.ServiceModel.resources.dll": {
+            "locale": "pl"
+          },
+          "lib/netstandard2.0/pt-BR/System.Private.ServiceModel.resources.dll": {
+            "locale": "pt-BR"
+          },
+          "lib/netstandard2.0/ru/System.Private.ServiceModel.resources.dll": {
+            "locale": "ru"
+          },
+          "lib/netstandard2.0/tr/System.Private.ServiceModel.resources.dll": {
+            "locale": "tr"
+          },
+          "lib/netstandard2.0/zh-Hans/System.Private.ServiceModel.resources.dll": {
+            "locale": "zh-Hans"
+          },
+          "lib/netstandard2.0/zh-Hant/System.Private.ServiceModel.resources.dll": {
+            "locale": "zh-Hant"
+          }
+        }
+      },
+      "System.Reflection.DispatchProxy/4.7.1": {
+        "type": "package",
+        "compile": {
+          "ref/netstandard2.0/System.Reflection.DispatchProxy.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp2.0/System.Reflection.DispatchProxy.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "System.Security.AccessControl/5.0.0": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.NETCore.Platforms": "5.0.0",
+          "System.Security.Principal.Windows": "5.0.0"
+        },
+        "compile": {
+          "ref/netstandard2.0/System.Security.AccessControl.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/System.Security.AccessControl.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/netcoreapp2.0/System.Security.AccessControl.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      },
+      "System.Security.Cryptography.Cng/5.0.0": {
+        "type": "package",
+        "dependencies": {
+          "System.Formats.Asn1": "5.0.0"
+        },
+        "compile": {
+          "ref/netcoreapp3.0/_._": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp3.0/System.Security.Cryptography.Cng.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/netcoreapp3.0/System.Security.Cryptography.Cng.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      },
+      "System.Security.Cryptography.Pkcs/5.0.0": {
+        "type": "package",
+        "dependencies": {
+          "System.Formats.Asn1": "5.0.0",
+          "System.Security.Cryptography.Cng": "5.0.0"
+        },
+        "compile": {
+          "ref/netcoreapp3.0/_._": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp3.0/System.Security.Cryptography.Pkcs.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/netcoreapp3.0/System.Security.Cryptography.Pkcs.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      },
+      "System.Security.Cryptography.Xml/5.0.0": {
+        "type": "package",
+        "dependencies": {
+          "System.Security.Cryptography.Pkcs": "5.0.0",
+          "System.Security.Permissions": "5.0.0"
+        },
+        "compile": {
+          "ref/netstandard2.0/System.Security.Cryptography.Xml.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/System.Security.Cryptography.Xml.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "System.Security.Permissions/5.0.0": {
+        "type": "package",
+        "dependencies": {
+          "System.Security.AccessControl": "5.0.0",
+          "System.Windows.Extensions": "5.0.0"
+        },
+        "compile": {
+          "ref/net5.0/System.Security.Permissions.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net5.0/System.Security.Permissions.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "System.Security.Principal.Windows/5.0.0": {
+        "type": "package",
+        "compile": {
+          "ref/netcoreapp3.0/System.Security.Principal.Windows.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/System.Security.Principal.Windows.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/unix/lib/netcoreapp2.1/System.Security.Principal.Windows.dll": {
+            "assetType": "runtime",
+            "rid": "unix"
+          },
+          "runtimes/win/lib/netcoreapp2.1/System.Security.Principal.Windows.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      },
+      "System.ServiceModel.Primitives/4.9.0": {
+        "type": "package",
+        "dependencies": {
+          "System.Private.ServiceModel": "4.9.0"
+        },
+        "compile": {
+          "ref/net6.0/System.ServiceModel.Primitives.dll": {},
+          "ref/net6.0/System.ServiceModel.dll": {}
+        },
+        "runtime": {
+          "lib/net6.0/System.ServiceModel.Primitives.dll": {
+            "related": ".pdb"
+          },
+          "lib/net6.0/System.ServiceModel.dll": {
+            "related": ".Primitives.pdb"
+          }
+        }
+      },
+      "System.ValueTuple/4.5.0": {
+        "type": "package",
+        "compile": {
+          "ref/netcoreapp2.0/_._": {}
+        },
+        "runtime": {
+          "lib/netcoreapp2.0/_._": {}
+        }
+      },
+      "System.Windows.Extensions/5.0.0": {
+        "type": "package",
+        "dependencies": {
+          "System.Drawing.Common": "5.0.0"
+        },
+        "compile": {
+          "ref/netcoreapp3.0/System.Windows.Extensions.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp3.0/System.Windows.Extensions.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/netcoreapp3.0/System.Windows.Extensions.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "AsyncIO/0.1.69": {
+      "sha512": "xyXJLi+wjy6AtIyWXHXJkPS0gItqVT4lg5w++7bA5YEjugYKdrFMGxCo6KUJ1yYwjriLQJ1g35LDljZs3Q90XQ==",
+      "type": "package",
+      "path": "asyncio/0.1.69",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "asyncio.0.1.69.nupkg.sha512",
+        "asyncio.nuspec",
+        "lib/net40/AsyncIO.dll",
+        "lib/net40/AsyncIO.pdb",
+        "lib/netstandard1.3/AsyncIO.dll",
+        "lib/netstandard1.3/AsyncIO.pdb",
+        "lib/netstandard2.0/AsyncIO.dll",
+        "lib/netstandard2.0/AsyncIO.pdb"
+      ]
+    },
+    "Grasshopper/8.0.23304.9001": {
+      "sha512": "L1Cse6nAxryzcZ7jsu3WzBiG9BYtgYsaNbRV+p55N+THKTFGmXx1PdBbiWtuxK9kB4jyuLVpeV8XBiYlSGA1Vw==",
+      "type": "package",
+      "path": "grasshopper/8.0.23304.9001",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "build/net48/Grasshopper.targets",
+        "grasshopper.8.0.23304.9001.nupkg.sha512",
+        "grasshopper.nuspec",
+        "grasshopper.png",
+        "lib/net48/GH_IO.dll",
+        "lib/net48/GH_IO.xml",
+        "lib/net48/Grasshopper.dll",
+        "lib/net48/Grasshopper.xml"
+      ]
+    },
+    "Microsoft.Bcl.AsyncInterfaces/5.0.0": {
+      "sha512": "W8DPQjkMScOMTtJbPwmPyj9c3zYSFGawDW3jwlBOOsnY+EzZFLgNQ/UMkK35JmkNOVPdCyPr2Tw7Vv9N+KA3ZQ==",
+      "type": "package",
+      "path": "microsoft.bcl.asyncinterfaces/5.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/net461/Microsoft.Bcl.AsyncInterfaces.dll",
+        "lib/net461/Microsoft.Bcl.AsyncInterfaces.xml",
+        "lib/netstandard2.0/Microsoft.Bcl.AsyncInterfaces.dll",
+        "lib/netstandard2.0/Microsoft.Bcl.AsyncInterfaces.xml",
+        "lib/netstandard2.1/Microsoft.Bcl.AsyncInterfaces.dll",
+        "lib/netstandard2.1/Microsoft.Bcl.AsyncInterfaces.xml",
+        "microsoft.bcl.asyncinterfaces.5.0.0.nupkg.sha512",
+        "microsoft.bcl.asyncinterfaces.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "Microsoft.Extensions.ObjectPool/5.0.10": {
+      "sha512": "pp9tbGqIhdEXL6Q1yJl+zevAJSq4BsxqhS1GXzBvEsEz9DDNu9GLNzgUy2xyFc4YjB4m4Ff2YEWTnvQvVYdkvQ==",
+      "type": "package",
+      "path": "microsoft.extensions.objectpool/5.0.10",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/net461/Microsoft.Extensions.ObjectPool.dll",
+        "lib/net461/Microsoft.Extensions.ObjectPool.xml",
+        "lib/net5.0/Microsoft.Extensions.ObjectPool.dll",
+        "lib/net5.0/Microsoft.Extensions.ObjectPool.xml",
+        "lib/netstandard2.0/Microsoft.Extensions.ObjectPool.dll",
+        "lib/netstandard2.0/Microsoft.Extensions.ObjectPool.xml",
+        "microsoft.extensions.objectpool.5.0.10.nupkg.sha512",
+        "microsoft.extensions.objectpool.nuspec"
+      ]
+    },
+    "Microsoft.NETCore.Platforms/5.0.0": {
+      "sha512": "VyPlqzH2wavqquTcYpkIIAQ6WdenuKoFN0BdYBbCWsclXacSOHNQn66Gt4z5NBqEYW0FAPm5rlvki9ZiCij5xQ==",
+      "type": "package",
+      "path": "microsoft.netcore.platforms/5.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/netstandard1.0/_._",
+        "microsoft.netcore.platforms.5.0.0.nupkg.sha512",
+        "microsoft.netcore.platforms.nuspec",
+        "runtime.json",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "Microsoft.NETFramework.ReferenceAssemblies.net48/1.0.3": {
+      "sha512": "zMk4D+9zyiEWByyQ7oPImPN/Jhpj166Ky0Nlla4eXlNL8hI/BtSJsgR8Inldd4NNpIAH3oh8yym0W2DrhXdSLQ==",
+      "type": "package",
+      "path": "microsoft.netframework.referenceassemblies.net48/1.0.3",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "build/.NETFramework/v4.8/Accessibility.dll",
+        "build/.NETFramework/v4.8/Accessibility.xml",
+        "build/.NETFramework/v4.8/CustomMarshalers.dll",
+        "build/.NETFramework/v4.8/CustomMarshalers.xml",
+        "build/.NETFramework/v4.8/Facades/Microsoft.Win32.Primitives.dll",
+        "build/.NETFramework/v4.8/Facades/System.AppContext.dll",
+        "build/.NETFramework/v4.8/Facades/System.Collections.Concurrent.dll",
+        "build/.NETFramework/v4.8/Facades/System.Collections.NonGeneric.dll",
+        "build/.NETFramework/v4.8/Facades/System.Collections.Specialized.dll",
+        "build/.NETFramework/v4.8/Facades/System.Collections.dll",
+        "build/.NETFramework/v4.8/Facades/System.ComponentModel.Annotations.dll",
+        "build/.NETFramework/v4.8/Facades/System.ComponentModel.EventBasedAsync.dll",
+        "build/.NETFramework/v4.8/Facades/System.ComponentModel.Primitives.dll",
+        "build/.NETFramework/v4.8/Facades/System.ComponentModel.TypeConverter.dll",
+        "build/.NETFramework/v4.8/Facades/System.ComponentModel.dll",
+        "build/.NETFramework/v4.8/Facades/System.Console.dll",
+        "build/.NETFramework/v4.8/Facades/System.Data.Common.dll",
+        "build/.NETFramework/v4.8/Facades/System.Diagnostics.Contracts.dll",
+        "build/.NETFramework/v4.8/Facades/System.Diagnostics.Debug.dll",
+        "build/.NETFramework/v4.8/Facades/System.Diagnostics.FileVersionInfo.dll",
+        "build/.NETFramework/v4.8/Facades/System.Diagnostics.Process.dll",
+        "build/.NETFramework/v4.8/Facades/System.Diagnostics.StackTrace.dll",
+        "build/.NETFramework/v4.8/Facades/System.Diagnostics.TextWriterTraceListener.dll",
+        "build/.NETFramework/v4.8/Facades/System.Diagnostics.Tools.dll",
+        "build/.NETFramework/v4.8/Facades/System.Diagnostics.TraceSource.dll",
+        "build/.NETFramework/v4.8/Facades/System.Drawing.Primitives.dll",
+        "build/.NETFramework/v4.8/Facades/System.Dynamic.Runtime.dll",
+        "build/.NETFramework/v4.8/Facades/System.Globalization.Calendars.dll",
+        "build/.NETFramework/v4.8/Facades/System.Globalization.Extensions.dll",
+        "build/.NETFramework/v4.8/Facades/System.Globalization.dll",
+        "build/.NETFramework/v4.8/Facades/System.IO.Compression.ZipFile.dll",
+        "build/.NETFramework/v4.8/Facades/System.IO.FileSystem.DriveInfo.dll",
+        "build/.NETFramework/v4.8/Facades/System.IO.FileSystem.Primitives.dll",
+        "build/.NETFramework/v4.8/Facades/System.IO.FileSystem.Watcher.dll",
+        "build/.NETFramework/v4.8/Facades/System.IO.FileSystem.dll",
+        "build/.NETFramework/v4.8/Facades/System.IO.IsolatedStorage.dll",
+        "build/.NETFramework/v4.8/Facades/System.IO.MemoryMappedFiles.dll",
+        "build/.NETFramework/v4.8/Facades/System.IO.Pipes.dll",
+        "build/.NETFramework/v4.8/Facades/System.IO.UnmanagedMemoryStream.dll",
+        "build/.NETFramework/v4.8/Facades/System.IO.dll",
+        "build/.NETFramework/v4.8/Facades/System.Linq.Expressions.dll",
+        "build/.NETFramework/v4.8/Facades/System.Linq.Parallel.dll",
+        "build/.NETFramework/v4.8/Facades/System.Linq.Queryable.dll",
+        "build/.NETFramework/v4.8/Facades/System.Linq.dll",
+        "build/.NETFramework/v4.8/Facades/System.Net.Http.Rtc.dll",
+        "build/.NETFramework/v4.8/Facades/System.Net.NameResolution.dll",
+        "build/.NETFramework/v4.8/Facades/System.Net.NetworkInformation.dll",
+        "build/.NETFramework/v4.8/Facades/System.Net.Ping.dll",
+        "build/.NETFramework/v4.8/Facades/System.Net.Primitives.dll",
+        "build/.NETFramework/v4.8/Facades/System.Net.Requests.dll",
+        "build/.NETFramework/v4.8/Facades/System.Net.Security.dll",
+        "build/.NETFramework/v4.8/Facades/System.Net.Sockets.dll",
+        "build/.NETFramework/v4.8/Facades/System.Net.WebHeaderCollection.dll",
+        "build/.NETFramework/v4.8/Facades/System.Net.WebSockets.Client.dll",
+        "build/.NETFramework/v4.8/Facades/System.Net.WebSockets.dll",
+        "build/.NETFramework/v4.8/Facades/System.ObjectModel.dll",
+        "build/.NETFramework/v4.8/Facades/System.Reflection.Emit.ILGeneration.dll",
+        "build/.NETFramework/v4.8/Facades/System.Reflection.Emit.Lightweight.dll",
+        "build/.NETFramework/v4.8/Facades/System.Reflection.Emit.dll",
+        "build/.NETFramework/v4.8/Facades/System.Reflection.Extensions.dll",
+        "build/.NETFramework/v4.8/Facades/System.Reflection.Primitives.dll",
+        "build/.NETFramework/v4.8/Facades/System.Reflection.dll",
+        "build/.NETFramework/v4.8/Facades/System.Resources.Reader.dll",
+        "build/.NETFramework/v4.8/Facades/System.Resources.ResourceManager.dll",
+        "build/.NETFramework/v4.8/Facades/System.Resources.Writer.dll",
+        "build/.NETFramework/v4.8/Facades/System.Runtime.CompilerServices.VisualC.dll",
+        "build/.NETFramework/v4.8/Facades/System.Runtime.Extensions.dll",
+        "build/.NETFramework/v4.8/Facades/System.Runtime.Handles.dll",
+        "build/.NETFramework/v4.8/Facades/System.Runtime.InteropServices.RuntimeInformation.dll",
+        "build/.NETFramework/v4.8/Facades/System.Runtime.InteropServices.WindowsRuntime.dll",
+        "build/.NETFramework/v4.8/Facades/System.Runtime.InteropServices.dll",
+        "build/.NETFramework/v4.8/Facades/System.Runtime.Numerics.dll",
+        "build/.NETFramework/v4.8/Facades/System.Runtime.Serialization.Formatters.dll",
+        "build/.NETFramework/v4.8/Facades/System.Runtime.Serialization.Json.dll",
+        "build/.NETFramework/v4.8/Facades/System.Runtime.Serialization.Primitives.dll",
+        "build/.NETFramework/v4.8/Facades/System.Runtime.Serialization.Xml.dll",
+        "build/.NETFramework/v4.8/Facades/System.Runtime.dll",
+        "build/.NETFramework/v4.8/Facades/System.Security.Claims.dll",
+        "build/.NETFramework/v4.8/Facades/System.Security.Cryptography.Algorithms.dll",
+        "build/.NETFramework/v4.8/Facades/System.Security.Cryptography.Csp.dll",
+        "build/.NETFramework/v4.8/Facades/System.Security.Cryptography.Encoding.dll",
+        "build/.NETFramework/v4.8/Facades/System.Security.Cryptography.Primitives.dll",
+        "build/.NETFramework/v4.8/Facades/System.Security.Cryptography.X509Certificates.dll",
+        "build/.NETFramework/v4.8/Facades/System.Security.Principal.dll",
+        "build/.NETFramework/v4.8/Facades/System.Security.SecureString.dll",
+        "build/.NETFramework/v4.8/Facades/System.ServiceModel.Duplex.dll",
+        "build/.NETFramework/v4.8/Facades/System.ServiceModel.Http.dll",
+        "build/.NETFramework/v4.8/Facades/System.ServiceModel.NetTcp.dll",
+        "build/.NETFramework/v4.8/Facades/System.ServiceModel.Primitives.dll",
+        "build/.NETFramework/v4.8/Facades/System.ServiceModel.Security.dll",
+        "build/.NETFramework/v4.8/Facades/System.Text.Encoding.Extensions.dll",
+        "build/.NETFramework/v4.8/Facades/System.Text.Encoding.dll",
+        "build/.NETFramework/v4.8/Facades/System.Text.RegularExpressions.dll",
+        "build/.NETFramework/v4.8/Facades/System.Threading.Overlapped.dll",
+        "build/.NETFramework/v4.8/Facades/System.Threading.Tasks.Parallel.dll",
+        "build/.NETFramework/v4.8/Facades/System.Threading.Tasks.dll",
+        "build/.NETFramework/v4.8/Facades/System.Threading.Thread.dll",
+        "build/.NETFramework/v4.8/Facades/System.Threading.ThreadPool.dll",
+        "build/.NETFramework/v4.8/Facades/System.Threading.Timer.dll",
+        "build/.NETFramework/v4.8/Facades/System.Threading.dll",
+        "build/.NETFramework/v4.8/Facades/System.ValueTuple.dll",
+        "build/.NETFramework/v4.8/Facades/System.Xml.ReaderWriter.dll",
+        "build/.NETFramework/v4.8/Facades/System.Xml.XDocument.dll",
+        "build/.NETFramework/v4.8/Facades/System.Xml.XPath.XDocument.dll",
+        "build/.NETFramework/v4.8/Facades/System.Xml.XPath.dll",
+        "build/.NETFramework/v4.8/Facades/System.Xml.XmlDocument.dll",
+        "build/.NETFramework/v4.8/Facades/System.Xml.XmlSerializer.dll",
+        "build/.NETFramework/v4.8/Facades/netstandard.dll",
+        "build/.NETFramework/v4.8/ISymWrapper.dll",
+        "build/.NETFramework/v4.8/ISymWrapper.xml",
+        "build/.NETFramework/v4.8/Microsoft.Activities.Build.dll",
+        "build/.NETFramework/v4.8/Microsoft.Activities.Build.xml",
+        "build/.NETFramework/v4.8/Microsoft.Build.Conversion.v4.0.dll",
+        "build/.NETFramework/v4.8/Microsoft.Build.Conversion.v4.0.xml",
+        "build/.NETFramework/v4.8/Microsoft.Build.Engine.dll",
+        "build/.NETFramework/v4.8/Microsoft.Build.Engine.xml",
+        "build/.NETFramework/v4.8/Microsoft.Build.Framework.dll",
+        "build/.NETFramework/v4.8/Microsoft.Build.Framework.xml",
+        "build/.NETFramework/v4.8/Microsoft.Build.Tasks.v4.0.dll",
+        "build/.NETFramework/v4.8/Microsoft.Build.Tasks.v4.0.xml",
+        "build/.NETFramework/v4.8/Microsoft.Build.Utilities.v4.0.dll",
+        "build/.NETFramework/v4.8/Microsoft.Build.Utilities.v4.0.xml",
+        "build/.NETFramework/v4.8/Microsoft.Build.dll",
+        "build/.NETFramework/v4.8/Microsoft.Build.xml",
+        "build/.NETFramework/v4.8/Microsoft.CSharp.dll",
+        "build/.NETFramework/v4.8/Microsoft.CSharp.xml",
+        "build/.NETFramework/v4.8/Microsoft.JScript.dll",
+        "build/.NETFramework/v4.8/Microsoft.JScript.xml",
+        "build/.NETFramework/v4.8/Microsoft.VisualBasic.Compatibility.Data.dll",
+        "build/.NETFramework/v4.8/Microsoft.VisualBasic.Compatibility.Data.xml",
+        "build/.NETFramework/v4.8/Microsoft.VisualBasic.Compatibility.dll",
+        "build/.NETFramework/v4.8/Microsoft.VisualBasic.Compatibility.xml",
+        "build/.NETFramework/v4.8/Microsoft.VisualBasic.dll",
+        "build/.NETFramework/v4.8/Microsoft.VisualBasic.xml",
+        "build/.NETFramework/v4.8/Microsoft.VisualC.STLCLR.dll",
+        "build/.NETFramework/v4.8/Microsoft.VisualC.STLCLR.xml",
+        "build/.NETFramework/v4.8/Microsoft.VisualC.dll",
+        "build/.NETFramework/v4.8/Microsoft.VisualC.xml",
+        "build/.NETFramework/v4.8/PermissionSets/FullTrust.xml",
+        "build/.NETFramework/v4.8/PermissionSets/Internet.xml",
+        "build/.NETFramework/v4.8/PermissionSets/LocalIntranet.xml",
+        "build/.NETFramework/v4.8/PresentationBuildTasks.dll",
+        "build/.NETFramework/v4.8/PresentationBuildTasks.xml",
+        "build/.NETFramework/v4.8/PresentationCore.dll",
+        "build/.NETFramework/v4.8/PresentationCore.xml",
+        "build/.NETFramework/v4.8/PresentationFramework.Aero.dll",
+        "build/.NETFramework/v4.8/PresentationFramework.Aero.xml",
+        "build/.NETFramework/v4.8/PresentationFramework.Aero2.dll",
+        "build/.NETFramework/v4.8/PresentationFramework.Aero2.xml",
+        "build/.NETFramework/v4.8/PresentationFramework.AeroLite.dll",
+        "build/.NETFramework/v4.8/PresentationFramework.AeroLite.xml",
+        "build/.NETFramework/v4.8/PresentationFramework.Classic.dll",
+        "build/.NETFramework/v4.8/PresentationFramework.Classic.xml",
+        "build/.NETFramework/v4.8/PresentationFramework.Luna.dll",
+        "build/.NETFramework/v4.8/PresentationFramework.Luna.xml",
+        "build/.NETFramework/v4.8/PresentationFramework.Royale.dll",
+        "build/.NETFramework/v4.8/PresentationFramework.Royale.xml",
+        "build/.NETFramework/v4.8/PresentationFramework.dll",
+        "build/.NETFramework/v4.8/PresentationFramework.xml",
+        "build/.NETFramework/v4.8/ReachFramework.dll",
+        "build/.NETFramework/v4.8/ReachFramework.xml",
+        "build/.NETFramework/v4.8/RedistList/FrameworkList.xml",
+        "build/.NETFramework/v4.8/System.Activities.Core.Presentation.dll",
+        "build/.NETFramework/v4.8/System.Activities.Core.Presentation.xml",
+        "build/.NETFramework/v4.8/System.Activities.DurableInstancing.dll",
+        "build/.NETFramework/v4.8/System.Activities.DurableInstancing.xml",
+        "build/.NETFramework/v4.8/System.Activities.Presentation.dll",
+        "build/.NETFramework/v4.8/System.Activities.Presentation.xml",
+        "build/.NETFramework/v4.8/System.Activities.dll",
+        "build/.NETFramework/v4.8/System.Activities.xml",
+        "build/.NETFramework/v4.8/System.AddIn.Contract.dll",
+        "build/.NETFramework/v4.8/System.AddIn.Contract.xml",
+        "build/.NETFramework/v4.8/System.AddIn.dll",
+        "build/.NETFramework/v4.8/System.AddIn.xml",
+        "build/.NETFramework/v4.8/System.ComponentModel.Composition.Registration.dll",
+        "build/.NETFramework/v4.8/System.ComponentModel.Composition.Registration.xml",
+        "build/.NETFramework/v4.8/System.ComponentModel.Composition.dll",
+        "build/.NETFramework/v4.8/System.ComponentModel.Composition.xml",
+        "build/.NETFramework/v4.8/System.ComponentModel.DataAnnotations.dll",
+        "build/.NETFramework/v4.8/System.ComponentModel.DataAnnotations.xml",
+        "build/.NETFramework/v4.8/System.Configuration.Install.dll",
+        "build/.NETFramework/v4.8/System.Configuration.Install.xml",
+        "build/.NETFramework/v4.8/System.Configuration.dll",
+        "build/.NETFramework/v4.8/System.Configuration.xml",
+        "build/.NETFramework/v4.8/System.Core.dll",
+        "build/.NETFramework/v4.8/System.Core.xml",
+        "build/.NETFramework/v4.8/System.Data.DataSetExtensions.dll",
+        "build/.NETFramework/v4.8/System.Data.DataSetExtensions.xml",
+        "build/.NETFramework/v4.8/System.Data.Entity.Design.dll",
+        "build/.NETFramework/v4.8/System.Data.Entity.Design.xml",
+        "build/.NETFramework/v4.8/System.Data.Entity.dll",
+        "build/.NETFramework/v4.8/System.Data.Entity.xml",
+        "build/.NETFramework/v4.8/System.Data.Linq.dll",
+        "build/.NETFramework/v4.8/System.Data.Linq.xml",
+        "build/.NETFramework/v4.8/System.Data.OracleClient.dll",
+        "build/.NETFramework/v4.8/System.Data.OracleClient.xml",
+        "build/.NETFramework/v4.8/System.Data.Services.Client.dll",
+        "build/.NETFramework/v4.8/System.Data.Services.Client.xml",
+        "build/.NETFramework/v4.8/System.Data.Services.Design.dll",
+        "build/.NETFramework/v4.8/System.Data.Services.Design.xml",
+        "build/.NETFramework/v4.8/System.Data.Services.dll",
+        "build/.NETFramework/v4.8/System.Data.Services.xml",
+        "build/.NETFramework/v4.8/System.Data.SqlXml.dll",
+        "build/.NETFramework/v4.8/System.Data.SqlXml.xml",
+        "build/.NETFramework/v4.8/System.Data.dll",
+        "build/.NETFramework/v4.8/System.Data.xml",
+        "build/.NETFramework/v4.8/System.Deployment.dll",
+        "build/.NETFramework/v4.8/System.Deployment.xml",
+        "build/.NETFramework/v4.8/System.Design.dll",
+        "build/.NETFramework/v4.8/System.Design.xml",
+        "build/.NETFramework/v4.8/System.Device.dll",
+        "build/.NETFramework/v4.8/System.Device.xml",
+        "build/.NETFramework/v4.8/System.Diagnostics.Tracing.dll",
+        "build/.NETFramework/v4.8/System.Diagnostics.Tracing.xml",
+        "build/.NETFramework/v4.8/System.DirectoryServices.AccountManagement.dll",
+        "build/.NETFramework/v4.8/System.DirectoryServices.AccountManagement.xml",
+        "build/.NETFramework/v4.8/System.DirectoryServices.Protocols.dll",
+        "build/.NETFramework/v4.8/System.DirectoryServices.Protocols.xml",
+        "build/.NETFramework/v4.8/System.DirectoryServices.dll",
+        "build/.NETFramework/v4.8/System.DirectoryServices.xml",
+        "build/.NETFramework/v4.8/System.Drawing.Design.dll",
+        "build/.NETFramework/v4.8/System.Drawing.Design.xml",
+        "build/.NETFramework/v4.8/System.Drawing.dll",
+        "build/.NETFramework/v4.8/System.Drawing.xml",
+        "build/.NETFramework/v4.8/System.Dynamic.dll",
+        "build/.NETFramework/v4.8/System.EnterpriseServices.Thunk.dll",
+        "build/.NETFramework/v4.8/System.EnterpriseServices.Wrapper.dll",
+        "build/.NETFramework/v4.8/System.EnterpriseServices.dll",
+        "build/.NETFramework/v4.8/System.EnterpriseServices.xml",
+        "build/.NETFramework/v4.8/System.IO.Compression.FileSystem.dll",
+        "build/.NETFramework/v4.8/System.IO.Compression.FileSystem.xml",
+        "build/.NETFramework/v4.8/System.IO.Compression.dll",
+        "build/.NETFramework/v4.8/System.IO.Compression.xml",
+        "build/.NETFramework/v4.8/System.IO.Log.dll",
+        "build/.NETFramework/v4.8/System.IO.Log.xml",
+        "build/.NETFramework/v4.8/System.IdentityModel.Selectors.dll",
+        "build/.NETFramework/v4.8/System.IdentityModel.Selectors.xml",
+        "build/.NETFramework/v4.8/System.IdentityModel.Services.dll",
+        "build/.NETFramework/v4.8/System.IdentityModel.Services.xml",
+        "build/.NETFramework/v4.8/System.IdentityModel.dll",
+        "build/.NETFramework/v4.8/System.IdentityModel.xml",
+        "build/.NETFramework/v4.8/System.Linq.xml",
+        "build/.NETFramework/v4.8/System.Management.Instrumentation.dll",
+        "build/.NETFramework/v4.8/System.Management.Instrumentation.xml",
+        "build/.NETFramework/v4.8/System.Management.dll",
+        "build/.NETFramework/v4.8/System.Management.xml",
+        "build/.NETFramework/v4.8/System.Messaging.dll",
+        "build/.NETFramework/v4.8/System.Messaging.xml",
+        "build/.NETFramework/v4.8/System.Net.Http.WebRequest.dll",
+        "build/.NETFramework/v4.8/System.Net.Http.WebRequest.xml",
+        "build/.NETFramework/v4.8/System.Net.Http.dll",
+        "build/.NETFramework/v4.8/System.Net.Http.xml",
+        "build/.NETFramework/v4.8/System.Net.dll",
+        "build/.NETFramework/v4.8/System.Net.xml",
+        "build/.NETFramework/v4.8/System.Numerics.dll",
+        "build/.NETFramework/v4.8/System.Numerics.xml",
+        "build/.NETFramework/v4.8/System.Printing.dll",
+        "build/.NETFramework/v4.8/System.Printing.xml",
+        "build/.NETFramework/v4.8/System.Reflection.Context.dll",
+        "build/.NETFramework/v4.8/System.Reflection.Context.xml",
+        "build/.NETFramework/v4.8/System.Runtime.Caching.dll",
+        "build/.NETFramework/v4.8/System.Runtime.Caching.xml",
+        "build/.NETFramework/v4.8/System.Runtime.DurableInstancing.dll",
+        "build/.NETFramework/v4.8/System.Runtime.DurableInstancing.xml",
+        "build/.NETFramework/v4.8/System.Runtime.Remoting.dll",
+        "build/.NETFramework/v4.8/System.Runtime.Remoting.xml",
+        "build/.NETFramework/v4.8/System.Runtime.Serialization.Formatters.Soap.dll",
+        "build/.NETFramework/v4.8/System.Runtime.Serialization.Formatters.Soap.xml",
+        "build/.NETFramework/v4.8/System.Runtime.Serialization.dll",
+        "build/.NETFramework/v4.8/System.Runtime.Serialization.xml",
+        "build/.NETFramework/v4.8/System.Security.dll",
+        "build/.NETFramework/v4.8/System.Security.xml",
+        "build/.NETFramework/v4.8/System.ServiceModel.Activation.dll",
+        "build/.NETFramework/v4.8/System.ServiceModel.Activation.xml",
+        "build/.NETFramework/v4.8/System.ServiceModel.Activities.dll",
+        "build/.NETFramework/v4.8/System.ServiceModel.Activities.xml",
+        "build/.NETFramework/v4.8/System.ServiceModel.Channels.dll",
+        "build/.NETFramework/v4.8/System.ServiceModel.Channels.xml",
+        "build/.NETFramework/v4.8/System.ServiceModel.Discovery.dll",
+        "build/.NETFramework/v4.8/System.ServiceModel.Discovery.xml",
+        "build/.NETFramework/v4.8/System.ServiceModel.Routing.dll",
+        "build/.NETFramework/v4.8/System.ServiceModel.Routing.xml",
+        "build/.NETFramework/v4.8/System.ServiceModel.Web.dll",
+        "build/.NETFramework/v4.8/System.ServiceModel.Web.xml",
+        "build/.NETFramework/v4.8/System.ServiceModel.dll",
+        "build/.NETFramework/v4.8/System.ServiceModel.xml",
+        "build/.NETFramework/v4.8/System.ServiceProcess.dll",
+        "build/.NETFramework/v4.8/System.ServiceProcess.xml",
+        "build/.NETFramework/v4.8/System.Speech.dll",
+        "build/.NETFramework/v4.8/System.Speech.xml",
+        "build/.NETFramework/v4.8/System.Threading.Tasks.Dataflow.xml",
+        "build/.NETFramework/v4.8/System.Transactions.dll",
+        "build/.NETFramework/v4.8/System.Transactions.xml",
+        "build/.NETFramework/v4.8/System.Web.Abstractions.dll",
+        "build/.NETFramework/v4.8/System.Web.ApplicationServices.dll",
+        "build/.NETFramework/v4.8/System.Web.ApplicationServices.xml",
+        "build/.NETFramework/v4.8/System.Web.DataVisualization.Design.dll",
+        "build/.NETFramework/v4.8/System.Web.DataVisualization.dll",
+        "build/.NETFramework/v4.8/System.Web.DataVisualization.xml",
+        "build/.NETFramework/v4.8/System.Web.DynamicData.Design.dll",
+        "build/.NETFramework/v4.8/System.Web.DynamicData.Design.xml",
+        "build/.NETFramework/v4.8/System.Web.DynamicData.dll",
+        "build/.NETFramework/v4.8/System.Web.DynamicData.xml",
+        "build/.NETFramework/v4.8/System.Web.Entity.Design.dll",
+        "build/.NETFramework/v4.8/System.Web.Entity.Design.xml",
+        "build/.NETFramework/v4.8/System.Web.Entity.dll",
+        "build/.NETFramework/v4.8/System.Web.Entity.xml",
+        "build/.NETFramework/v4.8/System.Web.Extensions.Design.dll",
+        "build/.NETFramework/v4.8/System.Web.Extensions.Design.xml",
+        "build/.NETFramework/v4.8/System.Web.Extensions.dll",
+        "build/.NETFramework/v4.8/System.Web.Extensions.xml",
+        "build/.NETFramework/v4.8/System.Web.Mobile.dll",
+        "build/.NETFramework/v4.8/System.Web.Mobile.xml",
+        "build/.NETFramework/v4.8/System.Web.RegularExpressions.dll",
+        "build/.NETFramework/v4.8/System.Web.RegularExpressions.xml",
+        "build/.NETFramework/v4.8/System.Web.Routing.dll",
+        "build/.NETFramework/v4.8/System.Web.Services.dll",
+        "build/.NETFramework/v4.8/System.Web.Services.xml",
+        "build/.NETFramework/v4.8/System.Web.dll",
+        "build/.NETFramework/v4.8/System.Web.xml",
+        "build/.NETFramework/v4.8/System.Windows.Controls.Ribbon.dll",
+        "build/.NETFramework/v4.8/System.Windows.Controls.Ribbon.xml",
+        "build/.NETFramework/v4.8/System.Windows.Forms.DataVisualization.Design.dll",
+        "build/.NETFramework/v4.8/System.Windows.Forms.DataVisualization.dll",
+        "build/.NETFramework/v4.8/System.Windows.Forms.DataVisualization.xml",
+        "build/.NETFramework/v4.8/System.Windows.Forms.dll",
+        "build/.NETFramework/v4.8/System.Windows.Forms.xml",
+        "build/.NETFramework/v4.8/System.Windows.Input.Manipulations.dll",
+        "build/.NETFramework/v4.8/System.Windows.Input.Manipulations.xml",
+        "build/.NETFramework/v4.8/System.Windows.Presentation.dll",
+        "build/.NETFramework/v4.8/System.Windows.Presentation.xml",
+        "build/.NETFramework/v4.8/System.Windows.dll",
+        "build/.NETFramework/v4.8/System.Workflow.Activities.dll",
+        "build/.NETFramework/v4.8/System.Workflow.Activities.xml",
+        "build/.NETFramework/v4.8/System.Workflow.ComponentModel.dll",
+        "build/.NETFramework/v4.8/System.Workflow.ComponentModel.xml",
+        "build/.NETFramework/v4.8/System.Workflow.Runtime.dll",
+        "build/.NETFramework/v4.8/System.Workflow.Runtime.xml",
+        "build/.NETFramework/v4.8/System.WorkflowServices.dll",
+        "build/.NETFramework/v4.8/System.WorkflowServices.xml",
+        "build/.NETFramework/v4.8/System.Xaml.dll",
+        "build/.NETFramework/v4.8/System.Xaml.xml",
+        "build/.NETFramework/v4.8/System.Xml.Linq.dll",
+        "build/.NETFramework/v4.8/System.Xml.Linq.xml",
+        "build/.NETFramework/v4.8/System.Xml.Serialization.dll",
+        "build/.NETFramework/v4.8/System.Xml.dll",
+        "build/.NETFramework/v4.8/System.Xml.xml",
+        "build/.NETFramework/v4.8/System.dll",
+        "build/.NETFramework/v4.8/System.xml",
+        "build/.NETFramework/v4.8/UIAutomationClient.dll",
+        "build/.NETFramework/v4.8/UIAutomationClient.xml",
+        "build/.NETFramework/v4.8/UIAutomationClientsideProviders.dll",
+        "build/.NETFramework/v4.8/UIAutomationClientsideProviders.xml",
+        "build/.NETFramework/v4.8/UIAutomationProvider.dll",
+        "build/.NETFramework/v4.8/UIAutomationProvider.xml",
+        "build/.NETFramework/v4.8/UIAutomationTypes.dll",
+        "build/.NETFramework/v4.8/UIAutomationTypes.xml",
+        "build/.NETFramework/v4.8/WindowsBase.dll",
+        "build/.NETFramework/v4.8/WindowsBase.xml",
+        "build/.NETFramework/v4.8/WindowsFormsIntegration.dll",
+        "build/.NETFramework/v4.8/WindowsFormsIntegration.xml",
+        "build/.NETFramework/v4.8/XamlBuildTask.dll",
+        "build/.NETFramework/v4.8/XamlBuildTask.xml",
+        "build/.NETFramework/v4.8/mscorlib.dll",
+        "build/.NETFramework/v4.8/mscorlib.xml",
+        "build/.NETFramework/v4.8/namespaces.xml",
+        "build/.NETFramework/v4.8/sysglobl.dll",
+        "build/.NETFramework/v4.8/sysglobl.xml",
+        "build/Microsoft.NETFramework.ReferenceAssemblies.net48.targets",
+        "microsoft.netframework.referenceassemblies.net48.1.0.3.nupkg.sha512",
+        "microsoft.netframework.referenceassemblies.net48.nuspec"
+      ]
+    },
+    "Microsoft.Win32.SystemEvents/5.0.0": {
+      "sha512": "Bh6blKG8VAKvXiLe2L+sEsn62nc1Ij34MrNxepD2OCrS5cpCwQa9MeLyhVQPQ/R4Wlzwuy6wMK8hLb11QPDRsQ==",
+      "type": "package",
+      "path": "microsoft.win32.systemevents/5.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/net461/Microsoft.Win32.SystemEvents.dll",
+        "lib/net461/Microsoft.Win32.SystemEvents.xml",
+        "lib/netstandard2.0/Microsoft.Win32.SystemEvents.dll",
+        "lib/netstandard2.0/Microsoft.Win32.SystemEvents.xml",
+        "microsoft.win32.systemevents.5.0.0.nupkg.sha512",
+        "microsoft.win32.systemevents.nuspec",
+        "ref/net461/Microsoft.Win32.SystemEvents.dll",
+        "ref/net461/Microsoft.Win32.SystemEvents.xml",
+        "ref/netstandard2.0/Microsoft.Win32.SystemEvents.dll",
+        "ref/netstandard2.0/Microsoft.Win32.SystemEvents.xml",
+        "runtimes/win/lib/netcoreapp2.0/Microsoft.Win32.SystemEvents.dll",
+        "runtimes/win/lib/netcoreapp2.0/Microsoft.Win32.SystemEvents.xml",
+        "runtimes/win/lib/netcoreapp3.0/Microsoft.Win32.SystemEvents.dll",
+        "runtimes/win/lib/netcoreapp3.0/Microsoft.Win32.SystemEvents.xml",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "Microsoft.Win32.SystemEvents/7.0.0": {
+      "sha512": "2nXPrhdAyAzir0gLl8Yy8S5Mnm/uBSQQA7jEsILOS1MTyS7DbmV1NgViMtvV1sfCD1ebITpNwb1NIinKeJgUVQ==",
+      "type": "package",
+      "path": "microsoft.win32.systemevents/7.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "buildTransitive/net461/Microsoft.Win32.SystemEvents.targets",
+        "buildTransitive/net462/_._",
+        "buildTransitive/net6.0/_._",
+        "buildTransitive/netcoreapp2.0/Microsoft.Win32.SystemEvents.targets",
+        "lib/net462/Microsoft.Win32.SystemEvents.dll",
+        "lib/net462/Microsoft.Win32.SystemEvents.xml",
+        "lib/net6.0/Microsoft.Win32.SystemEvents.dll",
+        "lib/net6.0/Microsoft.Win32.SystemEvents.xml",
+        "lib/net7.0/Microsoft.Win32.SystemEvents.dll",
+        "lib/net7.0/Microsoft.Win32.SystemEvents.xml",
+        "lib/netstandard2.0/Microsoft.Win32.SystemEvents.dll",
+        "lib/netstandard2.0/Microsoft.Win32.SystemEvents.xml",
+        "microsoft.win32.systemevents.7.0.0.nupkg.sha512",
+        "microsoft.win32.systemevents.nuspec",
+        "runtimes/win/lib/net6.0/Microsoft.Win32.SystemEvents.dll",
+        "runtimes/win/lib/net6.0/Microsoft.Win32.SystemEvents.xml",
+        "runtimes/win/lib/net7.0/Microsoft.Win32.SystemEvents.dll",
+        "runtimes/win/lib/net7.0/Microsoft.Win32.SystemEvents.xml",
+        "useSharedDesignerContext.txt"
+      ]
+    },
+    "NaCl.Net/0.1.13": {
+      "sha512": "AVg1455RQnyTy6tiessudruZHvbl70QWRPyx3og2I1Fei17LDNc7Z3DRgqN2+PsySBui/1EDP4A7adhQXydi6g==",
+      "type": "package",
+      "path": "nacl.net/0.1.13",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "lib/net45/NaCl.dll",
+        "lib/net45/NaCl.xml",
+        "lib/net472/NaCl.dll",
+        "lib/net472/NaCl.xml",
+        "lib/netstandard1.3/NaCl.dll",
+        "lib/netstandard1.3/NaCl.xml",
+        "lib/netstandard2.0/NaCl.dll",
+        "lib/netstandard2.0/NaCl.xml",
+        "lib/netstandard2.1/NaCl.dll",
+        "lib/netstandard2.1/NaCl.xml",
+        "nacl.net.0.1.13.nupkg.sha512",
+        "nacl.net.nuspec"
+      ]
+    },
+    "NetMQ/4.0.1.9": {
+      "sha512": "nB9IiVCpqgDXUZf3rptqZ+jgta1VWJVmSamy/JVUitJwxOtUQTgZHyaOKhdlS2z3Ey+/Yds54HEeSB+17Yf64Q==",
+      "type": "package",
+      "path": "netmq/4.0.1.9",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "NetMQLogoSquare-256px.png",
+        "lib/net45/NetMQ.dll",
+        "lib/net45/NetMQ.xml",
+        "lib/net47/NetMQ.dll",
+        "lib/net47/NetMQ.xml",
+        "lib/netstandard2.0/NetMQ.dll",
+        "lib/netstandard2.0/NetMQ.xml",
+        "lib/netstandard2.1/NetMQ.dll",
+        "lib/netstandard2.1/NetMQ.xml",
+        "netmq.4.0.1.9.nupkg.sha512",
+        "netmq.nuspec"
+      ]
+    },
+    "RhinoCommon/8.0.23304.9001": {
+      "sha512": "hWuqXjcj/eb1/z8+bml4Bav/8Oug2p6t0mAVf37GhX9sP+M1aYNO9FappqeN8oefcIBkLBmAzr46DYNhTxFAGQ==",
+      "type": "package",
+      "path": "rhinocommon/8.0.23304.9001",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Eto-LICENSE.txt",
+        "build/net48/RhinoCommon.targets",
+        "lib/net48/Ed.Eto.dll",
+        "lib/net48/Ed.Eto.xml",
+        "lib/net48/Eto.dll",
+        "lib/net48/Eto.xml",
+        "lib/net48/Rhino.UI.dll",
+        "lib/net48/RhinoCommon.dll",
+        "lib/net48/RhinoCommon.xml",
+        "rhinocommon.8.0.23304.9001.nupkg.sha512",
+        "rhinocommon.nuspec",
+        "rhinocommon.png"
+      ]
+    },
+    "roslyn-language-server.linux-arm64/5.8.0-1.26252.1": {
+      "sha512": "8Le9TmeBGPBYL+5TOeyRRngjHdj7UjN2Zu9978L4aup6lz9Pp7dGFZ0wj3kH9hUonKYY+ia1r8Q8l2GEy7ll+A==",
+      "type": "package",
+      "path": "roslyn-language-server.linux-arm64/5.8.0-1.26252.1",
+      "hasTools": true,
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "README.md",
+        "ThirdPartyNotices.rtf",
+        "roslyn-language-server.linux-arm64.5.8.0-1.26252.1.nupkg.sha512",
+        "roslyn-language-server.linux-arm64.nuspec",
+        "tools/net10.0/linux-arm64/BuildHost-net472/Microsoft.Bcl.AsyncInterfaces.dll",
+        "tools/net10.0/linux-arm64/BuildHost-net472/Microsoft.Build.Locator.dll",
+        "tools/net10.0/linux-arm64/BuildHost-net472/Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.exe",
+        "tools/net10.0/linux-arm64/BuildHost-net472/Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.exe.config",
+        "tools/net10.0/linux-arm64/BuildHost-net472/Microsoft.CodeAnalysis.Workspaces.MSBuild.Contracts.dll",
+        "tools/net10.0/linux-arm64/BuildHost-net472/Microsoft.CodeAnalysis.Workspaces.MSBuild.Contracts.pdb",
+        "tools/net10.0/linux-arm64/BuildHost-net472/Microsoft.IO.Redist.dll",
+        "tools/net10.0/linux-arm64/BuildHost-net472/System.Buffers.dll",
+        "tools/net10.0/linux-arm64/BuildHost-net472/System.Collections.Immutable.dll",
+        "tools/net10.0/linux-arm64/BuildHost-net472/System.IO.Pipelines.dll",
+        "tools/net10.0/linux-arm64/BuildHost-net472/System.Memory.dll",
+        "tools/net10.0/linux-arm64/BuildHost-net472/System.Numerics.Vectors.dll",
+        "tools/net10.0/linux-arm64/BuildHost-net472/System.Runtime.CompilerServices.Unsafe.dll",
+        "tools/net10.0/linux-arm64/BuildHost-net472/System.Text.Encodings.Web.dll",
+        "tools/net10.0/linux-arm64/BuildHost-net472/System.Text.Json.dll",
+        "tools/net10.0/linux-arm64/BuildHost-net472/System.Threading.Tasks.Extensions.dll",
+        "tools/net10.0/linux-arm64/BuildHost-netcore/Microsoft.Build.Locator.dll",
+        "tools/net10.0/linux-arm64/BuildHost-netcore/Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.deps.json",
+        "tools/net10.0/linux-arm64/BuildHost-netcore/Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.dll",
+        "tools/net10.0/linux-arm64/BuildHost-netcore/Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.runtimeconfig.json",
+        "tools/net10.0/linux-arm64/BuildHost-netcore/Microsoft.CodeAnalysis.Workspaces.MSBuild.Contracts.dll",
+        "tools/net10.0/linux-arm64/BuildHost-netcore/Microsoft.CodeAnalysis.Workspaces.MSBuild.Contracts.pdb",
+        "tools/net10.0/linux-arm64/BuildHost-netcore/System.Collections.Immutable.dll",
+        "tools/net10.0/linux-arm64/DotnetToolSettings.xml",
+        "tools/net10.0/linux-arm64/Humanizer.dll",
+        "tools/net10.0/linux-arm64/ICSharpCode.Decompiler.dll",
+        "tools/net10.0/linux-arm64/MessagePack.Annotations.dll",
+        "tools/net10.0/linux-arm64/MessagePack.dll",
+        "tools/net10.0/linux-arm64/Microsoft.Build.Framework.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.CSharp.Features.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.CSharp.Features.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.CSharp.Features.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.CSharp.Workspaces.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.CSharp.Workspaces.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.CSharp.Workspaces.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.CSharp.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.CSharp.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.CSharp.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Elfie.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.AspNetCore.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.AspNetCore.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.AspNetCore.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.CompilerDeveloperSDK.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.CompilerDeveloperSDK.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.CompilerDeveloperSDK.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.Copilot.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.Copilot.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.Copilot.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.Razor.Features.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.Razor.Features.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.Razor.Features.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.RazorCompiler.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.RazorCompiler.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.RazorCompiler.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.VisualDiagnostics.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.VisualDiagnostics.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.VisualDiagnostics.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.Xaml.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.Xaml.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.ExternalAccess.Xaml.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Features.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Features.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Features.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.LanguageServer",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.LanguageServer.ExternalAccess.Copilot.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.LanguageServer.ExternalAccess.Copilot.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.LanguageServer.ExternalAccess.Copilot.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.LanguageServer.Protocol.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.LanguageServer.Protocol.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.LanguageServer.Protocol.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.LanguageServer.deps.json",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.LanguageServer.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.LanguageServer.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.LanguageServer.runtimeconfig.json",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.LanguageServer.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Remote.Workspaces.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Remote.Workspaces.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Remote.Workspaces.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Scripting.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Scripting.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Scripting.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Workspaces.MSBuild.Contracts.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Workspaces.MSBuild.Contracts.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Workspaces.MSBuild.Contracts.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Workspaces.MSBuild.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Workspaces.MSBuild.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Workspaces.MSBuild.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Workspaces.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Workspaces.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.Workspaces.xml",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.dll",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.pdb",
+        "tools/net10.0/linux-arm64/Microsoft.CodeAnalysis.xml",
+        "tools/net10.0/linux-arm64/Microsoft.DiaSymReader.dll",
+        "tools/net10.0/linux-arm64/Microsoft.Extensions.Configuration.Abstractions.dll",
+        "tools/net10.0/linux-arm64/Microsoft.Extensions.Configuration.Binder.dll",
+        "tools/net10.0/linux-arm64/Microsoft.Extensions.Configuration.dll",
+        "tools/net10.0/linux-arm64/Microsoft.Extensions.DependencyInjection.Abstractions.dll",
+        "tools/net10.0/linux-arm64/Microsoft.Extensions.DependencyInjection.dll",
+        "tools/net10.0/linux-arm64/Microsoft.Extensions.FileSystemGlobbing.dll",
+        "tools/net10.0/linux-arm64/Microsoft.Extensions.Logging.Abstractions.dll",
+        "tools/net10.0/linux-arm64/Microsoft.Extensions.Logging.Configuration.dll",
+        "tools/net10.0/linux-arm64/Microsoft.Extensions.Logging.Console.dll",
+        "tools/net10.0/linux-arm64/Microsoft.Extensions.Logging.dll",
+        "tools/net10.0/linux-arm64/Microsoft.Extensions.Options.ConfigurationExtensions.dll",
+        "tools/net10.0/linux-arm64/Microsoft.Extensions.Options.dll",
+        "tools/net10.0/linux-arm64/Microsoft.Extensions.Primitives.dll",
+        "tools/net10.0/linux-arm64/Microsoft.NET.StringTools.dll",
+        "tools/net10.0/linux-arm64/Microsoft.ServiceHub.Client.dll",
+        "tools/net10.0/linux-arm64/Microsoft.ServiceHub.Framework.dll",
+        "tools/net10.0/linux-arm64/Microsoft.TestPlatform.CommunicationUtilities.dll",
+        "tools/net10.0/linux-arm64/Microsoft.TestPlatform.CoreUtilities.dll",
+        "tools/net10.0/linux-arm64/Microsoft.TestPlatform.PlatformAbstractions.dll",
+        "tools/net10.0/linux-arm64/Microsoft.TestPlatform.VsTestConsole.TranslationLayer.dll",
+        "tools/net10.0/linux-arm64/Microsoft.VisualStudio.Composition.dll",
+        "tools/net10.0/linux-arm64/Microsoft.VisualStudio.RemoteControl.dll",
+        "tools/net10.0/linux-arm64/Microsoft.VisualStudio.SolutionPersistence.dll",
+        "tools/net10.0/linux-arm64/Microsoft.VisualStudio.Telemetry.dll",
+        "tools/net10.0/linux-arm64/Microsoft.VisualStudio.TestPlatform.Common.dll",
+        "tools/net10.0/linux-arm64/Microsoft.VisualStudio.TestPlatform.ObjectModel.dll",
+        "tools/net10.0/linux-arm64/Microsoft.VisualStudio.Threading.dll",
+        "tools/net10.0/linux-arm64/Microsoft.VisualStudio.Utilities.Internal.dll",
+        "tools/net10.0/linux-arm64/Microsoft.VisualStudio.Validation.dll",
+        "tools/net10.0/linux-arm64/Nerdbank.Streams.dll",
+        "tools/net10.0/linux-arm64/Newtonsoft.Json.dll",
+        "tools/net10.0/linux-arm64/NuGet.Common.dll",
+        "tools/net10.0/linux-arm64/NuGet.Configuration.dll",
+        "tools/net10.0/linux-arm64/NuGet.DependencyResolver.Core.dll",
+        "tools/net10.0/linux-arm64/NuGet.Frameworks.dll",
+        "tools/net10.0/linux-arm64/NuGet.LibraryModel.dll",
+        "tools/net10.0/linux-arm64/NuGet.Packaging.dll",
+        "tools/net10.0/linux-arm64/NuGet.ProjectModel.dll",
+        "tools/net10.0/linux-arm64/NuGet.Protocol.dll",
+        "tools/net10.0/linux-arm64/NuGet.Versioning.dll",
+        "tools/net10.0/linux-arm64/RoslynVersion.txt",
+        "tools/net10.0/linux-arm64/SQLitePCLRaw.batteries_v2.dll",
+        "tools/net10.0/linux-arm64/SQLitePCLRaw.core.dll",
+        "tools/net10.0/linux-arm64/SQLitePCLRaw.provider.dynamic_cdecl.dll",
+        "tools/net10.0/linux-arm64/SQLitePCLRaw.provider.e_sqlite3.dll",
+        "tools/net10.0/linux-arm64/StreamJsonRpc.dll",
+        "tools/net10.0/linux-arm64/System.CodeDom.dll",
+        "tools/net10.0/linux-arm64/System.CommandLine.dll",
+        "tools/net10.0/linux-arm64/System.ComponentModel.Composition.dll",
+        "tools/net10.0/linux-arm64/System.Composition.AttributedModel.dll",
+        "tools/net10.0/linux-arm64/System.Composition.Convention.dll",
+        "tools/net10.0/linux-arm64/System.Composition.Hosting.dll",
+        "tools/net10.0/linux-arm64/System.Composition.Runtime.dll",
+        "tools/net10.0/linux-arm64/System.Composition.TypedParts.dll",
+        "tools/net10.0/linux-arm64/System.Configuration.ConfigurationManager.dll",
+        "tools/net10.0/linux-arm64/System.Diagnostics.EventLog.dll",
+        "tools/net10.0/linux-arm64/System.Diagnostics.PerformanceCounter.dll",
+        "tools/net10.0/linux-arm64/System.Management.dll",
+        "tools/net10.0/linux-arm64/System.Security.Cryptography.Pkcs.dll",
+        "tools/net10.0/linux-arm64/System.Security.Cryptography.ProtectedData.dll",
+        "tools/net10.0/linux-arm64/System.Security.Permissions.dll",
+        "tools/net10.0/linux-arm64/System.Windows.Extensions.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.CodeAnalysis.CSharp.Features.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.CodeAnalysis.ExternalAccess.AspNetCore.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.CodeAnalysis.Features.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.CodeAnalysis.LanguageServer.Protocol.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.CodeAnalysis.LanguageServer.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.CodeAnalysis.Remote.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.CodeAnalysis.Scripting.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.CodeAnalysis.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.CodeAnalysis.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.ServiceHub.Client.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.ServiceHub.Framework.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.TestPlatform.CommunicationUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.TestPlatform.CoreUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.TestPlatform.VsTestConsole.TranslationLayer.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.VisualStudio.Composition.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.VisualStudio.TestPlatform.Common.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.VisualStudio.TestPlatform.ObjectModel.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.VisualStudio.Threading.resources.dll",
+        "tools/net10.0/linux-arm64/cs/Microsoft.VisualStudio.Validation.resources.dll",
+        "tools/net10.0/linux-arm64/cs/StreamJsonRpc.resources.dll",
+        "tools/net10.0/linux-arm64/cs/System.CommandLine.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.CodeAnalysis.CSharp.Features.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.CodeAnalysis.ExternalAccess.AspNetCore.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.CodeAnalysis.Features.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.CodeAnalysis.LanguageServer.Protocol.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.CodeAnalysis.LanguageServer.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.CodeAnalysis.Remote.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.CodeAnalysis.Scripting.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.CodeAnalysis.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.CodeAnalysis.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.ServiceHub.Client.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.ServiceHub.Framework.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.TestPlatform.CommunicationUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.TestPlatform.CoreUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.TestPlatform.VsTestConsole.TranslationLayer.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.VisualStudio.Composition.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.VisualStudio.TestPlatform.Common.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.VisualStudio.TestPlatform.ObjectModel.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.VisualStudio.Threading.resources.dll",
+        "tools/net10.0/linux-arm64/de/Microsoft.VisualStudio.Validation.resources.dll",
+        "tools/net10.0/linux-arm64/de/StreamJsonRpc.resources.dll",
+        "tools/net10.0/linux-arm64/de/System.CommandLine.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.CodeAnalysis.CSharp.Features.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.CodeAnalysis.ExternalAccess.AspNetCore.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.CodeAnalysis.Features.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.CodeAnalysis.LanguageServer.Protocol.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.CodeAnalysis.LanguageServer.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.CodeAnalysis.Remote.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.CodeAnalysis.Scripting.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.CodeAnalysis.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.CodeAnalysis.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.ServiceHub.Client.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.ServiceHub.Framework.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.TestPlatform.CommunicationUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.TestPlatform.CoreUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.TestPlatform.VsTestConsole.TranslationLayer.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.VisualStudio.Composition.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.VisualStudio.TestPlatform.Common.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.VisualStudio.TestPlatform.ObjectModel.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.VisualStudio.Threading.resources.dll",
+        "tools/net10.0/linux-arm64/es/Microsoft.VisualStudio.Validation.resources.dll",
+        "tools/net10.0/linux-arm64/es/StreamJsonRpc.resources.dll",
+        "tools/net10.0/linux-arm64/es/System.CommandLine.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.CodeAnalysis.CSharp.Features.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.CodeAnalysis.ExternalAccess.AspNetCore.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.CodeAnalysis.Features.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.CodeAnalysis.LanguageServer.Protocol.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.CodeAnalysis.LanguageServer.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.CodeAnalysis.Remote.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.CodeAnalysis.Scripting.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.CodeAnalysis.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.CodeAnalysis.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.ServiceHub.Client.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.ServiceHub.Framework.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.TestPlatform.CommunicationUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.TestPlatform.CoreUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.TestPlatform.VsTestConsole.TranslationLayer.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.VisualStudio.Composition.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.VisualStudio.TestPlatform.Common.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.VisualStudio.TestPlatform.ObjectModel.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.VisualStudio.Threading.resources.dll",
+        "tools/net10.0/linux-arm64/fr/Microsoft.VisualStudio.Validation.resources.dll",
+        "tools/net10.0/linux-arm64/fr/StreamJsonRpc.resources.dll",
+        "tools/net10.0/linux-arm64/fr/System.CommandLine.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.CodeAnalysis.CSharp.Features.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.CodeAnalysis.ExternalAccess.AspNetCore.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.CodeAnalysis.Features.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.CodeAnalysis.LanguageServer.Protocol.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.CodeAnalysis.LanguageServer.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.CodeAnalysis.Remote.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.CodeAnalysis.Scripting.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.CodeAnalysis.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.CodeAnalysis.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.ServiceHub.Client.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.ServiceHub.Framework.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.TestPlatform.CommunicationUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.TestPlatform.CoreUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.TestPlatform.VsTestConsole.TranslationLayer.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.VisualStudio.Composition.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.VisualStudio.TestPlatform.Common.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.VisualStudio.TestPlatform.ObjectModel.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.VisualStudio.Threading.resources.dll",
+        "tools/net10.0/linux-arm64/it/Microsoft.VisualStudio.Validation.resources.dll",
+        "tools/net10.0/linux-arm64/it/StreamJsonRpc.resources.dll",
+        "tools/net10.0/linux-arm64/it/System.CommandLine.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.CodeAnalysis.CSharp.Features.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.CodeAnalysis.ExternalAccess.AspNetCore.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.CodeAnalysis.Features.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.CodeAnalysis.LanguageServer.Protocol.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.CodeAnalysis.LanguageServer.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.CodeAnalysis.Remote.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.CodeAnalysis.Scripting.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.CodeAnalysis.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.CodeAnalysis.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.ServiceHub.Client.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.ServiceHub.Framework.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.TestPlatform.CommunicationUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.TestPlatform.CoreUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.TestPlatform.VsTestConsole.TranslationLayer.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.VisualStudio.Composition.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.VisualStudio.TestPlatform.Common.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.VisualStudio.TestPlatform.ObjectModel.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.VisualStudio.Threading.resources.dll",
+        "tools/net10.0/linux-arm64/ja/Microsoft.VisualStudio.Validation.resources.dll",
+        "tools/net10.0/linux-arm64/ja/StreamJsonRpc.resources.dll",
+        "tools/net10.0/linux-arm64/ja/System.CommandLine.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.CodeAnalysis.CSharp.Features.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.CodeAnalysis.ExternalAccess.AspNetCore.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.CodeAnalysis.Features.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.CodeAnalysis.LanguageServer.Protocol.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.CodeAnalysis.LanguageServer.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.CodeAnalysis.Remote.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.CodeAnalysis.Scripting.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.CodeAnalysis.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.CodeAnalysis.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.ServiceHub.Client.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.ServiceHub.Framework.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.TestPlatform.CommunicationUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.TestPlatform.CoreUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.TestPlatform.VsTestConsole.TranslationLayer.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.VisualStudio.Composition.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.VisualStudio.TestPlatform.Common.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.VisualStudio.TestPlatform.ObjectModel.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.VisualStudio.Threading.resources.dll",
+        "tools/net10.0/linux-arm64/ko/Microsoft.VisualStudio.Validation.resources.dll",
+        "tools/net10.0/linux-arm64/ko/StreamJsonRpc.resources.dll",
+        "tools/net10.0/linux-arm64/ko/System.CommandLine.resources.dll",
+        "tools/net10.0/linux-arm64/libe_sqlite3.so",
+        "tools/net10.0/linux-arm64/pl/Microsoft.CodeAnalysis.CSharp.Features.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.CodeAnalysis.ExternalAccess.AspNetCore.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.CodeAnalysis.Features.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.CodeAnalysis.LanguageServer.Protocol.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.CodeAnalysis.LanguageServer.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.CodeAnalysis.Remote.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.CodeAnalysis.Scripting.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.CodeAnalysis.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.CodeAnalysis.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.ServiceHub.Client.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.ServiceHub.Framework.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.TestPlatform.CommunicationUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.TestPlatform.CoreUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.TestPlatform.VsTestConsole.TranslationLayer.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.VisualStudio.Composition.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.VisualStudio.TestPlatform.Common.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.VisualStudio.TestPlatform.ObjectModel.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.VisualStudio.Threading.resources.dll",
+        "tools/net10.0/linux-arm64/pl/Microsoft.VisualStudio.Validation.resources.dll",
+        "tools/net10.0/linux-arm64/pl/StreamJsonRpc.resources.dll",
+        "tools/net10.0/linux-arm64/pl/System.CommandLine.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.CodeAnalysis.CSharp.Features.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.CodeAnalysis.ExternalAccess.AspNetCore.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.CodeAnalysis.Features.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.CodeAnalysis.LanguageServer.Protocol.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.CodeAnalysis.LanguageServer.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.CodeAnalysis.Remote.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.CodeAnalysis.Scripting.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.CodeAnalysis.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.CodeAnalysis.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.ServiceHub.Client.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.ServiceHub.Framework.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.TestPlatform.CommunicationUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.TestPlatform.CoreUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.TestPlatform.VsTestConsole.TranslationLayer.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.VisualStudio.Composition.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.VisualStudio.TestPlatform.Common.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.VisualStudio.TestPlatform.ObjectModel.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.VisualStudio.Threading.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/Microsoft.VisualStudio.Validation.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/StreamJsonRpc.resources.dll",
+        "tools/net10.0/linux-arm64/pt-BR/System.CommandLine.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.CodeAnalysis.CSharp.Features.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.CodeAnalysis.ExternalAccess.AspNetCore.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.CodeAnalysis.Features.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.CodeAnalysis.LanguageServer.Protocol.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.CodeAnalysis.LanguageServer.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.CodeAnalysis.Remote.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.CodeAnalysis.Scripting.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.CodeAnalysis.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.CodeAnalysis.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.ServiceHub.Client.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.ServiceHub.Framework.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.TestPlatform.CommunicationUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.TestPlatform.CoreUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.TestPlatform.VsTestConsole.TranslationLayer.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.VisualStudio.Composition.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.VisualStudio.TestPlatform.Common.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.VisualStudio.TestPlatform.ObjectModel.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.VisualStudio.Threading.resources.dll",
+        "tools/net10.0/linux-arm64/ru/Microsoft.VisualStudio.Validation.resources.dll",
+        "tools/net10.0/linux-arm64/ru/StreamJsonRpc.resources.dll",
+        "tools/net10.0/linux-arm64/ru/System.CommandLine.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.CodeAnalysis.CSharp.Features.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.CodeAnalysis.ExternalAccess.AspNetCore.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.CodeAnalysis.Features.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.CodeAnalysis.LanguageServer.Protocol.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.CodeAnalysis.LanguageServer.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.CodeAnalysis.Remote.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.CodeAnalysis.Scripting.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.CodeAnalysis.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.CodeAnalysis.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.ServiceHub.Client.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.ServiceHub.Framework.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.TestPlatform.CommunicationUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.TestPlatform.CoreUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.TestPlatform.VsTestConsole.TranslationLayer.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.VisualStudio.Composition.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.VisualStudio.TestPlatform.Common.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.VisualStudio.TestPlatform.ObjectModel.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.VisualStudio.Threading.resources.dll",
+        "tools/net10.0/linux-arm64/tr/Microsoft.VisualStudio.Validation.resources.dll",
+        "tools/net10.0/linux-arm64/tr/StreamJsonRpc.resources.dll",
+        "tools/net10.0/linux-arm64/tr/System.CommandLine.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.CodeAnalysis.CSharp.Features.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.CodeAnalysis.ExternalAccess.AspNetCore.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.CodeAnalysis.Features.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.CodeAnalysis.LanguageServer.Protocol.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.CodeAnalysis.LanguageServer.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.CodeAnalysis.Remote.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.CodeAnalysis.Scripting.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.CodeAnalysis.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.CodeAnalysis.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.ServiceHub.Client.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.ServiceHub.Framework.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.TestPlatform.CommunicationUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.TestPlatform.CoreUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.TestPlatform.VsTestConsole.TranslationLayer.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.VisualStudio.Composition.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.VisualStudio.TestPlatform.Common.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.VisualStudio.TestPlatform.ObjectModel.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.VisualStudio.Threading.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/Microsoft.VisualStudio.Validation.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/StreamJsonRpc.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hans/System.CommandLine.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.CodeAnalysis.CSharp.Features.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.CodeAnalysis.ExternalAccess.AspNetCore.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.CodeAnalysis.Features.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.CodeAnalysis.LanguageServer.Protocol.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.CodeAnalysis.LanguageServer.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.CodeAnalysis.Remote.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.CodeAnalysis.Scripting.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.CodeAnalysis.Workspaces.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.CodeAnalysis.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.ServiceHub.Client.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.ServiceHub.Framework.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.TestPlatform.CommunicationUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.TestPlatform.CoreUtilities.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.TestPlatform.VsTestConsole.TranslationLayer.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.VisualStudio.Composition.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.VisualStudio.TestPlatform.Common.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.VisualStudio.TestPlatform.ObjectModel.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.VisualStudio.Threading.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/Microsoft.VisualStudio.Validation.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/StreamJsonRpc.resources.dll",
+        "tools/net10.0/linux-arm64/zh-Hant/System.CommandLine.resources.dll"
+      ]
+    },
+    "System.Drawing.Common/5.0.0": {
+      "sha512": "SztFwAnpfKC8+sEKXAFxCBWhKQaEd97EiOL7oZJZP56zbqnLpmxACWA8aGseaUExciuEAUuR9dY8f7HkTRAdnw==",
+      "type": "package",
+      "path": "system.drawing.common/5.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/MonoAndroid10/_._",
+        "lib/MonoTouch10/_._",
+        "lib/net461/System.Drawing.Common.dll",
+        "lib/netcoreapp3.0/System.Drawing.Common.dll",
+        "lib/netcoreapp3.0/System.Drawing.Common.xml",
+        "lib/netstandard2.0/System.Drawing.Common.dll",
+        "lib/xamarinios10/_._",
+        "lib/xamarinmac20/_._",
+        "lib/xamarintvos10/_._",
+        "lib/xamarinwatchos10/_._",
+        "ref/MonoAndroid10/_._",
+        "ref/MonoTouch10/_._",
+        "ref/net461/System.Drawing.Common.dll",
+        "ref/netcoreapp3.0/System.Drawing.Common.dll",
+        "ref/netcoreapp3.0/System.Drawing.Common.xml",
+        "ref/netstandard2.0/System.Drawing.Common.dll",
+        "ref/xamarinios10/_._",
+        "ref/xamarinmac20/_._",
+        "ref/xamarintvos10/_._",
+        "ref/xamarinwatchos10/_._",
+        "runtimes/unix/lib/netcoreapp2.0/System.Drawing.Common.dll",
+        "runtimes/unix/lib/netcoreapp3.0/System.Drawing.Common.dll",
+        "runtimes/unix/lib/netcoreapp3.0/System.Drawing.Common.xml",
+        "runtimes/win/lib/netcoreapp2.0/System.Drawing.Common.dll",
+        "runtimes/win/lib/netcoreapp3.0/System.Drawing.Common.dll",
+        "runtimes/win/lib/netcoreapp3.0/System.Drawing.Common.xml",
+        "system.drawing.common.5.0.0.nupkg.sha512",
+        "system.drawing.common.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "System.Drawing.Common/7.0.0": {
+      "sha512": "KIX+oBU38pxkKPxvLcLfIkOV5Ien8ReN78wro7OF5/erwcmortzeFx+iBswlh2Vz6gVne0khocQudGwaO1Ey6A==",
+      "type": "package",
+      "path": "system.drawing.common/7.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "buildTransitive/net461/System.Drawing.Common.targets",
+        "buildTransitive/net462/_._",
+        "buildTransitive/net6.0/_._",
+        "buildTransitive/netcoreapp2.0/System.Drawing.Common.targets",
+        "lib/MonoAndroid10/_._",
+        "lib/MonoTouch10/_._",
+        "lib/net462/System.Drawing.Common.dll",
+        "lib/net462/System.Drawing.Common.xml",
+        "lib/net6.0/System.Drawing.Common.dll",
+        "lib/net6.0/System.Drawing.Common.xml",
+        "lib/net7.0/System.Drawing.Common.dll",
+        "lib/net7.0/System.Drawing.Common.xml",
+        "lib/netstandard2.0/System.Drawing.Common.dll",
+        "lib/netstandard2.0/System.Drawing.Common.xml",
+        "lib/xamarinios10/_._",
+        "lib/xamarinmac20/_._",
+        "lib/xamarintvos10/_._",
+        "lib/xamarinwatchos10/_._",
+        "runtimes/win/lib/net6.0/System.Drawing.Common.dll",
+        "runtimes/win/lib/net6.0/System.Drawing.Common.xml",
+        "runtimes/win/lib/net7.0/System.Drawing.Common.dll",
+        "runtimes/win/lib/net7.0/System.Drawing.Common.xml",
+        "system.drawing.common.7.0.0.nupkg.sha512",
+        "system.drawing.common.nuspec",
+        "useSharedDesignerContext.txt"
+      ]
+    },
+    "System.Formats.Asn1/5.0.0": {
+      "sha512": "MTvUIktmemNB+El0Fgw9egyqT9AYSIk6DTJeoDSpc3GIHxHCMo8COqkWT1mptX5tZ1SlQ6HJZ0OsSvMth1c12w==",
+      "type": "package",
+      "path": "system.formats.asn1/5.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/net461/System.Formats.Asn1.dll",
+        "lib/net461/System.Formats.Asn1.xml",
+        "lib/netstandard2.0/System.Formats.Asn1.dll",
+        "lib/netstandard2.0/System.Formats.Asn1.xml",
+        "system.formats.asn1.5.0.0.nupkg.sha512",
+        "system.formats.asn1.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "System.Numerics.Vectors/4.5.0": {
+      "sha512": "QQTlPTl06J/iiDbJCiepZ4H//BVraReU4O4EoRw1U02H5TLUIT7xn3GnDp9AXPSlJUDyFs4uWjWafNX6WrAojQ==",
+      "type": "package",
+      "path": "system.numerics.vectors/4.5.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/MonoAndroid10/_._",
+        "lib/MonoTouch10/_._",
+        "lib/net46/System.Numerics.Vectors.dll",
+        "lib/net46/System.Numerics.Vectors.xml",
+        "lib/netcoreapp2.0/_._",
+        "lib/netstandard1.0/System.Numerics.Vectors.dll",
+        "lib/netstandard1.0/System.Numerics.Vectors.xml",
+        "lib/netstandard2.0/System.Numerics.Vectors.dll",
+        "lib/netstandard2.0/System.Numerics.Vectors.xml",
+        "lib/portable-net45+win8+wp8+wpa81/System.Numerics.Vectors.dll",
+        "lib/portable-net45+win8+wp8+wpa81/System.Numerics.Vectors.xml",
+        "lib/uap10.0.16299/_._",
+        "lib/xamarinios10/_._",
+        "lib/xamarinmac20/_._",
+        "lib/xamarintvos10/_._",
+        "lib/xamarinwatchos10/_._",
+        "ref/MonoAndroid10/_._",
+        "ref/MonoTouch10/_._",
+        "ref/net45/System.Numerics.Vectors.dll",
+        "ref/net45/System.Numerics.Vectors.xml",
+        "ref/net46/System.Numerics.Vectors.dll",
+        "ref/net46/System.Numerics.Vectors.xml",
+        "ref/netcoreapp2.0/_._",
+        "ref/netstandard1.0/System.Numerics.Vectors.dll",
+        "ref/netstandard1.0/System.Numerics.Vectors.xml",
+        "ref/netstandard2.0/System.Numerics.Vectors.dll",
+        "ref/netstandard2.0/System.Numerics.Vectors.xml",
+        "ref/uap10.0.16299/_._",
+        "ref/xamarinios10/_._",
+        "ref/xamarinmac20/_._",
+        "ref/xamarintvos10/_._",
+        "ref/xamarinwatchos10/_._",
+        "system.numerics.vectors.4.5.0.nupkg.sha512",
+        "system.numerics.vectors.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "System.Private.ServiceModel/4.9.0": {
+      "sha512": "d3RjkrtpjUQ63PzFmm/SZ4aOXeJNP+8YW5QeP0lCJy8iX4xlHdlNLWTF9sRn9SmrFTK757kQXT9Op/R4l858uw==",
+      "type": "package",
+      "path": "system.private.servicemodel/4.9.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/netstandard2.0/System.Private.ServiceModel.dll",
+        "lib/netstandard2.0/System.Private.ServiceModel.pdb",
+        "lib/netstandard2.0/cs/System.Private.ServiceModel.resources.dll",
+        "lib/netstandard2.0/de/System.Private.ServiceModel.resources.dll",
+        "lib/netstandard2.0/es/System.Private.ServiceModel.resources.dll",
+        "lib/netstandard2.0/fr/System.Private.ServiceModel.resources.dll",
+        "lib/netstandard2.0/it/System.Private.ServiceModel.resources.dll",
+        "lib/netstandard2.0/ja/System.Private.ServiceModel.resources.dll",
+        "lib/netstandard2.0/ko/System.Private.ServiceModel.resources.dll",
+        "lib/netstandard2.0/pl/System.Private.ServiceModel.resources.dll",
+        "lib/netstandard2.0/pt-BR/System.Private.ServiceModel.resources.dll",
+        "lib/netstandard2.0/ru/System.Private.ServiceModel.resources.dll",
+        "lib/netstandard2.0/tr/System.Private.ServiceModel.resources.dll",
+        "lib/netstandard2.0/zh-Hans/System.Private.ServiceModel.resources.dll",
+        "lib/netstandard2.0/zh-Hant/System.Private.ServiceModel.resources.dll",
+        "ref/netstandard2.0/_._",
+        "system.private.servicemodel.4.9.0.nupkg.sha512",
+        "system.private.servicemodel.nuspec"
+      ]
+    },
+    "System.Reflection.DispatchProxy/4.7.1": {
+      "sha512": "C1sMLwIG6ILQ2bmOT4gh62V6oJlyF4BlHcVMrOoor49p0Ji2tA8QAoqyMcIhAdH6OHKJ8m7BU+r4LK2CUEOKqw==",
+      "type": "package",
+      "path": "system.reflection.dispatchproxy/4.7.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/MonoAndroid10/_._",
+        "lib/MonoTouch10/_._",
+        "lib/net461/System.Reflection.DispatchProxy.dll",
+        "lib/net461/System.Reflection.DispatchProxy.xml",
+        "lib/netcoreapp2.0/System.Reflection.DispatchProxy.dll",
+        "lib/netcoreapp2.0/System.Reflection.DispatchProxy.xml",
+        "lib/netstandard1.3/System.Reflection.DispatchProxy.dll",
+        "lib/netstandard2.0/System.Reflection.DispatchProxy.dll",
+        "lib/netstandard2.0/System.Reflection.DispatchProxy.xml",
+        "lib/xamarinios10/_._",
+        "lib/xamarinmac20/_._",
+        "lib/xamarintvos10/_._",
+        "lib/xamarinwatchos10/_._",
+        "ref/MonoAndroid10/_._",
+        "ref/MonoTouch10/_._",
+        "ref/net461/System.Reflection.DispatchProxy.dll",
+        "ref/net461/System.Reflection.DispatchProxy.xml",
+        "ref/netstandard1.3/System.Reflection.DispatchProxy.dll",
+        "ref/netstandard1.3/System.Reflection.DispatchProxy.xml",
+        "ref/netstandard1.3/de/System.Reflection.DispatchProxy.xml",
+        "ref/netstandard1.3/es/System.Reflection.DispatchProxy.xml",
+        "ref/netstandard1.3/fr/System.Reflection.DispatchProxy.xml",
+        "ref/netstandard1.3/it/System.Reflection.DispatchProxy.xml",
+        "ref/netstandard1.3/ja/System.Reflection.DispatchProxy.xml",
+        "ref/netstandard1.3/ko/System.Reflection.DispatchProxy.xml",
+        "ref/netstandard1.3/ru/System.Reflection.DispatchProxy.xml",
+        "ref/netstandard1.3/zh-hans/System.Reflection.DispatchProxy.xml",
+        "ref/netstandard1.3/zh-hant/System.Reflection.DispatchProxy.xml",
+        "ref/netstandard2.0/System.Reflection.DispatchProxy.dll",
+        "ref/netstandard2.0/System.Reflection.DispatchProxy.xml",
+        "ref/uap10.0.16299/System.Reflection.DispatchProxy.dll",
+        "ref/uap10.0.16299/System.Reflection.DispatchProxy.xml",
+        "ref/xamarinios10/_._",
+        "ref/xamarinmac20/_._",
+        "ref/xamarintvos10/_._",
+        "ref/xamarinwatchos10/_._",
+        "runtimes/aot/lib/netcore50/System.Reflection.DispatchProxy.dll",
+        "runtimes/win-aot/lib/uap10.0.16299/System.Reflection.DispatchProxy.dll",
+        "runtimes/win/lib/uap10.0.16299/System.Reflection.DispatchProxy.dll",
+        "system.reflection.dispatchproxy.4.7.1.nupkg.sha512",
+        "system.reflection.dispatchproxy.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "System.Security.AccessControl/5.0.0": {
+      "sha512": "dagJ1mHZO3Ani8GH0PHpPEe/oYO+rVdbQjvjJkBRNQkX4t0r1iaeGn8+/ybkSLEan3/slM0t59SVdHzuHf2jmw==",
+      "type": "package",
+      "path": "system.security.accesscontrol/5.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/net46/System.Security.AccessControl.dll",
+        "lib/net461/System.Security.AccessControl.dll",
+        "lib/net461/System.Security.AccessControl.xml",
+        "lib/netstandard1.3/System.Security.AccessControl.dll",
+        "lib/netstandard2.0/System.Security.AccessControl.dll",
+        "lib/netstandard2.0/System.Security.AccessControl.xml",
+        "lib/uap10.0.16299/_._",
+        "ref/net46/System.Security.AccessControl.dll",
+        "ref/net461/System.Security.AccessControl.dll",
+        "ref/net461/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/System.Security.AccessControl.dll",
+        "ref/netstandard1.3/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/de/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/es/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/fr/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/it/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/ja/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/ko/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/ru/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/zh-hans/System.Security.AccessControl.xml",
+        "ref/netstandard1.3/zh-hant/System.Security.AccessControl.xml",
+        "ref/netstandard2.0/System.Security.AccessControl.dll",
+        "ref/netstandard2.0/System.Security.AccessControl.xml",
+        "ref/uap10.0.16299/_._",
+        "runtimes/win/lib/net46/System.Security.AccessControl.dll",
+        "runtimes/win/lib/net461/System.Security.AccessControl.dll",
+        "runtimes/win/lib/net461/System.Security.AccessControl.xml",
+        "runtimes/win/lib/netcoreapp2.0/System.Security.AccessControl.dll",
+        "runtimes/win/lib/netcoreapp2.0/System.Security.AccessControl.xml",
+        "runtimes/win/lib/netstandard1.3/System.Security.AccessControl.dll",
+        "runtimes/win/lib/uap10.0.16299/_._",
+        "system.security.accesscontrol.5.0.0.nupkg.sha512",
+        "system.security.accesscontrol.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "System.Security.Cryptography.Cng/5.0.0": {
+      "sha512": "jIMXsKn94T9JY7PvPq/tMfqa6GAaHpElRDpmG+SuL+D3+sTw2M8VhnibKnN8Tq+4JqbPJ/f+BwtLeDMEnzAvRg==",
+      "type": "package",
+      "path": "system.security.cryptography.cng/5.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/MonoAndroid10/_._",
+        "lib/MonoTouch10/_._",
+        "lib/net46/System.Security.Cryptography.Cng.dll",
+        "lib/net461/System.Security.Cryptography.Cng.dll",
+        "lib/net461/System.Security.Cryptography.Cng.xml",
+        "lib/net462/System.Security.Cryptography.Cng.dll",
+        "lib/net462/System.Security.Cryptography.Cng.xml",
+        "lib/net47/System.Security.Cryptography.Cng.dll",
+        "lib/net47/System.Security.Cryptography.Cng.xml",
+        "lib/netcoreapp2.1/System.Security.Cryptography.Cng.dll",
+        "lib/netcoreapp3.0/System.Security.Cryptography.Cng.dll",
+        "lib/netcoreapp3.0/System.Security.Cryptography.Cng.xml",
+        "lib/netstandard1.3/System.Security.Cryptography.Cng.dll",
+        "lib/netstandard1.4/System.Security.Cryptography.Cng.dll",
+        "lib/netstandard1.6/System.Security.Cryptography.Cng.dll",
+        "lib/netstandard2.0/System.Security.Cryptography.Cng.dll",
+        "lib/netstandard2.0/System.Security.Cryptography.Cng.xml",
+        "lib/netstandard2.1/System.Security.Cryptography.Cng.dll",
+        "lib/netstandard2.1/System.Security.Cryptography.Cng.xml",
+        "lib/uap10.0.16299/_._",
+        "lib/xamarinios10/_._",
+        "lib/xamarinmac20/_._",
+        "lib/xamarintvos10/_._",
+        "lib/xamarinwatchos10/_._",
+        "ref/MonoAndroid10/_._",
+        "ref/MonoTouch10/_._",
+        "ref/net46/System.Security.Cryptography.Cng.dll",
+        "ref/net461/System.Security.Cryptography.Cng.dll",
+        "ref/net461/System.Security.Cryptography.Cng.xml",
+        "ref/net462/System.Security.Cryptography.Cng.dll",
+        "ref/net462/System.Security.Cryptography.Cng.xml",
+        "ref/net47/System.Security.Cryptography.Cng.dll",
+        "ref/net47/System.Security.Cryptography.Cng.xml",
+        "ref/netcoreapp2.0/System.Security.Cryptography.Cng.dll",
+        "ref/netcoreapp2.0/System.Security.Cryptography.Cng.xml",
+        "ref/netcoreapp2.1/System.Security.Cryptography.Cng.dll",
+        "ref/netcoreapp2.1/System.Security.Cryptography.Cng.xml",
+        "ref/netcoreapp3.0/System.Security.Cryptography.Cng.dll",
+        "ref/netcoreapp3.0/System.Security.Cryptography.Cng.xml",
+        "ref/netstandard1.3/System.Security.Cryptography.Cng.dll",
+        "ref/netstandard1.4/System.Security.Cryptography.Cng.dll",
+        "ref/netstandard1.6/System.Security.Cryptography.Cng.dll",
+        "ref/netstandard2.0/System.Security.Cryptography.Cng.dll",
+        "ref/netstandard2.0/System.Security.Cryptography.Cng.xml",
+        "ref/netstandard2.1/System.Security.Cryptography.Cng.dll",
+        "ref/netstandard2.1/System.Security.Cryptography.Cng.xml",
+        "ref/uap10.0.16299/_._",
+        "ref/xamarinios10/_._",
+        "ref/xamarinmac20/_._",
+        "ref/xamarintvos10/_._",
+        "ref/xamarinwatchos10/_._",
+        "runtimes/win/lib/net46/System.Security.Cryptography.Cng.dll",
+        "runtimes/win/lib/net461/System.Security.Cryptography.Cng.dll",
+        "runtimes/win/lib/net461/System.Security.Cryptography.Cng.xml",
+        "runtimes/win/lib/net462/System.Security.Cryptography.Cng.dll",
+        "runtimes/win/lib/net462/System.Security.Cryptography.Cng.xml",
+        "runtimes/win/lib/net47/System.Security.Cryptography.Cng.dll",
+        "runtimes/win/lib/net47/System.Security.Cryptography.Cng.xml",
+        "runtimes/win/lib/netcoreapp2.0/System.Security.Cryptography.Cng.dll",
+        "runtimes/win/lib/netcoreapp2.1/System.Security.Cryptography.Cng.dll",
+        "runtimes/win/lib/netcoreapp3.0/System.Security.Cryptography.Cng.dll",
+        "runtimes/win/lib/netcoreapp3.0/System.Security.Cryptography.Cng.xml",
+        "runtimes/win/lib/netstandard1.4/System.Security.Cryptography.Cng.dll",
+        "runtimes/win/lib/netstandard1.6/System.Security.Cryptography.Cng.dll",
+        "runtimes/win/lib/uap10.0.16299/_._",
+        "system.security.cryptography.cng.5.0.0.nupkg.sha512",
+        "system.security.cryptography.cng.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "System.Security.Cryptography.Pkcs/5.0.0": {
+      "sha512": "9TPLGjBCGKmNvG8pjwPeuYy0SMVmGZRwlTZvyPHDbYv/DRkoeumJdfumaaDNQzVGMEmbWtg07zUpSW9q70IlDQ==",
+      "type": "package",
+      "path": "system.security.cryptography.pkcs/5.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/net46/System.Security.Cryptography.Pkcs.dll",
+        "lib/net461/System.Security.Cryptography.Pkcs.dll",
+        "lib/net461/System.Security.Cryptography.Pkcs.xml",
+        "lib/netcoreapp2.1/System.Security.Cryptography.Pkcs.dll",
+        "lib/netcoreapp3.0/System.Security.Cryptography.Pkcs.dll",
+        "lib/netcoreapp3.0/System.Security.Cryptography.Pkcs.xml",
+        "lib/netstandard1.3/System.Security.Cryptography.Pkcs.dll",
+        "lib/netstandard2.0/System.Security.Cryptography.Pkcs.dll",
+        "lib/netstandard2.0/System.Security.Cryptography.Pkcs.xml",
+        "lib/netstandard2.1/System.Security.Cryptography.Pkcs.dll",
+        "lib/netstandard2.1/System.Security.Cryptography.Pkcs.xml",
+        "ref/net46/System.Security.Cryptography.Pkcs.dll",
+        "ref/net461/System.Security.Cryptography.Pkcs.dll",
+        "ref/net461/System.Security.Cryptography.Pkcs.xml",
+        "ref/netcoreapp2.1/System.Security.Cryptography.Pkcs.dll",
+        "ref/netcoreapp2.1/System.Security.Cryptography.Pkcs.xml",
+        "ref/netcoreapp3.0/System.Security.Cryptography.Pkcs.dll",
+        "ref/netcoreapp3.0/System.Security.Cryptography.Pkcs.xml",
+        "ref/netstandard1.3/System.Security.Cryptography.Pkcs.dll",
+        "ref/netstandard2.0/System.Security.Cryptography.Pkcs.dll",
+        "ref/netstandard2.0/System.Security.Cryptography.Pkcs.xml",
+        "ref/netstandard2.1/System.Security.Cryptography.Pkcs.dll",
+        "ref/netstandard2.1/System.Security.Cryptography.Pkcs.xml",
+        "runtimes/win/lib/net46/System.Security.Cryptography.Pkcs.dll",
+        "runtimes/win/lib/net461/System.Security.Cryptography.Pkcs.dll",
+        "runtimes/win/lib/net461/System.Security.Cryptography.Pkcs.xml",
+        "runtimes/win/lib/netcoreapp2.1/System.Security.Cryptography.Pkcs.dll",
+        "runtimes/win/lib/netcoreapp3.0/System.Security.Cryptography.Pkcs.dll",
+        "runtimes/win/lib/netcoreapp3.0/System.Security.Cryptography.Pkcs.xml",
+        "runtimes/win/lib/netstandard1.3/System.Security.Cryptography.Pkcs.dll",
+        "runtimes/win/lib/netstandard2.0/System.Security.Cryptography.Pkcs.dll",
+        "runtimes/win/lib/netstandard2.0/System.Security.Cryptography.Pkcs.xml",
+        "runtimes/win/lib/netstandard2.1/System.Security.Cryptography.Pkcs.dll",
+        "runtimes/win/lib/netstandard2.1/System.Security.Cryptography.Pkcs.xml",
+        "system.security.cryptography.pkcs.5.0.0.nupkg.sha512",
+        "system.security.cryptography.pkcs.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "System.Security.Cryptography.Xml/5.0.0": {
+      "sha512": "MYmkHtCW+paFmPGFDktnLdOeH3zUrNchbZNki87E1ejNSMm9enSRbJokmvFrsWUrDE4bRE1lVeAle01+t6SGhA==",
+      "type": "package",
+      "path": "system.security.cryptography.xml/5.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/net461/System.Security.Cryptography.Xml.dll",
+        "lib/net461/System.Security.Cryptography.Xml.xml",
+        "lib/netstandard2.0/System.Security.Cryptography.Xml.dll",
+        "lib/netstandard2.0/System.Security.Cryptography.Xml.xml",
+        "ref/net461/System.Security.Cryptography.Xml.dll",
+        "ref/net461/System.Security.Cryptography.Xml.xml",
+        "ref/netstandard2.0/System.Security.Cryptography.Xml.dll",
+        "ref/netstandard2.0/System.Security.Cryptography.Xml.xml",
+        "system.security.cryptography.xml.5.0.0.nupkg.sha512",
+        "system.security.cryptography.xml.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "System.Security.Permissions/5.0.0": {
+      "sha512": "uE8juAhEkp7KDBCdjDIE3H9R1HJuEHqeqX8nLX9gmYKWwsqk3T5qZlPx8qle5DPKimC/Fy3AFTdV7HamgCh9qQ==",
+      "type": "package",
+      "path": "system.security.permissions/5.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/net461/System.Security.Permissions.dll",
+        "lib/net461/System.Security.Permissions.xml",
+        "lib/net5.0/System.Security.Permissions.dll",
+        "lib/net5.0/System.Security.Permissions.xml",
+        "lib/netcoreapp3.0/System.Security.Permissions.dll",
+        "lib/netcoreapp3.0/System.Security.Permissions.xml",
+        "lib/netstandard2.0/System.Security.Permissions.dll",
+        "lib/netstandard2.0/System.Security.Permissions.xml",
+        "ref/net461/System.Security.Permissions.dll",
+        "ref/net461/System.Security.Permissions.xml",
+        "ref/net5.0/System.Security.Permissions.dll",
+        "ref/net5.0/System.Security.Permissions.xml",
+        "ref/netcoreapp3.0/System.Security.Permissions.dll",
+        "ref/netcoreapp3.0/System.Security.Permissions.xml",
+        "ref/netstandard2.0/System.Security.Permissions.dll",
+        "ref/netstandard2.0/System.Security.Permissions.xml",
+        "system.security.permissions.5.0.0.nupkg.sha512",
+        "system.security.permissions.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "System.Security.Principal.Windows/5.0.0": {
+      "sha512": "t0MGLukB5WAVU9bO3MGzvlGnyJPgUlcwerXn1kzBRjwLKixT96XV0Uza41W49gVd8zEMFu9vQEFlv0IOrytICA==",
+      "type": "package",
+      "path": "system.security.principal.windows/5.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/net46/System.Security.Principal.Windows.dll",
+        "lib/net461/System.Security.Principal.Windows.dll",
+        "lib/net461/System.Security.Principal.Windows.xml",
+        "lib/netstandard1.3/System.Security.Principal.Windows.dll",
+        "lib/netstandard2.0/System.Security.Principal.Windows.dll",
+        "lib/netstandard2.0/System.Security.Principal.Windows.xml",
+        "lib/uap10.0.16299/_._",
+        "ref/net46/System.Security.Principal.Windows.dll",
+        "ref/net461/System.Security.Principal.Windows.dll",
+        "ref/net461/System.Security.Principal.Windows.xml",
+        "ref/netcoreapp3.0/System.Security.Principal.Windows.dll",
+        "ref/netcoreapp3.0/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/System.Security.Principal.Windows.dll",
+        "ref/netstandard1.3/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/de/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/es/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/fr/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/it/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/ja/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/ko/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/ru/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/zh-hans/System.Security.Principal.Windows.xml",
+        "ref/netstandard1.3/zh-hant/System.Security.Principal.Windows.xml",
+        "ref/netstandard2.0/System.Security.Principal.Windows.dll",
+        "ref/netstandard2.0/System.Security.Principal.Windows.xml",
+        "ref/uap10.0.16299/_._",
+        "runtimes/unix/lib/netcoreapp2.0/System.Security.Principal.Windows.dll",
+        "runtimes/unix/lib/netcoreapp2.0/System.Security.Principal.Windows.xml",
+        "runtimes/unix/lib/netcoreapp2.1/System.Security.Principal.Windows.dll",
+        "runtimes/unix/lib/netcoreapp2.1/System.Security.Principal.Windows.xml",
+        "runtimes/win/lib/net46/System.Security.Principal.Windows.dll",
+        "runtimes/win/lib/net461/System.Security.Principal.Windows.dll",
+        "runtimes/win/lib/net461/System.Security.Principal.Windows.xml",
+        "runtimes/win/lib/netcoreapp2.0/System.Security.Principal.Windows.dll",
+        "runtimes/win/lib/netcoreapp2.0/System.Security.Principal.Windows.xml",
+        "runtimes/win/lib/netcoreapp2.1/System.Security.Principal.Windows.dll",
+        "runtimes/win/lib/netcoreapp2.1/System.Security.Principal.Windows.xml",
+        "runtimes/win/lib/netstandard1.3/System.Security.Principal.Windows.dll",
+        "runtimes/win/lib/uap10.0.16299/_._",
+        "system.security.principal.windows.5.0.0.nupkg.sha512",
+        "system.security.principal.windows.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "System.ServiceModel.Primitives/4.9.0": {
+      "sha512": "LTFPVdS8Nf76xg/wRZkDa+2Q+GnjTOmwkTlwuoetwX37mAfYnGkf7p8ydhpDwVmomNljpUOhUUGxfjQyd5YcOg==",
+      "type": "package",
+      "path": "system.servicemodel.primitives/4.9.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/MonoAndroid10/_._",
+        "lib/MonoTouch10/_._",
+        "lib/net45/_._",
+        "lib/net46/System.ServiceModel.Primitives.dll",
+        "lib/net461/System.ServiceModel.Primitives.dll",
+        "lib/net461/System.ServiceModel.Primitives.pdb",
+        "lib/net6.0/System.ServiceModel.Primitives.dll",
+        "lib/net6.0/System.ServiceModel.Primitives.pdb",
+        "lib/net6.0/System.ServiceModel.dll",
+        "lib/netcore50/System.ServiceModel.Primitives.dll",
+        "lib/netcoreapp2.1/System.ServiceModel.Primitives.dll",
+        "lib/netcoreapp2.1/System.ServiceModel.Primitives.pdb",
+        "lib/netcoreapp2.1/System.ServiceModel.dll",
+        "lib/netstandard1.3/System.ServiceModel.Primitives.dll",
+        "lib/netstandard2.0/System.ServiceModel.Primitives.dll",
+        "lib/netstandard2.0/System.ServiceModel.Primitives.pdb",
+        "lib/netstandard2.0/System.ServiceModel.dll",
+        "lib/portable-net45+win8+wp8/_._",
+        "lib/win8/_._",
+        "lib/wp8/_._",
+        "lib/xamarinios10/_._",
+        "lib/xamarinmac20/_._",
+        "lib/xamarintvos10/_._",
+        "lib/xamarinwatchos10/_._",
+        "ref/MonoAndroid10/_._",
+        "ref/MonoTouch10/_._",
+        "ref/net45/_._",
+        "ref/net46/System.ServiceModel.Primitives.dll",
+        "ref/net461/System.ServiceModel.Primitives.dll",
+        "ref/net6.0/System.ServiceModel.Primitives.dll",
+        "ref/net6.0/System.ServiceModel.dll",
+        "ref/netcore50/System.ServiceModel.Primitives.dll",
+        "ref/netcoreapp2.1/System.ServiceModel.Primitives.dll",
+        "ref/netcoreapp2.1/System.ServiceModel.dll",
+        "ref/netstandard1.0/System.ServiceModel.Primitives.dll",
+        "ref/netstandard1.1/System.ServiceModel.Primitives.dll",
+        "ref/netstandard1.3/System.ServiceModel.Primitives.dll",
+        "ref/netstandard2.0/System.ServiceModel.Primitives.dll",
+        "ref/netstandard2.0/System.ServiceModel.dll",
+        "ref/portable-net45+win8+wp8/_._",
+        "ref/win8/_._",
+        "ref/wp8/_._",
+        "ref/xamarinios10/_._",
+        "ref/xamarinmac20/_._",
+        "ref/xamarintvos10/_._",
+        "ref/xamarinwatchos10/_._",
+        "system.servicemodel.primitives.4.9.0.nupkg.sha512",
+        "system.servicemodel.primitives.nuspec"
+      ]
+    },
+    "System.ValueTuple/4.5.0": {
+      "sha512": "okurQJO6NRE/apDIP23ajJ0hpiNmJ+f0BwOlB/cSqTLQlw5upkf+5+96+iG2Jw40G1fCVCyPz/FhIABUjMR+RQ==",
+      "type": "package",
+      "path": "system.valuetuple/4.5.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/MonoAndroid10/_._",
+        "lib/MonoTouch10/_._",
+        "lib/net461/System.ValueTuple.dll",
+        "lib/net461/System.ValueTuple.xml",
+        "lib/net47/System.ValueTuple.dll",
+        "lib/net47/System.ValueTuple.xml",
+        "lib/netcoreapp2.0/_._",
+        "lib/netstandard1.0/System.ValueTuple.dll",
+        "lib/netstandard1.0/System.ValueTuple.xml",
+        "lib/netstandard2.0/_._",
+        "lib/portable-net40+sl4+win8+wp8/System.ValueTuple.dll",
+        "lib/portable-net40+sl4+win8+wp8/System.ValueTuple.xml",
+        "lib/uap10.0.16299/_._",
+        "lib/xamarinios10/_._",
+        "lib/xamarinmac20/_._",
+        "lib/xamarintvos10/_._",
+        "lib/xamarinwatchos10/_._",
+        "ref/MonoAndroid10/_._",
+        "ref/MonoTouch10/_._",
+        "ref/net461/System.ValueTuple.dll",
+        "ref/net47/System.ValueTuple.dll",
+        "ref/netcoreapp2.0/_._",
+        "ref/netstandard2.0/_._",
+        "ref/portable-net40+sl4+win8+wp8/System.ValueTuple.dll",
+        "ref/uap10.0.16299/_._",
+        "ref/xamarinios10/_._",
+        "ref/xamarinmac20/_._",
+        "ref/xamarintvos10/_._",
+        "ref/xamarinwatchos10/_._",
+        "system.valuetuple.4.5.0.nupkg.sha512",
+        "system.valuetuple.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "System.Windows.Extensions/5.0.0": {
+      "sha512": "c1ho9WU9ZxMZawML+ssPKZfdnrg/OjR3pe0m9v8230z3acqphwvPJqzAkH54xRYm5ntZHGG1EPP3sux9H3qSPg==",
+      "type": "package",
+      "path": "system.windows.extensions/5.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/netcoreapp3.0/System.Windows.Extensions.dll",
+        "lib/netcoreapp3.0/System.Windows.Extensions.xml",
+        "ref/netcoreapp3.0/System.Windows.Extensions.dll",
+        "ref/netcoreapp3.0/System.Windows.Extensions.xml",
+        "runtimes/win/lib/netcoreapp3.0/System.Windows.Extensions.dll",
+        "runtimes/win/lib/netcoreapp3.0/System.Windows.Extensions.xml",
+        "system.windows.extensions.5.0.0.nupkg.sha512",
+        "system.windows.extensions.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    }
+  },
+  "projectFileDependencyGroups": {
+    "net7.0": [
+      "Grasshopper >= 8.0.23304.9001",
+      "Microsoft.NETFramework.ReferenceAssemblies.net48 >= 1.0.3",
+      "NetMQ >= 4.0.1.9",
+      "System.Drawing.Common >= 7.0.0",
+      "roslyn-language-server.linux-arm64 >= 5.8.0-1.26252.1"
+    ],
+    "net7.0-windows7.0": [
+      "Grasshopper >= 8.0.23304.9001",
+      "NetMQ >= 4.0.1.9",
+      "roslyn-language-server.linux-arm64 >= 5.8.0-1.26252.1"
+    ]
+  },
+  "packageFolders": {
+    "/Users/tomohirosugeta/.nuget/packages/": {}
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectUniqueName": "/Users/tomohirosugeta/repo/hoppercode/rhino-zmq-poc/rhino-zmq-poc.csproj",
+      "projectName": "rhino-zmq-poc",
+      "projectPath": "/Users/tomohirosugeta/repo/hoppercode/rhino-zmq-poc/rhino-zmq-poc.csproj",
+      "packagesPath": "/Users/tomohirosugeta/.nuget/packages/",
+      "outputPath": "/Users/tomohirosugeta/repo/hoppercode/rhino-zmq-poc/obj/",
+      "projectStyle": "PackageReference",
+      "crossTargeting": true,
+      "configFilePaths": [
+        "/Users/tomohirosugeta/.nuget/NuGet/NuGet.Config"
+      ],
+      "originalTargetFrameworks": [
+        "net7.0",
+        "net7.0-windows"
+      ],
+      "sources": {
+        "https://api.nuget.org/v3/index.json": {}
+      },
+      "frameworks": {
+        "net7.0": {
+          "targetAlias": "net7.0",
+          "projectReferences": {}
+        },
+        "net7.0-windows7.0": {
+          "targetAlias": "net7.0-windows",
+          "projectReferences": {}
+        }
+      },
+      "warningProperties": {
+        "noWarn": [
+          "NU1701"
+        ],
+        "warnAsError": [
+          "NU1605"
+        ]
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      }
+    },
+    "frameworks": {
+      "net7.0": {
+        "targetAlias": "net7.0",
+        "dependencies": {
+          "Grasshopper": {
+            "include": "Compile, Build, Native, ContentFiles, Analyzers, BuildTransitive",
+            "target": "Package",
+            "version": "[8.0.23304.9001, )"
+          },
+          "Microsoft.NETFramework.ReferenceAssemblies.net48": {
+            "include": "None",
+            "target": "Package",
+            "version": "[1.0.3, )",
+            "generatePathProperty": true
+          },
+          "NetMQ": {
+            "target": "Package",
+            "version": "[4.0.1.9, )"
+          },
+          "System.Drawing.Common": {
+            "include": "Compile, Build, Native, ContentFiles, Analyzers, BuildTransitive",
+            "target": "Package",
+            "version": "[7.0.0, )"
+          },
+          "roslyn-language-server.linux-arm64": {
+            "target": "Package",
+            "version": "[5.8.0-1.26252.1, )"
+          }
+        },
+        "imports": [
+          "net461",
+          "net462",
+          "net47",
+          "net471",
+          "net472",
+          "net48",
+          "net481"
+        ],
+        "assetTargetFallback": true,
+        "warn": true,
+        "downloadDependencies": [
+          {
+            "name": "Microsoft.AspNetCore.App.Ref",
+            "version": "[7.0.20, 7.0.20]"
+          },
+          {
+            "name": "Microsoft.NETCore.App.Ref",
+            "version": "[7.0.20, 7.0.20]"
+          },
+          {
+            "name": "Microsoft.WindowsDesktop.App.Ref",
+            "version": "[7.0.20, 7.0.20]"
+          }
+        ],
+        "frameworkReferences": {
+          "Microsoft.NETCore.App": {
+            "privateAssets": "all"
+          }
+        },
+        "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/8.0.413/RuntimeIdentifierGraph.json"
+      },
+      "net7.0-windows7.0": {
+        "targetAlias": "net7.0-windows",
+        "dependencies": {
+          "Grasshopper": {
+            "include": "Compile, Build, Native, ContentFiles, Analyzers, BuildTransitive",
+            "target": "Package",
+            "version": "[8.0.23304.9001, )"
+          },
+          "NetMQ": {
+            "target": "Package",
+            "version": "[4.0.1.9, )"
+          },
+          "roslyn-language-server.linux-arm64": {
+            "target": "Package",
+            "version": "[5.8.0-1.26252.1, )"
+          }
+        },
+        "imports": [
+          "net461",
+          "net462",
+          "net47",
+          "net471",
+          "net472",
+          "net48",
+          "net481"
+        ],
+        "assetTargetFallback": true,
+        "warn": true,
+        "downloadDependencies": [
+          {
+            "name": "Microsoft.AspNetCore.App.Ref",
+            "version": "[7.0.20, 7.0.20]"
+          },
+          {
+            "name": "Microsoft.NETCore.App.Ref",
+            "version": "[7.0.20, 7.0.20]"
+          },
+          {
+            "name": "Microsoft.WindowsDesktop.App.Ref",
+            "version": "[7.0.20, 7.0.20]"
+          }
+        ],
+        "frameworkReferences": {
+          "Microsoft.NETCore.App": {
+            "privateAssets": "all"
+          },
+          "Microsoft.WindowsDesktop.App.WindowsForms": {
+            "privateAssets": "none"
+          }
+        },
+        "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/8.0.413/RuntimeIdentifierGraph.json"
+      }
+    }
+  }
+}
