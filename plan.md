@@ -2,62 +2,71 @@
 
 ## Architecture Overview
 
-**Backend (rhino-zmq-poc)** â€” C# NetMQ Grasshopper component
+**Backend (rhino-zmq-poc)** - C# NetMQ Grasshopper component
 - `PUB @ 5555`: publishes versioned topics on document changes
 - `ROUTER @ 5556`: handles REQ/REP command requests
 
-**Frontend (terminal-tui)** â€” TypeScript/Node TUI, use commander for CLI and
-chalk for color
+**Frontend (terminal-tui)** - TypeScript/Node CLI, use commander for CLI and chalk for color
 - `SUB @ 5555`: subscribes to versioned pub/sub topics
 - `REQ @ 5556`: sends command requests via REQ/REP
 
 ---
 
-## 1. Pub/Sub Topics & Message Schemas
+## 1. XML Extraction (gh.event.xml)
+
+On every solution end, extract full GH document XML using GH_Archive:
+
+```csharp
+GH_Document doc = this.OnPingDocument();
+var archive = new GH_Archive();
+archive.AppendObject(doc, "Definition");
+string tempPath = Path.Combine(Path.GetTempPath(), "gh_definition.xml");
+archive.WriteToFile(tempPath, true);
+string xml = File.ReadAllText(tempPath);
+```
+
+Then publish via PUB socket with topic `gh.event.xml`.
+
+---
+
+## 2. Pub/Sub Topics & Message Schemas
 
 ### Topic Hierarchy
 
 ```
-gh.event.*     â†’ document changes (full XML on solution)
-gh.job.*       â†’ async command lifecycle
+gh.event.*     -> document changes (full XML on solution)
+gh.job.*       -> async command lifecycle
 ```
 
 ### Message Schemas
 
-**`gh.event.xml`** â€” published on every solution end
-
-Note: GH sends full XML on every solution. Client parses and computes diff locally.
-Topic routing enables filtering; version field enables forward compatibility.
+**gh.event.xml** - published on every solution end
 
 ```json
 {
   "type": "gh.event.xml",
-  "version": 1,
   "timestamp": 1712345678000,
   "docName": "grasshopper_definition.gh",
-  "solutionCount": 42,
-  "docVersion": 120,
   "xml": "<?xml ...>"
 }
 ```
 
-**`gh.job.completed`** â€” published when async job finishes
+**gh.job.completed** - published when async job finishes
+
 ```json
 {
   "type": "gh.job.completed",
-  "version": 1,
   "timestamp": 1712345678500,
   "jobId": "job-99",
   "commandId": "cmd-42",
   "ok": true,
-  "resultVersion": 121,
   "error": null
 }
 ```
 
 ---
 
-## 2. REQ/REP Command Protocol
+## 3. REQ/REP Command Protocol
 
 ### Commands
 
@@ -65,11 +74,11 @@ Topic routing enables filtering; version field enables forward compatibility.
 |---------|---------|
 | `submitJob` | Queue a command for async execution |
 | `getJobStatus` | Poll job state/progress |
-| `getSnapshot` | Get full document state (current behavior) |
+| `getSnapshot` | Get full document state |
 | `getEventsSince` | Get delta events since version |
 | `cancelJob` | Cancel a pending/running job |
 
-### `submitJob`
+### submitJob
 
 **Request:**
 
@@ -99,7 +108,7 @@ Topic routing enables filtering; version field enables forward compatibility.
 }
 ```
 
-### `getJobStatus`
+### getJobStatus
 
 **Request:**
 
@@ -115,7 +124,6 @@ Topic routing enables filtering; version field enables forward compatibility.
   "jobId": "job-99",
   "state": "completed",
   "progress": 100,
-  "resultVersion": 121,
   "submittedAt": 1712345678000,
   "completedAt": 1712345678500
 }
@@ -123,7 +131,7 @@ Topic routing enables filtering; version field enables forward compatibility.
 
 State enum: `queued | running | completed | failed | cancelled`
 
-### `getEventsSince`
+### getEventsSince
 
 **Request:**
 
@@ -137,19 +145,17 @@ State enum: `queued | running | completed | failed | cancelled`
 {
   "status": "ok",
   "events": [
-    { "type": "gh.event.xml", "version": 116, ... },
-    { "type": "gh.event.xml", "version": 117, ... }
+    { "type": "gh.event.xml", "timestamp": 1712345678000, ... },
+    { "type": "gh.event.xml", "timestamp": 1712345679000, ... }
   ]
 }
 ```
 
 ---
 
-## 3. Command Types (Future Implementation)
+## 4. Command Types
 
-These are operations that will be submitted as jobs:
-
-### `addComponent`
+### addComponent
 
 ```json
 {
@@ -163,7 +169,7 @@ These are operations that will be submitted as jobs:
 }
 ```
 
-### `deleteComponent`
+### deleteComponent
 
 ```json
 {
@@ -174,7 +180,7 @@ These are operations that will be submitted as jobs:
 }
 ```
 
-### `connectWire`
+### connectWire
 
 ```json
 {
@@ -186,7 +192,7 @@ These are operations that will be submitted as jobs:
 }
 ```
 
-### `disconnectWire`
+### disconnectWire
 
 ```json
 {
@@ -198,39 +204,39 @@ These are operations that will be submitted as jobs:
 }
 ```
 
-### Future Commands to Consider
+### Future Commands
 
-- `moveComponent` â€” reposition component
-- `renameComponent` â€” change nickName
+- `moveComponent` - reposition component
+- `renameComponent` - change nickName
 - `setComponentLocked` / `setComponentHidden`
 - `addGroup` / `removeFromGroup`
 - `setSliderValue` / `setPanelText`
 
 ---
 
-## 4. Job Queue State Machine
+## 5. Job Queue State Machine
 
 ```
 [submitJob]
-     â”‚
-     â–¼
-   QUEUED â”€â”€â–º RUNNING â”€â”€â–º COMPLETED
-     â”‚           â”‚             â”‚
-     â”‚           â–¼             â”‚
-     â”‚         FAILED â—„â”€â”€â”€â”€â”€â”€â”€â”¤
-     â”‚           â”‚             â”‚
-     â”‚           â–¼             â”‚
-     â””â”€â”€â”€â”€â”€â–º CANCELLED â—„â”€â”€â”€â”€â”€â”€â”˜
+     |
+     v
+   QUEUED ----> RUNNING ----> COMPLETED
+     |            |              |
+     |            v              |
+     |          FAILED <---------+
+     |            |              |
+     |            v              |
+     +----> CANCELLED <----------+
 ```
 
 - Queue is FIFO per document
 - Only one job running at a time (or N parallel if spec'd)
-- `cancelJob` transitions QUEUED/RUNNING â†’ CANCELLED
+- `cancelJob` transitions QUEUED/RUNNING -> CANCELLED
 - Failed jobs store error message, can be retried
 
 ---
 
-## 5. Backend Implementation Order
+## 6. Backend Implementation Order
 
 **Phase 1:** Topic-based pub/sub (gh.event.xml on solution, gh.job.completed on job finish)
 **Phase 2:** REQ/REP `submitJob` + job queue
@@ -238,55 +244,43 @@ These are operations that will be submitted as jobs:
 **Phase 4:** Additional polish / performance
 
 Files:
-- `rhino-zmq-poc/rhino-zmq-pocComponent.cs` â€” all backend logic
+- `rhino-zmq-poc/rhino-zmq-pocComponent.cs` - all backend logic
 
 ---
 
-## 6. Frontend Implementation Order
+## 7. Frontend Implementation Order
 
 **Phase 1:** SUB routing by topic prefix, parse versioned messages
 **Phase 2:** REQ/REP `submitJob` / `getJobStatus` client
-**Phase 3:** TUI updates to show job progress
-**Phase 4:** Build actual TUI features (canvas view, component tree, etc.)
+**Phase 3:** Job progress display (use nanoid for jobId generation)
+**Phase 4:** CLI output formatting with chalk
+
+Dependencies: `nanoid` for jobId generation
 
 Files:
-- `terminal-tui/index.ts` â€” main TUI logic, command client
-- `terminal-tui/src/gh-parser.ts` â€” XML parsing (existing)
-- `terminal-tui/src/gh-types.ts` â€” existing types
-- `terminal-tui/src/gh-messages.ts` â€” NEW: pub/sub message schemas
+- `terminal-tui/index.ts` - main CLI logic, command client
+- `terminal-tui/src/gh-parser.ts` - XML parsing (existing)
+- `terminal-tui/src/gh-types.ts` - existing types
+- `terminal-tui/src/gh-messages.ts` - NEW: pub/sub message schemas
 
 ---
 
-## 7. Shared Message Types (gh-messages.ts)
+## 8. Shared Message Types (gh-messages.ts)
 
 ```typescript
-export interface GhEventXml {
-  type: "gh.event.xml";
-  version: 1;
-  timestamp: number;
-  docName: string;
-  solutionCount: number;
-  docVersion: number;
-  xml: string;
-}
-
 export interface GhJobCompleted {
   type: "gh.job.completed";
-  version: 1;
   timestamp: number;
   jobId: string;
   commandId: string;
   ok: boolean;
-  resultVersion: number;
   error: string | null;
 }
-
-export type PubMessage = GhEventXml | GhJobCompleted;
 ```
 
 ---
 
-## 8. File Summary
+## 9. File Summary
 
 | File | Owner | Purpose |
 |------|-------|---------|
@@ -295,3 +289,31 @@ export type PubMessage = GhEventXml | GhJobCompleted;
 | `terminal-tui/src/gh-types.ts` | Frontend | Existing component/wire types |
 | `terminal-tui/src/gh-parser.ts` | Frontend | XML parsing |
 | `terminal-tui/index.ts` | Frontend | TUI, SUB routing, command client |
+
+---
+
+## 10. Connection & Error Handling
+
+### Connection Discovery
+
+Default endpoints hardcoded as `localhost:5555` and `localhost:5556`.
+Override via environment variables:
+- `GH_ZMQ_PUB=localhost:5555`
+- `GH_ZMQ_REQ=localhost:5556`
+
+### Error Handling
+
+- Connection failures: crash and exit
+- Malformed responses: log error, return error to CLI
+- Request timeout: 30 second default, configurable via `GH_TIMEOUT_MS`
+- GH not running: CLI prints "Cannot connect to Grasshopper. Is Rhino open?"
+
+---
+
+## 11. Logging
+
+Debug logging for ZMQ traffic via `GH_DEBUG` env var.
+When enabled, logs:
+- All published messages (topic + payload)
+- All sent requests and received responses
+- Connection open/close events
