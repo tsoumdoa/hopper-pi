@@ -166,6 +166,6 @@ mkdir -p rhino-zmq-poc/{infra,domain/Jobs,domain/Commands,services,app}
 
 1. Create folder structure
 2. Initialize `terminal-tui` as pnpm project with TypeScript
-3. Adjust `rhino-zmq-poc`  as per the folder structure, do not mess with dotnet
+3.  `rhino-zmq-poc` is already created with the gh dev template. adjust the folder strucutre as per the plan  as per the folder structure, do not mess with dotnet
    version
 4. Implement the phases in order
