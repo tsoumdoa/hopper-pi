@@ -3,7 +3,7 @@
 ## Architecture Overview
 
 **Backend (rhino-zmq-poc)** - C# NetMQ Grasshopper component
-- `PUB @ 5555`: publishes versioned topics on document changes
+- `PUB @ 5555`: publishes versioned topics
 - `ROUTER @ 5556`: handles REQ/REP command requests
 
 **Frontend (terminal-tui)** - TypeScript/Node CLI, use commander for CLI and chalk for color
@@ -12,287 +12,123 @@
 
 ---
 
-## 1. XML Extraction (gh.event.xml)
+## Implementation Phases
 
-On every solution end, extract full GH document XML using GH_Archive:
+### Phase 1: Minimum Viable Pub/Sub (Hello World)
 
-```csharp
-GH_Document doc = this.OnPingDocument();
-var archive = new GH_Archive();
-archive.AppendObject(doc, "Definition");
-string tempPath = Path.Combine(Path.GetTempPath(), "gh_definition.xml");
-archive.WriteToFile(tempPath, true);
-string xml = File.ReadAllText(tempPath);
-```
+**Goal:** Verify ZMQ connectivity works end-to-end
 
-Then publish via PUB socket with topic `gh.event.xml`.
-
----
-
-## 2. Pub/Sub Topics & Message Schemas
-
-### Topic Hierarchy
-
-```
-gh.event.*     -> document changes (full XML on solution)
-gh.job.*       -> async command lifecycle
-```
-
-### Message Schemas
-
-**gh.event.xml** - published on every solution end
-
+**Backend:**
+- Timer publishes to `gh.hello` topic every 2 seconds
+- Message schema:
 ```json
 {
-  "type": "gh.event.xml",
-  "timestamp": 1712345678000,
-  "docName": "grasshopper_definition.gh",
-  "xml": "<?xml ...>"
+  "type": "gh.hello",
+  "timestamp": 1234567890,
+  "msg": "hello from gh"
 }
 ```
 
-**gh.job.completed** - published when async job finishes
+**Frontend:**
+- `gh subscribe` already implemented - just verify it shows `gh.hello` messages
 
-```json
-{
-  "type": "gh.job.completed",
-  "timestamp": 1712345678500,
-  "jobId": "job-99",
-  "commandId": "cmd-42",
-  "ok": true,
-  "error": null
-}
-```
+**No file structure changes needed**
 
 ---
 
-## 3. REQ/REP Command Protocol
+### Phase 2: Job Submission via REQ/REP
 
-### Commands
+**Goal:** Frontend can submit a job, backend outputs received job to GH output param
 
-| Command | Purpose |
-|---------|---------|
-| `submitJob` | Queue a command for async execution |
-| `getJobStatus` | Poll job state/progress |
-| `getSnapshot` | Get full document state |
-| `getEventsSince` | Get delta events since version |
-| `cancelJob` | Cancel a pending/running job |
-
-### submitJob
-
-**Request:**
-
+**Backend:**
+- Add output parameter `Job Received` to the GH component
+- On receiving `submitJob` request via ROUTER socket:
+  - Output job details via output param (jobId, command.action, commandId)
+  - Store job in JobQueue but don't publish `gh.job.status` yet
+- Message schema (request):
 ```json
 {
   "type": "submitJob",
   "jobId": "job-99",
   "command": {
     "action": "addComponent",
-    "params": {
-      "componentType": "Circle",
-      "nickName": "My Circle",
-      "position": { "x": 100, "y": 200 }
-    }
+    "params": { ... }
   }
 }
 ```
 
-**Response (immediate):**
-
+**Response:**
 ```json
 {
   "status": "ok",
   "jobId": "job-99",
   "commandId": "cmd-42",
-  "queuedAt": 1712345678000
+  "queuedAt": 1234567890
 }
 ```
 
-### getJobStatus
+**Frontend:**
+- `gh submit <action> [params]` sends submitJob request via REQ socket
+- Example: `gh submit addComponent --componentType Circle --nickName "Test" --x 100 --y 200`
+- Output: `✓ job-abc123 received (cmd-xyz): addComponent`
 
-**Request:**
+---
 
-```json
-{ "type": "getJobStatus", "jobId": "job-99" }
-```
+### Phase 3: Job Status Pub/Sub
 
-**Response:**
+**Goal:** Job state transitions broadcast via gh.job.status
 
+**Backend:**
+- Publish `gh.job.status` on job state changes
+- States: queued → running → completed/failed
+
+**Message schema:**
 ```json
 {
-  "status": "ok",
+  "type": "gh.job.status",
+  "timestamp": 1234567890,
   "jobId": "job-99",
-  "state": "completed",
-  "progress": 100,
-  "submittedAt": 1712345678000,
-  "completedAt": 1712345678500
+  "commandId": "cmd-42",
+  "state": "queued | running | completed | failed",
+  "progress": 0-100,
+  "error": null
 }
 ```
 
-State enum: `queued | running | completed | failed | cancelled`
-
-### getEventsSince
-
-**Request:**
-
-```json
-{ "type": "getEventsSince", "sinceVersion": 115 }
-```
-
-**Response:**
-
-```json
-{
-  "status": "ok",
-  "events": [
-    { "type": "gh.event.xml", "timestamp": 1712345678000, ... },
-    { "type": "gh.event.xml", "timestamp": 1712345679000, ... }
-  ]
-}
-```
+**Frontend:**
+- `gh subscribe` shows job status updates with color coding
+- `gh submit` shows confirmation with jobId/commandId
 
 ---
 
-## 4. Command Types
+### Phase 4: Command Execution
 
-### addComponent
+**Goal:** Actually modify GH document based on submitted commands
 
-```json
-{
-  "action": "addComponent",
-  "params": {
-    "componentType": "Circle",
-    "libraryGuid": "...",
-    "nickName": "My Circle",
-    "position": { "x": 100, "y": 200 }
-  }
-}
-```
-
-### deleteComponent
-
-```json
-{
-  "action": "deleteComponent",
-  "params": {
-    "targetId": "Circle_1"
-  }
-}
-```
-
-### connectWire
-
-```json
-{
-  "action": "connectWire",
-  "params": {
-    "from": { "componentId": "A_1", "port": "out" },
-    "to": { "componentId": "B_2", "port": "in" }
-  }
-}
-```
-
-### disconnectWire
-
-```json
-{
-  "action": "disconnectWire",
-  "params": {
-    "from": { "componentId": "A_1", "port": "out" },
-    "to": { "componentId": "B_2", "port": "in" }
-  }
-}
-```
-
-### Future Commands
-
+**Command types:**
+- `addComponent` - add component to canvas
+- `deleteComponent` - remove a component
+- `connectWire` / `disconnectWire` - wire management
 - `moveComponent` - reposition component
-- `renameComponent` - change nickName
-- `setComponentLocked` / `setComponentHidden`
-- `addGroup` / `removeFromGroup`
-- `setSliderValue` / `setPanelText`
+- `renameComponent` - change nickname
+- `setComponentLocked` / `setComponentHidden` - visibility/lock
+- `addGroup` / `removeFromGroup` - grouping
+- `setSliderValue` / `setPanelText` - set values
 
 ---
 
-## 5. Job Queue State Machine
+### Phase 5: XML Extraction & Polish
 
-```
-[submitJob]
-     |
-     v
-   QUEUED ----> RUNNING ----> COMPLETED
-     |            |              |
-     |            v              |
-     |          FAILED <---------+
-     |            |              |
-     |            v              |
-     +----> CANCELLED <----------+
-```
+**Goal:** Full feature set per original specification
 
-- Queue is FIFO per document
-- Only one job running at a time (or N parallel if spec'd)
-- `cancelJob` transitions QUEUED/RUNNING -> CANCELLED
-- Failed jobs store error message, can be retried
+- `gh.event.xml` - publish full GH document XML on solution end
+- Interactive submit mode with numbered action list
+- Debug logging with `GH_DEBUG=1`
+- Environment variable configuration
 
 ---
 
-## 6. Backend Implementation Order
-
-**Phase 1:** Topic-based pub/sub (gh.event.xml on solution, gh.job.completed on job finish)
-**Phase 2:** REQ/REP `submitJob` + job queue
-**Phase 3:** Implement job execution (add/delete/connect commands)
-**Phase 4:** Additional polish / performance
-
-Files:
-- `rhino-zmq-poc/rhino-zmq-pocComponent.cs` - all backend logic
-
----
-
-## 7. Frontend Implementation Order
-
-**Phase 1:** SUB routing by topic prefix, parse versioned messages
-**Phase 2:** REQ/REP `submitJob` / `getJobStatus` client
-**Phase 3:** Job progress display (use nanoid for jobId generation)
-**Phase 4:** CLI output formatting with chalk
-
-Dependencies: `nanoid` for jobId generation
-
-Files:
-- `terminal-tui/index.ts` - main CLI logic, command client
-- `terminal-tui/src/gh-parser.ts` - XML parsing (existing)
-- `terminal-tui/src/gh-types.ts` - existing types
-- `terminal-tui/src/gh-messages.ts` - NEW: pub/sub message schemas
-
----
-
-## 8. Shared Message Types (gh-messages.ts)
-
-```typescript
-export interface GhJobCompleted {
-  type: "gh.job.completed";
-  timestamp: number;
-  jobId: string;
-  commandId: string;
-  ok: boolean;
-  error: string | null;
-}
-```
-
----
-
-## 9. File Summary
-
-| File | Owner | Purpose |
-|------|-------|---------|
-| `rhino-zmq-poc/rhino-zmq-pocComponent.cs` | Backend | ZMQ sockets, pub/sub, job queue, command execution |
-| `terminal-tui/src/gh-messages.ts` | Frontend | Shared pub/sub message type definitions |
-| `terminal-tui/src/gh-types.ts` | Frontend | Existing component/wire types |
-| `terminal-tui/src/gh-parser.ts` | Frontend | XML parsing |
-| `terminal-tui/index.ts` | Frontend | TUI, SUB routing, command client |
-
----
-
-## 10. Connection & Error Handling
+## Connection & Error Handling
 
 ### Connection Discovery
 
@@ -310,10 +146,47 @@ Override via environment variables:
 
 ---
 
-## 11. Logging
+## CLI Tool (terminal-tui)
 
-Debug logging for ZMQ traffic via `GH_DEBUG` env var.
-When enabled, logs:
-- All published messages (topic + payload)
-- All sent requests and received responses
-- Connection open/close events
+### Commands
+
+#### `gh subscribe`
+Subscribes to pub/sub events and displays them in the terminal.
+
+#### `gh submit <action> [params]`
+Submits a command to Grasshopper via REQ/REP.
+Example: `gh submit addComponent --componentType Circle --nickName "Test"`
+
+---
+
+## Shared Message Types
+
+```typescript
+export interface GhHello {
+  type: "gh.hello";
+  timestamp: number;
+  msg: string;
+}
+
+export interface GhJobStatus {
+  type: "gh.job.status";
+  timestamp: number;
+  jobId: string;
+  commandId: string;
+  state: "queued" | "running" | "completed" | "failed" | "cancelled";
+  progress: number;
+  error: string | null;
+}
+```
+
+---
+
+## File Summary
+
+| File | Owner | Purpose |
+|------|-------|---------|
+| `rhino-zmq-poc/rhino-zmq-pocComponent.cs` | Backend | ZMQ sockets, pub/sub, job queue, command execution |
+| `terminal-tui/src/cli/commands.ts` | Frontend | CLI command definitions |
+| `terminal-tui/src/infra/subscriber.ts` | Frontend | SUB socket client |
+| `terminal-tui/src/infra/requester.ts` | Frontend | REQ socket client |
+| `terminal-tui/src/domain/messages.ts` | Frontend | Message type definitions |

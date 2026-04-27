@@ -1,153 +1,602 @@
 using System;
 using System.Collections.Generic;
-
+using System.Linq;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
 using Grasshopper;
 using Grasshopper.Kernel;
-using Rhino.Geometry;
+using NetMQ;
+using NetMQ.Sockets;
+using Rhino;
 
 namespace rhino_zmq_poc
 {
-  public class rhino_zmq_pocComponent : GH_Component
-  {
-    /// <summary>
-    /// Each implementation of GH_Component must provide a public 
-    /// constructor without any arguments.
-    /// Category represents the Tab in which the component will appear, 
-    /// Subcategory the panel. If you use non-existing tab or panel names, 
-    /// new tabs/panels will automatically be created.
-    /// </summary>
-    public rhino_zmq_pocComponent()
-      : base("rhino-zmq-poc Component", "Nickname",
-        "Description of component",
-        "Category", "Subcategory")
+    #region Message Types
+
+    public class Position
     {
+        [JsonPropertyName("x")]
+        public double X { get; set; }
+
+        [JsonPropertyName("y")]
+        public double Y { get; set; }
     }
 
-    /// <summary>
-    /// Registers all the input parameters for this component.
-    /// </summary>
-    protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
+    public class PortRef
     {
-      // Use the pManager object to register your input parameters.
-      // You can often supply default values when creating parameters.
-      // All parameters must have the correct access type. If you want 
-      // to import lists or trees of values, modify the ParamAccess flag.
-      pManager.AddPlaneParameter("Plane", "P", "Base plane for spiral", GH_ParamAccess.item, Plane.WorldXY);
-      pManager.AddNumberParameter("Inner Radius", "R0", "Inner radius for spiral", GH_ParamAccess.item, 1.0);
-      pManager.AddNumberParameter("Outer Radius", "R1", "Outer radius for spiral", GH_ParamAccess.item, 10.0);
-      pManager.AddIntegerParameter("Turns", "T", "Number of turns between radii", GH_ParamAccess.item, 10);
+        [JsonPropertyName("componentId")]
+        public string ComponentId { get; set; }
 
-      // If you want to change properties of certain parameters, 
-      // you can use the pManager instance to access them by index:
-      //pManager[0].Optional = true;
+        [JsonPropertyName("port")]
+        public string Port { get; set; }
     }
 
-    /// <summary>
-    /// Registers all the output parameters for this component.
-    /// </summary>
-    protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
+    public class GhCommand
     {
-      // Use the pManager object to register your output parameters.
-      // Output parameters do not have default values, but they too must have the correct access type.
-      pManager.AddCurveParameter("Spiral", "S", "Spiral curve", GH_ParamAccess.item);
+        [JsonPropertyName("action")]
+        public string Action { get; set; }
 
-      // Sometimes you want to hide a specific parameter from the Rhino preview.
-      // You can use the HideParameter() method as a quick way:
-      //pManager.HideParameter(0);
+        [JsonPropertyName("params")]
+        public JsonElement Params { get; set; }
     }
 
-    /// <summary>
-    /// This is the method that actually does the work.
-    /// </summary>
-    /// <param name="DA">The DA object can be used to retrieve data from input parameters and 
-    /// to store data in output parameters.</param>
-    protected override void SolveInstance(IGH_DataAccess DA)
+    public class SubmitJobRequest
     {
-      // First, we need to retrieve all data from the input parameters.
-      // We'll start by declaring variables and assigning them starting values.
-      Plane plane = Plane.WorldXY;
-      double radius0 = 0.0;
-      double radius1 = 0.0;
-      int turns = 0;
+        [JsonPropertyName("type")]
+        public string Type { get; set; }
 
-      // Then we need to access the input parameters individually. 
-      // When data cannot be extracted from a parameter, we should abort this method.
-      if (!DA.GetData(0, ref plane)) return;
-      if (!DA.GetData(1, ref radius0)) return;
-      if (!DA.GetData(2, ref radius1)) return;
-      if (!DA.GetData(3, ref turns)) return;
+        [JsonPropertyName("jobId")]
+        public string JobId { get; set; }
 
-      // We should now validate the data and warn the user if invalid data is supplied.
-      if (radius0 < 0.0)
-      {
-        AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Inner radius must be bigger than or equal to zero");
-        return;
-      }
-      if (radius1 <= radius0)
-      {
-        AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Outer radius must be bigger than the inner radius");
-        return;
-      }
-      if (turns <= 0)
-      {
-        AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Spiral turn count must be bigger than or equal to one");
-        return;
-      }
-
-      // We're set to create the spiral now. To keep the size of the SolveInstance() method small, 
-      // The actual functionality will be in a different method:
-      Curve spiral = CreateSpiral(plane, radius0, radius1, turns);
-
-      // Finally assign the spiral to the output parameter.
-      DA.SetData(0, spiral);
+        [JsonPropertyName("command")]
+        public GhCommand Command { get; set; }
     }
 
-    Curve CreateSpiral(Plane plane, double r0, double r1, Int32 turns)
+    public class SubmitJobResponse
     {
-      Line l0 = new Line(plane.Origin + r0 * plane.XAxis, plane.Origin + r1 * plane.XAxis);
-      Line l1 = new Line(plane.Origin - r0 * plane.XAxis, plane.Origin - r1 * plane.XAxis);
+        [JsonPropertyName("status")]
+        public string Status { get; set; }
 
-      Point3d[] p0;
-      Point3d[] p1;
+        [JsonPropertyName("jobId")]
+        public string JobId { get; set; }
 
-      l0.ToNurbsCurve().DivideByCount(turns, true, out p0);
-      l1.ToNurbsCurve().DivideByCount(turns, true, out p1);
+        [JsonPropertyName("commandId")]
+        public string CommandId { get; set; }
 
-      PolyCurve spiral = new PolyCurve();
+        [JsonPropertyName("queuedAt")]
+        public long QueuedAt { get; set; }
 
-      for (int i = 0; i < p0.Length - 1; i++)
-      {
-        Arc arc0 = new Arc(p0[i], plane.YAxis, p1[i + 1]);
-        Arc arc1 = new Arc(p1[i + 1], -plane.YAxis, p0[i + 1]);
-
-        spiral.Append(arc0);
-        spiral.Append(arc1);
-      }
-
-      return spiral;
+        [JsonPropertyName("error")]
+        public string Error { get; set; }
     }
 
-    /// <summary>
-    /// The Exposure property controls where in the panel a component icon 
-    /// will appear. There are seven possible locations (primary to septenary), 
-    /// each of which can be combined with the GH_Exposure.obscure flag, which 
-    /// ensures the component will only be visible on panel dropdowns.
-    /// </summary>
-    public override GH_Exposure Exposure => GH_Exposure.primary;
+    public class GhJobStatus
+    {
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = "gh.job.status";
 
-    /// <summary>
-    /// Provides an Icon for every component that will be visible in the User Interface.
-    /// Icons need to be 24x24 pixels.
-    /// You can add image files to your project resources and access them like this:
-    /// return Resources.IconForThisComponent;
-    /// </summary>
-    protected override System.Drawing.Bitmap Icon => null;
+        [JsonPropertyName("timestamp")]
+        public long Timestamp { get; set; }
 
-    /// <summary>
-    /// Each component must have a unique Guid to identify it. 
-    /// It is vital this Guid doesn't change otherwise old ghx files 
-    /// that use the old ID will partially fail during loading.
-    /// </summary>
-    public override Guid ComponentGuid => new Guid("e07753b1-fdec-417a-b57a-83a95204a8dd");
-  }
+        [JsonPropertyName("jobId")]
+        public string JobId { get; set; }
+
+        [JsonPropertyName("commandId")]
+        public string CommandId { get; set; }
+
+        [JsonPropertyName("state")]
+        public string State { get; set; }
+
+        [JsonPropertyName("progress")]
+        public int Progress { get; set; }
+
+        [JsonPropertyName("error")]
+        public string Error { get; set; }
+    }
+
+    public class GhEventXml
+    {
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = "gh.event.xml";
+
+        [JsonPropertyName("timestamp")]
+        public long Timestamp { get; set; }
+
+        [JsonPropertyName("docName")]
+        public string DocName { get; set; }
+
+        [JsonPropertyName("xml")]
+        public string Xml { get; set; }
+    }
+
+    public class CommandResult
+    {
+        [JsonPropertyName("executed")]
+        public bool Executed { get; set; }
+
+        [JsonPropertyName("action")]
+        public string Action { get; set; }
+
+        [JsonPropertyName("output")]
+        public string Output { get; set; }
+
+        [JsonPropertyName("timestamp")]
+        public long Timestamp { get; set; }
+    }
+
+    #endregion
+
+    #region Job Queue
+
+    public enum JobState
+    {
+        Queued,
+        Running,
+        Completed,
+        Failed,
+        Cancelled
+    }
+
+    public class Job
+    {
+        public string JobId { get; set; }
+        public string CommandId { get; set; }
+        public GhCommand Command { get; set; }
+        public JobState State { get; set; }
+        public int Progress { get; set; }
+        public string Error { get; set; }
+        public long QueuedAt { get; set; }
+        public long StartedAt { get; set; }
+        public long CompletedAt { get; set; }
+    }
+
+    public class JobQueue : IDisposable
+    {
+        private readonly Queue<Job> _jobs = new Queue<Job>();
+        private readonly object _lock = new object();
+        private Job _currentJob;
+        private readonly ManualResetEventSlim _jobAvailable = new ManualResetEventSlim(false);
+        private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+        private Task _processingTask;
+
+        public event Action<GhJobStatus> OnStatusChanged;
+
+        public void Enqueue(Job job)
+        {
+            lock (_lock)
+            {
+                job.State = JobState.Queued;
+                job.QueuedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                _jobs.Enqueue(job);
+            }
+            _jobAvailable.Set();
+            EmitStatus(job);
+        }
+
+        public void Start()
+        {
+            _processingTask = Task.Run(ProcessJobs);
+        }
+
+        private void ProcessJobs()
+        {
+            while (!_cts.Token.IsCancellationRequested)
+            {
+                _jobAvailable.Wait(_cts.Token);
+
+                Job job = null;
+                lock (_lock)
+                {
+                    if (_jobs.Count > 0)
+                    {
+                        job = _jobs.Dequeue();
+                        if (_jobs.Count == 0)
+                            _jobAvailable.Reset();
+                    }
+                }
+
+                if (job != null)
+                {
+                    ExecuteJob(job);
+                }
+            }
+        }
+
+        private void ExecuteJob(Job job)
+        {
+            job.State = JobState.Running;
+            job.StartedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            EmitStatus(job);
+
+            try
+            {
+                job.Progress = 50;
+                EmitStatus(job);
+
+                string result = RhinoZmqPlugin.Instance?.Component?.ExecuteCommand(job.Command) ?? "Plugin not initialized";
+
+                job.Progress = 100;
+                job.State = JobState.Completed;
+                job.CompletedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                EmitStatus(job);
+            }
+            catch (Exception ex)
+            {
+                job.State = JobState.Failed;
+                job.Error = ex.Message;
+                job.CompletedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                EmitStatus(job);
+            }
+        }
+
+        private void EmitStatus(Job job)
+        {
+            OnStatusChanged?.Invoke(new GhJobStatus
+            {
+                JobId = job.JobId,
+                CommandId = job.CommandId,
+                State = job.State.ToString().ToLower(),
+                Progress = job.Progress,
+                Error = job.Error,
+                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            });
+        }
+
+        public void Dispose()
+        {
+            _cts.Cancel();
+            _jobAvailable.Set();
+            _processingTask?.Wait(TimeSpan.FromSeconds(2));
+            _cts.Dispose();
+            _jobAvailable.Dispose();
+        }
+    }
+
+    #endregion
+
+    #region ZMQ Service
+
+    public class ZMqService : IDisposable
+    {
+        private const string PubEndpoint = "tcp://*:5555";
+        private const string RouterEndpoint = "tcp://*:5556";
+
+        private PublisherSocket _pubSocket;
+        private RouterSocket _routerSocket;
+        private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+        private Task _routerTask;
+        private readonly JobQueue _jobQueue;
+
+        public event Action<GhJobStatus> OnJobStatus;
+        public event Action<string> OnDebugLog;
+
+        public ZMqService(JobQueue jobQueue)
+        {
+            _jobQueue = jobQueue;
+            _jobQueue.OnStatusChanged += status =>
+            {
+                OnJobStatus?.Invoke(status);
+                PublishJobStatus(status);
+            };
+        }
+
+        public void Start()
+        {
+            try
+            {
+                _pubSocket = new PublisherSocket();
+                _pubSocket.Bind(PubEndpoint);
+                DebugLog($"[PUB] Bound to {PubEndpoint}");
+
+                _routerSocket = new RouterSocket();
+                _routerSocket.Bind(RouterEndpoint);
+                DebugLog($"[ROUTER] Bound to {RouterEndpoint}");
+
+                _routerTask = Task.Run(() => RouterLoop(_cts.Token));
+            }
+            catch (Exception ex)
+            {
+                DebugLog($"[ZMQ] Start error: {ex.Message}");
+            }
+        }
+
+        private void RouterLoop(CancellationToken ct)
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                try
+                {
+                    byte[] identity;
+                    if (!_routerSocket.TryReceiveFrameBytes(TimeSpan.FromSeconds(1), out identity))
+                        continue;
+
+                    var message = _routerSocket.ReceiveFrameString();
+                    DebugLog($"[ROUTER] Received: {message}");
+
+                    var response = ProcessRequest(message);
+                    _routerSocket.SendFrame(identity, true);
+                    _routerSocket.SendFrame(response);
+                    DebugLog($"[ROUTER] Sent: {response}");
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    DebugLog($"[ROUTER] Error: {ex.Message}");
+                }
+            }
+        }
+
+        private string ProcessRequest(string message)
+        {
+            try
+            {
+                var request = JsonSerializer.Deserialize<SubmitJobRequest>(message);
+                if (request == null || request.Command == null)
+                {
+                    return JsonSerializer.Serialize(new SubmitJobResponse
+                    {
+                        Status = "error",
+                        Error = "Invalid request"
+                    });
+                }
+
+                if (request.Type != "submitJob")
+                {
+                    return JsonSerializer.Serialize(new SubmitJobResponse
+                    {
+                        Status = "error",
+                        Error = $"Unknown request type: {request.Type}"
+                    });
+                }
+
+                string commandId = $"cmd-{Guid.NewGuid().ToString()[..8]}";
+
+                var job = new Job
+                {
+                    JobId = request.JobId,
+                    CommandId = commandId,
+                    Command = request.Command
+                };
+
+                _jobQueue.Enqueue(job);
+
+                return JsonSerializer.Serialize(new SubmitJobResponse
+                {
+                    Status = "ok",
+                    JobId = job.JobId,
+                    CommandId = commandId,
+                    QueuedAt = job.QueuedAt
+                });
+            }
+            catch (Exception ex)
+            {
+                return JsonSerializer.Serialize(new SubmitJobResponse
+                {
+                    Status = "error",
+                    Error = ex.Message
+                });
+            }
+        }
+
+        public void PublishXmlEvent(string docName, string xml)
+        {
+            if (_pubSocket == null) return;
+
+            var evt = new GhEventXml
+            {
+                DocName = docName,
+                Xml = xml,
+                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            };
+
+            var json = JsonSerializer.Serialize(evt);
+            _pubSocket.SendFrame("gh.event.xml", false);
+            _pubSocket.SendFrame(json);
+            DebugLog($"[PUB] Published gh.event.xml for {docName}");
+        }
+
+        private void PublishJobStatus(GhJobStatus status)
+        {
+            if (_pubSocket == null) return;
+
+            var json = JsonSerializer.Serialize(status);
+            _pubSocket.SendFrame("gh.job.status", false);
+            _pubSocket.SendFrame(json);
+            DebugLog($"[PUB] Published gh.job.status: {status.State}");
+        }
+
+        private void DebugLog(string msg)
+        {
+            OnDebugLog?.Invoke(msg);
+        }
+
+        public void Dispose()
+        {
+            _cts.Cancel();
+            _routerTask?.Wait(TimeSpan.FromSeconds(2));
+            _pubSocket?.Dispose();
+            _routerSocket?.Dispose();
+            _cts.Dispose();
+            DebugLog("[ZMQ] Disposed");
+        }
+    }
+
+    #endregion
+
+    #region Main Component
+
+    public class rhino_zmq_pocComponent : GH_Component
+    {
+        private ZMqService _zmqService;
+        private JobQueue _jobQueue;
+        private string _debugLog = "";
+
+        public rhino_zmq_pocComponent()
+            : base("GH ZMQ Plugin", "GHZMQ",
+                "CLI-GH Connector: ZMQ pub/sub and command execution",
+                "CLI-GH", "Commands")
+        {
+        }
+
+        protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
+        {
+        }
+
+        protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
+        {
+            pManager.AddTextParameter("Debug Log", "LOG", "ZMQ debug output", GH_ParamAccess.list);
+        }
+
+        protected override void BeforeSolveInstance()
+        {
+            if (_zmqService == null)
+            {
+                InitializeZmq();
+            }
+        }
+
+        private void InitializeZmq()
+        {
+            _debugLog = $"[{DateTime.Now:HH:mm:ss}] Initializing ZMQ...\n";
+            _jobQueue = new JobQueue();
+            _zmqService = new ZMqService(_jobQueue);
+            _zmqService.OnDebugLog += msg => _debugLog += $"[{DateTime.Now:HH:mm:ss}] {msg}\n";
+            _zmqService.OnJobStatus += status => _debugLog += $"[{DateTime.Now:HH:mm:ss}] Job {status.JobId}: {status.State}\n";
+            _zmqService.Start();
+            _jobQueue.Start();
+            RhinoZmqPlugin.Instance.Component = this;
+            _debugLog += $"[{DateTime.Now:HH:mm:ss}] ZMQ started: PUB @ 5555, ROUTER @ 5556\n";
+        }
+
+        private void OnSolutionStart()
+        {
+            PublishDocumentXml();
+        }
+
+        private void PublishDocumentXml()
+        {
+            GH_Document doc = Instances.ActiveCanvas?.Document;
+            if (doc == null) return;
+
+            try
+            {
+                var archive = new GH_IO.Serialization.GH_Archive();
+                archive.AppendObject(doc, "Definition");
+                string xml = archive.Serialize_Xml();
+                _zmqService?.PublishXmlEvent(doc.FilePath ?? "Untitled.gh", xml);
+                _debugLog += $"[{DateTime.Now:HH:mm:ss}] Published XML: {(xml.Length / 1024)}KB\n";
+            }
+            catch (Exception ex)
+            {
+                _debugLog += $"[{DateTime.Now:HH:mm:ss}] XML publish error: {ex.Message}\n";
+            }
+        }
+
+        public string ExecuteCommand(GhCommand command)
+        {
+            if (command == null || string.IsNullOrEmpty(command.Action))
+                return "Invalid command: missing action";
+
+            _debugLog += $"[{DateTime.Now:HH:mm:ss}] Executing: {command.Action}\n";
+
+            return command.Action switch
+            {
+                "addComponent" => MockAddComponent(command.Params),
+                "deleteComponent" => MockDeleteComponent(command.Params),
+                "connectWire" => MockConnectWire(command.Params),
+                "disconnectWire" => MockDisconnectWire(command.Params),
+                "moveComponent" => MockMoveComponent(command.Params),
+                "renameComponent" => MockRenameComponent(command.Params),
+                "setComponentLocked" => MockSetComponentLocked(command.Params),
+                "setComponentHidden" => MockSetComponentHidden(command.Params),
+                "addGroup" => MockAddGroup(command.Params),
+                "removeFromGroup" => MockRemoveFromGroup(command.Params),
+                "setSliderValue" => MockSetSliderValue(command.Params),
+                "setPanelText" => MockSetPanelText(command.Params),
+                _ => $"Unknown action: {command.Action}"
+            };
+        }
+
+        protected override void SolveInstance(IGH_DataAccess DA)
+        {
+            var logLines = _debugLog.Split('\n').Where(l => !string.IsNullOrEmpty(l)).ToArray();
+            DA.SetDataList(0, logLines);
+        }
+
+        #region Mock Commands
+
+        private string MockAddComponent(JsonElement p) =>
+            $"MOCK: addComponent - would add {p.GetProperty("componentType").GetString()}";
+
+        private string MockDeleteComponent(JsonElement p) =>
+            $"MOCK: deleteComponent - would delete {p.GetProperty("targetId").GetString()}";
+
+        private string MockConnectWire(JsonElement p) =>
+            $"MOCK: connectWire - would connect {p.GetProperty("from").GetProperty("componentId")} -> {p.GetProperty("to").GetProperty("componentId")}";
+
+        private string MockDisconnectWire(JsonElement p) =>
+            $"MOCK: disconnectWire - would disconnect";
+
+        private string MockMoveComponent(JsonElement p) =>
+            $"MOCK: moveComponent - would move {p.GetProperty("targetId").GetString()}";
+
+        private string MockRenameComponent(JsonElement p) =>
+            $"MOCK: renameComponent - would rename {p.GetProperty("targetId").GetString()} to {p.GetProperty("nickName").GetString()}";
+
+        private string MockSetComponentLocked(JsonElement p) =>
+            $"MOCK: setComponentLocked - would set locked={p.GetProperty("locked").GetBoolean()}";
+
+        private string MockSetComponentHidden(JsonElement p) =>
+            $"MOCK: setComponentHidden - would set hidden={p.GetProperty("hidden").GetBoolean()}";
+
+        private string MockAddGroup(JsonElement p) =>
+            $"MOCK: addGroup - would add group {p.GetProperty("groupName").GetString()}";
+
+        private string MockRemoveFromGroup(JsonElement p) =>
+            $"MOCK: removeFromGroup - would remove from group";
+
+        private string MockSetSliderValue(JsonElement p) =>
+            $"MOCK: setSliderValue - would set {p.GetProperty("targetId").GetString()} = {p.GetProperty("value").GetDouble()}";
+
+        private string MockSetPanelText(JsonElement p) =>
+            $"MOCK: setPanelText - would set {p.GetProperty("targetId").GetString()} = \"{p.GetProperty("text").GetString()}\"";
+
+        #endregion
+
+        public override GH_Exposure Exposure => GH_Exposure.primary;
+
+        protected override System.Drawing.Bitmap Icon => null;
+
+        public override Guid ComponentGuid => new Guid("e07753b1-fdec-417a-b57a-83a95204a8dd");
+
+        private void Cleanup()
+        {
+            _zmqService?.Dispose();
+            _jobQueue?.Dispose();
+            RhinoZmqPlugin.Instance = null;
+            _zmqService = null;
+            _jobQueue = null;
+        }
+    }
+
+    #endregion
+
+    #region Plugin Entry Point
+
+    public class RhinoZmqPlugin
+    {
+        private static RhinoZmqPlugin _instance = new RhinoZmqPlugin();
+        public static RhinoZmqPlugin Instance
+        {
+            get => _instance;
+            set => _instance = value;
+        }
+
+        public rhino_zmq_pocComponent Component { get; set; }
+    }
+
+    #endregion
 }

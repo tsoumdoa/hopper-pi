@@ -4,80 +4,135 @@
 
 ```
 hoppercode/
-├── plan.md
+├── plan.md                      # Phased implementation overview
 ├── SPEC.md                      # This document
 │
 ├── rhino-zmq-poc/               # Backend: Rhino/Grasshopper ZMQ component
 │   ├── rhino-zmq-poc.csproj
-│   ├── rhino-zmq-pocComponent.cs    # Main Grasshopper component
-│   ├── infra/
-│   │   ├── ZeroMqPublisher.cs       # PUB socket management
-│   │   ├── ZeroMqRouter.cs          # ROUTER socket for REQ/REP
-│   │   └── MessageSerializer.cs     # JSON serialization
-│   ├── domain/
-│   │   ├── Jobs/
-│   │   │   ├── Job.cs               # Job entity
-│   │   │   ├── JobQueue.cs          # FIFO job queue
-│   │   │   └── JobState.cs          # State machine enum
-│   │   └── Commands/
-│   │       ├── Command.cs           # Base command interface
-│   │       ├── AddComponentCommand.cs
-│   │       ├── DeleteComponentCommand.cs
-│   │       ├── ConnectWireCommand.cs
-│   │       └── DisconnectWireCommand.cs
-│   ├── services/
-│   │   ├── GrasshopperService.cs    # GH document manipulation
-│   │   └── XmlEventPublisher.cs     # Publishes gh.event.xml
-│   └── app/
-│       └── RhinoZmqPocPlugin.cs     # Plugin entry point
+│   └── rhino-zmq-pocComponent.cs    # Main Grasshopper component
 │
-└── terminal-tui/                 # Frontend: Node.js CLI
+└── terminal-tui/               # Frontend: Node.js CLI
     ├── package.json
     ├── tsconfig.json
-    ├── src/
-    │   ├── index.ts               # Main entry, commander CLI
-    │   │
-    │   ├── cli/
-    │   │   └── commands.ts        # CLI command definitions
-    │   │
-    │   ├── domain/
-    │   │   ├── messages.ts         # Pub/sub message schemas
-    │   │   ├── job.ts              # Job entity types
-    │   │   └── commands.ts         # Command request/response types
-    │   │
-    │   ├── infra/
-    │   │   ├── subscriber.ts       # SUB socket client
-    │   │   ├── requester.ts        # REQ socket client
-    │   │   └── connection.ts       # ZMQ connection management
-    │   │
-    │   └── services/
-    │       └── gh-parser.ts        # XML parsing
-    └── test/
+    └── src/
+        ├── index.ts               # Main entry, commander CLI
+        ├── cli/
+        │   └── commands.ts        # CLI command definitions
+        ├── domain/
+        │   └── messages.ts        # Pub/sub message schemas
+        └── infra/
+            ├── subscriber.ts      # SUB socket client
+            ├── requester.ts        # REQ socket client
+            └── connection.ts       # ZMQ connection management
 ```
 
 ---
 
-## Frontend (terminal-tui) Detailed Design
+## Implementation Phases
 
-### Dependencies
+### Phase 1: Minimum Viable Pub/Sub
+
+**Goal:** Verify ZMQ connectivity works end-to-end
+
+**Backend (`rhino-zmq-pocComponent.cs`):**
+- Add timer that publishes `gh.hello` every 2 seconds
+- Message: `{ "type": "gh.hello", "timestamp": 1234567890, "msg": "hello from gh" }`
+
+**Frontend (`terminal-tui`):**
+- `gh subscribe` already implemented - verify it shows `gh.hello` messages
+
+### Phase 2: Job Submission via REQ/REP
+
+**Goal:** Frontend submits job via REQ, backend outputs received job to GH output param
+
+**Backend:**
+- Add output parameter `Job Received` to GH component
+- On `submitJob` request: output job details via output param, store in JobQueue
+
+**Frontend:**
+- `gh submit <action> [params]` sends submitJob request
+- Example: `gh submit addComponent --componentType Circle --nickName "Test" --x 100 --y 200`
+
+### Phase 3: Job Status Pub/Sub
+
+**Goal:** Job state transitions broadcast via `gh.job.status`
+
+- Publish `gh.job.status` on job state changes
+- Frontend displays status with color coding
+
+### Phase 4: Command Execution
+
+**Goal:** Actually modify GH document based on submitted commands
+
+Commands: addComponent, deleteComponent, connectWire, disconnectWire, moveComponent, renameComponent, setComponentLocked, setComponentHidden, addGroup, removeFromGroup, setSliderValue, setPanelText
+
+### Phase 5: XML Extraction & Polish
+
+**Goal:** Full feature set
+
+- `gh.event.xml` on solution end
+- Interactive submit mode
+- Debug logging, environment variable configuration
+
+---
+
+## Message Schemas
+
+### gh.hello (Phase 1)
 
 ```json
 {
-  "dependencies": {
-    "commander": "^12.0.0",    // CLI framework
-    "chalk": "^5.3.0",         // Terminal colors
-    "nanoid": "^5.0.0",        // Unique ID generation
-    "zeromq": "^6.0.0",        // ZMQ bindings
-    "xml2js": "^0.6.0"         // XML parsing
-  },
-  "devDependencies": {
-    "typescript": "^5.3.0",
-    "@types/node": "^20.0.0"
+  "type": "gh.hello",
+  "timestamp": 1234567890,
+  "msg": "hello from gh"
+}
+```
+
+### submitJob Request (Phase 2)
+
+```json
+{
+  "type": "submitJob",
+  "jobId": "job-99",
+  "command": {
+    "action": "addComponent",
+    "params": {
+      "componentType": "Circle",
+      "nickName": "My Circle",
+      "position": { "x": 100, "y": 200 }
+    }
   }
 }
 ```
 
-### ZMQ Connection Config
+### submitJob Response (Phase 2)
+
+```json
+{
+  "status": "ok",
+  "jobId": "job-99",
+  "commandId": "cmd-42",
+  "queuedAt": 1234567890
+}
+```
+
+### gh.job.status (Phase 3)
+
+```json
+{
+  "type": "gh.job.status",
+  "timestamp": 1234567890,
+  "jobId": "job-99",
+  "commandId": "cmd-42",
+  "state": "queued | running | completed | failed",
+  "progress": 0-100,
+  "error": null
+}
+```
+
+---
+
+## ZMQ Connection Config
 
 ```typescript
 const PUB_ENDPOINT = 'tcp://localhost:5555';
@@ -88,84 +143,37 @@ const REQ_ENDPOINT = 'tcp://localhost:5556';
 
 ```
 CLI Command → Commander → Requester (REQ socket) → Router (5556)
-                                                     │
-                                          ┌──────────┴──────────┐
-                                          │  Grasshopper Plugin  │
-                                          └──────────┬──────────┘
-                                                     │
-                                          Publisher (PUB @ 5555) ← Subscriber (SUB)
+                                                      │
+                                           ┌──────────┴──────────┐
+                                           │  Grasshopper Plugin  │
+                                           └──────────┬──────────┘
+                                                      │
+                             Publisher (PUB @ 5555) ← Subscriber (SUB)
 ```
 
 ---
 
-## Backend (rhino-zmq-poc) Detailed Design
+## Environment Variables
 
-### Project setup
-
-- Target: .NET Framework 4.8 or .NET 6+ (Rhino 8 compatible)
-- Dependencies: NetMQ, Newtonsoft.Json
-
-### Key Classes
-
-**ZeroMqRouter** (infra/ZeroMqRouter.cs)
-- Binds to `tcp://*:5556`
-- Routes requests to JobQueue
-- Returns responses via ROUTER envelope
-
-**JobQueue** (domain/Jobs/JobQueue.cs)
-- Thread-safe FIFO queue
-- States: Queued → Running → Completed/Failed/Cancelled
-- Emits events on state transitions
-
-**Command implementations** (domain/Commands/*.cs)
-- Each command is a class with `Execute(GrasshopperDocument)` method
-- Commands are instantiated from JSON payload
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GH_ZMQ_PUB` | `localhost:5555` | Pub/sub endpoint |
+| `GH_ZMQ_REQ` | `localhost:5556` | Request/reply endpoint |
+| `GH_TIMEOUT_MS` | `30000` | Request timeout in milliseconds |
+| `GH_DEBUG` | `0` | Enable debug logging (1 to enable) |
 
 ---
 
-## Implementation Phases
+## Coding Style (TypeScript)
 
-### Phase 1: Project Scaffolding
-
-**terminal-tui:**
-```
-mkdir -p terminal-tui/src/{cli,domain,infra,services}
-```
-
-**rhino-zmq-poc:**
-```
-mkdir -p rhino-zmq-poc/{infra,domain/Jobs,domain/Commands,services,app}
-```
-
-### Phase 2: Frontend Core
-
-1. `src/infra/connection.ts` — ZMQ connection setup
-2. `src/infra/subscriber.ts` — SUB socket to 5555
-3. `src/infra/requester.ts` — REQ socket to 5556
-4. `src/domain/messages.ts` — Message type definitions
-5. `src/cli/commands.ts` — Commander setup
-
-### Phase 3: Backend Core
-
-1. `infra/ZeroMqPublisher.cs` — PUB socket management
-2. `infra/ZeroMqRouter.cs` — ROUTER socket handling
-3. `domain/Jobs/JobState.cs` — State enum
-4. `domain/Jobs/Job.cs` — Job entity
-5. `domain/Jobs/JobQueue.cs` — Queue management
-6. `domain/Commands/Command.cs` — Base interface
-
-### Phase 4: Integration & CLI
-
-1. Backend: Execute commands against GH document
-2. Frontend: Wire up full pub/sub communication
-3. Wire up full CLI output with chalk
-
----
-
-## Next Steps
-
-1. Create folder structure
-2. Initialize `terminal-tui` as pnpm project with TypeScript
-3.  `rhino-zmq-poc` is already created with the gh dev template. adjust the folder strucutre as per the plan  as per the folder structure, do not mess with dotnet
-   version
-4. Implement the phases in order
+- Use `type` over `interface`
+- Avoid `any`
+- Prefer inference for obvious values
+- Add return types to exported functions
+- Prefer unions over enums
+- Use `unknown` at boundaries
+- Validate external data
+- Use discriminated unions for state
+- Prefer `satisfies` over `as`
+- Keep abstractions simple
+- Optimize for readability
