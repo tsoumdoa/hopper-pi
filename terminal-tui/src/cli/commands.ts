@@ -1,11 +1,17 @@
 import { Command } from "commander";
 import chalk from "chalk";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as readline from "node:readline";
 import { nanoid } from "nanoid";
 import { Subscriber } from "../infra/subscriber.js";
 import { Requester } from "../infra/requester.js";
-import { REQUEST_TIMEOUT } from "../infra/connection.js";
+import { DEBUG } from "../infra/connection.js";
 import type { CommandAction, CommandParams, SubmitJobRequest } from "../domain/commands.js";
-import type { GhMessage, GhJobStatus, GhEventXml, GhHello } from "../domain/messages.js";
+import type { GhMessage, GhJobStatus, GhEventXml } from "../domain/messages.js";
+import { buildGhJson } from "../services/parser.js";
+import { diffGh, formatDiffSummary } from "../services/differ.js";
 
 const ACTIONS: Array<{ id: number; action: CommandAction; label: string }> = [
 	{ id: 1, action: "addComponent", label: "add-component" },
@@ -27,14 +33,7 @@ function formatTimestamp(ts: number): string {
 }
 
 function handleMessage(msg: GhMessage): void {
-	if (msg.type === "gh.hello") {
-		const hello = msg as GhHello;
-		console.log(
-			chalk.blue(`[${msg.type}]`) +
-			` ${formatTimestamp(hello.timestamp)} — ` +
-			chalk.green(hello.msg)
-		);
-	} else if (msg.type === "gh.job.status") {
+	if (msg.type === "gh.job.status") {
 		const status = msg as GhJobStatus;
 		const stateColor =
 			status.state === "completed" ? "green" :
@@ -47,7 +46,8 @@ function handleMessage(msg: GhMessage): void {
 			` ${chalk[stateColor](status.state)} ` +
 			`(${status.progress}%)`
 		);
-	} else if (msg.type === "gh.event.xml") {
+	}
+	if (msg.type === "gh.event.xml") {
 		const event = msg as GhEventXml;
 		const size = new TextEncoder().encode(event.xml).length;
 		console.log(
@@ -58,17 +58,37 @@ function handleMessage(msg: GhMessage): void {
 	}
 }
 
-export async function subscribe(): Promise<void> {
+export async function subscribe(
+	filter?: string,
+	saveXml?: boolean
+): Promise<void> {
+	if (DEBUG) {
+		console.log(chalk.gray(`[DEBUG] filter=${filter || "none"} saveXml=${saveXml}`));
+	}
+
 	console.log(chalk.bold("Connecting to Grasshopper pub/sub...\n"));
 
 	const subscriber = new Subscriber();
 	await subscriber.connect();
 
+	if (filter) {
+		await subscriber.subscribeTopic(filter);
+	}
+
 	console.log(chalk.green("✓ Connected to PUB socket"));
 	console.log("Listening for events...\n");
 
 	try {
-		await subscriber.subscribe(handleMessage);
+		await subscriber.subscribe((msg: GhMessage) => {
+			handleMessage(msg);
+			if (msg.type === "gh.event.xml" && saveXml) {
+				const event = msg as GhEventXml;
+				const filename = event.docName.replace(/[^a-zA-Z0-9._-]/g, "_") || "untitled";
+				const outPath = `${filename}.xml`;
+				fs.writeFileSync(outPath, event.xml);
+				console.log(chalk.gray(`  Saved XML to ${outPath}`));
+			}
+		});
 	} catch (err) {
 		console.error(chalk.red("Subscriber error:"), err);
 	} finally {
@@ -76,76 +96,15 @@ export async function subscribe(): Promise<void> {
 	}
 }
 
-function buildCommandPrompt(actionId: number, params: Record<string, string>): string {
-	const action = ACTIONS.find((a) => a.id === actionId);
-	if (!action) return "";
-
-	const lines: string[] = [];
-	lines.push(chalk.bold("\nSelect action:"));
-	ACTIONS.forEach((a) => {
-		const marker = a.id === actionId ? ">" : " ";
-		lines.push(`  ${marker} ${a.id}. ${a.label}`);
-	});
-
-	lines.push(chalk.bold("\nEnter parameters:"));
-	switch (action.action) {
-		case "addComponent":
-			lines.push(`  component type: ${params.componentType || ""}`);
-			lines.push(`  nickname: ${params.nickName || ""}`);
-			lines.push(`  x position: ${params.x || ""}`);
-			lines.push(`  y position: ${params.y || ""}`);
-			break;
-		case "deleteComponent":
-			lines.push(`  target id: ${params.targetId || ""}`);
-			break;
-		case "connectWire":
-		case "disconnectWire":
-			lines.push(`  from component: ${params.fromComponent || ""}`);
-			lines.push(`  from port: ${params.fromPort || ""}`);
-			lines.push(`  to component: ${params.toComponent || ""}`);
-			lines.push(`  to port: ${params.toPort || ""}`);
-			break;
-		case "moveComponent":
-			lines.push(`  target id: ${params.targetId || ""}`);
-			lines.push(`  x position: ${params.x || ""}`);
-			lines.push(`  y position: ${params.y || ""}`);
-			break;
-		case "renameComponent":
-			lines.push(`  target id: ${params.targetId || ""}`);
-			lines.push(`  nickname: ${params.nickName || ""}`);
-			break;
-		case "setComponentLocked":
-			lines.push(`  target id: ${params.targetId || ""}`);
-			lines.push(`  locked (true/false): ${params.locked || ""}`);
-			break;
-		case "setComponentHidden":
-			lines.push(`  target id: ${params.targetId || ""}`);
-			lines.push(`  hidden (true/false): ${params.hidden || ""}`);
-			break;
-		case "addGroup":
-		case "removeFromGroup":
-			lines.push(`  component ids (comma-separated): ${params.componentIds || ""}`);
-			lines.push(`  group name: ${params.groupName || ""}`);
-			break;
-		case "setSliderValue":
-			lines.push(`  target id: ${params.targetId || ""}`);
-			lines.push(`  value: ${params.value || ""}`);
-			break;
-		case "setPanelText":
-			lines.push(`  target id: ${params.targetId || ""}`);
-			lines.push(`  text: ${params.text || ""}`);
-			break;
-	}
-	return lines.join("\n");
-}
-
 export function createSubscribeCommand(program: Command): void {
 	program
 		.command("subscribe")
 		.description("Subscribe to Grasshopper pub/sub events")
-		.action(async () => {
+		.option("--filter <topic>", "Filter by topic prefix (e.g. gh.job, gh.hello)")
+		.option("--save-xml", "Save received XML events to files", false)
+		.action(async (opts: { filter?: string; saveXml?: boolean }) => {
 			try {
-				await subscribe();
+				await subscribe(opts.filter, opts.saveXml);
 			} catch (err) {
 				console.error(chalk.red("Error:"), err);
 				process.exit(1);
@@ -254,10 +213,112 @@ export async function submit(action: string, opts: Record<string, string>): Prom
 	}
 }
 
+function createReadlineInterface(): readline.Interface {
+	return readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+	});
+}
+
+function question(rl: readline.Interface, prompt: string): Promise<string> {
+	return new Promise((resolve) => {
+		rl.question(prompt, (answer) => {
+			resolve(answer.trim());
+		});
+	});
+}
+
+async function interactiveSubmit(): Promise<void> {
+	const rl = createReadlineInterface();
+
+	console.log(chalk.bold("\n🛠  Interactive Command Submission\n"));
+	console.log("Available actions:");
+	ACTIONS.forEach((a) => {
+		console.log(
+			`  ${chalk.cyan(String(a.id).padStart(2))}. ${chalk.white(a.label)} (${a.action})`
+		);
+	});
+	console.log("  " + chalk.cyan(" 0") + ". " + chalk.gray("Exit"));
+
+	try {
+		while (true) {
+			const actionIdStr = await question(rl, chalk.yellow("\nSelect action (0-12): "));
+			const actionId = parseInt(actionIdStr, 10);
+
+			if (actionId === 0) {
+				console.log(chalk.gray("Bye!"));
+				break;
+			}
+
+			const selected = ACTIONS.find((a) => a.id === actionId);
+			if (!selected) {
+				console.log(chalk.red("Invalid selection. Try again."));
+				continue;
+			}
+
+			const params: Record<string, string> = {};
+
+			switch (selected.action) {
+				case "addComponent":
+					params.componentType = await question(rl, "  component type: ");
+					params.nickName = await question(rl, "  nickname: ");
+					params.x = await question(rl, "  x position: ");
+					params.y = await question(rl, "  y position: ");
+					break;
+				case "deleteComponent":
+					params.targetId = await question(rl, "  target id: ");
+					break;
+				case "connectWire":
+				case "disconnectWire":
+					params.fromComponent = await question(rl, "  from component id: ");
+					params.fromPort = await question(rl, "  from port: ");
+					params.toComponent = await question(rl, "  to component id: ");
+					params.toPort = await question(rl, "  to port: ");
+					break;
+				case "moveComponent":
+					params.targetId = await question(rl, "  target id: ");
+					params.x = await question(rl, "  x position: ");
+					params.y = await question(rl, "  y position: ");
+					break;
+				case "renameComponent":
+					params.targetId = await question(rl, "  target id: ");
+					params.nickName = await question(rl, "  new nickname: ");
+					break;
+				case "setComponentLocked":
+					params.targetId = await question(rl, "  target id: ");
+					params.locked = await question(rl, "  locked (true/false): ");
+					break;
+				case "setComponentHidden":
+					params.targetId = await question(rl, "  target id: ");
+					params.hidden = await question(rl, "  hidden (true/false): ");
+					break;
+				case "addGroup":
+				case "removeFromGroup":
+					params.componentIds = await question(rl, "  component ids (comma-separated): ");
+					params.groupName = await question(rl, "  group name: ");
+					break;
+				case "setSliderValue":
+					params.targetId = await question(rl, "  target id: ");
+					params.value = await question(rl, "  value: ");
+					break;
+				case "setPanelText":
+					params.targetId = await question(rl, "  target id: ");
+					params.text = await question(rl, "  text: ");
+					break;
+			}
+
+			await submit(selected.action, params);
+		}
+	} finally {
+		rl.close();
+	}
+}
+
 export function createSubmitCommand(program: Command): void {
 	program
-		.command("submit <action>")
+		.command("submit [action]")
 		.description("Submit a command to Grasshopper")
+		.option("--interactive", "Interactive mode with action selection", false)
 		.option("--componentType <type>", "Component type (addComponent)")
 		.option("--nickName <name>", "Component nickname")
 		.option("--targetId <id>", "Target component ID")
@@ -273,9 +334,140 @@ export function createSubmitCommand(program: Command): void {
 		.option("--groupName <name>", "Group name")
 		.option("--value <number>", "Slider value")
 		.option("--text <text>", "Panel text")
-		.action(async (action: string, opts: Record<string, string>) => {
+		.action(async (action: string | undefined, opts: Record<string, string>) => {
 			try {
-				await submit(action, opts);
+				if (opts.interactive || !action) {
+					await interactiveSubmit();
+				} else {
+					await submit(action, opts);
+				}
+			} catch (err) {
+				console.error(chalk.red("Error:"), err);
+				process.exit(1);
+			}
+		});
+}
+
+function getBaselinePath(): string {
+	return path.join(os.homedir(), ".gh-diff-baseline.xml");
+}
+
+function readBaseline(): string | null {
+	const p = getBaselinePath();
+	if (fs.existsSync(p)) {
+		return fs.readFileSync(p, "utf-8");
+	}
+	return null;
+}
+
+function writeBaseline(xml: string): void {
+	fs.writeFileSync(getBaselinePath(), xml, "utf-8");
+}
+
+async function diffCommand(watch: boolean, verbose: boolean): Promise<void> {
+	console.log(chalk.bold("Connecting to Grasshopper pub/sub...\n"));
+
+	const subscriber = new Subscriber();
+	await subscriber.connect();
+
+	console.log(chalk.green("✓ Connected to PUB socket"));
+	console.log("Waiting for gh.event.xml...\n");
+
+	let baseline = readBaseline();
+	if (baseline && !watch) {
+		console.log(chalk.gray("Baseline found. Waiting for next XML snapshot to compare..."));
+	} else if (!baseline) {
+		console.log(chalk.gray("No baseline found. First snapshot will be saved as baseline."));
+	}
+
+	try {
+		await subscriber.subscribe((msg: GhMessage) => {
+			if (msg.type !== "gh.event.xml") return;
+
+			const event = msg as GhEventXml;
+
+			if (verbose) {
+				const size = new TextEncoder().encode(event.xml).length;
+				console.log(chalk.dim(`\n[${formatTimestamp(event.timestamp)}] XML received: ${size} chars`));
+				try {
+					const parsed = buildGhJson(event.xml);
+					console.log(chalk.gray(JSON.stringify(parsed, null, 2)));
+				} catch (parseErr) {
+					console.log(chalk.red("Parse error:"), parseErr);
+				}
+				console.log();
+			}
+
+			if (!baseline) {
+				baseline = event.xml;
+				writeBaseline(event.xml);
+				console.log(chalk.green("✓ Baseline saved.") + ` ${event.docName}`);
+				if (!watch) {
+					subscriber.close();
+					process.exit(0);
+				}
+				return;
+			}
+
+			try {
+				const prev = buildGhJson(baseline);
+				const next = buildGhJson(event.xml);
+				const diff = diffGh(prev, next);
+				const summary = formatDiffSummary(diff);
+
+				const ts = formatTimestamp(event.timestamp);
+				const compCount = Object.keys(next.components).length;
+				const wireCount = next.wires.length;
+
+				console.log(chalk.dim(`\n── ${ts} — ${event.docName} (${compCount} components, ${wireCount} wires) ──`));
+				if (summary === "(no changes)") {
+					console.log(chalk.gray("  (no changes)"));
+				} else {
+					const lines = summary.split("\n");
+					for (const line of lines) {
+						if (line.startsWith("+") && !line.startsWith("++")) {
+							console.log(chalk.green(line));
+						} else if (line.startsWith("-") && !line.startsWith("--")) {
+							console.log(chalk.red(line));
+						} else if (line.startsWith("~")) {
+							console.log(chalk.yellow(line));
+						} else {
+							console.log(chalk.gray(line));
+						}
+					}
+				}
+
+				baseline = event.xml;
+				writeBaseline(event.xml);
+
+				if (!watch) {
+					subscriber.close();
+					process.exit(0);
+				}
+			} catch (parseErr) {
+				console.error(chalk.red("Parse error:"), parseErr);
+				if (!watch) {
+					subscriber.close();
+					process.exit(1);
+				}
+			}
+		});
+	} catch (err) {
+		console.error(chalk.red("Error:"), err);
+		await subscriber.close();
+		process.exit(1);
+	}
+}
+
+export function createDiffCommand(program: Command): void {
+	program
+		.command("diff")
+		.description("Diff GH document XML snapshots")
+		.option("--watch", "Continuous mode: diff every new snapshot against previous", false)
+		.option("--verbose", "Log raw XML to terminal", false)
+		.action(async (opts: { watch?: boolean; verbose?: boolean }) => {
+			try {
+				await diffCommand(opts.watch ?? false, opts.verbose ?? false);
 			} catch (err) {
 				console.error(chalk.red("Error:"), err);
 				process.exit(1);
@@ -286,4 +478,5 @@ export function createSubmitCommand(program: Command): void {
 export function setupCommands(program: Command): void {
 	createSubscribeCommand(program);
 	createSubmitCommand(program);
+	createDiffCommand(program);
 }

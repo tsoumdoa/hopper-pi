@@ -1,5 +1,5 @@
 import type { SubmitJobRequest, SubmitJobResponse } from "../domain/commands.js";
-import { REQ_ENDPOINT, DEBUG } from "./connection.js";
+import { REQ_ENDPOINT, DEBUG, REQUEST_TIMEOUT } from "../infra/connection.js";
 
 export class Requester {
 	private socket: import("zeromq").Request | null = null;
@@ -25,8 +25,9 @@ export class Requester {
 
 		await this.socket.send(payload);
 
-		const response = await this.socket.receive();
-		const responseStr = response.toString();
+		const messages = await this.socket.receive();
+
+		const responseStr = messages.toString();
 
 		if (DEBUG) {
 			console.log(`[REQ] Received: ${responseStr.slice(0, 100)}...`);

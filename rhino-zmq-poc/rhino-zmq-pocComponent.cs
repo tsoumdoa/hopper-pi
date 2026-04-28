@@ -1,9 +1,9 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
-
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
@@ -112,18 +112,6 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("xml")]
         public string Xml { get; set; }
-    }
-
-    public class GhHello
-    {
-        [JsonPropertyName("type")]
-        public string Type { get; set; } = "gh.hello";
-
-        [JsonPropertyName("timestamp")]
-        public long Timestamp { get; set; }
-
-        [JsonPropertyName("msg")]
-        public string Msg { get; set; }
     }
 
     public class CommandResult
@@ -283,7 +271,7 @@ namespace rhino_zmq_poc
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
         private Task _routerTask;
         private readonly JobQueue _jobQueue;
-        private System.Threading.Timer _helloTimer;
+        private readonly ConcurrentQueue<(string topic, string json)> _publishQueue = new ConcurrentQueue<(string, string)>();
 
         public event Action<GhJobStatus> OnJobStatus;
         public event Action<string> OnDebugLog;
@@ -295,7 +283,7 @@ namespace rhino_zmq_poc
             _jobQueue.OnStatusChanged += status =>
             {
                 OnJobStatus?.Invoke(status);
-                PublishJobStatus(status);
+                EnqueuePublish("gh.job.status", JsonSerializer.Serialize(status));
             };
         }
 
@@ -312,9 +300,6 @@ namespace rhino_zmq_poc
                 DebugLog($"[ROUTER] Bound to {RouterEndpoint}");
 
                 _routerTask = Task.Run(() => RouterLoop(_cts.Token));
-
-                _helloTimer = new System.Threading.Timer(_ => PublishHello(), null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
-                DebugLog("[PUB] Hello timer started (every 2s)");
             }
             catch (Exception ex)
             {
@@ -330,7 +315,10 @@ namespace rhino_zmq_poc
                 {
                     byte[] identity;
                     if (!_routerSocket.TryReceiveFrameBytes(TimeSpan.FromSeconds(1), out identity))
+                    {
+                        DrainPublishQueue();
                         continue;
+                    }
 
                     var message = _routerSocket.ReceiveFrameString();
                     DebugLog($"[ROUTER] Received: {message}");
@@ -339,12 +327,36 @@ namespace rhino_zmq_poc
                     _routerSocket.SendFrame(identity, true);
                     _routerSocket.SendFrame(response);
                     DebugLog($"[ROUTER] Sent: {response}");
+
+                    DrainPublishQueue();
                 }
                 catch (Exception ex) when (!ct.IsCancellationRequested)
                 {
                     DebugLog($"[ROUTER] Error: {ex.Message}");
                 }
             }
+        }
+
+        private void DrainPublishQueue()
+        {
+            while (_publishQueue.TryDequeue(out var item))
+            {
+                try
+                {
+                    _pubSocket.SendFrame(item.topic, true);
+                    _pubSocket.SendFrame(item.json);
+                    DebugLog($"[PUB] Published {item.topic}");
+                }
+                catch (Exception ex)
+                {
+                    DebugLog($"[PUB] Publish error: {ex.Message}");
+                }
+            }
+        }
+
+        private void EnqueuePublish(string topic, string json)
+        {
+            _publishQueue.Enqueue((topic, json));
         }
 
         private string ProcessRequest(string message)
@@ -412,36 +424,16 @@ namespace rhino_zmq_poc
                 Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
             };
 
-            var json = JsonSerializer.Serialize(evt);
-            _pubSocket.SendFrame("gh.event.xml", true);
-            _pubSocket.SendFrame(json);
-            DebugLog($"[PUB] Published gh.event.xml for {docName}");
-        }
-
-        private void PublishHello()
-        {
-            if (_pubSocket == null) return;
-
-            var hello = new GhHello
-            {
-                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                Msg = "hello from gh"
-            };
-
-            var json = JsonSerializer.Serialize(hello);
-            _pubSocket.SendFrame("gh.hello", true);
-            _pubSocket.SendFrame(json);
-            DebugLog($"[PUB] Published gh.hello: {json}");
+            EnqueuePublish("gh.event.xml", JsonSerializer.Serialize(evt));
+            DebugLog($"[PUB] Queued gh.event.xml for {docName}");
         }
 
         private void PublishJobStatus(GhJobStatus status)
         {
             if (_pubSocket == null) return;
 
-            var json = JsonSerializer.Serialize(status);
-            _pubSocket.SendFrame("gh.job.status", true);
-            _pubSocket.SendFrame(json);
-            DebugLog($"[PUB] Published gh.job.status: {status.State}");
+            EnqueuePublish("gh.job.status", JsonSerializer.Serialize(status));
+            DebugLog($"[PUB] Queued gh.job.status: {status.State}");
         }
 
         private void DebugLog(string msg)
@@ -452,7 +444,6 @@ namespace rhino_zmq_poc
         public void Dispose()
         {
             _cts.Cancel();
-            _helloTimer?.Dispose();
             _routerTask?.Wait(TimeSpan.FromSeconds(2));
             _pubSocket?.Dispose();
             _routerSocket?.Dispose();
@@ -471,6 +462,8 @@ namespace rhino_zmq_poc
         private JobQueue _jobQueue;
         private string _debugLog = "";
         private string _lastJobReceived = "";
+        private string _lastXmlSent = "";
+        private GH_Document _subscribedDoc;
 
         public rhino_zmq_pocComponent()
             : base("GH ZMQ Plugin", "GHZMQ",
@@ -487,6 +480,7 @@ namespace rhino_zmq_poc
         {
             pManager.AddTextParameter("Debug Log", "LOG", "ZMQ debug output", GH_ParamAccess.list);
             pManager.AddTextParameter("Job Received", "JOB", "Last received job (jobId|commandId|action)", GH_ParamAccess.item);
+            pManager.AddTextParameter("Last XML", "XML", "Last published XML snapshot", GH_ParamAccess.item);
         }
 
         protected override void BeforeSolveInstance()
@@ -495,6 +489,7 @@ namespace rhino_zmq_poc
             {
                 InitializeZmq();
             }
+            EnsureSolutionEvents();
         }
 
         private void InitializeZmq()
@@ -512,6 +507,7 @@ namespace rhino_zmq_poc
             _zmqService.Start();
             _jobQueue.Start();
             RhinoZmqPlugin.Instance.Component = this;
+            SubscribeSolutionEvents();
             _debugLog += $"[{DateTime.Now:HH:mm:ss}] ZMQ started: PUB @ 5555, ROUTER @ 5556\n";
         }
 
@@ -521,14 +517,53 @@ namespace rhino_zmq_poc
             ExpireSolution(true);
         }
 
-        private void OnSolutionStart()
+        private void SubscribeSolutionEvents()
         {
-            PublishDocumentXml();
+            GH_Document doc = GetCurrentDocument();
+            if (doc == null) return;
+
+            UnsubscribeSolutionEvents();
+
+            doc.SolutionEnd += OnSolutionEnd;
+            _subscribedDoc = doc;
+            _debugLog += $"[{DateTime.Now:HH:mm:ss}] Subscribed to SolutionEnd\n";
         }
 
-        private void PublishDocumentXml()
+        private void UnsubscribeSolutionEvents()
         {
-            GH_Document doc = Instances.ActiveCanvas?.Document;
+            if (_subscribedDoc != null)
+            {
+                _subscribedDoc.SolutionEnd -= OnSolutionEnd;
+            }
+        }
+
+        private void EnsureSolutionEvents()
+        {
+            GH_Document current = GetCurrentDocument();
+            if (current == null) return;
+            if (_subscribedDoc != current)
+            {
+                SubscribeSolutionEvents();
+            }
+        }
+
+        private GH_Document GetCurrentDocument()
+        {
+            return Instances.ActiveDocument;
+        }
+
+        private void OnSolutionEnd(object sender, EventArgs e)
+        {
+            var doc = sender as GH_Document;
+            PublishDocumentXml(doc);
+        }
+
+        private void PublishDocumentXml(GH_Document doc)
+        {
+            if (doc == null)
+            {
+                doc = GetCurrentDocument();
+            }
             if (doc == null) return;
 
             try
@@ -536,8 +571,9 @@ namespace rhino_zmq_poc
                 var archive = new GH_IO.Serialization.GH_Archive();
                 archive.AppendObject(doc, "Definition");
                 string xml = archive.Serialize_Xml();
+                _lastXmlSent = xml;
                 _zmqService?.PublishXmlEvent(doc.FilePath ?? "Untitled.gh", xml);
-                _debugLog += $"[{DateTime.Now:HH:mm:ss}] Published XML: {(xml.Length / 1024)}KB\n";
+                _debugLog += $"[{DateTime.Now:HH:mm:ss}] Sending XML: {xml.Length} chars, topic=gh.event.xml\n";
             }
             catch (Exception ex)
             {
@@ -552,7 +588,7 @@ namespace rhino_zmq_poc
 
             _debugLog += $"[{DateTime.Now:HH:mm:ss}] Executing: {command.Action}\n";
 
-            return command.Action switch
+            string result = command.Action switch
             {
                 "addComponent" => MockAddComponent(command.Params),
                 "deleteComponent" => MockDeleteComponent(command.Params),
@@ -568,6 +604,9 @@ namespace rhino_zmq_poc
                 "setPanelText" => MockSetPanelText(command.Params),
                 _ => $"Unknown action: {command.Action}"
             };
+
+            _debugLog += $"[{DateTime.Now:HH:mm:ss}] Result: {result}\n";
+            return result;
         }
 
         protected override void SolveInstance(IGH_DataAccess DA)
@@ -575,6 +614,7 @@ namespace rhino_zmq_poc
             var logLines = _debugLog.Split('\n').Where(l => !string.IsNullOrEmpty(l)).ToArray();
             DA.SetDataList(0, logLines);
             DA.SetData(1, _lastJobReceived);
+            DA.SetData(2, _lastXmlSent);
         }
 
         #region Mock Commands

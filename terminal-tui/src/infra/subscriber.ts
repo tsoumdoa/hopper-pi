@@ -13,9 +13,17 @@ export class Subscriber {
 			console.log(`[SUB] Connecting to ${PUB_ENDPOINT}`);
 		}
 		await this.socket.connect(PUB_ENDPOINT);
-		await this.socket.subscribe("gh.hello");
-		await this.socket.subscribe("gh.event.");
-		await this.socket.subscribe("gh.job.");
+		await this.socket.subscribe("");
+	}
+
+	async subscribeTopic(topic: string): Promise<void> {
+		if (!this.socket) {
+			throw new Error("Subscriber not connected");
+		}
+		if (DEBUG) {
+			console.log(`[SUB] Subscribing to: ${topic}`);
+		}
+		await this.socket.subscribe(topic);
 	}
 
 	async subscribe(handler: MessageHandler): Promise<void> {
@@ -35,9 +43,7 @@ export class Subscriber {
 
 			try {
 				const parsed = JSON.parse(payload) as GhMessage;
-				if (parsed.type && topicStr.startsWith(parsed.type.slice(0, 8))) {
-					handler(parsed);
-				}
+				handler(parsed);
 			} catch (err) {
 				console.error(`[SUB] Failed to parse message: ${err}`);
 			}
