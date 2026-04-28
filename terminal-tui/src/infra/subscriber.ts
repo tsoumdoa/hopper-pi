@@ -13,6 +13,7 @@ export class Subscriber {
 			console.log(`[SUB] Connecting to ${PUB_ENDPOINT}`);
 		}
 		await this.socket.connect(PUB_ENDPOINT);
+		await this.socket.subscribe("gh.hello");
 		await this.socket.subscribe("gh.event.");
 		await this.socket.subscribe("gh.job.");
 	}
@@ -21,7 +22,10 @@ export class Subscriber {
 		if (!this.socket) {
 			throw new Error("Subscriber not connected");
 		}
-		for await (const [topic, data] of this.socket) {
+		while (true) {
+			const [topic, data] = await this.socket.receive();
+			if (!topic || !data) continue;
+
 			const topicStr = topic.toString();
 			const payload = data.toString();
 

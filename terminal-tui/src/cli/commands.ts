@@ -4,7 +4,7 @@ import { nanoid } from "nanoid";
 import { Subscriber } from "../infra/subscriber.js";
 import { Requester } from "../infra/requester.js";
 import type { CommandAction, SubmitJobRequest } from "../domain/commands.js";
-import type { GhMessage, GhJobStatus, GhEventXml } from "../domain/messages.js";
+import type { GhMessage, GhJobStatus, GhEventXml, GhHello } from "../domain/messages.js";
 
 const ACTIONS: Array<{ id: number; action: CommandAction; label: string }> = [
 	{ id: 1, action: "addComponent", label: "add-component" },
@@ -26,7 +26,14 @@ function formatTimestamp(ts: number): string {
 }
 
 function handleMessage(msg: GhMessage): void {
-	if (msg.type === "gh.job.status") {
+	if (msg.type === "gh.hello") {
+		const hello = msg as GhHello;
+		console.log(
+			chalk.blue(`[${msg.type}]`) +
+			` ${formatTimestamp(hello.timestamp)} — ` +
+			chalk.green(hello.msg)
+		);
+	} else if (msg.type === "gh.job.status") {
 		const status = msg as GhJobStatus;
 		const stateColor =
 			status.state === "completed" ? "green" :

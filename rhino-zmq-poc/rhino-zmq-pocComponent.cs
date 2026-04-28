@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
@@ -111,6 +112,18 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("xml")]
         public string Xml { get; set; }
+    }
+
+    public class GhHello
+    {
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = "gh.hello";
+
+        [JsonPropertyName("timestamp")]
+        public long Timestamp { get; set; }
+
+        [JsonPropertyName("msg")]
+        public string Msg { get; set; }
     }
 
     public class CommandResult
@@ -270,6 +283,7 @@ namespace rhino_zmq_poc
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
         private Task _routerTask;
         private readonly JobQueue _jobQueue;
+        private System.Threading.Timer _helloTimer;
 
         public event Action<GhJobStatus> OnJobStatus;
         public event Action<string> OnDebugLog;
@@ -297,6 +311,9 @@ namespace rhino_zmq_poc
                 DebugLog($"[ROUTER] Bound to {RouterEndpoint}");
 
                 _routerTask = Task.Run(() => RouterLoop(_cts.Token));
+
+                _helloTimer = new System.Threading.Timer(_ => PublishHello(), null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+                DebugLog("[PUB] Hello timer started (every 2s)");
             }
             catch (Exception ex)
             {
@@ -393,9 +410,25 @@ namespace rhino_zmq_poc
             };
 
             var json = JsonSerializer.Serialize(evt);
-            _pubSocket.SendFrame("gh.event.xml", false);
+            _pubSocket.SendFrame("gh.event.xml", true);
             _pubSocket.SendFrame(json);
             DebugLog($"[PUB] Published gh.event.xml for {docName}");
+        }
+
+        private void PublishHello()
+        {
+            if (_pubSocket == null) return;
+
+            var hello = new GhHello
+            {
+                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                Msg = "hello from gh"
+            };
+
+            var json = JsonSerializer.Serialize(hello);
+            _pubSocket.SendFrame("gh.hello", true);
+            _pubSocket.SendFrame(json);
+            DebugLog($"[PUB] Published gh.hello: {json}");
         }
 
         private void PublishJobStatus(GhJobStatus status)
@@ -403,7 +436,7 @@ namespace rhino_zmq_poc
             if (_pubSocket == null) return;
 
             var json = JsonSerializer.Serialize(status);
-            _pubSocket.SendFrame("gh.job.status", false);
+            _pubSocket.SendFrame("gh.job.status", true);
             _pubSocket.SendFrame(json);
             DebugLog($"[PUB] Published gh.job.status: {status.State}");
         }
@@ -416,6 +449,7 @@ namespace rhino_zmq_poc
         public void Dispose()
         {
             _cts.Cancel();
+            _helloTimer?.Dispose();
             _routerTask?.Wait(TimeSpan.FromSeconds(2));
             _pubSocket?.Dispose();
             _routerSocket?.Dispose();
