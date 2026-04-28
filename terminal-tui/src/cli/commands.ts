@@ -3,7 +3,8 @@ import chalk from "chalk";
 import { nanoid } from "nanoid";
 import { Subscriber } from "../infra/subscriber.js";
 import { Requester } from "../infra/requester.js";
-import type { CommandAction, SubmitJobRequest } from "../domain/commands.js";
+import { REQUEST_TIMEOUT } from "../infra/connection.js";
+import type { CommandAction, CommandParams, SubmitJobRequest } from "../domain/commands.js";
 import type { GhMessage, GhJobStatus, GhEventXml, GhHello } from "../domain/messages.js";
 
 const ACTIONS: Array<{ id: number; action: CommandAction; label: string }> = [
@@ -152,14 +153,129 @@ export function createSubscribeCommand(program: Command): void {
 		});
 }
 
+const VALID_ACTIONS = new Set<string>([
+	"addComponent",
+	"deleteComponent",
+	"connectWire",
+	"disconnectWire",
+	"moveComponent",
+	"renameComponent",
+	"setComponentLocked",
+	"setComponentHidden",
+	"addGroup",
+	"removeFromGroup",
+	"setSliderValue",
+	"setPanelText",
+]);
+
+function parseParams(action: CommandAction, opts: Record<string, string>): CommandParams {
+	switch (action) {
+		case "addComponent":
+			return {
+				componentType: opts.componentType,
+				nickName: opts.nickName,
+				position: {
+					x: Number(opts.x),
+					y: Number(opts.y),
+				},
+			};
+		case "deleteComponent":
+			return { targetId: opts.targetId };
+		case "connectWire":
+		case "disconnectWire":
+			return {
+				from: { componentId: opts.fromComponent, port: opts.fromPort },
+				to: { componentId: opts.toComponent, port: opts.toPort },
+			};
+		case "moveComponent":
+			return {
+				targetId: opts.targetId,
+				position: { x: Number(opts.x), y: Number(opts.y) },
+			};
+		case "renameComponent":
+			return { targetId: opts.targetId, nickName: opts.nickName };
+		case "setComponentLocked":
+			return { targetId: opts.targetId, locked: opts.locked === "true" };
+		case "setComponentHidden":
+			return { targetId: opts.targetId, hidden: opts.hidden === "true" };
+		case "addGroup":
+		case "removeFromGroup":
+			return {
+				componentIds: opts.componentIds?.split(",").map((s) => s.trim()) ?? [],
+				groupName: opts.groupName,
+			};
+		case "setSliderValue":
+			return { targetId: opts.targetId, value: Number(opts.value) };
+		case "setPanelText":
+			return { targetId: opts.targetId, text: opts.text };
+	}
+}
+
+export async function submit(action: string, opts: Record<string, string>): Promise<void> {
+	if (!VALID_ACTIONS.has(action)) {
+		console.error(chalk.red(`Unknown action: ${action}`));
+		console.log(`Valid actions: ${[...VALID_ACTIONS].join(", ")}`);
+		process.exit(1);
+	}
+
+	const jobId = `job-${nanoid(8)}`;
+	const params = parseParams(action as CommandAction, opts);
+	const request: SubmitJobRequest = {
+		type: "submitJob",
+		jobId,
+		command: { action: action as CommandAction, params },
+	};
+
+	const requester = new Requester();
+	try {
+		await requester.connect();
+		const response = await requester.submitJob(request);
+
+		if (response.status === "error") {
+			console.error(chalk.red(`Error: ${response.error}`));
+			process.exit(1);
+		}
+
+		console.log(
+			chalk.green("✓") +
+			` ${chalk.cyan(response.jobId)}` +
+			` received (${chalk.yellow(response.commandId)}): ` +
+			chalk.bold(action)
+		);
+	} catch (err) {
+		if (err instanceof Error && err.message.includes("ECONNREFUSED")) {
+			console.error(chalk.red("Cannot connect to Grasshopper. Is Rhino open?"));
+		} else {
+			console.error(chalk.red("Request failed:"), err);
+		}
+		process.exit(1);
+	} finally {
+		await requester.close();
+	}
+}
+
 export function createSubmitCommand(program: Command): void {
 	program
-		.command("submit")
+		.command("submit <action>")
 		.description("Submit a command to Grasshopper")
-		.action(async () => {
+		.option("--componentType <type>", "Component type (addComponent)")
+		.option("--nickName <name>", "Component nickname")
+		.option("--targetId <id>", "Target component ID")
+		.option("--fromComponent <id>", "Source component ID (wire commands)")
+		.option("--fromPort <port>", "Source port name (wire commands)")
+		.option("--toComponent <id>", "Destination component ID (wire commands)")
+		.option("--toPort <port>", "Destination port name (wire commands)")
+		.option("--x <number>", "X position")
+		.option("--y <number>", "Y position")
+		.option("--locked <boolean>", "Locked state (true/false)")
+		.option("--hidden <boolean>", "Hidden state (true/false)")
+		.option("--componentIds <ids>", "Component IDs, comma-separated")
+		.option("--groupName <name>", "Group name")
+		.option("--value <number>", "Slider value")
+		.option("--text <text>", "Panel text")
+		.action(async (action: string, opts: Record<string, string>) => {
 			try {
-				console.log(chalk.bold("Submit command - interactive mode not implemented"));
-				console.log("Use: gh subscribe to listen for events");
+				await submit(action, opts);
 			} catch (err) {
 				console.error(chalk.red("Error:"), err);
 				process.exit(1);

@@ -287,6 +287,7 @@ namespace rhino_zmq_poc
 
         public event Action<GhJobStatus> OnJobStatus;
         public event Action<string> OnDebugLog;
+        public event Action<string> OnJobReceived;
 
         public ZMqService(JobQueue jobQueue)
         {
@@ -380,6 +381,8 @@ namespace rhino_zmq_poc
 
                 _jobQueue.Enqueue(job);
 
+                OnJobReceived?.Invoke($"{job.JobId}|{job.CommandId}|{job.Command.Action}");
+
                 return JsonSerializer.Serialize(new SubmitJobResponse
                 {
                     Status = "ok",
@@ -467,6 +470,7 @@ namespace rhino_zmq_poc
         private ZMqService _zmqService;
         private JobQueue _jobQueue;
         private string _debugLog = "";
+        private string _lastJobReceived = "";
 
         public rhino_zmq_pocComponent()
             : base("GH ZMQ Plugin", "GHZMQ",
@@ -482,6 +486,7 @@ namespace rhino_zmq_poc
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
             pManager.AddTextParameter("Debug Log", "LOG", "ZMQ debug output", GH_ParamAccess.list);
+            pManager.AddTextParameter("Job Received", "JOB", "Last received job (jobId|commandId|action)", GH_ParamAccess.item);
         }
 
         protected override void BeforeSolveInstance()
@@ -499,10 +504,21 @@ namespace rhino_zmq_poc
             _zmqService = new ZMqService(_jobQueue);
             _zmqService.OnDebugLog += msg => _debugLog += $"[{DateTime.Now:HH:mm:ss}] {msg}\n";
             _zmqService.OnJobStatus += status => _debugLog += $"[{DateTime.Now:HH:mm:ss}] Job {status.JobId}: {status.State}\n";
+            _zmqService.OnJobReceived += info =>
+            {
+                _lastJobReceived = info;
+                RhinoApp.Idle += OnIdleExpire;
+            };
             _zmqService.Start();
             _jobQueue.Start();
             RhinoZmqPlugin.Instance.Component = this;
             _debugLog += $"[{DateTime.Now:HH:mm:ss}] ZMQ started: PUB @ 5555, ROUTER @ 5556\n";
+        }
+
+        private void OnIdleExpire(object sender, EventArgs e)
+        {
+            RhinoApp.Idle -= OnIdleExpire;
+            ExpireSolution(true);
         }
 
         private void OnSolutionStart()
@@ -558,6 +574,7 @@ namespace rhino_zmq_poc
         {
             var logLines = _debugLog.Split('\n').Where(l => !string.IsNullOrEmpty(l)).ToArray();
             DA.SetDataList(0, logLines);
+            DA.SetData(1, _lastJobReceived);
         }
 
         #region Mock Commands
