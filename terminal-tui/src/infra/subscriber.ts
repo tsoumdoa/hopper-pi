@@ -50,6 +50,17 @@ export class Subscriber {
 		}
 	}
 
+	async receiveOne(): Promise<GhMessage | null> {
+		if (!this.socket) throw new Error("Subscriber not connected");
+		const [topic, data] = await this.socket.receive();
+		if (!topic || !data) return null;
+		const payload = data.toString();
+		if (DEBUG) {
+			console.log(`[SUB] Received one: ${payload.slice(0, 100)}...`);
+		}
+		return JSON.parse(payload) as GhMessage;
+	}
+
 	async close(): Promise<void> {
 		if (this.socket) {
 			await this.socket.close();

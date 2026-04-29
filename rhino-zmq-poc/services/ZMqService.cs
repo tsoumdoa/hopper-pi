@@ -11,12 +11,12 @@ namespace rhino_zmq_poc
     public class ZMqService : IDisposable
     {
         private const string PubEndpoint = "tcp://*:5555";
-        private const string RouterEndpoint = "tcp://*:5556";
+        private const string PullEndpoint = "tcp://*:5556";
 
         private PublisherSocket _pubSocket;
-        private RouterSocket _routerSocket;
+        private PullSocket _pullSocket;
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
-        private Task _routerTask;
+        private Task _commandTask;
         private readonly JobQueue _jobQueue;
         private readonly ConcurrentQueue<(string topic, string json)> _publishQueue = new ConcurrentQueue<(string, string)>();
 
@@ -42,11 +42,11 @@ namespace rhino_zmq_poc
                 _pubSocket.Bind(PubEndpoint);
                 DebugLog($"[PUB] Bound to {PubEndpoint}");
 
-                _routerSocket = new RouterSocket();
-                _routerSocket.Bind(RouterEndpoint);
-                DebugLog($"[ROUTER] Bound to {RouterEndpoint}");
+                _pullSocket = new PullSocket();
+                _pullSocket.Bind(PullEndpoint);
+                DebugLog($"[PULL] Bound to {PullEndpoint}");
 
-                _routerTask = Task.Run(() => RouterLoop(_cts.Token));
+                _commandTask = Task.Run(() => CommandLoop(_cts.Token));
             }
             catch (Exception ex)
             {
@@ -54,33 +54,67 @@ namespace rhino_zmq_poc
             }
         }
 
-        private void RouterLoop(CancellationToken ct)
+        private void CommandLoop(CancellationToken ct)
         {
             while (!ct.IsCancellationRequested)
             {
                 try
                 {
-                    byte[] identity;
-                    if (!_routerSocket.TryReceiveFrameBytes(TimeSpan.FromSeconds(1), out identity))
+                    string message;
+                    if (!_pullSocket.TryReceiveFrameString(TimeSpan.FromSeconds(1), out message))
                     {
                         DrainPublishQueue();
                         continue;
                     }
 
-                    var message = _routerSocket.ReceiveFrameString();
-                    DebugLog($"[ROUTER] Received: {message}");
+                    DebugLog($"[PULL] Received: {message}");
 
-                    var response = ProcessRequest(message);
-                    _routerSocket.SendFrame(identity, true);
-                    _routerSocket.SendFrame(response);
-                    DebugLog($"[ROUTER] Sent: {response}");
+                    ProcessCommand(message);
 
                     DrainPublishQueue();
                 }
                 catch (Exception ex) when (!ct.IsCancellationRequested)
                 {
-                    DebugLog($"[ROUTER] Error: {ex.Message}");
+                    DebugLog($"[PULL] Error: {ex.Message}");
                 }
+            }
+        }
+
+        private void ProcessCommand(string message)
+        {
+            try
+            {
+                var request = JsonSerializer.Deserialize<SubmitJobRequest>(message);
+                if (request == null || request.Command == null)
+                {
+                    DebugLog("[PULL] Invalid request: null or missing command");
+                    return;
+                }
+
+                if (request.Type != "submitJob")
+                {
+                    DebugLog($"[PULL] Unknown request type: {request.Type}");
+                    return;
+                }
+
+                string commandId = $"cmd-{Guid.NewGuid().ToString()[..8]}";
+
+                var job = new Job
+                {
+                    JobId = request.JobId,
+                    CommandId = commandId,
+                    Command = request.Command
+                };
+
+                _jobQueue.Enqueue(job);
+
+                OnJobReceived?.Invoke($"{job.JobId}|{job.CommandId}|{job.Command.Action}");
+
+                DebugLog($"[PULL] Enqueued job {job.JobId} ({commandId})");
+            }
+            catch (Exception ex)
+            {
+                DebugLog($"[PULL] Process error: {ex.Message}");
             }
         }
 
@@ -106,60 +140,6 @@ namespace rhino_zmq_poc
             _publishQueue.Enqueue((topic, json));
         }
 
-        private string ProcessRequest(string message)
-        {
-            try
-            {
-                var request = JsonSerializer.Deserialize<SubmitJobRequest>(message);
-                if (request == null || request.Command == null)
-                {
-                    return JsonSerializer.Serialize(new SubmitJobResponse
-                    {
-                        Status = "error",
-                        Error = "Invalid request"
-                    });
-                }
-
-                if (request.Type != "submitJob")
-                {
-                    return JsonSerializer.Serialize(new SubmitJobResponse
-                    {
-                        Status = "error",
-                        Error = $"Unknown request type: {request.Type}"
-                    });
-                }
-
-                string commandId = $"cmd-{Guid.NewGuid().ToString()[..8]}";
-
-                var job = new Job
-                {
-                    JobId = request.JobId,
-                    CommandId = commandId,
-                    Command = request.Command
-                };
-
-                _jobQueue.Enqueue(job);
-
-                OnJobReceived?.Invoke($"{job.JobId}|{job.CommandId}|{job.Command.Action}");
-
-                return JsonSerializer.Serialize(new SubmitJobResponse
-                {
-                    Status = "ok",
-                    JobId = job.JobId,
-                    CommandId = commandId,
-                    QueuedAt = job.QueuedAt
-                });
-            }
-            catch (Exception ex)
-            {
-                return JsonSerializer.Serialize(new SubmitJobResponse
-                {
-                    Status = "error",
-                    Error = ex.Message
-                });
-            }
-        }
-
         public void PublishXmlEvent(string docName, string xml)
         {
             if (_pubSocket == null) return;
@@ -175,14 +155,6 @@ namespace rhino_zmq_poc
             DebugLog($"[PUB] Queued gh.event.xml for {docName}");
         }
 
-        private void PublishJobStatus(GhJobStatus status)
-        {
-            if (_pubSocket == null) return;
-
-            EnqueuePublish("gh.job.status", JsonSerializer.Serialize(status));
-            DebugLog($"[PUB] Queued gh.job.status: {status.State}");
-        }
-
         private void DebugLog(string msg)
         {
             OnDebugLog?.Invoke(msg);
@@ -191,9 +163,9 @@ namespace rhino_zmq_poc
         public void Dispose()
         {
             _cts.Cancel();
-            _routerTask?.Wait(TimeSpan.FromSeconds(2));
+            _commandTask?.Wait(TimeSpan.FromSeconds(2));
             _pubSocket?.Dispose();
-            _routerSocket?.Dispose();
+            _pullSocket?.Dispose();
             _cts.Dispose();
             DebugLog("[ZMQ] Disposed");
         }

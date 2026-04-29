@@ -108,10 +108,3 @@ export interface SubmitJobRequest {
 	command: Command;
 }
 
-export interface SubmitJobResponse {
-	status: "ok" | "error";
-	jobId: string;
-	commandId: string;
-	queuedAt: number;
-	error?: string;
-}

@@ -42,24 +42,6 @@ namespace rhino_zmq_poc
         public GhCommand Command { get; set; }
     }
 
-    public class SubmitJobResponse
-    {
-        [JsonPropertyName("status")]
-        public string Status { get; set; }
-
-        [JsonPropertyName("jobId")]
-        public string JobId { get; set; }
-
-        [JsonPropertyName("commandId")]
-        public string CommandId { get; set; }
-
-        [JsonPropertyName("queuedAt")]
-        public long QueuedAt { get; set; }
-
-        [JsonPropertyName("error")]
-        public string Error { get; set; }
-    }
-
     public class GhJobStatus
     {
         [JsonPropertyName("type")]

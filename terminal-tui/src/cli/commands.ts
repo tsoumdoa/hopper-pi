@@ -6,8 +6,8 @@ import * as path from "node:path";
 import * as readline from "node:readline";
 import { nanoid } from "nanoid";
 import { Subscriber } from "../infra/subscriber.js";
-import { Requester } from "../infra/requester.js";
-import { DEBUG } from "../infra/connection.js";
+import { Publisher } from "../infra/publisher.js";
+import { DEBUG, COMMAND_ACK_TIMEOUT_MS, PUB_ENDPOINT } from "../infra/connection.js";
 import type { CommandAction, CommandParams, SubmitJobRequest } from "../domain/commands.js";
 import type { GhMessage, GhJobStatus, GhEventXml } from "../domain/messages.js";
 import { buildGhJson } from "../services/parser.js";
@@ -185,31 +185,57 @@ export async function submit(action: string, opts: Record<string, string>): Prom
 		command: { action: action as CommandAction, params },
 	};
 
-	const requester = new Requester();
+	const publisher = new Publisher();
 	try {
-		await requester.connect();
-		const response = await requester.submitJob(request);
+		await publisher.connect();
+		await publisher.publishCommand(request);
 
-		if (response.status === "error") {
-			console.error(chalk.red(`Error: ${response.error}`));
-			process.exit(1);
+		console.log(chalk.gray(`Command published, waiting for ack (jobId: ${chalk.cyan(jobId)})...`));
+
+		const ack = await waitForAck(jobId);
+		if (ack) {
+			console.log(
+				chalk.green("✓") +
+				` ${chalk.cyan(ack.jobId)}` +
+				` received (${chalk.yellow(ack.commandId)}): ` +
+				chalk.bold(action)
+			);
+		} else {
+			console.log(chalk.yellow(`⚠ Command sent but no ack received within timeout (jobId: ${jobId})`));
 		}
-
-		console.log(
-			chalk.green("✓") +
-			` ${chalk.cyan(response.jobId)}` +
-			` received (${chalk.yellow(response.commandId)}): ` +
-			chalk.bold(action)
-		);
 	} catch (err) {
 		if (err instanceof Error && err.message.includes("ECONNREFUSED")) {
 			console.error(chalk.red("Cannot connect to Grasshopper. Is Rhino open?"));
 		} else {
-			console.error(chalk.red("Request failed:"), err);
+			console.error(chalk.red("Publish failed:"), err);
 		}
 		process.exit(1);
 	} finally {
-		await requester.close();
+		await publisher.close();
+	}
+}
+
+async function waitForAck(jobId: string): Promise<{ jobId: string; commandId: string } | null> {
+	const subscriber = new Subscriber();
+	try {
+		await subscriber.connect();
+		await subscriber.subscribeTopic("gh.job.status");
+
+		const deadline = Date.now() + COMMAND_ACK_TIMEOUT_MS;
+
+		while (Date.now() < deadline) {
+			try {
+				const msg = await subscriber.receiveOne();
+				if (msg?.type === "gh.job.status" && msg.jobId === jobId && msg.state === "queued") {
+					return { jobId: msg.jobId, commandId: msg.commandId };
+				}
+			} catch {
+				break;
+			}
+		}
+		return null;
+	} finally {
+		await subscriber.close();
 	}
 }
 
