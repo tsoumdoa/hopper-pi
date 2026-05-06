@@ -1,30 +1,5 @@
-import type { ParsedGrasshopper, Component, Wire, InputPort, OutputPort, PortOptions, ComponentValue } from "../domain/gh-types.js";
-
-export type PropertyChange = {
-	path: string;
-	old: unknown;
-	new: unknown;
-};
-
-export type ComponentDiff = {
-	id: string;
-	type: string;
-	added: string[];
-	removed: string[];
-	changed: PropertyChange[];
-};
-
-export type WireDiff = {
-	added: Wire[];
-	removed: Wire[];
-};
-
-export type GhDiff = {
-	addedComponents: Array<{ id: string; type: string }>;
-	removedComponents: Array<{ id: string; type: string }>;
-	components: ComponentDiff[];
-	wires: WireDiff;
-};
+import type { ParsedGrasshopper, Component, Wire, InputPort, OutputPort, PortOptions, ComponentValue } from "../types/gh.js";
+import type { PropertyChange, ComponentDiff, WireDiff, GhDiff } from "../types/diff.js";
 
 const SKIP_COMPONENT_KEYS = new Set(["id", "guid", "visuals"]);
 const SKIP_PORT_KEYS = new Set(["guid"]);

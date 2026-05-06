@@ -1,4 +1,4 @@
-import type { GhMessage } from "../domain/messages.js";
+import type { GhMessage } from "../types/messages.js";
 import { PUB_ENDPOINT, DEBUG } from "./connection.js";
 
 export type MessageHandler = (message: GhMessage) => void;

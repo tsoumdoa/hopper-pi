@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
-import chalk from "chalk";
 import { setupCommands } from "./cli/commands.js";
 
 const program = new Command();

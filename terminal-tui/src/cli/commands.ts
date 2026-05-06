@@ -7,26 +7,14 @@ import * as readline from "node:readline";
 import { nanoid } from "nanoid";
 import { Subscriber } from "../infra/subscriber.js";
 import { Publisher } from "../infra/publisher.js";
-import { DEBUG, COMMAND_ACK_TIMEOUT_MS, PUB_ENDPOINT } from "../infra/connection.js";
-import type { CommandAction, CommandParams, SubmitJobRequest } from "../domain/commands.js";
-import type { GhMessage, GhJobStatus, GhEventXml } from "../domain/messages.js";
+import { DEBUG, COMMAND_ACK_TIMEOUT_MS } from "../infra/connection.js";
+import type { CommandAction, CommandParams, SubmitJobRequest } from "../types/commands.js";
+import { ACTION_REGISTRY } from "../domain/commands.js";
+import type { GhMessage, GhJobStatus, GhEventXml } from "../types/messages.js";
 import { buildGhJson } from "../services/parser.js";
 import { diffGh, formatDiffSummary } from "../services/differ.js";
 
-const ACTIONS: Array<{ id: number; action: CommandAction; label: string }> = [
-	{ id: 1, action: "addComponent", label: "add-component" },
-	{ id: 2, action: "deleteComponent", label: "delete-component" },
-	{ id: 3, action: "connectWire", label: "connect-wire" },
-	{ id: 4, action: "disconnectWire", label: "disconnect-wire" },
-	{ id: 5, action: "moveComponent", label: "move-component" },
-	{ id: 6, action: "renameComponent", label: "rename-component" },
-	{ id: 7, action: "setComponentLocked", label: "set-locked" },
-	{ id: 8, action: "setComponentHidden", label: "set-hidden" },
-	{ id: 9, action: "addGroup", label: "add-group" },
-	{ id: 10, action: "removeFromGroup", label: "remove-from-group" },
-	{ id: 11, action: "setSliderValue", label: "set-slider" },
-	{ id: 12, action: "setPanelText", label: "set-panel" },
-];
+const ACTIONS = ACTION_REGISTRY.map(({ id, action, label }) => ({ id, action, label }));
 
 function formatTimestamp(ts: number): string {
 	return new Date(ts).toISOString().replace("T", " ").slice(0, 19);
@@ -112,65 +100,21 @@ export function createSubscribeCommand(program: Command): void {
 		});
 }
 
-const VALID_ACTIONS = new Set<string>([
-	"addComponent",
-	"deleteComponent",
-	"connectWire",
-	"disconnectWire",
-	"moveComponent",
-	"renameComponent",
-	"setComponentLocked",
-	"setComponentHidden",
-	"addGroup",
-	"removeFromGroup",
-	"setSliderValue",
-	"setPanelText",
-]);
+const VALID_ACTIONS = new Set(ACTION_REGISTRY.map((a) => a.action));
 
 function parseParams(action: CommandAction, opts: Record<string, string>): CommandParams {
-	switch (action) {
-		case "addComponent":
-			return {
-				guid: opts.guid,
-				position: {
-					x: Number(opts.x),
-					y: Number(opts.y),
-				},
-			};
-		case "deleteComponent":
-			return { targetId: opts.targetId };
-		case "connectWire":
-		case "disconnectWire":
-			return {
-				from: { componentId: opts.fromComponent, port: opts.fromPort },
-				to: { componentId: opts.toComponent, port: opts.toPort },
-			};
-		case "moveComponent":
-			return {
-				targetId: opts.targetId,
-				position: { x: Number(opts.x), y: Number(opts.y) },
-			};
-		case "renameComponent":
-			return { targetId: opts.targetId, nickName: opts.nickName };
-		case "setComponentLocked":
-			return { targetId: opts.targetId, locked: opts.locked === "true" };
-		case "setComponentHidden":
-			return { targetId: opts.targetId, hidden: opts.hidden === "true" };
-		case "addGroup":
-		case "removeFromGroup":
-			return {
-				componentIds: opts.componentIds?.split(",").map((s) => s.trim()) ?? [],
-				groupName: opts.groupName,
-			};
-		case "setSliderValue":
-			return { targetId: opts.targetId, value: Number(opts.value) };
-		case "setPanelText":
-			return { targetId: opts.targetId, text: opts.text };
+	const def = ACTION_REGISTRY.find((a) => a.action === action);
+	if (!def) throw new Error(`Unknown action: ${action}`);
+	const params: Record<string, unknown> = {};
+	for (const param of def.params) {
+		const raw = opts[param.name];
+		params[param.name] = param.parse ? param.parse(raw) : raw;
 	}
+	return params as unknown as CommandParams;
 }
 
 export async function submit(action: string, opts: Record<string, string>): Promise<void> {
-	if (!VALID_ACTIONS.has(action)) {
+	if (!VALID_ACTIONS.has(action as CommandAction)) {
 		console.error(chalk.red(`Unknown action: ${action}`));
 		console.log(`Valid actions: ${[...VALID_ACTIONS].join(", ")}`);
 		process.exit(1);
@@ -281,54 +225,16 @@ async function interactiveSubmit(): Promise<void> {
 				continue;
 			}
 
+		const def = ACTION_REGISTRY.find((a) => a.action === selected.action);
+			if (!def) {
+				console.log(chalk.red("Invalid selection. Try again."));
+				continue;
+			}
+
 			const params: Record<string, string> = {};
 
-			switch (selected.action) {
-				case "addComponent":
-					params.componentType = await question(rl, "  component guid: ");
-					params.x = await question(rl, "  x position: ");
-					params.y = await question(rl, "  y position: ");
-					break;
-				case "deleteComponent":
-					params.targetId = await question(rl, "  target id: ");
-					break;
-				case "connectWire":
-				case "disconnectWire":
-					params.fromComponent = await question(rl, "  from component id: ");
-					params.fromPort = await question(rl, "  from port: ");
-					params.toComponent = await question(rl, "  to component id: ");
-					params.toPort = await question(rl, "  to port: ");
-					break;
-				case "moveComponent":
-					params.targetId = await question(rl, "  target id: ");
-					params.x = await question(rl, "  x position: ");
-					params.y = await question(rl, "  y position: ");
-					break;
-				case "renameComponent":
-					params.targetId = await question(rl, "  target id: ");
-					params.nickName = await question(rl, "  new nickname: ");
-					break;
-				case "setComponentLocked":
-					params.targetId = await question(rl, "  target id: ");
-					params.locked = await question(rl, "  locked (true/false): ");
-					break;
-				case "setComponentHidden":
-					params.targetId = await question(rl, "  target id: ");
-					params.hidden = await question(rl, "  hidden (true/false): ");
-					break;
-				case "addGroup":
-				case "removeFromGroup":
-					params.componentIds = await question(rl, "  component ids (comma-separated): ");
-					params.groupName = await question(rl, "  group name: ");
-					break;
-				case "setSliderValue":
-					params.targetId = await question(rl, "  target id: ");
-					params.value = await question(rl, "  value: ");
-					break;
-				case "setPanelText":
-					params.targetId = await question(rl, "  target id: ");
-					params.text = await question(rl, "  text: ");
-					break;
+			for (const param of def.params) {
+				params[param.name] = await question(rl, param.prompt);
 			}
 
 			await submit(selected.action, params);
@@ -339,26 +245,22 @@ async function interactiveSubmit(): Promise<void> {
 }
 
 export function createSubmitCommand(program: Command): void {
-	program
+	const cmd = program
 		.command("submit [action]")
 		.description("Submit a command to Grasshopper")
-		.option("--interactive", "Interactive mode with action selection", false)
-		.option("--componentType <type>", "Component type (addComponent)")
-		.option("--nickName <name>", "Component nickname")
-		.option("--targetId <id>", "Target component ID")
-		.option("--fromComponent <id>", "Source component ID (wire commands)")
-		.option("--fromPort <port>", "Source port name (wire commands)")
-		.option("--toComponent <id>", "Destination component ID (wire commands)")
-		.option("--toPort <port>", "Destination port name (wire commands)")
-		.option("--x <number>", "X position")
-		.option("--y <number>", "Y position")
-		.option("--locked <boolean>", "Locked state (true/false)")
-		.option("--hidden <boolean>", "Hidden state (true/false)")
-		.option("--componentIds <ids>", "Component IDs, comma-separated")
-		.option("--groupName <name>", "Group name")
-		.option("--value <number>", "Slider value")
-		.option("--text <text>", "Panel text")
-		.action(async (action: string | undefined, opts: Record<string, string>) => {
+		.option("--interactive", "Interactive mode with action selection", false);
+
+	const seenFlags = new Set<string>();
+	for (const def of ACTION_REGISTRY) {
+		for (const param of def.params) {
+			if (!seenFlags.has(param.cliFlag)) {
+				seenFlags.add(param.cliFlag);
+				cmd.option(param.cliFlag, param.cliDescription);
+			}
+		}
+	}
+
+	cmd.action(async (action: string | undefined, opts: Record<string, string>) => {
 			try {
 				if (opts.interactive || !action) {
 					await interactiveSubmit();

@@ -1,6 +1,6 @@
 import type { JobState } from "./messages.js";
 
-export interface Job {
+export type Job = {
 	jobId: string;
 	commandId: string;
 	state: JobState;
@@ -9,4 +9,4 @@ export interface Job {
 	queuedAt: number;
 	startedAt?: number;
 	completedAt?: number;
-}
+};

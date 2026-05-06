@@ -10,42 +10,8 @@ import type {
 	ComponentState,
 	DataMapping,
 	PortOptions,
-} from "../domain/gh-types.js";
-
-interface XmlItem {
-	name?: string;
-	type_name?: string;
-	type_code?: string;
-	"#text"?: string | number | boolean;
-	[key: string]: unknown;
-}
-
-interface XmlChunk {
-	name?: string;
-	index?: string;
-	items?: {
-		item?: XmlItem[];
-		count?: string;
-	};
-	chunks?: {
-		chunk?: XmlChunk[];
-		count?: string;
-	};
-}
-
-export interface ParsedXml {
-	Archive?: {
-		name?: string;
-		items?: {
-			item?: XmlItem[];
-			count?: string;
-		};
-		chunks?: {
-			chunk?: XmlChunk[];
-			count?: string;
-		};
-	};
-}
+} from "../types/gh.js";
+import type { ParsedXml, XmlChunk, ParsedComponent } from "../types/parser.js";
 
 function normalizeArray<T>(item: T | T[] | undefined): T[] {
 	if (item === undefined) return [];
@@ -432,12 +398,6 @@ function parseComponentState(
 	return hasState ? state : undefined;
 }
 
-interface ParsedComponent {
-	component: Component;
-	guid: string;
-	objectChunk: XmlChunk;
-}
-
 function parseComponent(
 	objectChunk: XmlChunk,
 	options?: ParseOptions,
@@ -716,7 +676,7 @@ export function parseGrasshopper(
 	}
 
 	// Resolve group members
-	for (const { id: compId, parsed } of parsedComponents) {
+	for (const { id: _compId, parsed } of parsedComponents) {
 		const component = parsed.component;
 		if (component.type === "Group") {
 			const containerChunk = findChunk(parsed.objectChunk, "Container");

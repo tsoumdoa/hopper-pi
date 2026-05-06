@@ -1,4 +1,4 @@
-import type { SubmitJobRequest } from "../domain/commands.js";
+import type { SubmitJobRequest } from "../types/commands.js";
 import { PUSH_ENDPOINT, DEBUG } from "./connection.js";
 
 export class Publisher {

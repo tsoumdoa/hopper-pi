@@ -1,6 +1,6 @@
 export type JobState = "queued" | "running" | "completed" | "failed" | "cancelled";
 
-export interface GhJobStatus {
+export type GhJobStatus = {
 	type: "gh.job.status";
 	timestamp: number;
 	jobId: string;
@@ -8,13 +8,13 @@ export interface GhJobStatus {
 	state: JobState;
 	progress: number;
 	error: string | null;
-}
+};
 
-export interface GhEventXml {
+export type GhEventXml = {
 	type: "gh.event.xml";
 	timestamp: number;
 	docName: string;
 	xml: string;
-}
+};
 
 export type GhMessage = GhJobStatus | GhEventXml;
