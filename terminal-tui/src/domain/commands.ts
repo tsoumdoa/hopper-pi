@@ -9,9 +9,7 @@ export interface PortRef {
 }
 
 export interface AddComponentParams {
-	componentType: string;
-	libraryGuid?: string;
-	nickName: string;
+	guid: string;
 	position: Position;
 }
 

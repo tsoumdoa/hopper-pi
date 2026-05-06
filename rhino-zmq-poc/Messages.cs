@@ -12,6 +12,15 @@ namespace rhino_zmq_poc
         public double Y { get; set; }
     }
 
+    public class AddComponentParams
+    {
+        [JsonPropertyName("guid")]
+        public string Guid { get; set; }
+
+        [JsonPropertyName("position")]
+        public Position Position { get; set; }
+    }
+
     public class PortRef
     {
         [JsonPropertyName("componentId")]

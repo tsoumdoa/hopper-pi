@@ -1,5 +1,6 @@
 using System;
 using System.Text.Json;
+using Grasshopper.Kernel;
 
 namespace rhino_zmq_poc
 {
@@ -12,7 +13,7 @@ namespace rhino_zmq_poc
             _log = log;
         }
 
-        public string Execute(GhCommand command)
+        public string Execute(GH_Document doc, GhCommand command)
         {
             if (command == null || string.IsNullOrEmpty(command.Action))
                 return "Invalid command: missing action";
@@ -21,7 +22,7 @@ namespace rhino_zmq_poc
 
             string result = command.Action switch
             {
-                "addComponent" => MockAddComponent(command.Params),
+                "addComponent" => AddComponent(doc, command.Params),
                 "deleteComponent" => MockDeleteComponent(command.Params),
                 "connectWire" => MockConnectWire(command.Params),
                 "disconnectWire" => MockDisconnectWire(command.Params),
@@ -40,8 +41,12 @@ namespace rhino_zmq_poc
             return result;
         }
 
-        private string MockAddComponent(JsonElement p) =>
-            $"MOCK: addComponent - would add {p.GetProperty("componentType").GetString()}";
+        private string AddComponent(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<AddComponentParams>();
+            if (param == null) return "addComponent: invalid params";
+            return ComponentOperations.AddComponentToCanvas(doc, param);
+        }
 
         private string MockDeleteComponent(JsonElement p) =>
             $"MOCK: deleteComponent - would delete {p.GetProperty("targetId").GetString()}";

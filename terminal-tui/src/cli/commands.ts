@@ -37,8 +37,8 @@ function handleMessage(msg: GhMessage): void {
 		const status = msg as GhJobStatus;
 		const stateColor =
 			status.state === "completed" ? "green" :
-			status.state === "failed" ? "red" :
-			status.state === "running" ? "yellow" : "gray";
+				status.state === "failed" ? "red" :
+					status.state === "running" ? "yellow" : "gray";
 		console.log(
 			chalk.blue(`[${msg.type}]`) +
 			` ${formatTimestamp(status.timestamp)} — ` +
@@ -131,8 +131,7 @@ function parseParams(action: CommandAction, opts: Record<string, string>): Comma
 	switch (action) {
 		case "addComponent":
 			return {
-				componentType: opts.componentType,
-				nickName: opts.nickName,
+				guid: opts.guid,
 				position: {
 					x: Number(opts.x),
 					y: Number(opts.y),
@@ -286,8 +285,7 @@ async function interactiveSubmit(): Promise<void> {
 
 			switch (selected.action) {
 				case "addComponent":
-					params.componentType = await question(rl, "  component type: ");
-					params.nickName = await question(rl, "  nickname: ");
+					params.componentType = await question(rl, "  component guid: ");
 					params.x = await question(rl, "  x position: ");
 					params.y = await question(rl, "  y position: ");
 					break;

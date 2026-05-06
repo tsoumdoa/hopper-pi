@@ -10,9 +10,9 @@ namespace rhino_zmq_poc
 
         public event Action<GH_Document> OnSolutionEnd;
 
-        public void EnsureSubscription()
+        public void EnsureSubscription(GH_Document doc)
         {
-            var current = Instances.ActiveDocument;
+            var current = doc;
             if (current == null) return;
             if (_subscribedDoc != current)
             {

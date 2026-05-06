@@ -42,7 +42,7 @@ namespace rhino_zmq_poc
             {
                 InitializeZmq();
             }
-            _docMonitor.EnsureSubscription();
+            _docMonitor.EnsureSubscription(OnPingDocument());
         }
 
         private void InitializeZmq()
@@ -80,7 +80,7 @@ namespace rhino_zmq_poc
             ExpireSolution(true);
         }
 
-        public string ExecuteCommand(GhCommand command) => _cmdExecutor?.Execute(command);
+        public string ExecuteCommand(GhCommand command) => _cmdExecutor?.Execute(OnPingDocument(), command);
 
         protected override void SolveInstance(IGH_DataAccess DA)
         {
