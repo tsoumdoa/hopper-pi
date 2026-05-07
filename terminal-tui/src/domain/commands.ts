@@ -25,9 +25,9 @@ export const ACTION_REGISTRY: readonly ActionDef[] = [
 		label: "connect-wire",
 		params: [
 			{ name: "fromComponent", cliFlag: "--fromComponent <id>", cliDescription: "Source component ID (wire commands)", prompt: "  from component id: " },
-			{ name: "fromPort", cliFlag: "--fromPort <port>", cliDescription: "Source port name (wire commands)", prompt: "  from port: " },
+			{ name: "fromPort", cliFlag: "--fromPort <guid>", cliDescription: "Source port GUID (wire commands)", prompt: "  from port guid: " },
 			{ name: "toComponent", cliFlag: "--toComponent <id>", cliDescription: "Destination component ID (wire commands)", prompt: "  to component id: " },
-			{ name: "toPort", cliFlag: "--toPort <port>", cliDescription: "Destination port name (wire commands)", prompt: "  to port: " },
+			{ name: "toPort", cliFlag: "--toPort <guid>", cliDescription: "Destination port GUID (wire commands)", prompt: "  to port guid: " },
 		],
 	},
 	{
@@ -36,9 +36,9 @@ export const ACTION_REGISTRY: readonly ActionDef[] = [
 		label: "disconnect-wire",
 		params: [
 			{ name: "fromComponent", cliFlag: "--fromComponent <id>", cliDescription: "Source component ID (wire commands)", prompt: "  from component id: " },
-			{ name: "fromPort", cliFlag: "--fromPort <port>", cliDescription: "Source port name (wire commands)", prompt: "  from port: " },
+			{ name: "fromPort", cliFlag: "--fromPort <guid>", cliDescription: "Source port GUID (wire commands)", prompt: "  from port guid: " },
 			{ name: "toComponent", cliFlag: "--toComponent <id>", cliDescription: "Destination component ID (wire commands)", prompt: "  to component id: " },
-			{ name: "toPort", cliFlag: "--toPort <port>", cliDescription: "Destination port name (wire commands)", prompt: "  to port: " },
+			{ name: "toPort", cliFlag: "--toPort <guid>", cliDescription: "Destination port GUID (wire commands)", prompt: "  to port guid: " },
 		],
 	},
 	{

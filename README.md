@@ -50,8 +50,8 @@ node dist/index.js submit addComponent --componentType Circle --nickName "My Cir
 node dist/index.js submit deleteComponent --targetId "Area_1"
 node dist/index.js submit renameComponent --targetId "Panel_1" --nickName "New Name"
 node dist/index.js submit moveComponent --targetId "Circle_1" --x 300 --y 400
-node dist/index.js submit connectWire --fromComponent "Panel_1" --fromPort "output" --toComponent "Circle_1" --toPort "radius"
-node dist/index.js submit disconnectWire --fromComponent "Panel_1" --fromPort "output" --toComponent "Circle_1" --toPort "radius"
+node dist/index.js submit connectWire --fromComponent "Panel_1" --fromPort "<port-guid>" --toComponent "Circle_1" --toPort "<port-guid>"
+node dist/index.js submit disconnectWire --fromComponent "Panel_1" --fromPort "<port-guid>" --toComponent "Circle_1" --toPort "<port-guid>"
 node dist/index.js submit setComponentLocked --targetId "Circle_1" --locked true
 node dist.index.js submit setComponentHidden --targetId "Circle_1" --hidden false
 node dist/index.js submit addGroup --componentIds "Circle_1,Panel_1" --groupName "My Group"
@@ -70,8 +70,8 @@ node dist/index.js submit --interactive
 |----|---------------------|----------------------------------------------------|
 | 1  | addComponent        | --componentType, --nickName, --x, --y              |
 | 2  | deleteComponent     | --targetId                                         |
-| 3  | connectWire         | --fromComponent, --fromPort, --toComponent, --toPort |
-| 4  | disconnectWire      | --fromComponent, --fromPort, --toComponent, --toPort |
+| 3  | connectWire         | --fromComponent, **--fromPort (GUID)**, --toComponent, **--toPort (GUID)** |
+| 4  | disconnectWire      | --fromComponent, **--fromPort (GUID)**, --toComponent, **--toPort (GUID)** |
 | 5  | moveComponent       | --targetId, --x, --y                               |
 | 6  | renameComponent     | --targetId, --nickName                             |
 | 7  | setComponentLocked  | --targetId, --locked (true/false)                  |
