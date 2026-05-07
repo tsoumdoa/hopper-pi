@@ -2,6 +2,8 @@ export type Wire = {
 	from: string;
 	to: string;
 	style?: WireStyle;
+	sourceComponentGuid?: string;
+	targetPortGuid?: string;
 };
 
 export type WireStyle = "normal" | "faint" | "hidden";
@@ -24,6 +26,7 @@ export type InputPort = {
 	description?: string;
 	nick: string;
 	source?: string;
+	sources?: string[];
 	optional?: boolean;
 	options?: PortOptions;
 	guid: string;
@@ -86,7 +89,7 @@ export type Component = {
 };
 
 export type ComponentValue = {
-	type: "slider" | "panel" | "valueList" | "number" | "text";
+	type: "slider" | "panel" | "valueList" | "number" | "text" | "toggle" | "swatch" | "button";
 	min?: number;
 	max?: number;
 	current?: number;
@@ -99,6 +102,10 @@ export type ComponentValue = {
 		selected: boolean;
 	}>;
 	selectedIndex?: number;
+	value?: boolean;
+	color?: string;
+	normalExpression?: string;
+	pressedExpression?: string;
 };
 
 export type ParsedGrasshopper = {

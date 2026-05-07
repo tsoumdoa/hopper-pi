@@ -31,10 +31,8 @@ function extractItems(chunk: XmlChunk): Record<string, unknown> {
 		const index = item.index;
 
 		if (text !== undefined) {
-			// Handle indexed items (e.g., ID_0, ID_1 for groups)
 			const key = index !== undefined ? `${name}_${index}` : name;
 
-			// Try to parse as number or boolean
 			if (text === "true") {
 				result[key] = true;
 			} else if (text === "false") {
@@ -66,7 +64,6 @@ function extractItems(chunk: XmlChunk): Record<string, unknown> {
 		} else if (typeName === "gh_drawing_color") {
 			result[name] = item.ARGB;
 		} else if (typeName === "gh_bytearray") {
-			// Handle binary data streams (e.g., cluster content)
 			const stream = item.stream as
 				| { length?: string; [key: string]: unknown }
 				| undefined;
@@ -95,7 +92,6 @@ function extractIndexedItems(chunk: XmlChunk, itemName: string): string[] {
 		}
 	}
 
-	// Filter out any undefined slots and return
 	return result.filter((x): x is string => x !== undefined);
 }
 
@@ -110,7 +106,6 @@ function findAllChunks(parent: XmlChunk, name: string): XmlChunk[] {
 }
 
 function parseMapping(mappingValue: number): DataMapping {
-	// Mapping values: 0=None, 1=Flatten, 2=Graft, 3=Reparametrize
 	switch (mappingValue) {
 		case 1:
 			return "flatten";
@@ -132,7 +127,7 @@ function parseParamChunk(
 	const nickName = items.NickName;
 	if (!nickName || typeof nickName !== "string") return null;
 
-	const guid = (items.GUID as string) || "";
+	const guid = (items.InstanceGuid as string) || "";
 
 	const port: InputPort | OutputPort = {
 		description: items.Description as string,
@@ -142,36 +137,33 @@ function parseParamChunk(
 	};
 
 	if (type === "input") {
-		// Source is an indexed item (Source_0, Source_1, etc.)
 		const sources = extractIndexedItems(paramChunk, "Source");
 		if (sources.length > 0) {
 			(port as InputPort).source = sources[0];
+			if (sources.length > 1) {
+				(port as InputPort).sources = sources;
+			}
 		}
 	}
 
-	// Parse parameter options (mapping, simplify, etc.)
 	const options: PortOptions = {};
 	let hasOptions = false;
 
-	// Mapping: 0=None, 1=Flatten, 2=Graft, 3=Reparametrize
 	if (items.Mapping !== undefined) {
 		options.mapping = parseMapping(items.Mapping as number);
 		hasOptions = true;
 	}
 
-	// Simplify data
 	if (items.SimplifyData === true) {
 		options.simplify = true;
 		hasOptions = true;
 	}
 
-	// Reverse
 	if (items.Reverse === true) {
 		options.reverse = true;
 		hasOptions = true;
 	}
 
-	// Expression applied to this parameter
 	if (items.Expression && typeof items.Expression === "string") {
 		options.expression = items.Expression as string;
 		hasOptions = true;
@@ -196,7 +188,6 @@ function detectScriptLanguage(
 	componentType: string,
 	scriptChunk: XmlChunk
 ): string {
-	// Check LanguageSpec chunk if available
 	const languageSpecChunk = findChunk(scriptChunk, "LanguageSpec");
 	if (languageSpecChunk) {
 		const items = extractItems(languageSpecChunk);
@@ -212,7 +203,6 @@ function detectScriptLanguage(
 		}
 	}
 
-	// Fallback to component type detection
 	const type = componentType.toLowerCase();
 	if (type.includes("python")) return "python";
 	if (type.includes("csharp") || type.includes("c#")) return "csharp";
@@ -251,7 +241,6 @@ function parseComponentValue(
 ): Component["value"] | undefined {
 	const type = componentType.toLowerCase();
 
-	// Parse Slider values
 	if (type.includes("slider")) {
 		const sliderChunk = findChunk(containerChunk, "Slider");
 		if (sliderChunk) {
@@ -267,7 +256,6 @@ function parseComponentValue(
 		}
 	}
 
-	// Parse Panel text
 	if (type.includes("panel")) {
 		const text = containerItems.UserText as string;
 		if (text !== undefined) {
@@ -278,7 +266,6 @@ function parseComponentValue(
 		}
 	}
 
-	// Parse Value List
 	if (type.includes("value list")) {
 		const listItems = findAllChunks(containerChunk, "ListItem");
 		if (listItems.length > 0) {
@@ -301,7 +288,6 @@ function parseComponentValue(
 		}
 	}
 
-	// Parse Get Number / other numeric inputs
 	if (
 		containerItems.Minimum !== undefined &&
 		containerItems.Maximum !== undefined
@@ -314,7 +300,36 @@ function parseComponentValue(
 		};
 	}
 
-	// Parse generic text value
+	if (type.includes("toggle")) {
+		const toggleValue = containerItems.ToggleValue;
+		if (toggleValue !== undefined) {
+			return {
+				type: "toggle",
+				value: toggleValue === true,
+			};
+		}
+	}
+
+	if (type.includes("swatch")) {
+		const swatchColor = containerItems.SwatchColor;
+		if (swatchColor !== undefined) {
+			return {
+				type: "swatch",
+				color: swatchColor as string,
+			};
+		}
+	}
+
+	if (type.includes("button")) {
+		const normalExpr = containerItems.ExpressionNormal as string;
+		const pressedExpr = containerItems.ExpressionPressed as string;
+		return {
+			type: "button",
+			normalExpression: normalExpr,
+			pressedExpression: pressedExpr,
+		};
+	}
+
 	if (
 		containerItems.Value !== undefined &&
 		typeof containerItems.Value === "string"
@@ -335,7 +350,6 @@ function parseVisuals(
 	const visuals: Visuals = {};
 	let hasVisuals = false;
 
-	// Parse bounds from Attributes chunk
 	const attributesChunk = findChunk(containerChunk, "Attributes");
 	if (attributesChunk) {
 		const attrItems = extractItems(attributesChunk);
@@ -358,7 +372,6 @@ function parseVisuals(
 		}
 	}
 
-	// Parse color from container items (for groups)
 	if (containerItems.Colour) {
 		visuals.color = containerItems.Colour as string;
 		hasVisuals = true;
@@ -383,13 +396,11 @@ function parseComponentState(
 		hasState = true;
 	}
 
-	// Frozen is typically in container items
 	if (containerItems.Frozen !== undefined) {
 		state.frozen = containerItems.Frozen === true;
 		hasState = true;
 	}
 
-	// Selected is typically in Attributes
 	if (containerItems.Selected !== undefined) {
 		state.selected = containerItems.Selected === true;
 		hasState = true;
@@ -425,7 +436,7 @@ function parseComponent(
 		libGuid && libraryMap ? libraryMap.get(libGuid) : undefined;
 
 	const component: Component = {
-		id: "", // Will be set by caller
+		id: "",
 		type: name,
 		guid: instanceGuid,
 		library: libraryName,
@@ -435,7 +446,6 @@ function parseComponent(
 		outputs: {},
 	};
 
-	// Find ParameterData chunk
 	const paramDataChunk = findChunk(containerChunk, "ParameterData");
 	if (paramDataChunk) {
 		const paramDataItems = extractItems(paramDataChunk);
@@ -463,37 +473,36 @@ function parseComponent(
 		}
 	}
 
-	// Also check for param_input and param_output chunks directly in container
-	// (some components like Evaluate Surface use this format)
+	const seenInputKeys = new Set<string>();
 	const paramInputs = findAllChunks(containerChunk, "param_input");
 	for (const paramChunk of paramInputs) {
 		const param = parseParamChunk(paramChunk, "input");
 		if (param && param.nick) {
-			const key = String(param.nick).toLowerCase();
-			// Only add if not already present from ParameterData
-			if (!component.inputs[key]) {
-				component.inputs[key] = param;
+			let key = String(param.nick).toLowerCase();
+			if (seenInputKeys.has(key)) {
+				key = `${key}_${paramChunk.index ?? seenInputKeys.size}`;
 			}
+			seenInputKeys.add(key);
+			component.inputs[key] = param;
 		}
 	}
 
+	const seenOutputKeys = new Set<string>();
 	const paramOutputs = findAllChunks(containerChunk, "param_output");
 	for (const paramChunk of paramOutputs) {
 		const param = parseParamChunk(paramChunk, "output");
 		if (param && param.nick) {
-			const key = String(param.nick).toLowerCase();
-			// Only add if not already present from ParameterData
-			if (!component.outputs[key]) {
-				component.outputs[key] = param;
+			let key = String(param.nick).toLowerCase();
+			if (seenOutputKeys.has(key)) {
+				key = `${key}_${paramChunk.index ?? seenOutputKeys.size}`;
 			}
+			seenOutputKeys.add(key);
+			component.outputs[key] = param;
 		}
 	}
 
-	// Handle container-level sources for primitive components (e.g., Text, Number Slider)
-	// These don't have ParameterData but have Source directly in Container
 	const sourceGuids = extractIndexedItems(containerChunk, "Source");
 	if (sourceGuids.length > 0 && Object.keys(component.inputs).length === 0) {
-		// Create a default input for components with container-level sources
 		component.inputs["value"] = {
 			description: "Input value",
 			nick: "V",
@@ -503,29 +512,31 @@ function parseComponent(
 		};
 	}
 
-	// Parse script if present
+	if (Object.keys(component.outputs).length === 0) {
+		component.outputs["value"] = {
+			nick: "V",
+			guid: instanceGuid,
+		};
+	}
+
 	const script = parseScript(containerChunk, name);
 	if (script) {
 		component.script = script;
 	}
 
-	// Parse expression if present (for Expression components)
 	if (containerItems.Expression) {
 		component.expression = String(containerItems.Expression);
 	}
 
-	// Parse internal expression if present (e.g., Number component with x/2)
 	if (containerItems.InternalExpression) {
 		component.internalExpression = String(containerItems.InternalExpression);
 	}
 
-	// Parse component value (for sliders, panels, value lists, etc.)
 	const value = parseComponentValue(containerChunk, name, containerItems);
 	if (value) {
 		component.value = value;
 	}
 
-	// Parse cluster data if present (for Cluster components)
 	const clusterData = containerItems.ClusterDocument as
 		| { data: string; size: number }
 		| undefined;
@@ -536,7 +547,6 @@ function parseComponent(
 		};
 	}
 
-	// Parse visuals if option is enabled
 	if (options?.includeVisuals) {
 		const visuals = parseVisuals(containerChunk, containerItems);
 		if (visuals) {
@@ -561,7 +571,6 @@ export function parseGrasshopper(
 		throw new Error("Invalid XML: Missing Archive root");
 	}
 
-	// Extract version
 	const items = normalizeArray(archive.items?.item);
 	const versionItem = items.find((i) => i.name === "ArchiveVersion");
 	const version = versionItem
@@ -571,16 +580,19 @@ export function parseGrasshopper(
 	const chunks = normalizeArray(archive.chunks?.chunk);
 
 	const defChunk = chunks.find((c) => c.name === "Definition");
+	const definitionChunks = defChunk
+		? normalizeArray(defChunk.chunks?.chunk)
+		: chunks;
 
-	const definitionChunks = (() => {
-		if (defChunk) {
-			const inner = normalizeArray(defChunk.chunks?.chunk);
-			return inner;
-		}
-		return chunks;
-	})();
+	const clipboardChunk = definitionChunks.find(
+		(c) => c.name === "Clipboard" || c.name === "Archive"
+	);
 
-	const definitionObjectsChunk = definitionChunks.find(
+	const workingChunks = clipboardChunk
+		? normalizeArray(clipboardChunk.chunks?.chunk)
+		: definitionChunks;
+
+	const definitionObjectsChunk = workingChunks.find(
 		(c) => c.name === "DefinitionObjects"
 	);
 
@@ -592,11 +604,8 @@ export function parseGrasshopper(
 		};
 	}
 
-	// Parse components with unique IDs
 	const objectChunks = findAllChunks(definitionObjectsChunk, "Object");
-	console.log("[parseGrasshopper] Object chunks found:", objectChunks.length);
 
-	// Build library map from GHALibraries (moved before component parsing)
 	const ghaLibsChunk = definitionChunks.find((c) => c.name === "GHALibraries");
 	const libraryMap = new Map<string, string>();
 	if (ghaLibsChunk) {
@@ -615,16 +624,14 @@ export function parseGrasshopper(
 
 	const components: Record<string, Component> = {};
 	const guidToId: Map<string, string> = new Map();
+	const outputPortGuidToHandle: Map<string, string> = new Map();
 	const nickNameCounts: Map<string, number> = new Map();
 
-	// First pass: generate unique IDs and build GUID mapping
 	const parsedComponents: Array<{ parsed: ParsedComponent; id: string }> = [];
 
 	for (const objectChunk of objectChunks) {
 		const parsed = parseComponent(objectChunk, options, libraryMap);
-		if (!parsed) {
-			continue;
-		}
+		if (!parsed) continue;
 
 		const baseNick = parsed.component.nickName || parsed.component.type;
 		const count = (nickNameCounts.get(baseNick) || 0) + 1;
@@ -636,7 +643,6 @@ export function parseGrasshopper(
 		components[uniqueId] = parsed.component;
 		guidToId.set(parsed.guid, uniqueId);
 
-		// Also map InstanceGuid if it exists and is different
 		const containerChunk = findChunk(objectChunk, "Container");
 		if (containerChunk) {
 			const containerItems = extractItems(containerChunk);
@@ -646,36 +652,53 @@ export function parseGrasshopper(
 			}
 		}
 
+		for (const [portKey, outputPort] of Object.entries(parsed.component.outputs)) {
+			if (outputPort.guid) {
+				outputPortGuidToHandle.set(outputPort.guid, `${uniqueId}.${portKey}`);
+			}
+		}
+
 		parsedComponents.push({ parsed, id: uniqueId });
 	}
 
-	// Build wires from input sources
 	const wires: Wire[] = [];
 
 	for (const { id: compId, parsed } of parsedComponents) {
 		const component = parsed.component;
 		for (const [inputName, input] of Object.entries(component.inputs)) {
-			if (input.source) {
-				const sourceComponentId = guidToId.get(input.source);
+			const allSources = input.sources ?? (input.source ? [input.source] : []);
 
-				if (sourceComponentId) {
+			for (const src of allSources) {
+				const resolvedFrom =
+					outputPortGuidToHandle.get(src) ??
+					guidToId.get(src);
+
+				if (resolvedFrom) {
 					wires.push({
-						from: sourceComponentId,
+						from: resolvedFrom,
 						to: `${compId}.${inputName}`,
+						sourceComponentGuid: src,
+						targetPortGuid: input.guid,
 					});
-					// Update the input source to reference the component ID instead of GUID
-					input.source = sourceComponentId;
 				} else {
 					wires.push({
-						from: input.source,
+						from: src,
 						to: `${compId}.${inputName}`,
+						sourceComponentGuid: src,
+						targetPortGuid: input.guid,
 					});
 				}
+			}
+
+			if (input.source) {
+				const resolvedFrom =
+					outputPortGuidToHandle.get(input.source) ??
+					guidToId.get(input.source);
+				if (resolvedFrom) input.source = resolvedFrom;
 			}
 		}
 	}
 
-	// Resolve group members
 	for (const { id: _compId, parsed } of parsedComponents) {
 		const component = parsed.component;
 		if (component.type === "Group") {
@@ -689,7 +712,6 @@ export function parseGrasshopper(
 		}
 	}
 
-	// Extract metadata
 	const metadata: ParsedGrasshopper["metadata"] = {};
 
 	const pluginVersionItem = definitionChunks
