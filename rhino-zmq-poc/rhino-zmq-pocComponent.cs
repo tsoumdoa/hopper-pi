@@ -49,7 +49,7 @@ namespace rhino_zmq_poc
         {
             _debugLog = $"[{DateTime.Now:HH:mm:ss}] Initializing ZMQ...\n";
             _jobQueue = new JobQueue();
-            _zmqService = new ZMqService(_jobQueue);
+            _zmqService = new ZMqService(_jobQueue, OnPingDocument());
             _xmlPublisher = new XmlPublisher(_zmqService.PublishXmlEvent);
             _cmdExecutor = new CommandExecutor(msg => _debugLog += $"[{DateTime.Now:HH:mm:ss}] {msg}\n");
 

@@ -1,3 +1,4 @@
+using GH_IO.Serialization;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -5,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Grasshopper;
+using Grasshopper.Kernel;
 using NetMQ;
 using NetMQ.Sockets;
 
@@ -23,15 +25,17 @@ namespace rhino_zmq_poc
         private Task _commandTask;
         private Task _repTask;
         private readonly JobQueue _jobQueue;
+        private readonly GH_Document _doc;
         private readonly ConcurrentQueue<(string topic, string json)> _publishQueue = new ConcurrentQueue<(string, string)>();
 
         public event Action<GhJobStatus> OnJobStatus;
         public event Action<string> OnDebugLog;
         public event Action<string> OnJobReceived;
 
-        public ZMqService(JobQueue jobQueue)
+        public ZMqService(JobQueue jobQueue, GH_Document doc)
         {
             _jobQueue = jobQueue;
+            _doc = doc;
             _jobQueue.OnStatusChanged += status =>
             {
                 OnJobStatus?.Invoke(status);
@@ -216,6 +220,36 @@ namespace rhino_zmq_poc
                     };
 
                     return JsonSerializer.Serialize(response);
+                }
+
+                if (type == "getCurrentCanvas")
+                {
+                    string xml = null;
+                    string docName = "Untitled";
+
+                    if (_doc != null)
+                    {
+                        docName = _doc.FilePath ?? "Untitled";
+                        try
+                        {
+                            var archive = new GH_Archive();
+                            archive.AppendObject(_doc, "Definition");
+                            xml = archive.Serialize_Xml();
+                        }
+                        catch (Exception ex)
+                        {
+                            DebugLog($"[REP] getCurrentCanvas serialize error: {ex.Message}");
+                        }
+                    }
+
+                    var canvasResponse = new GetCurrentCanvasResponse
+                    {
+                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        DocName = docName,
+                        Xml = xml ?? ""
+                    };
+
+                    return JsonSerializer.Serialize(canvasResponse);
                 }
 
                 return JsonSerializer.Serialize(new { error = $"Unknown request type: {type}" });

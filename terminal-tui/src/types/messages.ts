@@ -32,3 +32,10 @@ export type ListAllComponentsResponse = {
 	timestamp: number;
 	components: GhComponentInfo[];
 };
+
+export type GetCurrentCanvasResponse = {
+	type: "getCurrentCanvas.response";
+	timestamp: number;
+	docName: string;
+	xml: string;
+};

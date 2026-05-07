@@ -238,4 +238,19 @@ namespace rhino_zmq_poc
         [JsonPropertyName("components")]
         public List<GhComponentInfo> Components { get; set; }
     }
+
+    public class GetCurrentCanvasResponse
+    {
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = "getCurrentCanvas.response";
+
+        [JsonPropertyName("timestamp")]
+        public long Timestamp { get; set; }
+
+        [JsonPropertyName("docName")]
+        public string DocName { get; set; }
+
+        [JsonPropertyName("xml")]
+        public string Xml { get; set; }
+    }
 }
