@@ -13,6 +13,10 @@
     <SourceRoot Include="/Users/tomohirosugeta/.nuget/packages/" />
   </ItemGroup>
   <PropertyGroup Condition=" '$(TargetFramework)' == 'net7.0' AND '$(ExcludeRestorePackageImports)' != 'true' ">
+    <Pkgroslyn-language-server_linux-arm64 Condition=" '$(Pkgroslyn-language-server_linux-arm64)' == '' ">/Users/tomohirosugeta/.nuget/packages/roslyn-language-server.linux-arm64/5.8.0-1.26252.1</Pkgroslyn-language-server_linux-arm64>
     <PkgMicrosoft_NETFramework_ReferenceAssemblies_net48 Condition=" '$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net48)' == '' ">/Users/tomohirosugeta/.nuget/packages/microsoft.netframework.referenceassemblies.net48/1.0.3</PkgMicrosoft_NETFramework_ReferenceAssemblies_net48>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(TargetFramework)' == 'net7.0-windows' AND '$(ExcludeRestorePackageImports)' != 'true' ">
+    <Pkgroslyn-language-server_linux-arm64 Condition=" '$(Pkgroslyn-language-server_linux-arm64)' == '' ">/Users/tomohirosugeta/.nuget/packages/roslyn-language-server.linux-arm64/5.8.0-1.26252.1</Pkgroslyn-language-server_linux-arm64>
   </PropertyGroup>
 </Project>

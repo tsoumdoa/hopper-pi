@@ -71,6 +71,8 @@ build/
 out/
 target/
 coverage/
+bin/
+obj/
 
 # ------------------------------------------------------------
 # Temporary / cache

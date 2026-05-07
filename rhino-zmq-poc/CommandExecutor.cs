@@ -22,18 +22,18 @@ namespace rhino_zmq_poc
 
             string result = command.Action switch
             {
-                "addComponent" => AddComponent(doc, command.Params),
-                "deleteComponent" => MockDeleteComponent(command.Params),
-                "connectWire" => MockConnectWire(command.Params),
-                "disconnectWire" => MockDisconnectWire(command.Params),
-                "moveComponent" => MockMoveComponent(command.Params),
-                "renameComponent" => MockRenameComponent(command.Params),
-                "setComponentLocked" => MockSetComponentLocked(command.Params),
-                "setComponentHidden" => MockSetComponentHidden(command.Params),
-                "addGroup" => MockAddGroup(command.Params),
-                "removeFromGroup" => MockRemoveFromGroup(command.Params),
-                "setSliderValue" => MockSetSliderValue(command.Params),
-                "setPanelText" => MockSetPanelText(command.Params),
+                "addComponent" => ExecuteAddComponent(doc, command.Params),
+                "deleteComponent" => ExecuteDeleteComponent(doc, command.Params),
+                "connectWire" => ExecuteConnectWire(doc, command.Params),
+                "disconnectWire" => ExecuteDisconnectWire(doc, command.Params),
+                "moveComponent" => ExecuteMoveComponent(doc, command.Params),
+                "renameComponent" => ExecuteRenameComponent(doc, command.Params),
+                "setComponentLocked" => ExecuteSetComponentLocked(doc, command.Params),
+                "setComponentHidden" => ExecuteSetComponentHidden(doc, command.Params),
+                "addGroup" => ExecuteAddGroup(doc, command.Params),
+                "removeFromGroup" => ExecuteRemoveFromGroup(doc, command.Params),
+                "setSliderValue" => ExecuteSetSliderValue(doc, command.Params),
+                "setPanelText" => ExecuteSetPanelText(doc, command.Params),
                 _ => $"Unknown action: {command.Action}"
             };
 
@@ -41,44 +41,88 @@ namespace rhino_zmq_poc
             return result;
         }
 
-        private string AddComponent(GH_Document doc, JsonElement p)
+        private string ExecuteAddComponent(GH_Document doc, JsonElement p)
         {
             var param = p.Deserialize<AddComponentParams>();
             if (param == null) return "addComponent: invalid params";
-            return ComponentOperations.AddComponentToCanvas(doc, param);
+            return ComponentLifecycleOps.AddComponentToCanvas(doc, param);
         }
 
-        private string MockDeleteComponent(JsonElement p) =>
-            $"MOCK: deleteComponent - would delete {p.GetProperty("targetId").GetString()}";
+        private string ExecuteDeleteComponent(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<DeleteComponentParams>();
+            if (param == null) return "deleteComponent: invalid params";
+            return ComponentLifecycleOps.DeleteComponent(doc, param);
+        }
 
-        private string MockConnectWire(JsonElement p) =>
-            $"MOCK: connectWire - would connect {p.GetProperty("from").GetProperty("componentId")} -> {p.GetProperty("to").GetProperty("componentId")}";
+        private string ExecuteMoveComponent(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<MoveComponentParams>();
+            if (param == null) return "moveComponent: invalid params";
+            return ComponentLifecycleOps.MoveComponent(doc, param);
+        }
 
-        private string MockDisconnectWire(JsonElement p) =>
-            $"MOCK: disconnectWire - would disconnect";
+        private string ExecuteRenameComponent(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<RenameComponentParams>();
+            if (param == null) return "renameComponent: invalid params";
+            return ComponentPropertyOps.RenameComponent(doc, param);
+        }
 
-        private string MockMoveComponent(JsonElement p) =>
-            $"MOCK: moveComponent - would move {p.GetProperty("targetId").GetString()}";
+        private string ExecuteSetComponentLocked(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<SetComponentLockedParams>();
+            if (param == null) return "setComponentLocked: invalid params";
+            return ComponentPropertyOps.SetComponentLocked(doc, param);
+        }
 
-        private string MockRenameComponent(JsonElement p) =>
-            $"MOCK: renameComponent - would rename {p.GetProperty("targetId").GetString()} to {p.GetProperty("nickName").GetString()}";
+        private string ExecuteSetComponentHidden(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<SetComponentHiddenParams>();
+            if (param == null) return "setComponentHidden: invalid params";
+            return ComponentPropertyOps.SetComponentHidden(doc, param);
+        }
 
-        private string MockSetComponentLocked(JsonElement p) =>
-            $"MOCK: setComponentLocked - would set locked={p.GetProperty("locked").GetBoolean()}";
+        private string ExecuteConnectWire(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<ConnectWireParams>();
+            if (param == null) return "connectWire: invalid params";
+            return WireOperations.ConnectWire(doc, param);
+        }
 
-        private string MockSetComponentHidden(JsonElement p) =>
-            $"MOCK: setComponentHidden - would set hidden={p.GetProperty("hidden").GetBoolean()}";
+        private string ExecuteDisconnectWire(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<DisconnectWireParams>();
+            if (param == null) return "disconnectWire: invalid params";
+            return WireOperations.DisconnectWire(doc, param);
+        }
 
-        private string MockAddGroup(JsonElement p) =>
-            $"MOCK: addGroup - would add group {p.GetProperty("groupName").GetString()}";
+        private string ExecuteAddGroup(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<AddGroupParams>();
+            if (param == null) return "addGroup: invalid params";
+            return GroupOperations.AddGroup(doc, param);
+        }
 
-        private string MockRemoveFromGroup(JsonElement p) =>
-            $"MOCK: removeFromGroup - would remove from group";
+        private string ExecuteRemoveFromGroup(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<RemoveFromGroupParams>();
+            if (param == null) return "removeFromGroup: invalid params";
+            return GroupOperations.RemoveFromGroup(doc, param);
+        }
 
-        private string MockSetSliderValue(JsonElement p) =>
-            $"MOCK: setSliderValue - would set {p.GetProperty("targetId").GetString()} = {p.GetProperty("value").GetDouble()}";
+        private string ExecuteSetSliderValue(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<SetSliderValueParams>();
+            if (param == null) return "setSliderValue: invalid params";
+            return ValueOperations.SetSliderValue(doc, param);
+        }
 
-        private string MockSetPanelText(JsonElement p) =>
-            $"MOCK: setPanelText - would set {p.GetProperty("targetId").GetString()} = \"{p.GetProperty("text").GetString()}\"";
+        private string ExecuteSetPanelText(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<SetPanelTextParams>();
+            if (param == null) return "setPanelText: invalid params";
+            return ValueOperations.SetPanelText(doc, param);
+        }
     }
 }

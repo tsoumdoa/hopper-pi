@@ -71,6 +71,10 @@
               "include": "Compile, Build, Native, ContentFiles, Analyzers, BuildTransitive",
               "target": "Package",
               "version": "[7.0.0, )"
+            },
+            "roslyn-language-server.linux-arm64": {
+              "target": "Package",
+              "version": "[5.8.0-1.26252.1, )"
             }
           },
           "imports": [
@@ -116,6 +120,10 @@
             "NetMQ": {
               "target": "Package",
               "version": "[4.0.1.9, )"
+            },
+            "roslyn-language-server.linux-arm64": {
+              "target": "Package",
+              "version": "[5.8.0-1.26252.1, )"
             }
           },
           "imports": [

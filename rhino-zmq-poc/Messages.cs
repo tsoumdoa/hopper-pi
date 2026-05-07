@@ -23,6 +23,102 @@ namespace rhino_zmq_poc
         public Position Position { get; set; }
     }
 
+    public class DeleteComponentParams
+    {
+        [JsonPropertyName("targetId")]
+        public string TargetId { get; set; }
+    }
+
+    public class ConnectWireParams
+    {
+        [JsonPropertyName("from")]
+        public PortRef From { get; set; }
+
+        [JsonPropertyName("to")]
+        public PortRef To { get; set; }
+    }
+
+    public class DisconnectWireParams
+    {
+        [JsonPropertyName("from")]
+        public PortRef From { get; set; }
+
+        [JsonPropertyName("to")]
+        public PortRef To { get; set; }
+    }
+
+    public class MoveComponentParams
+    {
+        [JsonPropertyName("targetId")]
+        public string TargetId { get; set; }
+
+        [JsonPropertyName("position")]
+        public Position Position { get; set; }
+    }
+
+    public class RenameComponentParams
+    {
+        [JsonPropertyName("targetId")]
+        public string TargetId { get; set; }
+
+        [JsonPropertyName("nickName")]
+        public string NickName { get; set; }
+    }
+
+    public class SetComponentLockedParams
+    {
+        [JsonPropertyName("targetId")]
+        public string TargetId { get; set; }
+
+        [JsonPropertyName("locked")]
+        public bool Locked { get; set; }
+    }
+
+    public class SetComponentHiddenParams
+    {
+        [JsonPropertyName("targetId")]
+        public string TargetId { get; set; }
+
+        [JsonPropertyName("hidden")]
+        public bool Hidden { get; set; }
+    }
+
+    public class AddGroupParams
+    {
+        [JsonPropertyName("componentIds")]
+        public string[] ComponentIds { get; set; }
+
+        [JsonPropertyName("groupName")]
+        public string GroupName { get; set; }
+    }
+
+    public class RemoveFromGroupParams
+    {
+        [JsonPropertyName("componentIds")]
+        public string[] ComponentIds { get; set; }
+
+        [JsonPropertyName("groupName")]
+        public string GroupName { get; set; }
+    }
+
+    public class SetSliderValueParams
+    {
+        [JsonPropertyName("targetId")]
+        public string TargetId { get; set; }
+
+        [JsonPropertyName("value")]
+        public double Value { get; set; }
+    }
+
+    public class SetPanelTextParams
+    {
+        [JsonPropertyName("targetId")]
+        public string TargetId { get; set; }
+
+        [JsonPropertyName("text")]
+        public string Text { get; set; }
+    }
+
     public class PortRef
     {
         [JsonPropertyName("componentId")]
