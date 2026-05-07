@@ -1,8 +1,8 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import * as fs from "node:fs";
 import { Subscriber } from "../../infra/subscriber.js";
 import { DEBUG } from "../../infra/connection.js";
+import { buildGhJson } from "../../services/parser.js";
 import type { GhMessage, GhJobStatus, GhEventXml } from "../../types/messages.js";
 
 function formatTimestamp(ts: number): string {
@@ -36,11 +36,10 @@ function handleMessage(msg: GhMessage): void {
 }
 
 export async function subscribe(
-	filter?: string,
-	saveXml?: boolean
+	filter?: string
 ): Promise<void> {
 	if (DEBUG) {
-		console.log(chalk.gray(`[DEBUG] filter=${filter || "none"} saveXml=${saveXml}`));
+		console.log(chalk.gray(`[DEBUG] filter=${filter || "none"}`));
 	}
 
 	console.log(chalk.bold("Connecting to Grasshopper pub/sub...\n"));
@@ -58,12 +57,10 @@ export async function subscribe(
 	try {
 		await subscriber.subscribe((msg: GhMessage) => {
 			handleMessage(msg);
-			if (msg.type === "gh.event.xml" && saveXml) {
+			if (msg.type === "gh.event.xml") {
 				const event = msg as GhEventXml;
-				const filename = event.docName.replace(/[^a-zA-Z0-9._-]/g, "_") || "untitled";
-				const outPath = `${filename}.xml`;
-				fs.writeFileSync(outPath, event.xml);
-				console.log(chalk.gray(`  Saved XML to ${outPath}`));
+				const json = buildGhJson(event.xml);
+				console.log(JSON.stringify(json, null, 2));
 			}
 		});
 	} catch (err) {
@@ -78,10 +75,9 @@ export function createSubscribeCommand(program: Command): void {
 		.command("subscribe")
 		.description("Subscribe to Grasshopper pub/sub events")
 		.option("--filter <topic>", "Filter by topic prefix (e.g. gh.job, gh.hello)")
-		.option("--save-xml", "Save received XML events to files", false)
-		.action(async (opts: { filter?: string; saveXml?: boolean }) => {
+		.action(async (opts: { filter?: string }) => {
 			try {
-				await subscribe(opts.filter, opts.saveXml);
+				await subscribe(opts.filter);
 			} catch (err) {
 				console.error(chalk.red("Error:"), err);
 				process.exit(1);
