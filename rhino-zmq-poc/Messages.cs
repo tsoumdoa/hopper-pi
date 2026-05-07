@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -103,5 +105,35 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("timestamp")]
         public long Timestamp { get; set; }
+    }
+
+    public class GhComponentInfo
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; }
+
+        [JsonPropertyName("guid")]
+        public string Guid { get; set; }
+
+        [JsonPropertyName("category")]
+        public string Category { get; set; }
+
+        [JsonPropertyName("subcategory")]
+        public string Subcategory { get; set; }
+
+        [JsonPropertyName("description")]
+        public string Description { get; set; }
+    }
+
+    public class ListAllComponentsResponse
+    {
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = "listAllComponents.response";
+
+        [JsonPropertyName("timestamp")]
+        public long Timestamp { get; set; }
+
+        [JsonPropertyName("components")]
+        public List<GhComponentInfo> Components { get; set; }
     }
 }

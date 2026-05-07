@@ -18,3 +18,17 @@ export type GhEventXml = {
 };
 
 export type GhMessage = GhJobStatus | GhEventXml;
+
+export type GhComponentInfo = {
+	name: string;
+	guid: string;
+	category: string;
+	subcategory: string;
+	description: string;
+};
+
+export type ListAllComponentsResponse = {
+	type: "listAllComponents.response";
+	timestamp: number;
+	components: GhComponentInfo[];
+};

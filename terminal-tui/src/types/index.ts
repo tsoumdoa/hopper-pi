@@ -4,7 +4,7 @@ export { ACTION_REGISTRY } from "../domain/commands.js";
 
 export type { Wire, WireStyle, DataMapping, PortOptions, InputPort, OutputPort, Visuals, ComponentState, Component, ComponentValue, ParsedGrasshopper, ParseOptions } from "./gh.js";
 
-export type { JobState, GhJobStatus, GhEventXml, GhMessage } from "./messages.js";
+export type { JobState, GhJobStatus, GhEventXml, GhMessage, GhComponentInfo, ListAllComponentsResponse } from "./messages.js";
 
 export type { Job } from "./job.js";
 

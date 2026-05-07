@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,11 +13,14 @@ namespace rhino_zmq_poc
     {
         private const string PubEndpoint = "tcp://*:5555";
         private const string PullEndpoint = "tcp://*:5556";
+        private const string RepEndpoint = "tcp://*:5557";
 
         private PublisherSocket _pubSocket;
         private PullSocket _pullSocket;
+        private ResponseSocket _repSocket;
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
         private Task _commandTask;
+        private Task _repTask;
         private readonly JobQueue _jobQueue;
         private readonly ConcurrentQueue<(string topic, string json)> _publishQueue = new ConcurrentQueue<(string, string)>();
 
@@ -46,7 +50,12 @@ namespace rhino_zmq_poc
                 _pullSocket.Bind(PullEndpoint);
                 DebugLog($"[PULL] Bound to {PullEndpoint}");
 
+                _repSocket = new ResponseSocket();
+                _repSocket.Bind(RepEndpoint);
+                DebugLog($"[REP] Bound to {RepEndpoint}");
+
                 _commandTask = Task.Run(() => CommandLoop(_cts.Token));
+                _repTask = Task.Run(() => RepLoop(_cts.Token));
             }
             catch (Exception ex)
             {
@@ -118,6 +127,63 @@ namespace rhino_zmq_poc
             }
         }
 
+        private void RepLoop(CancellationToken ct)
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                try
+                {
+                    string message = _repSocket.ReceiveFrameString();
+                    DebugLog($"[REP] Received: {message}");
+
+                    var response = HandleRequest(message);
+
+                    _repSocket.SendFrame(response);
+                    DebugLog($"[REP] Sent response");
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    DebugLog($"[REP] Error: {ex.Message}");
+                }
+            }
+        }
+
+        private string HandleRequest(string message)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(message);
+                var type = doc.RootElement.GetProperty("type").GetString();
+
+                if (type == "listAllComponents")
+                {
+                    var mockComponents = new List<GhComponentInfo>
+                    {
+                        new GhComponentInfo { Name = "Point", Guid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890", Category = "Vector", Subcategory = "Point", Description = "Construct a 3D point from xyz coordinates" },
+                        new GhComponentInfo { Name = "Line", Guid = "b2c3d4e5-f6a7-8901-bcde-f12345678901", Category = "Curve", Subcategory = "Primitive", Description = "Create a line between two points" },
+                        new GhComponentInfo { Name = "Circle", Guid = "c3d4e5f6-a7b8-9012-cdef-123456789012", Category = "Curve", Subcategory = "Primitive", Description = "Define a circle by base plane and radius" },
+                        new GhComponentInfo { Name = "Number Slider", Guid = "d4e5f6a7-b8c9-0123-defa-234567890123", Category = "Params", Subcategory = "Input", Description = "Numeric slider for user input values" },
+                        new GhComponentInfo { Name = "Panel", Guid = "e5f6a7b8-c9d0-1234-efab-345678901234", Category = "Params", Subcategory = "Input", Description = "Data display and text container" },
+                    };
+
+                    var response = new ListAllComponentsResponse
+                    {
+                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        Components = mockComponents
+                    };
+
+                    return JsonSerializer.Serialize(response);
+                }
+
+                return JsonSerializer.Serialize(new { error = $"Unknown request type: {type}" });
+            }
+            catch (Exception ex)
+            {
+                DebugLog($"[REP] HandleRequest error: {ex.Message}");
+                return JsonSerializer.Serialize(new { error = ex.Message });
+            }
+        }
+
         private void DrainPublishQueue()
         {
             while (_publishQueue.TryDequeue(out var item))
@@ -164,8 +230,10 @@ namespace rhino_zmq_poc
         {
             _cts.Cancel();
             _commandTask?.Wait(TimeSpan.FromSeconds(2));
+            _repTask?.Wait(TimeSpan.FromSeconds(2));
             _pubSocket?.Dispose();
             _pullSocket?.Dispose();
+            _repSocket?.Dispose();
             _cts.Dispose();
             DebugLog("[ZMQ] Disposed");
         }
