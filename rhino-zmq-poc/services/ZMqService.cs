@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Grasshopper;
 using NetMQ;
 using NetMQ.Sockets;
 
@@ -157,19 +158,61 @@ namespace rhino_zmq_poc
 
                 if (type == "listAllComponents")
                 {
-                    var mockComponents = new List<GhComponentInfo>
+                    var components = new List<GhComponentInfo>();
+
+                    foreach (var proxy in Instances.ComponentServer.ObjectProxies)
                     {
-                        new GhComponentInfo { Name = "Point", Guid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890", Category = "Vector", Subcategory = "Point", Description = "Construct a 3D point from xyz coordinates" },
-                        new GhComponentInfo { Name = "Line", Guid = "b2c3d4e5-f6a7-8901-bcde-f12345678901", Category = "Curve", Subcategory = "Primitive", Description = "Create a line between two points" },
-                        new GhComponentInfo { Name = "Circle", Guid = "c3d4e5f6-a7b8-9012-cdef-123456789012", Category = "Curve", Subcategory = "Primitive", Description = "Define a circle by base plane and radius" },
-                        new GhComponentInfo { Name = "Number Slider", Guid = "d4e5f6a7-b8c9-0123-defa-234567890123", Category = "Params", Subcategory = "Input", Description = "Numeric slider for user input values" },
-                        new GhComponentInfo { Name = "Panel", Guid = "e5f6a7b8-c9d0-1234-efab-345678901234", Category = "Params", Subcategory = "Input", Description = "Data display and text container" },
-                    };
+                        var d = proxy.Desc;
+                        if (d == null) continue;
+
+                        string pluginName = "Unknown";
+                        string assemblyName = "Unknown";
+
+                        try
+                        {
+                            if (!string.IsNullOrEmpty(proxy.Location))
+                            {
+                                assemblyName =
+                                    System.IO.Path.GetFileNameWithoutExtension(proxy.Location);
+                            }
+
+                            foreach (var lib in Instances.ComponentServer.Libraries)
+                            {
+                                if (lib == null || lib.Assembly == null) continue;
+
+                                string libLocation = "";
+                                try { libLocation = lib.Assembly.Location; }
+                                catch { }
+
+                                if (!string.IsNullOrEmpty(libLocation) &&
+                                    string.Equals(libLocation, proxy.Location,
+                                        StringComparison.OrdinalIgnoreCase))
+                                {
+                                    pluginName = lib.Name;
+                                    break;
+                                }
+                            }
+                        }
+                        catch
+                        {
+                        }
+
+                        components.Add(new GhComponentInfo
+                        {
+                            Name = d.Name,
+                            Guid = proxy.Guid.ToString(),
+                            PluginName = pluginName,
+                            AssemblyName = assemblyName,
+                            Category = d.Category,
+                            SubCategory = d.SubCategory,
+                            Description = d.Description
+                        });
+                    }
 
                     var response = new ListAllComponentsResponse
                     {
                         Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                        Components = mockComponents
+                        Components = components
                     };
 
                     return JsonSerializer.Serialize(response);

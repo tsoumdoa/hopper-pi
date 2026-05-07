@@ -115,11 +115,17 @@ namespace rhino_zmq_poc
         [JsonPropertyName("guid")]
         public string Guid { get; set; }
 
+        [JsonPropertyName("pluginName")]
+        public string PluginName { get; set; }
+
+        [JsonPropertyName("assemblyName")]
+        public string AssemblyName { get; set; }
+
         [JsonPropertyName("category")]
         public string Category { get; set; }
 
         [JsonPropertyName("subcategory")]
-        public string Subcategory { get; set; }
+        public string SubCategory { get; set; }
 
         [JsonPropertyName("description")]
         public string Description { get; set; }
