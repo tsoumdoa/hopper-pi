@@ -1,35 +1,38 @@
-import chalk from "chalk";
-import { createAgentSession } from "@mariozechner/pi-coding-agent";
-import { runOnce } from "./agent/run-once.js";
-import { getModel } from "@mariozechner/pi-ai";
+/**
+ * Hopper Pi — Grasshopper Canvas Tools Extension for Pi
+ *
+ * This extension gives the AI agent direct access to inspect and edit
+ * a Grasshopper canvas running in Rhino via ZeroMQ.
+ *
+ * Architecture:
+ *   - infra/        → ZMQ transport (REQ/REP, PUSH, SUB sockets)
+ *   - types/        → Message & domain schemas
+ *   - domain/       → Action registry
+ *   - services/     → XML parser (Grasshopper archive → JSON)
+ *   - tools/        → Pi extension tool definitions (14 tools)
+ *
+ * Backend ports (configurable via env vars):
+ *   - PUB  :5555  (event publishing)
+ *   - PUSH :5556  (command submission)
+ *   - REQ  :5557  (query/response)
+ */
 
-async function main() {
-	console.log(chalk.bold("\n🚀 Pi Agent Headless Harness\n"));
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { ALL_TOOLS } from "./tools/index.js";
 
-	const { session } = await createAgentSession({
-		model: getModel("minimax", "MiniMax-M2.7"),
-	});
+export default function hopperPiExtension(pi: ExtensionAPI) {
+	// ── Register all Grasshopper canvas tools ───────────────────────
 
-	console.log(chalk.gray("Session created. Sending prompt...\n"));
-
-	session.subscribe((event) => {
-		if (event.type === "message_update") {
-			const { assistantMessageEvent } = event;
-			if (assistantMessageEvent.type === "text_delta") {
-				process.stdout.write(chalk.cyan(assistantMessageEvent.delta));
-			}
-		}
-	});
-
-	try {
-		await runOnce(session, "say hi in 10 words");
-		console.log(chalk.green("\n\n✓ Run completed successfully"));
-	} catch (err) {
-		console.error(chalk.red("\n✗ Run failed:"), err);
-		process.exit(1);
-	} finally {
-		session.dispose();
+	for (const tool of ALL_TOOLS) {
+		pi.registerTool(tool);
 	}
-}
 
-main();
+	// ── Lifecycle: notify on load ──────────────────────────────────
+
+	pi.on("session_start", async (_event, ctx) => {
+		ctx.ui.notify(
+			"\u{1F998} Hopper Pi: Grasshopper canvas tools loaded (14 tools)",
+			"info"
+		);
+	});
+}
