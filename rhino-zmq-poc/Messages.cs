@@ -208,7 +208,7 @@ namespace rhino_zmq_poc
         [JsonPropertyName("name")]
         public string Name { get; set; }
 
-        [JsonPropertyName("guid")]
+        [JsonPropertyName("typeGuid")]
         public string Guid { get; set; }
 
         [JsonPropertyName("pluginName")]

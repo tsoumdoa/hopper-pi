@@ -23,8 +23,8 @@ WRONG:  User says "delete the circle" → you call gh_delete_component immediate
 
 CORRECT: User says "delete the circle"
         1. gh_get_canvas()          ← always first
-        2. Read response: find "Circle" → id = "Circle", guid = "abc-123"
-        3. gh_delete_component(targetId: "Circle")
+        2. Read response: find "Circle" → id = "Circle", instanceGuid = "abc-123"
+        3. gh_delete_component(targetId: "abc-123")
 ```
 
 ### Rule 2: After edits, re-fetch to confirm state
@@ -40,7 +40,7 @@ The backend processes commands asynchronously. After making changes, call `gh_ge
 | You want to... | Call this |
 |---------------|-----------|
 | See everything (components, wires, values) | `gh_get_canvas` |
-| Find a component type to add (get its GUID) | `gh_list_components` |
+| Find a component type to add (get its typeGuid) | `gh_list_components` |
 | Find a specific kind of component | `gh_list_components(filter: "circle")` |
 
 ### Need to CHANGE something?
@@ -68,28 +68,31 @@ This is the most important thing to understand.
 
 ### Component IDs and Port GUIDs
 
-When you call `gh_get_canvas`, every component shows its instance GUID and every port shows its GUID:
+When you call `gh_get_canvas`, every component shows its `[id]`, `typeGuid`, `instanceGuid`, and every port shows its `instanceGuid`:
 
 ```
 === COMPONENTS ===
 
 [Cir] Cir (Circle)
-  COMPONENT_GUID=aaaa-bbbb-cccc-dddd-1111-2222-3333-4444  <-- for wire tool fromComponent/toComponent
+  INSTANCE_GUID=aaaa-bbbb-cccc-dddd-1111-2222-3333-4444  <-- use this for ALL tool calls
+  TYPE_GUID=eeee-ffff-0000-1111-2222-3333-4444-5555      <-- component type definition
   OUTPUTS (fromPort values):
-    PORT_GUID=eeee-ffff-0000-1111-2222-3333-4444-5555  (C)  <-- for wire tool fromPort
+    PORT_INSTANCE_GUID=6666-7777-8888-9999-aaaa-bbbb-cccc-dddd  (C)  <-- for wire tool fromPort
   INPUTS (toPort values):
-    PORT_GUID=6666-7777-8888-9999-aaaa-bbbb-cccc-dddd  (R)  <-- for wire tool toPort
+    PORT_INSTANCE_GUID=1234-5678-abcd-ef01-2345-6789-abcd-ef0  (R)  <-- for wire tool toPort
 ```
 
-**Two kinds of identifiers:**
+**Identifier system:**
 
-1. **`[id]`** = readable label like `Cir`, `Number Slider`. Use this as `targetId` for **non-wire tools**: `gh_delete_component`, `gh_move_component`, `gh_rename_component`, `gh_set_locked`, `gh_set_hidden`, `gh_set_slider_value`, `gh_set_panel_text`.
+1. **`[id]`** = readable label like `Cir`, `Number Slider`. This is your **reasoning handle** — use it to identify which component you're working with, track state across steps, and decide logic. Every tool call resolves through this label.
 
-2. **`COMPONENT_GUID`** = hex string on the `COMPONENT_GUID=` line. Use this as **`fromComponent` / `toComponent`** for **wire tools only** (`gh_connect_wire`, `gh_disconnect_wire`).
+2. **`INSTANCE_GUID`** = hex string on the `INSTANCE_GUID=` line. This is the **real identifier** the backend uses. **ALL tools** that reference an existing component or port must use this value: `gh_delete_component`, `gh_move_component`, `gh_rename_component`, `gh_connect_wire`, `gh_disconnect_wire`, `gh_set_locked`, `gh_set_hidden`, `gh_set_slider_value`, `gh_set_panel_text`.
 
-3. **`PORT_GUID`** = hex string on each `PORT_GUID=` line. Use this as **`fromPort` / `toPort`** for **wire tools only**.
+3. **`TYPE_GUID`** = hex string on the `TYPE_GUID=` line. This identifies the component *type* definition. Use this when calling `gh_add_component(componentType: ...)` to add a new component of that type.
 
-> **Wire tools require ALL 4 parameters to be GUID strings.** Never pass `[id]` or nicknames to a wire tool.
+4. **`PORT_INSTANCE_GUID`** = hex string on each port's `PORT_INSTANCE_GUID=` line. Use these as **`fromPort` / `toPort`** for wire tools (`gh_connect_wire`, `gh_disconnect_wire`).
+
+> **ALL tool calls referencing existing components/ports MUST use instanceGuid strings.** Never pass `[id]` or nicknames to any tool. Use `[id]` only for your own reasoning about which component is which.
 
 ---
 
@@ -106,11 +109,11 @@ gh_get_canvas()
 
 # Step 2: Look up the Circle component GUID
 gh_list_components(filter: "circle")
-# → Returns: { components: [{ name: "Circle", guid: "c155f249-...", category: "Curve", ... }] }
+# → Returns: { components: [{ name: "Circle", typeGuid: "c155f249-...", category: "Curve", ... }] }
 
 # Step 3: Add the Circle at position (0, 50)
 gh_add_component(
-  componentType: "c155f249-...",   # the GUID from step 2
+  componentType: "c155f249-...",   # the typeGuid from step 2
   x: 0,
   y: 50
 )
@@ -121,10 +124,10 @@ gh_get_canvas()
 
 # Step 5: Connect slider output to Circle radius input
 gh_connect_wire(
-  fromComponent: "<slider COMPONENT_GUID>",    # from Number Slider's COMPONENT_GUID= line
-  fromPort: "<slider output PORT_GUID>",   # from Number Slider's OUTPUTS PORT_GUID= line
-  toComponent: "<circle COMPONENT_GUID>",     # from Circle's COMPONENT_GUID= line
-  toPort: "<circle radius PORT_GUID>"       # from Circle's INPUTS PORT_GUID= line
+  fromComponent: "<slider instanceGuid>",    # from Number Slider's INSTANCE_GUID= line
+  fromPort: "<slider output portInstanceGuid>",   # from Number Slider's OUTPUTS PORT_INSTANCE_GUID= line
+  toComponent: "<circle instanceGuid>",     # from Circle's INSTANCE_GUID= line
+  toPort: "<circle radius portInstanceGuid>"       # from Circle's INPUTS PORT_INSTANCE_GUID= line
 )
 
 # Step 6: Confirm
@@ -139,17 +142,18 @@ gh_get_canvas()
 ```python
 # Step 1: Fetch canvas
 gh_get_canvas()
-# → Find: "Number Slider" (id), "Panel" (id)
+# → Find: "Number Slider" [id], instanceGuid = "abc-123"
+# → Find: "Panel" [id], instanceGuid = "def-456"
 
 # Step 2: Set slider value
 gh_set_slider_value(
-  targetId: "Number Slider",
+  targetId: "abc-123",
   value: 25
 )
 
 # Step 3: Hide panel
 gh_set_hidden(
-  targetId: "Panel",
+  targetId: "def-456",
   hidden: true
 )
 
@@ -168,10 +172,10 @@ gh_get_canvas()
 # Step 2: Scan components for a Panel with matching text
 # (The gh_get_canvas response includes all component details including
 #  panel text in component.value.text for type="panel")
-# → Found: id = "Panel_3", value.text = "result"
+# → Found: [id] = "Panel_3", instanceGuid = "xyz-789", value.text = "result"
 
 # Step 3: Delete it
-gh_delete_component(targetId: "Panel_3")
+gh_delete_component(targetId: "xyz-789")
 
 # Step 4: Confirm
 gh_get_canvas()
@@ -187,9 +191,9 @@ gh_get_canvas()
 
 # Step 2: Look up component GUIDs we need
 gh_list_components(filter: "circle")
-# → Circle guid = "c155f249-..."
+# → Circle typeGuid = "c155f249-..."
 gh_list_components(filter: "slider")
-# → Number Slider guid = "..."
+# → Number Slider typeGuid = "..."
 
 # Step 3: Add slider for radius
 gh_add_component(componentType: "<slider-guid>", x: -100, y: 0)
@@ -199,21 +203,21 @@ gh_get_canvas()
 # → "Number Slider" added
 
 # Step 5: Set slider to 10
-gh_set_slider_value(targetId: "Number Slider", value: 10)
+gh_set_slider_value(targetId: "<slider-instanceGuid>", value: 10)
 
 # Step 6: Add circle
-gh_add_component(componentType: "<circle-guid>", x: 0, y: 0)
+gh_add_component(componentType: "<circle-typeGuid>", x: 0, y: 0)
 
-# Step 7: Re-fetch again (need Circle's port GUIDs)
+# Step 7: Re-fetch again (need Circle's port instanceGuids)
 gh_get_canvas()
-# → "Circle" added, now has input port GUIDs
+# → "Circle" added, now has input port instanceGuids
 
 # Step 8: Connect slider → circle radius
 gh_connect_wire(
-  fromComponent: "<slider COMPONENT_GUID>",
-  fromPort: "<slider output PORT_GUID>",
-  toComponent: "<circle COMPONENT_GUID>",
-  toPort: "<circle radius PORT_GUID>"
+  fromComponent: "<slider instanceGuid>",
+  fromPort: "<slider output portInstanceGuid>",
+  toComponent: "<circle instanceGuid>",
+  toPort: "<circle radius portInstanceGuid>"
 )
 
 # Step 9: Final verification
@@ -228,16 +232,17 @@ After calling `gh_get_canvas`, here's how to find what you need for each operati
 
 | Operation | What you need | Where to find it in `gh_get_canvas` result |
 |-----------|--------------|---------------------------------------------|
-| `gh_delete_component` | `targetId` | `component.id` (e.g. `"Circle"`, `"Panel_2"`) |
-| `gh_move_component` | `targetId` | `component.id` |
-| `gh_rename_component` | `targetId` | `component.id` |
-| `gh_set_locked` | `targetId` | `component.id` |
-| `gh_set_hidden` | `targetId` | `component.id` |
-| `gh_set_slider_value` | `targetId` | `component.id` (of a slider-type component) |
-| `gh_set_panel_text` | `targetId` | `component.id` (of a panel-type component) |
-| `gh_connect_wire` | `fromComponent`, `toComponent` | `COMPONENT_GUID=` line on each component's header (hex like `aaaa-bbbb-...`) |
-| `gh_connect_wire` | `fromPort` | `PORT_GUID=` value from source component's OUTPUTS section (hex like `eeee-ffff-...`) |
-| `gh_connect_wire` | `toPort` | `PORT_GUID=` value from target component's INPUTS section (hex like `6666-7777-...`) |
+| `gh_delete_component` | `targetId` | `component.instanceGuid` (hex string) |
+| `gh_move_component` | `targetId` | `component.instanceGuid` |
+| `gh_rename_component` | `targetId` | `component.instanceGuid` |
+| `gh_set_locked` | `targetId` | `component.instanceGuid` |
+| `gh_set_hidden` | `targetId` | `component.instanceGuid` |
+| `gh_set_slider_value` | `targetId` | `component.instanceGuid` (of a slider-type component) |
+| `gh_set_panel_text` | `targetId` | `component.instanceGuid` (of a panel-type component) |
+| `gh_add_component` | `componentType` | `component.typeGuid` from `gh_list_components`, or look up via filter |
+| `gh_connect_wire` | `fromComponent`, `toComponent` | `component.instanceGuid` on each component (hex like `aaaa-bbbb-...`) |
+| `gh_connect_wire` | `fromPort` | `outputPort.instanceGuid` from source component's OUTPUTS section (hex like `eeee-ffff-...`) |
+| `gh_connect_wire` | `toPort` | `inputPort.instanceGuid` from target component's INPUTS section (hex like `6666-7777-...`) |
 | `gh_disconnect_wire` | same as connect | same fields |
 
 ### Common port names to know
@@ -275,11 +280,11 @@ Grasshopper uses conventional port nicknames. Here are the most common ones:
 - **Always call `gh_get_canvas` between adding a component and trying to reference it**
 - If still missing, wait briefly and call `gh_get_canvas` again
 
-### Wire connect fails (wrong port GUID)
+### Wire connect fails (wrong instanceGuid)
 
-- Port GUIDs are case-sensitive and must be exact
+- Port instanceGuids are case-sensitive and must be exact
 - Re-read them fresh from the most recent `gh_get_canvas` response
-- Make sure you're using an **output port GUID** for `fromPort` and an **input port GUID** for `toPort`
+- Make sure you're using an **output port instanceGuid** for `fromPort` and an **input port instanceGuid** for `toPort`
 - Mixing these up is the most common cause of wire failures
 
 ### Canvas seems out of date
@@ -304,7 +309,7 @@ Grasshopper uses conventional port nicknames. Here are the most common ones:
 
 4. **Name things for the user:** When adding components, use descriptive nicknames via `nickName` parameter so the canvas is human-readable. When the user asks "what's on the canvas?", report using nicknames and types.
 
-5. **Check component state before modifying:** Before calling `gh_set_slider_value`, confirm the target is actually a slider (check `component.value.type === "slider"`). Before `gh_set_panel_text`, confirm it's a panel. This prevents silent no-op errors.
+5. **Check component state before modifying:** Before calling `gh_set_slider_value`, confirm the target is actually a slider (check `component.value.type === "slider"`). Before `gh_set_panel_text`, confirm it's a panel. Always pass `component.instanceGuid` as `targetId`, never `[id]`. This prevents silent no-op errors.
 
 6. **Wire order doesn't matter mathematically but does for clarity:** Connect data-flow left-to-right (sources on the right/top, consumers on the left/bottom matches standard Grasshopper layout conventions).
 

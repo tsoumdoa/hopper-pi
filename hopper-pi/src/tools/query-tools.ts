@@ -103,7 +103,7 @@ export const ghListComponentsTool = defineTool({
 	name: "gh_list_components",
 	label: "List Components",
 	description:
-		"List all available Grasshopper component types that can be added to the canvas. Returns name, GUID, category, subcategory, and description. Use this to find the correct component GUID when adding new components.",
+		"List all available Grasshopper component types that can be added to the canvas. Returns name, typeGuid, category, subcategory, and description. Use this to find the correct component typeGuid when adding new components.",
 	parameters: Type.Object({
 		filter: Type.Optional(
 			Type.String({
@@ -150,7 +150,7 @@ export const ghListComponentsTool = defineTool({
 				filtered: components.length,
 				components: components.map((c) => ({
 					name: c.name,
-					guid: c.typeGuid,
+					typeGuid: c.typeGuid,
 					category: c.category,
 					subcategory: c.subcategory,
 				})),

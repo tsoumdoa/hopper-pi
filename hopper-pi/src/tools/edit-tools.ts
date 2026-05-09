@@ -77,15 +77,16 @@ export const ghAddComponentTool = defineTool({
 	async execute(_toolCallId, params, _signal, onUpdate) {
 		onUpdate?.({ content: [{ type: "text", text: `Adding component ${params.componentType} at (${params.x}, ${params.y})...` }], details: {} });
 
+		console.log("addComponent", params);
 		const result = await submitCommand("addComponent", {
-			typeGuid: params.componentType,
+			guid: params.componentType,
 			position: { x: params.x, y: params.y },
 		});
 
 		return {
 			content: [{
 				type: "text",
-				text: `Component added. jobId=${result.jobId}${result.commandId ? `, cmd=${result.commandId}` : ""}`,
+				text: `Component (id=${params.componentType}) added. jobId=${result.jobId}${result.commandId ? `, cmd=${result.commandId}` : ""}`,
 			}],
 			details: result,
 		};

@@ -20,7 +20,7 @@ const DELETE_SETTLE_MS = 200;
 const SKIP_GUIDS = new Set(["e07753b1-fdec-417a-b57a-83a95204a8dd"]);
 
 function isSkipped(c: GhComponentInfo): boolean {
-	return SKIP_GUIDS.has(c.guid) || c.name.includes("[OBSOLETE]") || c.name.includes("(Deconstruct)") || c.name.includes("(LEGACY)");
+	return SKIP_GUIDS.has(c.typeGuid) || c.name.includes("[OBSOLETE]") || c.name.includes("(Deconstruct)") || c.name.includes("(LEGACY)");
 }
 
 interface BatchResult {
@@ -53,19 +53,19 @@ async function publishAddCommands(
 			jobId: `test-${nanoid(8)}`,
 			command: {
 				action: "addComponent",
-				params: { guid: comp.guid, position: { x, y } },
+				params: { guid: comp.typeGuid, position: { x, y } },
 			},
 		};
 
 		try {
 			await publisher.publishCommand(request);
 			published.push(comp);
-			process.stdout.write(`    ${chalk.cyan(comp.name)} (${comp.guid})${chalk.green(" ✓")}\n`);
+			process.stdout.write(`    ${chalk.cyan(comp.name)} (${comp.typeGuid})${chalk.green(" ✓")}\n`);
 			if (i < components.length - 1) await new Promise((r) => setTimeout(r, 20));
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			failed.push({ component: comp, reason: message });
-			process.stdout.write(`    ${chalk.cyan(comp.name)} (${comp.guid})${chalk.red(` ✗ ${message}`)}\n`);
+			process.stdout.write(`    ${chalk.cyan(comp.name)} (${comp.typeGuid})${chalk.red(` ✗ ${message}`)}\n`);
 		}
 	}
 
@@ -133,7 +133,7 @@ export async function testAddAllComponents(): Promise<void> {
 
 	if (skipped.length > 0) {
 		for (const s of skipped) {
-			process.stdout.write(`  ${chalk.gray(`skipped ${s.name} (${s.guid})`)}\n`);
+			process.stdout.write(`  ${chalk.gray(`skipped ${s.name} (${s.typeGuid})`)}\n`);
 		}
 		console.log("");
 	}
@@ -182,12 +182,12 @@ export async function testAddAllComponents(): Promise<void> {
 			canvasTypeGuidMap.set(comp.typeGuid, comp.instanceGuid);
 		}
 
-		const missingFromCanvas = published.filter((c) => !canvasTypeGuidMap.has(c.guid));
+		const missingFromCanvas = published.filter((c) => !canvasTypeGuidMap.has(c.typeGuid));
 		const deletable = published
-			.filter((c) => canvasTypeGuidMap.has(c.guid))
-			.filter((c) => !SKIP_GUIDS.has(c.guid));
+			.filter((c) => canvasTypeGuidMap.has(c.typeGuid))
+			.filter((c) => !SKIP_GUIDS.has(c.typeGuid));
 		let idsToDelete = deletable
-			.map((c) => canvasTypeGuidMap.get(c.guid)!);
+			.map((c) => canvasTypeGuidMap.get(c.typeGuid)!);
 
 		if (idsToDelete.length > 0 || missingFromCanvas.length > 0) {
 			if (idsToDelete.length > 0) {
@@ -216,7 +216,7 @@ export async function testAddAllComponents(): Promise<void> {
 			if (missingFromCanvas.length > 0) {
 				console.log(chalk.yellow(`  ⚠ ${missingFromCanvas.length} components were not found on canvas after add:`));
 				for (const c of missingFromCanvas) {
-					console.log(`    ${chalk.yellow(`${c.name} (${c.guid})`)}`);
+					console.log(`    ${chalk.yellow(`${c.name} (${c.typeGuid})`)}`);
 				}
 			}
 
@@ -306,7 +306,7 @@ function printFinalSummary(results: BatchResult[], totalAttempted: number): void
 	if (allFailed.length > 0) {
 		console.log(chalk.bold("\nAll publish failures:"));
 		for (const f of allFailed) {
-			console.log(`  ${chalk.red("✗")} [${f.batch}] ${f.component.name} (${f.component.guid}) — ${f.reason}`);
+			console.log(`  ${chalk.red("✗")} [${f.batch}] ${f.component.name} (${f.component.typeGuid}) — ${f.reason}`);
 		}
 	}
 
@@ -316,7 +316,7 @@ function printFinalSummary(results: BatchResult[], totalAttempted: number): void
 	if (allMissing.length > 0) {
 		console.log(chalk.bold("\nAll missing from canvas:"));
 		for (const m of allMissing) {
-			console.log(`  ${chalk.yellow("⚠")} [${m.batch}] ${m.name} (${m.guid})`);
+			console.log(`  ${chalk.yellow("⚠")} [${m.batch}] ${m.name} (${m.typeGuid})`);
 		}
 	}
 

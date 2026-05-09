@@ -22,6 +22,8 @@ export type GhMessage = GhJobStatus | GhEventXml;
 export type GhComponentInfo = {
 	name: string;
 	typeGuid: string;
+	pluginName: string;
+	assemblyName: string;
 	category: string;
 	subcategory: string;
 	description: string;

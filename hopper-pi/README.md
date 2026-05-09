@@ -94,7 +94,7 @@ These send a request to port 5557 and wait for a response.
 | Tool | Parameters | What it does |
 |------|-----------|--------------|
 | `gh_get_canvas` | _(none)_ | Fetches the full Grasshopper canvas as parsed JSON. Populates an internal cache with all components, wires, ports, values, positions. **Always call this first before editing.** |
-| `gh_list_components` | `filter?` (optional string) | Lists every registered Grasshopper component type (name, GUID, category, subcategory, description). Use this to find the correct GUID when adding new components. Supports optional text search filter. |
+| `gh_list_components` | `filter?` (optional string) | Lists every registered Grasshopper component type (name, typeGuid, category, subcategory, description). Use this to find the correct typeGuid when adding new components. Supports optional text search filter. |
 
 ### Edit Tools (PUSH → SUB ack pattern)
 
