@@ -13,15 +13,7 @@ export async function listComponents(): Promise<void> {
 	});
 
 	console.log(chalk.green(`✓ Received ${response.components.length} component types:\n`));
-
-	for (const comp of response.components) {
-		console.log(
-			`  ${chalk.white(chalk.bold(comp.name))}  ` +
-			`${chalk.gray(comp.category)} / ${chalk.gray(comp.subcategory)}  ` +
-			`guid=${chalk.cyan(comp.guid)}`
-		);
-		console.log(`    ${chalk.dim(comp.description)}`);
-	}
+	console.log(JSON.stringify(response.components, null, 2));
 }
 
 export function createListComponentsCommand(program: Command): void {

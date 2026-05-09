@@ -95,3 +95,4 @@ temp/
 *.tar
 *.tar.gz
 *.tgz
+/terminal-tui/all.json

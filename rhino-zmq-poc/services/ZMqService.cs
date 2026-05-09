@@ -166,6 +166,7 @@ namespace rhino_zmq_poc
 
                     foreach (var proxy in Instances.ComponentServer.ObjectProxies)
                     {
+                        if (proxy.Obsolete) continue;
                         var d = proxy.Desc;
                         if (d == null) continue;
 
