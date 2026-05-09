@@ -21,7 +21,7 @@ export type GhMessage = GhJobStatus | GhEventXml;
 
 export type GhComponentInfo = {
 	name: string;
-	guid: string;
+	typeGuid: string;
 	category: string;
 	subcategory: string;
 	description: string;

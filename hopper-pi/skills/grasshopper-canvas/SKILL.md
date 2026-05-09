@@ -117,7 +117,7 @@ gh_add_component(
 
 # Step 4: Re-fetch to get the new Circle's ports
 gh_get_canvas()
-# → Now "Circle" exists with inputs.radius.guid = "xxxx-..."
+# → Now "Circle" exists with inputs.radius.instanceGuid = "xxxx-..."
 
 # Step 5: Connect slider output to Circle radius input
 gh_connect_wire(

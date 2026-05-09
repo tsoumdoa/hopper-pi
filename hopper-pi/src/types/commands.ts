@@ -24,7 +24,7 @@ export type ActionDef = {
 };
 
 export type AddComponentParams = {
-	guid: string;
+	typeGuid: string;
 	position: Position;
 };
 

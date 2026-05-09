@@ -78,7 +78,7 @@ export const ghAddComponentTool = defineTool({
 		onUpdate?.({ content: [{ type: "text", text: `Adding component ${params.componentType} at (${params.x}, ${params.y})...` }], details: {} });
 
 		const result = await submitCommand("addComponent", {
-			guid: params.componentType,
+			typeGuid: params.componentType,
 			position: { x: params.x, y: params.y },
 		});
 

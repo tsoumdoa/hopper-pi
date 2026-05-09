@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "pi": "pi -e ./src/index.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

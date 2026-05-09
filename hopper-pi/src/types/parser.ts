@@ -35,6 +35,6 @@ export type ParsedXml = {
 
 export type ParsedComponent = {
 	component: import("./gh.js").Component;
-	guid: string;
+	instanceGuid: string;
 	objectChunk: XmlChunk;
 };

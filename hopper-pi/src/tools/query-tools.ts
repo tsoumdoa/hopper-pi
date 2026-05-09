@@ -47,19 +47,19 @@ export const ghGetCanvasTool = defineTool({
 
 		for (const [id, c] of Object.entries(parsed.components)) {
 			lines.push(`[${id}] ${c.nickName} (${c.type})`);
-			lines.push(`  COMPONENT_GUID=${c.guid}  <-- use this as fromComponent or toComponent in wire tools`);
+			lines.push(`  COMPONENT_GUID=${c.instanceGuid}  <-- use this as fromComponent or toComponent in wire tools`);
 
 			if (Object.keys(c.outputs).length > 0) {
 				lines.push("  OUTPUTS (fromPort values):");
 				for (const [key, p] of Object.entries(c.outputs)) {
-					lines.push(`    PORT_GUID=${p.guid}  (${p.nick})`);
+					lines.push(`    PORT_GUID=${p.instanceGuid}  (${p.nick})`);
 				}
 			}
 
 			if (Object.keys(c.inputs).length > 0) {
 				lines.push("  INPUTS (toPort values):");
 				for (const [key, p] of Object.entries(c.inputs)) {
-					lines.push(`    PORT_GUID=${p.guid}  (${p.nick})`);
+					lines.push(`    PORT_GUID=${p.instanceGuid}  (${p.nick})`);
 				}
 			}
 
@@ -135,7 +135,7 @@ export const ghListComponentsTool = defineTool({
 
 		const lines = components.map(
 			(c) =>
-				`  ${c.name}  [${c.guid}]  (${c.category}/${c.subcategory}) -- ${c.description}`
+				`  ${c.name}  [${c.typeGuid}]  (${c.category}/${c.subcategory}) -- ${c.description}`
 		);
 
 		return {
@@ -150,7 +150,7 @@ export const ghListComponentsTool = defineTool({
 				filtered: components.length,
 				components: components.map((c) => ({
 					name: c.name,
-					guid: c.guid,
+					guid: c.typeGuid,
 					category: c.category,
 					subcategory: c.subcategory,
 				})),
