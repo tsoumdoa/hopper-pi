@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Rhino;
 
 namespace rhino_zmq_poc
 {
@@ -32,6 +34,7 @@ namespace rhino_zmq_poc
         private readonly object _lock = new object();
         private readonly ManualResetEventSlim _jobAvailable = new ManualResetEventSlim(false);
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+        private readonly object _uiLock = new object();
         private Task _processingTask;
 
         public event Action<GhJobStatus> OnStatusChanged;
@@ -59,49 +62,68 @@ namespace rhino_zmq_poc
             {
                 _jobAvailable.Wait(_cts.Token);
 
-                Job job = null;
+                var batch = new List<Job>();
                 lock (_lock)
                 {
-                    if (_jobs.Count > 0)
-                    {
-                        job = _jobs.Dequeue();
-                        if (_jobs.Count == 0)
-                            _jobAvailable.Reset();
-                    }
+                    while (_jobs.Count > 0)
+                        batch.Add(_jobs.Dequeue());
+                    _jobAvailable.Reset();
                 }
 
-                if (job != null)
-                {
-                    ExecuteJob(job);
-                }
+                if (batch.Count > 0)
+                    RunOnUiThread(() => ExecuteBatch(batch));
             }
         }
 
-        private void ExecuteJob(Job job)
+        private void ExecuteBatch(List<Job> batch)
         {
-            job.State = JobState.Running;
-            job.StartedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            EmitStatus(job);
-
-            try
+            foreach (var job in batch)
             {
-                job.Progress = 50;
+                job.State = JobState.Running;
+                job.StartedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 EmitStatus(job);
 
-                string result = RhinoZmqPlugin.Instance?.Component?.ExecuteCommand(job.Command) ?? "Plugin not initialized";
+                try
+                {
+                    string result = RhinoZmqPlugin.Instance?.Component?.ExecuteCommand(job.Command)
+                                    ?? "Plugin not initialized";
+                    job.Progress = 100;
+                    job.State = JobState.Completed;
+                }
+                catch (Exception ex)
+                {
+                    job.State = JobState.Failed;
+                    job.Error = ex.Message;
+                }
 
-                job.Progress = 100;
-                job.State = JobState.Completed;
                 job.CompletedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 EmitStatus(job);
             }
-            catch (Exception ex)
+        }
+
+        private void RunOnUiThread(Action action)
+        {
+            var tcs = new TaskCompletionSource<bool>();
+            lock (_uiLock)
             {
-                job.State = JobState.Failed;
-                job.Error = ex.Message;
-                job.CompletedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                EmitStatus(job);
+                RhinoApp.Idle += OnIdle;
+
+                void OnIdle(object s, EventArgs a)
+                {
+                    RhinoApp.Idle -= OnIdle;
+                    try
+                    {
+                        action();
+                        tcs.SetResult(true);
+                    }
+                    catch (Exception ex)
+                    {
+                        tcs.SetException(ex);
+                    }
+                }
             }
+
+            tcs.Task.GetAwaiter().GetResult();
         }
 
         private void EmitStatus(Job job)

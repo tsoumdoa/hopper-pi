@@ -17,6 +17,8 @@ namespace rhino_zmq_poc
         private string _debugLog = "";
         private string _lastJobReceived = "";
         private string _lastXmlSent = "";
+        private bool _publishEnabled = true;
+        private readonly object _logLock = new object();
 
         public rhino_zmq_pocComponent()
             : base("GH ZMQ Plugin", "GHZMQ",
@@ -27,6 +29,7 @@ namespace rhino_zmq_poc
 
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
+            pManager.AddBooleanParameter("Enable Pub", "PUB", "Enable/disable XML publishing on solution end", GH_ParamAccess.item, true);
         }
 
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
@@ -47,31 +50,43 @@ namespace rhino_zmq_poc
 
         private void InitializeZmq()
         {
-            _debugLog = $"[{DateTime.Now:HH:mm:ss}] Initializing ZMQ...\n";
+            lock (_logLock) { _debugLog = $"[{DateTime.Now:HH:mm:ss}] Initializing ZMQ...\n"; }
             _jobQueue = new JobQueue();
             _zmqService = new ZMqService(_jobQueue, OnPingDocument());
             _xmlPublisher = new XmlPublisher(_zmqService.PublishXmlEvent);
-            _cmdExecutor = new CommandExecutor(msg => _debugLog += $"[{DateTime.Now:HH:mm:ss}] {msg}\n");
+            _cmdExecutor = new CommandExecutor(msg => AppendLog($"[{DateTime.Now:HH:mm:ss}] {msg}\n"));
 
-            _zmqService.OnDebugLog += msg => _debugLog += $"[{DateTime.Now:HH:mm:ss}] {msg}\n";
-            _zmqService.OnJobStatus += status => _debugLog += $"[{DateTime.Now:HH:mm:ss}] Job {status.JobId}: {status.State}\n";
+            _zmqService.OnDebugLog += msg => AppendLog($"[{DateTime.Now:HH:mm:ss}] {msg}\n");
+            _zmqService.OnJobStatus += status => AppendLog($"[{DateTime.Now:HH:mm:ss}] Job {status.JobId}: {status.State}\n");
             _zmqService.OnJobReceived += info =>
             {
                 _lastJobReceived = info;
-                RhinoApp.Idle += OnIdleExpire;
+                ScheduleExpire();
             };
 
             _docMonitor = new DocumentMonitor();
             _docMonitor.OnSolutionEnd += doc =>
             {
+                if (!_publishEnabled) return;
                 _lastXmlSent = _xmlPublisher.Publish(doc);
-                _debugLog += $"[{DateTime.Now:HH:mm:ss}] Sending XML: {_lastXmlSent.Length} chars, topic=gh.event.xml\n";
+                if (_lastXmlSent != null)
+                    AppendLog($"[{DateTime.Now:HH:mm:ss}] Sending XML: {_lastXmlSent.Length} chars, topic=gh.event.xml\n");
             };
 
             _zmqService.Start();
             _jobQueue.Start();
             RhinoZmqPlugin.Instance.Component = this;
-            _debugLog += $"[{DateTime.Now:HH:mm:ss}] ZMQ started: PUB @ 5555, ROUTER @ 5556\n";
+            AppendLog($"[{DateTime.Now:HH:mm:ss}] ZMQ started: PUB @ 5555, ROUTER @ 5556\n");
+        }
+
+        private void ScheduleExpire()
+        {
+            RhinoApp.Idle += OnIdleExpire;
+        }
+
+        private void AppendLog(string msg)
+        {
+            lock (_logLock) { _debugLog += msg; }
         }
 
         private void OnIdleExpire(object sender, EventArgs e)
@@ -84,7 +99,10 @@ namespace rhino_zmq_poc
 
         protected override void SolveInstance(IGH_DataAccess DA)
         {
-            var logLines = _debugLog.Split('\n').Where(l => !string.IsNullOrEmpty(l)).ToArray();
+            DA.GetData(0, ref _publishEnabled);
+            string logSnapshot;
+            lock (_logLock) { logSnapshot = _debugLog; }
+            var logLines = logSnapshot.Split('\n').Where(l => !string.IsNullOrEmpty(l)).ToArray();
             DA.SetDataList(0, logLines);
             DA.SetData(1, _lastJobReceived);
             DA.SetData(2, _lastXmlSent);

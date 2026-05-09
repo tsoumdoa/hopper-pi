@@ -19,7 +19,18 @@ namespace rhino_zmq_poc
             if (doc == null) return null;
 
             var archive = new GH_IO.Serialization.GH_Archive();
-            archive.AppendObject(doc, "Definition");
+            try
+            {
+                archive.AppendObject(doc, "Definition");
+            }
+            catch (System.InvalidOperationException)
+            {
+                return null;
+            }
+            catch (System.ArgumentOutOfRangeException)
+            {
+                return null;
+            }
             string xml = archive.Serialize_Xml();
             _publish?.Invoke(doc.FilePath ?? "Untitled.gh", xml);
             return xml;

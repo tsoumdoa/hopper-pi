@@ -1,6 +1,7 @@
 using System;
 using Grasshopper;
 using Grasshopper.Kernel;
+using Rhino;
 
 namespace rhino_zmq_poc
 {
@@ -24,7 +25,14 @@ namespace rhino_zmq_poc
 
         private void OnSolutionEndHandler(object sender, EventArgs e)
         {
-            OnSolutionEnd?.Invoke(sender as GH_Document);
+            var doc = sender as GH_Document;
+            RhinoApp.Idle += IdlePublish;
+
+            void IdlePublish(object s, EventArgs a)
+            {
+                RhinoApp.Idle -= IdlePublish;
+                OnSolutionEnd?.Invoke(doc);
+            }
         }
 
         public void Unsubscribe()

@@ -8,23 +8,33 @@ namespace rhino_zmq_poc
     {
         public static string AddComponentToCanvas(GH_Document doc, AddComponentParams param)
         {
-            if (doc == null)
-                return "addComponent error: document is null";
+            try
+            {
+                if (doc == null)
+                    return "addComponent error: document is null";
 
-            if (!Guid.TryParse(param.Guid, out var componentGuid))
-                return $"addComponent error: invalid guid '{param.Guid}'";
+                if (!Guid.TryParse(param.Guid, out var componentGuid))
+                    return $"addComponent error: invalid guid '{param.Guid}'";
 
-            IGH_DocumentObject obj = Instances.ComponentServer.EmitObject(componentGuid);
-            if (obj == null)
-                return $"addComponent error: failed to emit object for guid '{param.Guid}'";
+                var obj = Instances.ComponentServer.EmitObject(componentGuid);
+                if (obj == null)
+                    return $"addComponent error: failed to emit object for guid '{param.Guid}'";
 
-            obj.Attributes.Pivot = new System.Drawing.PointF(
-                (float)param.Position.X,
-                (float)param.Position.Y);
+                doc.AddObject(obj, false);
 
-            doc.AddObject(obj, false);
+                if (obj.Attributes == null)
+                    return "addComponent error: Attributes is null after AddObject()";
 
-            return $"addComponent: added ({obj.InstanceGuid}) at ({param.Position.X}, {param.Position.Y})";
+                obj.Attributes.Pivot = new System.Drawing.PointF(
+                    (float)param.Position.X,
+                    (float)param.Position.Y);
+
+                return $"addComponent: added ({obj.InstanceGuid}) at ({param.Position.X}, {param.Position.Y})";
+            }
+            catch (Exception ex)
+            {
+                return $"addComponent CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+            }
         }
 
         public static string DeleteComponent(GH_Document doc, DeleteComponentParams param)

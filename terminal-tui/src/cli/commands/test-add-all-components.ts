@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
+import * as readline from "node:readline/promises";
 import { nanoid } from "nanoid";
 import { withRequester } from "../../infra/request-helpers.js";
 import { Publisher } from "../../infra/publisher.js";
@@ -44,8 +45,8 @@ async function publishAddCommands(
 		const comp = components[i];
 		const col = i % COLS;
 		const row = Math.floor(i / COLS);
-		const x = col * SPACING;
-		const y = row * SPACING;
+		const x = (col * SPACING) + SPACING;
+		const y = (row * SPACING) + SPACING;
 
 		const request: SubmitJobRequest = {
 			type: "submitJob",
@@ -71,7 +72,7 @@ async function publishAddCommands(
 	return { published, failed };
 }
 
-async function getCanvasComponents(): Promise<Map<string, string>> {
+async function getCanvasComponents() {
 	const response = await withRequester<GetCurrentCanvasResponse>(async (requester) => {
 		return requester.request<GetCurrentCanvasResponse>({ type: "getCurrentCanvas" });
 	});
@@ -85,13 +86,7 @@ async function getCanvasComponents(): Promise<Map<string, string>> {
 		isArray: (name) => ["item", "chunk"].includes(name),
 	});
 	const parsed = xmlParser.parse(response.xml);
-	const gh = parseGrasshopper(parsed);
-
-	const map = new Map<string, string>();
-	for (const [id, comp] of Object.entries(gh.components)) {
-		map.set(comp.type, id);
-	}
-	return map;
+	return parseGrasshopper(parsed);
 }
 
 async function publishDeleteCommands(
@@ -151,7 +146,26 @@ export async function testAddAllComponents(): Promise<void> {
 
 	const allResults: BatchResult[] = [];
 
-	for (let bi = 0; bi < batches.length; bi++) {
+	console.log(chalk.gray("\nAvailable batches:"));
+	for (let i = 0; i < batches.length; i++) {
+		const b = batches[i];
+		process.stdout.write(`    ${i + 1}. ${b.category} / ${b.subcategory} (${b.components.length})\n`);
+	}
+
+	const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+	const startInput = await rl.question(chalk.cyan(`Start from batch (1-${batches.length}, Enter for all): `));
+	rl.close();
+
+	let startIndex = 0;
+	if (startInput.trim() !== "") {
+		startIndex = parseInt(startInput, 10) - 1;
+		if (isNaN(startIndex) || startIndex < 0 || startIndex >= batches.length) {
+			console.log(chalk.red("Invalid input, starting from batch 1"));
+			startIndex = 0;
+		}
+	}
+
+	for (let bi = startIndex; bi < batches.length; bi++) {
 		const batch = batches[bi];
 		const label = `${batch.category} / ${batch.subcategory}`;
 
@@ -162,32 +176,48 @@ export async function testAddAllComponents(): Promise<void> {
 		console.log(chalk.gray(`  Waiting ${ADD_SETTLE_MS}ms...`));
 		await new Promise((r) => setTimeout(r, ADD_SETTLE_MS));
 
-		const canvasMap = await getCanvasComponents();
-		const missingFromCanvas = published.filter((c) => !canvasMap.has(c.name));
+		const currentDoc = await getCanvasComponents();
+		const canvasTypeGuidMap = new Map<string, string>();
+		for (const [id, comp] of Object.entries(currentDoc.components)) {
+			canvasTypeGuidMap.set(comp.typeGuid, comp.instanceGuid);
+		}
 
-		const idsToDelete = published
-			.filter((c) => canvasMap.has(c.name))
-			.map((c) => canvasMap.get(c.name)!);
+		const missingFromCanvas = published.filter((c) => !canvasTypeGuidMap.has(c.guid));
+		const deletable = published
+			.filter((c) => canvasTypeGuidMap.has(c.guid))
+			.filter((c) => !SKIP_GUIDS.has(c.guid));
+		let idsToDelete = deletable
+			.map((c) => canvasTypeGuidMap.get(c.guid)!);
 
-		if (idsToDelete.length > 0) {
-			console.log(chalk.gray(`  Deleting ${idsToDelete.length} components from canvas...`));
-			const deleteFailed = await publishDeleteCommands(publisher, idsToDelete);
+		if (idsToDelete.length > 0 || missingFromCanvas.length > 0) {
+			if (idsToDelete.length > 0) {
+				console.log(chalk.gray(`  Deleting ${idsToDelete.length} components from canvas...`));
+				var deleteFailed = await publishDeleteCommands(publisher, idsToDelete);
 
-			console.log(chalk.gray(`  Waiting ${DELETE_SETTLE_MS}ms...`));
-			await new Promise((r) => setTimeout(r, DELETE_SETTLE_MS));
+				console.log(chalk.gray(`  Waiting ${DELETE_SETTLE_MS}ms...`));
+				await new Promise((r) => setTimeout(r, DELETE_SETTLE_MS));
+			} else {
+				var deleteFailed = [] as string[];
+			}
 
-			const afterDeleteMap = await getCanvasComponents();
-			const stillOnCanvas = idsToDelete.filter(
-				(id) => afterDeleteMap.has(id)
-			);
+			const afterDelete = await getCanvasComponents();
+			const afterDeleteIds = new Set(Object.keys(afterDelete.components));
+			const stillOnCanvas = idsToDelete.filter((id) => afterDeleteIds.has(id));
 
 			if (stillOnCanvas.length > 0) {
 				console.log(chalk.yellow(`  ⚠ ${stillOnCanvas.length} components still on canvas after delete!`));
 				for (const id of stillOnCanvas) {
 					console.log(`    ${chalk.yellow(`  still present: ${id}`)}`);
 				}
-			} else {
+			} else if (idsToDelete.length > 0) {
 				console.log(chalk.green(`  ✓ All components deleted from canvas`));
+			}
+
+			if (missingFromCanvas.length > 0) {
+				console.log(chalk.yellow(`  ⚠ ${missingFromCanvas.length} components were not found on canvas after add:`));
+				for (const c of missingFromCanvas) {
+					console.log(`    ${chalk.yellow(`${c.name} (${c.guid})`)}`);
+				}
 			}
 
 			allResults.push({

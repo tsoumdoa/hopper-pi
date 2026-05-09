@@ -29,7 +29,7 @@ export type InputPort = {
 	sources?: string[];
 	optional?: boolean;
 	options?: PortOptions;
-	guid: string;
+	instanceGuid: string;
 };
 
 export type OutputPort = {
@@ -37,7 +37,7 @@ export type OutputPort = {
 	nick: string;
 	optional?: boolean;
 	options?: PortOptions;
-	guid: string;
+	instanceGuid: string;
 };
 
 export type Visuals = {
@@ -65,7 +65,8 @@ export type ComponentState = {
 export type Component = {
 	id: string;
 	type: string;
-	guid: string;
+	typeGuid: string;
+	instanceGuid: string;
 	library?: string;
 	description?: string;
 	nickName: string;
