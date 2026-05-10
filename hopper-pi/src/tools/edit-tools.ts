@@ -21,7 +21,7 @@ export const ghAddComponentTool = defineTool({
 	execute: createExecute(
 		"addComponent",
 		(p) => ({ guid: p.componentType, position: { x: p.x, y: p.y } }),
-		(p, r) => `Component (id=${p.componentType}) added. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(_p, r) => `Component added. jobId=${r.jobId}`,
 		(p) => `Adding component ${p.componentType} at (${p.x}, ${p.y})...`,
 	),
 });
@@ -40,7 +40,7 @@ export const ghDeleteComponentTool = defineTool({
 	execute: createExecute(
 		"deleteComponent",
 		(p) => ({ targetId: p.targetId }),
-		(_p, r) => `Component deleted. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(_p, r) => `Component deleted. jobId=${r.jobId}`,
 		(p) => `Deleting component ${p.targetId}...`,
 	),
 });
@@ -68,7 +68,7 @@ export const ghConnectWireTool = defineTool({
 	execute: createExecute(
 		"connectWire",
 		(p) => ({ from: { componentId: p.fromComponent, port: p.fromPort }, to: { componentId: p.toComponent, port: p.toPort } }),
-		(_p, r) => `Wire connected. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(_p, r) => `Wire connected. jobId=${r.jobId}`,
 		(p) => `Connecting wire ${p.fromComponent}:${p.fromPort} → ${p.toComponent}:${p.toPort}...`,
 	),
 });
@@ -96,7 +96,7 @@ export const ghDisconnectWireTool = defineTool({
 	execute: createExecute(
 		"disconnectWire",
 		(p) => ({ from: { componentId: p.fromComponent, port: p.fromPort }, to: { componentId: p.toComponent, port: p.toPort } }),
-		(_p, r) => `Wire disconnected. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(_p, r) => `Wire disconnected. jobId=${r.jobId}`,
 		(p) => `Disconnecting wire ${p.fromComponent}:${p.fromPort} → ${p.toComponent}:${p.toPort}...`,
 	),
 });
@@ -117,7 +117,7 @@ export const ghMoveComponentTool = defineTool({
 	execute: createExecute(
 		"moveComponent",
 		(p) => ({ targetId: p.targetId, position: { x: p.x, y: p.y } }),
-		(_p, r) => `Component moved. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(_p, r) => `Component moved. jobId=${r.jobId}`,
 		(p) => `Moving component ${p.targetId} to (${p.x}, ${p.y})...`,
 	),
 });
@@ -137,7 +137,7 @@ export const ghRenameComponentTool = defineTool({
 	execute: createExecute(
 		"renameComponent",
 		(p) => ({ targetId: p.targetId, nickName: p.nickName }),
-		(_p, r) => `Component renamed. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(_p, r) => `Component renamed. jobId=${r.jobId}`,
 		(p) => `Renaming component ${p.targetId} to "${p.nickName}"...`,
 	),
 });
@@ -157,7 +157,7 @@ export const ghSetLockedTool = defineTool({
 	execute: createExecute(
 		"setComponentLocked",
 		(p) => ({ targetId: p.targetId, locked: p.locked }),
-		(_p, r) => `Lock state set. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(_p, r) => `Lock state set. jobId=${r.jobId}`,
 		(p) => `${p.locked ? "Locking" : "Unlocking"} component ${p.targetId}...`,
 	),
 });
@@ -177,7 +177,7 @@ export const ghSetHiddenTool = defineTool({
 	execute: createExecute(
 		"setComponentHidden",
 		(p) => ({ targetId: p.targetId, hidden: p.hidden }),
-		(_p, r) => `Visibility set. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(_p, r) => `Visibility set. jobId=${r.jobId}`,
 		(p) => `${p.hidden ? "Hiding" : "Showing"} component ${p.targetId}...`,
 	),
 });
@@ -197,7 +197,7 @@ export const ghAddGroupTool = defineTool({
 	execute: createExecute(
 		"addGroup",
 		(p) => ({ componentIds: p.componentIds.split(",").map((s) => s.trim()), groupName: p.groupName }),
-		(_p, r) => `Group created. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(_p, r) => `Group created. jobId=${r.jobId}`,
 		(p) => {
 			const ids = p.componentIds.split(",").map((s) => s.trim());
 			return `Grouping [${ids.join(", ")}] as "${p.groupName}"...`;
@@ -220,7 +220,7 @@ export const ghRemoveFromGroupTool = defineTool({
 	execute: createExecute(
 		"removeFromGroup",
 		(p) => ({ componentIds: p.componentIds.split(",").map((s) => s.trim()), groupName: p.groupName }),
-		(_p, r) => `Removed from group. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(_p, r) => `Removed from group. jobId=${r.jobId}`,
 		(p) => {
 			const ids = p.componentIds.split(",").map((s) => s.trim());
 			return `Removing [${ids.join(", ")}] from group "${p.groupName}"...`;
@@ -243,7 +243,7 @@ export const ghSetSliderValueTool = defineTool({
 	execute: createExecute(
 		"setSliderValue",
 		(p) => ({ targetId: p.targetId, value: p.value }),
-		(_p, r) => `Slider value set. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(_p, r) => `Slider value set. jobId=${r.jobId}`,
 		(p) => `Setting slider ${p.targetId} to ${p.value}...`,
 	),
 });
@@ -263,7 +263,7 @@ export const ghSetPanelTextTool = defineTool({
 	execute: createExecute(
 		"setPanelText",
 		(p) => ({ targetId: p.targetId, text: p.text }),
-		(_p, r) => `Panel text set. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(_p, r) => `Panel text set. jobId=${r.jobId}`,
 		(p) => `Setting panel ${p.targetId} text...`,
 	),
 });
