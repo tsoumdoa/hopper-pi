@@ -49,39 +49,19 @@ export const ghConnectWireTool = defineTool({
 	name: "gh_connect_wire",
 	label: "Connect Wire",
 	description:
-		"Connect an output port of one component to an input port of another. ALL 4 parameters must be GUID strings copied from gh_get_canvas output. " +
-		"Step 1: call gh_get_canvas. Step 2: copy the 4 GUID values from its output into the parameters below." +
-		"\n" +
-		"The gh_get_canvas output format:" +
-		"\n  [Cir] Cir (Circle)" +
-		"\n    COMPONENT_GUID=aaaa-bbbb-cccc-dddd-1111-2222-3333-4444  <-- copy this as fromComponent" +
-		"\n    OUTPUTS (fromPort values):" +
-		"\n      PORT_GUID=eeee-ffff-0000-1111-2222-3333-4444-5555  (C)  <-- copy this as fromPort" +
-		"\n    INPUTS (toPort values):" +
-		"\n      PORT_GUID=6666-7777-8888-9999-aaaa-bbbb-cccc-dddd  (R)  <-- copy this as toPort" +
-		"\n" +
-		"For the TARGET component, also copy its COMPONENT_GUID as toComponent, and its input PORT_GUID as toPort." +
-		"\n" +
-		"ALL 4 PARAMS ARE GUIDS (hex strings like 'aaaa-bbbb-cccc-dddd-eeee-ffff-0000-1111'):" +
-		"\n  fromComponent = COMPONENT_GUID line from SOURCE component (the guid= value on its header row)" +
-		"\n  fromPort     = PORT_GUID line from SOURCE component's OUTPUTS section" +
-		"\n  toComponent   = COMPONENT_GUID line from TARGET component (the guid= value on its header row)" +
-		"\n  toPort       = PORT_GUID line from TARGET component's INPUTS section" +
-		"\n" +
-		"INVALID (will fail): fromComponent='Circle', fromPort='C', fromPort='c', toPort='Area', toPort='g', toPort='radius'" +
-		"\nVALID: fromComponent='aaaa-bbbb-cccc-dddd-eeee-ffff-0000-1111'  fromPort='eeee-ffff-...'",
+		"Connect a source output to a target input using 4 GUIDs copied from gh_get_canvas: source COMPONENT_GUID, source output PORT_GUID, target COMPONENT_GUID, target input PORT_GUID. Do not use names, nicknames, [id] values, or port labels.",
 	parameters: Type.Object({
 		fromComponent: Type.String({
-			description: "Copy the COMPONENT_GUID= value from the SOURCE component's header row in gh_get_canvas output. This is a hex GUID string like 'aaaa-bbbb-cccc-dddd-eeee-ffff-0000-1111'. NOT the [id] in brackets, NOT a nickname.",
+			description: "Copy the COMPONENT_GUID= value from the SOURCE component's header row in gh_get_canvas output.",
 		}),
 		fromPort: Type.String({
-			description: "Copy the PORT_GUID= value from the SOURCE component's OUTPUTS section in gh_get_canvas output. Hex GUID string like 'eeee-ffff-0000-1111-2222-3333-4444-5555'. NOT the nickname in parens.",
+			description: "Copy the PORT_GUID= value from the SOURCE component's OUTPUTS section in gh_get_canvas output.",
 		}),
 		toComponent: Type.String({
-			description: "Copy the COMPONENT_GUID= value from the TARGET component's header row in gh_get_canvas output. Hex GUID string like '6666-7777-8888-9999-aaaa-bbbb-cccc-dddd'. NOT the [id] in brackets.",
+			description: "Copy the COMPONENT_GUID= value from the TARGET component's header row in gh_get_canvas output.",
 		}),
 		toPort: Type.String({
-			description: "Copy the PORT_GUID= value from the TARGET component's INPUTS section in gh_get_canvas output. Hex GUID string like 'ffff-0000-1111-2222-3333-4444-5556-6666'. NOT the nickname in parens.",
+			description: "Copy the PORT_GUID= value from the TARGET component's INPUTS section in gh_get_canvas output.",
 		}),
 	}),
 
@@ -97,39 +77,19 @@ export const ghDisconnectWireTool = defineTool({
 	name: "gh_disconnect_wire",
 	label: "Disconnect Wire",
 	description:
-		"Disconnect a wire between two components. ALL 4 parameters must be GUID strings copied from gh_get_canvas output. " +
-		"Use the SAME 4 GUID values that were used (or would be used) to connect this wire via gh_connect_wire." +
-		"\n" +
-		"The gh_get_canvas output format:" +
-		"\n  [Cir] Cir (Circle)" +
-		"\n    COMPONENT_GUID=aaaa-bbbb-cccc-dddd-1111-2222-3333-4444  <-- copy this as fromComponent" +
-		"\n    OUTPUTS:" +
-		"\n      PORT_GUID=eeee-ffff-0000-1111-2222-3333-4444-5555  <-- copy this as fromPort" +
-		"\n    INPUTS:" +
-		"\n      PORT_GUID=6666-7777-8888-9999-aaaa-bbbb-cccc-dddd  (R)  <-- copy this as toPort" +
-		"\n" +
-		"For the TARGET component, also copy its COMPONENT_GUID as toComponent, and its input PORT_GUID as toPort." +
-		"\n" +
-		"ALL 4 PARAMS ARE GUIDS (hex strings like 'aaaa-bbbb-cccc-dddd-eeee-ffff-0000-1111'):" +
-		"\n  fromComponent = COMPONENT_GUID line from SOURCE component's header row" +
-		"\n  fromPort     = PORT_GUID line from SOURCE component's OUTPUTS section" +
-		"\n  toComponent   = COMPONENT_GUID line from TARGET component's header row" +
-		"\n  toPort       = PORT_GUID line from TARGET component's INPUTS section" +
-		"\n" +
-		"INVALID (will fail): fromComponent='Circle', fromPort='C', toPort='Area', toPort='g'" +
-		"\nVALID: fromComponent='aaaa-bbbb-...'  fromPort='eeee-ffff-...'",
+  "Disconnect a wire using the same 4 GUIDs from gh_get_canvas used to identify the connection: source COMPONENT_GUID, source output PORT_GUID, target COMPONENT_GUID, and target input PORT_GUID. Do not use names, nicknames, [id] values, or port labels.",
 	parameters: Type.Object({
 		fromComponent: Type.String({
-			description: "Copy the COMPONENT_GUID= value from the SOURCE component's header row in gh_get_canvas output. Hex GUID string like 'aaaa-bbbb-cccc-dddd-eeee-ffff-0000-1111'. NOT the [id], NOT a nickname.",
+			description: "Copy the COMPONENT_GUID= value from the SOURCE component's header row in gh_get_canvas output.",
 		}),
 		fromPort: Type.String({
-			description: "Copy the PORT_GUID= value from the SOURCE component's OUTPUTS section in gh_get_canvas output. Hex GUID string like 'eeee-ffff-0000-1111-2222-3333-4444-5555'. NOT the nickname in parens.",
+			description: "Copy the PORT_GUID= value from the SOURCE component's OUTPUTS section in gh_get_canvas output.",
 		}),
 		toComponent: Type.String({
-			description: "Copy the COMPONENT_GUID= value from the TARGET component's header row in gh_get_canvas output. Hex GUID string like '6666-7777-8888-9999-aaaa-bbbb-cccc-dddd'. NOT the [id] in brackets.",
+			description: "Copy the COMPONENT_GUID= value from the TARGET component's header row in gh_get_canvas output.",
 		}),
 		toPort: Type.String({
-			description: "Copy the PORT_GUID= value from the TARGET component's INPUTS section in gh_get_canvas output. Hex GUID string like 'ffff-0000-1111-2222-3333-4444-5556-6666'. NOT the nickname in parens.",
+			description: "Copy the PORT_GUID= value from the TARGET component's INPUTS section in gh_get_canvas output.",
 		}),
 	}),
 
