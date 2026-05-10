@@ -1,11 +1,42 @@
 import { Requester } from "../infra/requester.js";
 import { withRequester } from "../infra/request-helpers.js";
 import type { ListAllComponentsResponse, GetCurrentCanvasResponse, GhComponentInfo } from "../types/messages.js";
+import type { Component } from "../types/gh.js";
 import { buildGhJson } from "../services/parser.js";
+import {
+	toShortInstanceGuid,
+	toShortTypeGuid,
+} from "../services/guid-shortener.js";
 
 const CACHE_TTL_MS = 60_000;
 
 let _cache: { data: ListAllComponentsResponse; fetchedAt: number } | null = null;
+
+function shortenComponentGuids(component: Component): Component {
+	const shortInputs: Component["inputs"] = {};
+	for (const [key, input] of Object.entries(component.inputs)) {
+		shortInputs[key] = {
+			...input,
+			instanceGuid: toShortInstanceGuid(input.instanceGuid),
+		};
+	}
+
+	const shortOutputs: Component["outputs"] = {};
+	for (const [key, output] of Object.entries(component.outputs)) {
+		shortOutputs[key] = {
+			...output,
+			instanceGuid: toShortInstanceGuid(output.instanceGuid),
+		};
+	}
+
+	return {
+		...component,
+		typeGuid: toShortTypeGuid(component.typeGuid),
+		instanceGuid: toShortInstanceGuid(component.instanceGuid),
+		inputs: shortInputs,
+		outputs: shortOutputs,
+	};
+}
 
 export async function getCachedOrFetchComponents(): Promise<ListAllComponentsResponse> {
 	if (_cache && Date.now() - _cache.fetchedAt < CACHE_TTL_MS) {
@@ -26,14 +57,17 @@ export async function fetchAllComponents(req: Requester): Promise<ListAllCompone
 
 export function formatCanvasResponse(response: GetCurrentCanvasResponse) {
 	const parsed = buildGhJson(response.xml);
+	const shortComponents = Object.fromEntries(
+		Object.entries(parsed.components).map(([id, component]) => [
+			id,
+			shortenComponentGuids(component),
+		])
+	);
 	const compCount = Object.keys(parsed.components).length;
 	const wireCount = parsed.wires.length;
 
 	const lines: string[] = [
 		`Canvas: ${response.docName} (${compCount} components, ${wireCount} wires)`,
-		"",
-		"=== COMPONENTS ===",
-		"",
 		"Each component line below shows:",
 		"  [id] = readable label (for delete/move/rename/etc tools only)",
 		"  guid=COMPONENT_GUID (use THIS for gh_connect_wire / gh_disconnect_wire fromComponent & toComponent)",
@@ -46,9 +80,9 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse) {
 		"",
 	];
 
-	for (const [id, c] of Object.entries(parsed.components)) {
+	for (const [id, c] of Object.entries(shortComponents)) {
 		lines.push(`[${id}] ${c.nickName} (${c.type})`);
-		lines.push(`  COMPONENT_GUID=${c.instanceGuid}  <-- use this as fromComponent or toComponent in wire tools`);
+		lines.push(`  COMPONENT_GUID=${c.instanceGuid}`);
 
 		if (Object.keys(c.outputs).length > 0) {
 			lines.push("  OUTPUTS (fromPort values):");
@@ -89,7 +123,7 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse) {
 			docName: response.docName,
 			componentCount: compCount,
 			wireCount: wireCount,
-			components: parsed.components,
+			components: shortComponents,
 			wires: parsed.wires,
 		},
 	};
@@ -106,14 +140,22 @@ function matchComponent(c: GhComponentInfo, f: string) {
 }
 
 function pickSummary(c: GhComponentInfo) {
-	return { name: c.name, typeGuid: c.typeGuid, category: c.category, subcategory: c.subcategory };
+	return {
+		name: c.name,
+		typeGuid: toShortTypeGuid(c.typeGuid),
+		category: c.category,
+		subcategory: c.subcategory,
+	};
 }
 
 export function formatComponentsMultiQuery(response: ListAllComponentsResponse, queries?: string[]) {
 	const all = response.components;
 
 	if (!queries || queries.length === 0) {
-		const lines = all.map((c) => `  ${c.name}  [${c.typeGuid}]  (${c.category}/${c.subcategory}) -- ${c.description}`);
+		const lines = all.map((c) => {
+			const shortTypeGuid = toShortTypeGuid(c.typeGuid);
+			return `  ${c.name}  [${shortTypeGuid}]  (${c.category}/${c.subcategory}) -- ${c.description}`;
+		});
 		return {
 			content: [{ type: "text" as const, text: `All components (${all.length}):\n${lines.join("\n")}` }],
 			details: { results: [], totalAvailable: all.length },
@@ -130,7 +172,10 @@ export function formatComponentsMultiQuery(response: ListAllComponentsResponse, 
 		if (matched.length === 0) {
 			sections.push(`"${q}" — no matches`);
 		} else {
-			const lines = matched.map((c) => `  ${c.name}  [${c.typeGuid}]  (${c.category}/${c.subcategory}) -- ${c.description}`);
+			const lines = matched.map((c) => {
+				const shortTypeGuid = toShortTypeGuid(c.typeGuid);
+				return `  ${c.name}  [${shortTypeGuid}]  (${c.category}/${c.subcategory}) -- ${c.description}`;
+			});
 			sections.push(`"${q}" (${matched.length} matches):\n${lines.join("\n")}`);
 		}
 	}

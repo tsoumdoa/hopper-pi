@@ -15,8 +15,8 @@ export const ghGetCanvasTool = defineTool({
 	label: "Get Canvas",
 	description:
 		"Fetch the live Grasshopper canvas from Rhino/Grasshopper backend. " +
-		"Returns every component with its instance GUID and every port GUID. " +
-		"You MUST call this before any gh_connect_wire or gh_disconnect_wire — copy the 4 GUID values directly from the output.",
+		"Returns every component with short instance GUID aliases and every port GUID alias (mapped internally to full GUIDs). " +
+		"You MUST call this before any gh_connect_wire or gh_disconnect_wire — copy the 4 GUID aliases directly from the output.",
 	parameters: Type.Object({}),
 
 	async execute(_toolCallId, _params, _signal, onUpdate, _ctx) {
@@ -32,7 +32,7 @@ export const ghListComponentsTool = defineTool({
 	description:
 		"Search available Grasshopper component types by query keywords. " +
 		"Pass an array of search strings to batch multiple lookups in one call. " +
-		"Returns results grouped by query keyword, each containing matching components with name, typeGuid, category, and subcategory.",
+		"Returns results grouped by query keyword, each containing matching components with name, short typeGuid aliases, category, and subcategory.",
 	parameters: Type.Object({
 		queries: Type.Optional(
 			Type.Array(Type.String({

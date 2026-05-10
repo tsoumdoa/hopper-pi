@@ -54,11 +54,11 @@ From `gh_get_canvas` output:
 | Identifier | Source | Used For |
 |-----------|--------|----------|
 | `[id]` | e.g. `Cir`, `Number Slider` | Your reasoning only — never pass to tools |
-| `INSTANCE_GUID` | hex on `INSTANCE_GUID=` line | All tool calls referencing existing components/ports |
-| `TYPE_GUID` | hex on `TYPE_GUID=` line | `gh_add_component(componentType:)` only |
-| `PORT_INSTANCE_GUID` | hex per port in OUTPUTS/INPUTS sections | Wire tool `fromPort` / `toPort` |
+| `INSTANCE_GUID` | short GUID alias on `INSTANCE_GUID=` line | All tool calls referencing existing components/ports |
+| `TYPE_GUID` | short GUID alias on `TYPE_GUID=` line | `gh_add_component(componentType:)` only |
+| `PORT_INSTANCE_GUID` | short GUID alias per port in OUTPUTS/INPUTS sections | Wire tool `fromPort` / `toPort` |
 
-**Rule:** Always use instanceGuid strings. Never pass `[id]` or nicknames.
+**Rule:** Always use instanceGuid strings (short aliases are preferred and auto-resolved). Never pass `[id]` or nicknames.
 
 ## Port Resolution Cheat Sheet
 

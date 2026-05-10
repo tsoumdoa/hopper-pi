@@ -93,8 +93,8 @@ These send a request to port 5557 and wait for a response.
 
 | Tool | Parameters | What it does |
 |------|-----------|--------------|
-| `gh_get_canvas` | _(none)_ | Fetches the full Grasshopper canvas as parsed JSON. Populates an internal cache with all components, wires, ports, values, positions. **Always call this first before editing.** |
-| `gh_list_components` | `filter?` (optional string) | Lists every registered Grasshopper component type (name, typeGuid, category, subcategory, description). Use this to find the correct typeGuid when adding new components. Supports optional text search filter. |
+| `gh_get_canvas` | _(none)_ | Fetches the full Grasshopper canvas as parsed JSON. Returns short GUID aliases for `instanceGuid` values (components and ports) and keeps an internal lookup map back to full GUIDs for edit commands. **Always call this first before editing.** |
+| `gh_list_components` | `filter?` (optional string) | Lists every registered Grasshopper component type (name, short `typeGuid` alias, category, subcategory, description). Use this to find the correct `componentType` for `gh_add_component`. Supports optional text search filter. |
 
 ### Edit Tools (PUSH → SUB ack pattern)
 
@@ -162,6 +162,7 @@ Agent: [calls gh_delete_component(items: [{ targetId: "abc-123" },
 
 Key points:
 - **`gh_get_canvas` populates a cache** — subsequent tool calls can resolve fuzzy names like "Number Slider" to real GUIDs automatically
+- **GUIDs shown to the agent are short aliases** — edit tools automatically convert them back to full GUIDs before commands are sent
 - **Canvas context is auto-injected** — after the first `gh_get_canvas`, every agent turn receives a summary of the cached canvas as context, so the agent doesn't forget what's on screen
 - **The agent figures out port GUIDs** from the cached component data (each input/output port carries its GUID)
 
