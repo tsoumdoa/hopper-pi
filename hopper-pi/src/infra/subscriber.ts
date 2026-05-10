@@ -12,8 +12,8 @@ export class Subscriber {
 		if (DEBUG) {
 			console.log(`[SUB] Connecting to ${PUB_ENDPOINT}`);
 		}
-		await this.socket.connect(PUB_ENDPOINT);
-		await this.socket.subscribe("");
+		this.socket.connect(PUB_ENDPOINT);
+		this.socket.subscribe("");
 	}
 
 	async subscribeTopic(topic: string): Promise<void> {
@@ -23,7 +23,7 @@ export class Subscriber {
 		if (DEBUG) {
 			console.log(`[SUB] Subscribing to: ${topic}`);
 		}
-		await this.socket.subscribe(topic);
+		this.socket.subscribe(topic);
 	}
 
 	async subscribe(handler: MessageHandler): Promise<void> {
@@ -50,9 +50,9 @@ export class Subscriber {
 		}
 	}
 
-	async receiveOne(timeoutMs?: number): Promise<GhMessage | null> {
+	async receiveOne(): Promise<GhMessage | null> {
 		if (!this.socket) throw new Error("Subscriber not connected");
-		const [topic, data] = await this.socket.receive({ timeout: timeoutMs ?? 0 });
+		const [topic, data] = await this.socket.receive();
 		if (!topic || !data) return null;
 		const payload = data.toString();
 		if (DEBUG) {

@@ -1,62 +1,6 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { nanoid } from "nanoid";
-import { Publisher } from "../infra/publisher.js";
-import { Subscriber } from "../infra/subscriber.js";
-import { COMMAND_ACK_TIMEOUT_MS } from "../infra/connection.js";
-import type {
-	CommandAction,
-	SubmitJobRequest,
-} from "../types/commands.js";
-// ── Internal: submit a command and wait for ACK ─────────────────────
-
-async function submitCommand(
-	action: CommandAction,
-	params: unknown
-): Promise<{ jobId: string; commandId: string | null }> {
-	const jobId = `job-${nanoid(8)}`;
-	const request: SubmitJobRequest = {
-		type: "submitJob",
-		jobId,
-		command: { action, params: params as SubmitJobRequest["command"]["params"] },
-	};
-
-	const publisher = new Publisher();
-	let ack: { jobId: string; commandId: string } | null = null;
-
-	try {
-		await publisher.connect();
-		await publisher.publishCommand(request);
-
-		// Wait for job status ACK on SUB socket
-		const subscriber = new Subscriber();
-		try {
-			await subscriber.connect();
-			await subscriber.subscribeTopic("gh.job.status");
-
-			const deadline = Date.now() + COMMAND_ACK_TIMEOUT_MS;
-			while (Date.now() < deadline) {
-				try {
-					const msg = await subscriber.receiveOne(500);
-					if (msg?.type === "gh.job.status" && msg.jobId === jobId && msg.state === "queued") {
-						ack = { jobId: msg.jobId, commandId: msg.commandId };
-						break;
-					}
-				} catch {
-					break;
-				}
-			}
-		} finally {
-			await subscriber.close();
-		}
-	} finally {
-		await publisher.close();
-	}
-
-	return { jobId, commandId: ack?.commandId ?? null };
-}
-
-// ── Tool definitions ────────────────────────────────────────────────
+import { createExecute } from "./edit-handlers.js";
 
 export const ghAddComponentTool = defineTool({
 	name: "gh_add_component",
@@ -74,23 +18,12 @@ export const ghAddComponentTool = defineTool({
 		y: Type.Number({ description: "Y position on canvas" }),
 	}),
 
-	async execute(_toolCallId, params, _signal, onUpdate) {
-		onUpdate?.({ content: [{ type: "text", text: `Adding component ${params.componentType} at (${params.x}, ${params.y})...` }], details: {} });
-
-		console.log("addComponent", params);
-		const result = await submitCommand("addComponent", {
-			guid: params.componentType,
-			position: { x: params.x, y: params.y },
-		});
-
-		return {
-			content: [{
-				type: "text",
-				text: `Component (id=${params.componentType}) added. jobId=${result.jobId}${result.commandId ? `, cmd=${result.commandId}` : ""}`,
-			}],
-			details: result,
-		};
-	},
+	execute: createExecute(
+		"addComponent",
+		(p) => ({ guid: p.componentType, position: { x: p.x, y: p.y } }),
+		(p, r) => `Component (id=${p.componentType}) added. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(p) => `Adding component ${p.componentType} at (${p.x}, ${p.y})...`,
+	),
 });
 
 export const ghDeleteComponentTool = defineTool({
@@ -104,21 +37,12 @@ export const ghDeleteComponentTool = defineTool({
 		}),
 	}),
 
-	async execute(_toolCallId, params, _signal, onUpdate) {
-		onUpdate?.({ content: [{ type: "text", text: `Deleting component ${params.targetId}...` }], details: {} });
-
-		const result = await submitCommand("deleteComponent", {
-			targetId: params.targetId,
-		});
-
-		return {
-			content: [{
-				type: "text",
-				text: `Component deleted. jobId=${result.jobId}${result.commandId ? `, cmd=${result.commandId}` : ""}`,
-			}],
-			details: result,
-		};
-	},
+	execute: createExecute(
+		"deleteComponent",
+		(p) => ({ targetId: p.targetId }),
+		(_p, r) => `Component deleted. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(p) => `Deleting component ${p.targetId}...`,
+	),
 });
 
 export const ghConnectWireTool = defineTool({
@@ -161,22 +85,12 @@ export const ghConnectWireTool = defineTool({
 		}),
 	}),
 
-	async execute(_toolCallId, params, _signal, onUpdate) {
-		onUpdate?.({ content: [{ type: "text", text: `Connecting wire ${params.fromComponent}:${params.fromPort} → ${params.toComponent}:${params.toPort}...` }], details: {} });
-
-		const result = await submitCommand("connectWire", {
-			from: { componentId: params.fromComponent, port: params.fromPort },
-			to: { componentId: params.toComponent, port: params.toPort },
-		});
-
-		return {
-			content: [{
-				type: "text",
-				text: `Wire connected. jobId=${result.jobId}${result.commandId ? `, cmd=${result.commandId}` : ""}`,
-			}],
-			details: result,
-		};
-	},
+	execute: createExecute(
+		"connectWire",
+		(p) => ({ from: { componentId: p.fromComponent, port: p.fromPort }, to: { componentId: p.toComponent, port: p.toPort } }),
+		(_p, r) => `Wire connected. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(p) => `Connecting wire ${p.fromComponent}:${p.fromPort} → ${p.toComponent}:${p.toPort}...`,
+	),
 });
 
 export const ghDisconnectWireTool = defineTool({
@@ -190,7 +104,7 @@ export const ghDisconnectWireTool = defineTool({
 		"\n  [Cir] Cir (Circle)" +
 		"\n    COMPONENT_GUID=aaaa-bbbb-cccc-dddd-1111-2222-3333-4444  <-- copy this as fromComponent" +
 		"\n    OUTPUTS:" +
-		"\n      PORT_GUID=eeee-ffff-0000-1111-2222-3333-4444-5555  (C)  <-- copy this as fromPort" +
+		"\n      PORT_GUID=eeee-ffff-0000-1111-2222-3333-4444-5555  <-- copy this as fromPort" +
 		"\n    INPUTS:" +
 		"\n      PORT_GUID=6666-7777-8888-9999-aaaa-bbbb-cccc-dddd  (R)  <-- copy this as toPort" +
 		"\n" +
@@ -212,29 +126,19 @@ export const ghDisconnectWireTool = defineTool({
 			description: "Copy the PORT_GUID= value from the SOURCE component's OUTPUTS section in gh_get_canvas output. Hex GUID string like 'eeee-ffff-0000-1111-2222-3333-4444-5555'. NOT the nickname in parens.",
 		}),
 		toComponent: Type.String({
-			description: "Copy the COMPONENT_GUID= value from the TARGET component's header row in gh_get_canvas output. Hex GUID string like '6666-7777-8888-9999-aaaa-bbbb-cccc-dddd'. NOT the [id], NOT a nickname.",
+			description: "Copy the COMPONENT_GUID= value from the TARGET component's header row in gh_get_canvas output. Hex GUID string like '6666-7777-8888-9999-aaaa-bbbb-cccc-dddd'. NOT the [id] in brackets.",
 		}),
 		toPort: Type.String({
 			description: "Copy the PORT_GUID= value from the TARGET component's INPUTS section in gh_get_canvas output. Hex GUID string like 'ffff-0000-1111-2222-3333-4444-5556-6666'. NOT the nickname in parens.",
 		}),
 	}),
 
-	async execute(_toolCallId, params, _signal, onUpdate) {
-		onUpdate?.({ content: [{ type: "text", text: `Disconnecting wire ${params.fromComponent}:${params.fromPort} → ${params.toComponent}:${params.toPort}...` }], details: {} });
-
-		const result = await submitCommand("disconnectWire", {
-			from: { componentId: params.fromComponent, port: params.fromPort },
-			to: { componentId: params.toComponent, port: params.toPort },
-		});
-
-		return {
-			content: [{
-				type: "text",
-				text: `Wire disconnected. jobId=${result.jobId}${result.commandId ? `, cmd=${result.commandId}` : ""}`,
-			}],
-			details: result,
-		};
-	},
+	execute: createExecute(
+		"disconnectWire",
+		(p) => ({ from: { componentId: p.fromComponent, port: p.fromPort }, to: { componentId: p.toComponent, port: p.toPort } }),
+		(_p, r) => `Wire disconnected. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(p) => `Disconnecting wire ${p.fromComponent}:${p.fromPort} → ${p.toComponent}:${p.toPort}...`,
+	),
 });
 
 export const ghMoveComponentTool = defineTool({
@@ -250,22 +154,12 @@ export const ghMoveComponentTool = defineTool({
 		y: Type.Number({ description: "New Y position" }),
 	}),
 
-	async execute(_toolCallId, params, _signal, onUpdate) {
-		onUpdate?.({ content: [{ type: "text", text: `Moving component ${params.targetId} to (${params.x}, ${params.y})...` }], details: {} });
-
-		const result = await submitCommand("moveComponent", {
-			targetId: params.targetId,
-			position: { x: params.x, y: params.y },
-		});
-
-		return {
-			content: [{
-				type: "text",
-				text: `Component moved. jobId=${result.jobId}${result.commandId ? `, cmd=${result.commandId}` : ""}`,
-			}],
-			details: result,
-		};
-	},
+	execute: createExecute(
+		"moveComponent",
+		(p) => ({ targetId: p.targetId, position: { x: p.x, y: p.y } }),
+		(_p, r) => `Component moved. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(p) => `Moving component ${p.targetId} to (${p.x}, ${p.y})...`,
+	),
 });
 
 export const ghRenameComponentTool = defineTool({
@@ -280,22 +174,12 @@ export const ghRenameComponentTool = defineTool({
 		nickName: Type.String({ description: "New nickname" }),
 	}),
 
-	async execute(_toolCallId, params, _signal, onUpdate) {
-		onUpdate?.({ content: [{ type: "text", text: `Renaming component ${params.targetId} to "${params.nickName}"...` }], details: {} });
-
-		const result = await submitCommand("renameComponent", {
-			targetId: params.targetId,
-			nickName: params.nickName,
-		});
-
-		return {
-			content: [{
-				type: "text",
-				text: `Component renamed. jobId=${result.jobId}${result.commandId ? `, cmd=${result.commandId}` : ""}`,
-			}],
-			details: result,
-		};
-	},
+	execute: createExecute(
+		"renameComponent",
+		(p) => ({ targetId: p.targetId, nickName: p.nickName }),
+		(_p, r) => `Component renamed. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(p) => `Renaming component ${p.targetId} to "${p.nickName}"...`,
+	),
 });
 
 export const ghSetLockedTool = defineTool({
@@ -310,22 +194,12 @@ export const ghSetLockedTool = defineTool({
 		locked: Type.Boolean({ description: "true to lock, false to unlock" }),
 	}),
 
-	async execute(_toolCallId, params, _signal, onUpdate) {
-		onUpdate?.({ content: [{ type: "text", text: `${params.locked ? "Locking" : "Unlocking"} component ${params.targetId}...` }], details: {} });
-
-		const result = await submitCommand("setComponentLocked", {
-			targetId: params.targetId,
-			locked: params.locked,
-		});
-
-		return {
-			content: [{
-				type: "text",
-				text: `Lock state set. jobId=${result.jobId}${result.commandId ? `, cmd=${result.commandId}` : ""}`,
-			}],
-			details: result,
-		};
-	},
+	execute: createExecute(
+		"setComponentLocked",
+		(p) => ({ targetId: p.targetId, locked: p.locked }),
+		(_p, r) => `Lock state set. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(p) => `${p.locked ? "Locking" : "Unlocking"} component ${p.targetId}...`,
+	),
 });
 
 export const ghSetHiddenTool = defineTool({
@@ -340,22 +214,12 @@ export const ghSetHiddenTool = defineTool({
 		hidden: Type.Boolean({ description: "true to hide, false to show" }),
 	}),
 
-	async execute(_toolCallId, params, _signal, onUpdate) {
-		onUpdate?.({ content: [{ type: "text", text: `${params.hidden ? "Hiding" : "Showing"} component ${params.targetId}...` }], details: {} });
-
-		const result = await submitCommand("setComponentHidden", {
-			targetId: params.targetId,
-			hidden: params.hidden,
-		});
-
-		return {
-			content: [{
-				type: "text",
-				text: `Visibility set. jobId=${result.jobId}${result.commandId ? `, cmd=${result.commandId}` : ""}`,
-			}],
-			details: result,
-		};
-	},
+	execute: createExecute(
+		"setComponentHidden",
+		(p) => ({ targetId: p.targetId, hidden: p.hidden }),
+		(_p, r) => `Visibility set. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(p) => `${p.hidden ? "Hiding" : "Showing"} component ${p.targetId}...`,
+	),
 });
 
 export const ghAddGroupTool = defineTool({
@@ -370,23 +234,15 @@ export const ghAddGroupTool = defineTool({
 		groupName: Type.String({ description: "Name for the group" }),
 	}),
 
-	async execute(_toolCallId, params, _signal, onUpdate) {
-		const ids = params.componentIds.split(",").map((s) => s.trim());
-		onUpdate?.({ content: [{ type: "text", text: `Grouping [${ids.join(", ")}] as "${params.groupName}"...` }], details: {} });
-
-		const result = await submitCommand("addGroup", {
-			componentIds: ids,
-			groupName: params.groupName,
-		});
-
-		return {
-			content: [{
-				type: "text",
-				text: `Group created. jobId=${result.jobId}${result.commandId ? `, cmd=${result.commandId}` : ""}`,
-			}],
-			details: result,
-		};
-	},
+	execute: createExecute(
+		"addGroup",
+		(p) => ({ componentIds: p.componentIds.split(",").map((s) => s.trim()), groupName: p.groupName }),
+		(_p, r) => `Group created. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(p) => {
+			const ids = p.componentIds.split(",").map((s) => s.trim());
+			return `Grouping [${ids.join(", ")}] as "${p.groupName}"...`;
+		},
+	),
 });
 
 export const ghRemoveFromGroupTool = defineTool({
@@ -401,23 +257,15 @@ export const ghRemoveFromGroupTool = defineTool({
 		groupName: Type.String({ description: "Name of the group to remove from" }),
 	}),
 
-	async execute(_toolCallId, params, _signal, onUpdate) {
-		const ids = params.componentIds.split(",").map((s) => s.trim());
-		onUpdate?.({ content: [{ type: "text", text: `Removing [${ids.join(", ")}] from group "${params.groupName}"...` }], details: {} });
-
-		const result = await submitCommand("removeFromGroup", {
-			componentIds: ids,
-			groupName: params.groupName,
-		});
-
-		return {
-			content: [{
-				type: "text",
-				text: `Removed from group. jobId=${result.jobId}${result.commandId ? `, cmd=${result.commandId}` : ""}`,
-			}],
-			details: result,
-		};
-	},
+	execute: createExecute(
+		"removeFromGroup",
+		(p) => ({ componentIds: p.componentIds.split(",").map((s) => s.trim()), groupName: p.groupName }),
+		(_p, r) => `Removed from group. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(p) => {
+			const ids = p.componentIds.split(",").map((s) => s.trim());
+			return `Removing [${ids.join(", ")}] from group "${p.groupName}"...`;
+		},
+	),
 });
 
 export const ghSetSliderValueTool = defineTool({
@@ -432,22 +280,12 @@ export const ghSetSliderValueTool = defineTool({
 		value: Type.Number({ description: "New slider value" }),
 	}),
 
-	async execute(_toolCallId, params, _signal, onUpdate) {
-		onUpdate?.({ content: [{ type: "text", text: `Setting slider ${params.targetId} to ${params.value}...` }], details: {} });
-
-		const result = await submitCommand("setSliderValue", {
-			targetId: params.targetId,
-			value: params.value,
-		});
-
-		return {
-			content: [{
-				type: "text",
-				text: `Slider value set. jobId=${result.jobId}${result.commandId ? `, cmd=${result.commandId}` : ""}`,
-			}],
-			details: result,
-		};
-	},
+	execute: createExecute(
+		"setSliderValue",
+		(p) => ({ targetId: p.targetId, value: p.value }),
+		(_p, r) => `Slider value set. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(p) => `Setting slider ${p.targetId} to ${p.value}...`,
+	),
 });
 
 export const ghSetPanelTextTool = defineTool({
@@ -462,20 +300,10 @@ export const ghSetPanelTextTool = defineTool({
 		text: Type.String({ description: "New panel text content" }),
 	}),
 
-	async execute(_toolCallId, params, _signal, onUpdate) {
-		onUpdate?.({ content: [{ type: "text", text: `Setting panel ${params.targetId} text...` }], details: {} });
-
-		const result = await submitCommand("setPanelText", {
-			targetId: params.targetId,
-			text: params.text,
-		});
-
-		return {
-			content: [{
-				type: "text",
-				text: `Panel text set. jobId=${result.jobId}${result.commandId ? `, cmd=${result.commandId}` : ""}`,
-			}],
-			details: result,
-		};
-	},
+	execute: createExecute(
+		"setPanelText",
+		(p) => ({ targetId: p.targetId, text: p.text }),
+		(_p, r) => `Panel text set. jobId=${r.jobId}${r.commandId ? `, cmd=${r.commandId}` : ""}`,
+		(p) => `Setting panel ${p.targetId} text...`,
+	),
 });
