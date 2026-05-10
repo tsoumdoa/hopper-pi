@@ -19,6 +19,11 @@ function parseParams(action: CommandAction, opts: Record<string, string>): Comma
 		const raw = opts[param.name];
 		params[param.name] = param.parse ? param.parse(raw) : raw;
 	}
+	if ("x" in params && "y" in params) {
+		(params as Record<string, unknown>).position = { x: params.x as number, y: params.y as number };
+		delete (params as Record<string, unknown>).x;
+		delete (params as Record<string,unknown>).y;
+	}
 	return params as unknown as CommandParams;
 }
 
