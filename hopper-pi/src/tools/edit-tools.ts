@@ -24,7 +24,7 @@ export const ghAddComponentTool = defineTool({
 
 	execute: createExecute(
 		"addComponent",
-		(p) => ({ guid: p.componentType, position: { x: p.x, y: p.y } }),
+		(p) => ({ guid: p.componentType, position: { x: p.x, y: p.y }, nickName: p.nickName }),
 		(_p, r) => `Component added. jobId=${r.jobId}`,
 		(p) => `Adding component ${p.componentType} at (${p.x}, ${p.y})...`,
 	),
