@@ -37,23 +37,30 @@ export function createExecute<P>(
 	formatMessage: (params: P, result: SubmitResult) => string,
 	progressMsg?: (params: P) => string,
 ) {
-	return async (_toolCallId: string, params: P, _signal: unknown, onUpdate: unknown): Promise<AgentToolResult<unknown>> => {
+	return async (_toolCallId: string, params: { items: P[] }, _signal: unknown, onUpdate: unknown): Promise<AgentToolResult<unknown>> => {
 		const progressFn = typeof onUpdate === "function"
 			? (onUpdate as ProgressFn)
 			: undefined;
 
-		if (progressFn) {
-			progressFn({
-				content: [{ type: "text" as const, text: progressMsg?.(params) ?? `Executing ${action}...` }],
-				details: {},
-			});
+		const results: string[] = [];
+		const jobIds: string[] = [];
+
+		for (const p of params.items) {
+			if (progressFn) {
+				progressFn({
+					content: [{ type: "text" as const, text: progressMsg?.(p) ?? `Executing ${action}...` }],
+					details: {},
+				});
+			}
+
+			const result = await submitCommand(action, mapParams(p));
+			results.push(formatMessage(p, result));
+			jobIds.push(result.jobId);
 		}
 
-		const result = await submitCommand(action, mapParams(params));
-
 		return {
-			content: [{ type: "text" as const, text: formatMessage(params, result) }],
-			details: result,
+			content: [{ type: "text" as const, text: results.join("\n") }],
+			details: { jobIds },
 		};
 	};
 }

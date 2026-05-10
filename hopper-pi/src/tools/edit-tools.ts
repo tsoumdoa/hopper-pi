@@ -6,16 +6,20 @@ export const ghAddComponentTool = defineTool({
 	name: "gh_add_component",
 	label: "Add Component",
 	description:
-		"Add a new component to the Grasshopper canvas. You need the component type GUID — use gh_list_components to find it.",
+		"Add one or more new components to the Grasshopper canvas. You need the component type GUID — use gh_list_components to find it. Accepts an array of component definitions for batch processing.",
 	parameters: Type.Object({
-		componentType: Type.String({
-			description: "Component type GUID (e.g. from gh_list_components)",
-		}),
-		nickName: Type.Optional(
-			Type.String({ description: "Optional nickname for the component" })
+		items: Type.Array(
+			Type.Object({
+				componentType: Type.String({
+					description: "Component type GUID (e.g. from gh_list_components)",
+				}),
+				nickName: Type.Optional(
+					Type.String({ description: "Optional nickname for the component" })
+				),
+				x: Type.Number({ description: "X position on canvas" }),
+				y: Type.Number({ description: "Y position on canvas" }),
+			})
 		),
-		x: Type.Number({ description: "X position on canvas" }),
-		y: Type.Number({ description: "Y position on canvas" }),
 	}),
 
 	execute: createExecute(
@@ -30,11 +34,15 @@ export const ghDeleteComponentTool = defineTool({
 	name: "gh_delete_component",
 	label: "Delete Component",
 	description:
-		"Delete a component from the Grasshopper canvas by its ID. Use gh_get_canvas first to find the correct ID.",
+		"Delete one or more components from the Grasshopper canvas by their IDs. Use gh_get_canvas first to find the correct IDs. Accepts an array of target definitions for batch processing.",
 	parameters: Type.Object({
-		targetId: Type.String({
-			description: "Component ID to delete (from gh_get_canvas)",
-		}),
+		items: Type.Array(
+			Type.Object({
+				targetId: Type.String({
+					description: "Component ID to delete (from gh_get_canvas)",
+				}),
+			})
+		),
 	}),
 
 	execute: createExecute(
@@ -49,20 +57,24 @@ export const ghConnectWireTool = defineTool({
 	name: "gh_connect_wire",
 	label: "Connect Wire",
 	description:
-		"Connect a source output to a target input using 4 GUIDs copied from gh_get_canvas: source COMPONENT_GUID, source output PORT_GUID, target COMPONENT_GUID, target input PORT_GUID. Do not use names, nicknames, [id] values, or port labels.",
+		"Connect one or more source outputs to target inputs using 4 GUIDs copied from gh_get_canvas: source COMPONENT_GUID, source output PORT_GUID, target COMPONENT_GUID, target input PORT_GUID. Do not use names, nicknames, [id] values, or port labels. Accepts an array of wire definitions for batch processing.",
 	parameters: Type.Object({
-		fromComponent: Type.String({
-			description: "Copy the COMPONENT_GUID= value from the SOURCE component's header row in gh_get_canvas output.",
-		}),
-		fromPort: Type.String({
-			description: "Copy the PORT_GUID= value from the SOURCE component's OUTPUTS section in gh_get_canvas output.",
-		}),
-		toComponent: Type.String({
-			description: "Copy the COMPONENT_GUID= value from the TARGET component's header row in gh_get_canvas output.",
-		}),
-		toPort: Type.String({
-			description: "Copy the PORT_GUID= value from the TARGET component's INPUTS section in gh_get_canvas output.",
-		}),
+		items: Type.Array(
+			Type.Object({
+				fromComponent: Type.String({
+					description: "Copy the COMPONENT_GUID= value from the SOURCE component's header row in gh_get_canvas output.",
+				}),
+				fromPort: Type.String({
+					description: "Copy the PORT_GUID= value from the SOURCE component's OUTPUTS section in gh_get_canvas output.",
+				}),
+				toComponent: Type.String({
+					description: "Copy the COMPONENT_GUID= value from the TARGET component's header row in gh_get_canvas output.",
+				}),
+				toPort: Type.String({
+					description: "Copy the PORT_GUID= value from the TARGET component's INPUTS section in gh_get_canvas output.",
+				}),
+			})
+		),
 	}),
 
 	execute: createExecute(
@@ -77,20 +89,24 @@ export const ghDisconnectWireTool = defineTool({
 	name: "gh_disconnect_wire",
 	label: "Disconnect Wire",
 	description:
-  "Disconnect a wire using the same 4 GUIDs from gh_get_canvas used to identify the connection: source COMPONENT_GUID, source output PORT_GUID, target COMPONENT_GUID, and target input PORT_GUID. Do not use names, nicknames, [id] values, or port labels.",
+  "Disconnect one or more wires using the same 4 GUIDs from gh_get_canvas used to identify the connection: source COMPONENT_GUID, source output PORT_GUID, target COMPONENT_GUID, and target input PORT_GUID. Do not use names, nicknames, [id] values, or port labels. Accepts an array of wire definitions for batch processing.",
 	parameters: Type.Object({
-		fromComponent: Type.String({
-			description: "Copy the COMPONENT_GUID= value from the SOURCE component's header row in gh_get_canvas output.",
-		}),
-		fromPort: Type.String({
-			description: "Copy the PORT_GUID= value from the SOURCE component's OUTPUTS section in gh_get_canvas output.",
-		}),
-		toComponent: Type.String({
-			description: "Copy the COMPONENT_GUID= value from the TARGET component's header row in gh_get_canvas output.",
-		}),
-		toPort: Type.String({
-			description: "Copy the PORT_GUID= value from the TARGET component's INPUTS section in gh_get_canvas output.",
-		}),
+		items: Type.Array(
+			Type.Object({
+				fromComponent: Type.String({
+					description: "Copy the COMPONENT_GUID= value from the SOURCE component's header row in gh_get_canvas output.",
+				}),
+				fromPort: Type.String({
+					description: "Copy the PORT_GUID= value from the SOURCE component's OUTPUTS section in gh_get_canvas output.",
+				}),
+				toComponent: Type.String({
+					description: "Copy the COMPONENT_GUID= value from the TARGET component's header row in gh_get_canvas output.",
+				}),
+				toPort: Type.String({
+					description: "Copy the PORT_GUID= value from the TARGET component's INPUTS section in gh_get_canvas output.",
+				}),
+			})
+		),
 	}),
 
 	execute: createExecute(
@@ -105,13 +121,17 @@ export const ghMoveComponentTool = defineTool({
 	name: "gh_move_component",
 	label: "Move Component",
 	description:
-		"Move a component to a new position on the canvas.",
+		"Move one or more components to new positions on the canvas. Accepts an array of move definitions for batch processing.",
 	parameters: Type.Object({
-		targetId: Type.String({
-			description: "Component ID to move",
-		}),
-		x: Type.Number({ description: "New X position" }),
-		y: Type.Number({ description: "New Y position" }),
+		items: Type.Array(
+			Type.Object({
+				targetId: Type.String({
+					description: "Component ID to move",
+				}),
+				x: Type.Number({ description: "New X position" }),
+				y: Type.Number({ description: "New Y position" }),
+			})
+		),
 	}),
 
 	execute: createExecute(
@@ -126,12 +146,16 @@ export const ghRenameComponentTool = defineTool({
 	name: "gh_rename_component",
 	label: "Rename Component",
 	description:
-		"Rename a component's nickname on the canvas.",
+		"Rename one or more components' nicknames on the canvas. Accepts an array of rename definitions for batch processing.",
 	parameters: Type.Object({
-		targetId: Type.String({
-			description: "Component ID to rename",
-		}),
-		nickName: Type.String({ description: "New nickname" }),
+		items: Type.Array(
+			Type.Object({
+				targetId: Type.String({
+					description: "Component ID to rename",
+				}),
+				nickName: Type.String({ description: "New nickname" }),
+			})
+		),
 	}),
 
 	execute: createExecute(
@@ -146,12 +170,16 @@ export const ghSetLockedTool = defineTool({
 	name: "gh_set_locked",
 	label: "Set Locked",
 	description:
-		"Lock or unlock a component on the Grasshopper canvas.",
+		"Lock or unlock one or more components on the Grasshopper canvas. Accepts an array of lock definitions for batch processing.",
 	parameters: Type.Object({
-		targetId: Type.String({
-			description: "Component ID",
-		}),
-		locked: Type.Boolean({ description: "true to lock, false to unlock" }),
+		items: Type.Array(
+			Type.Object({
+				targetId: Type.String({
+					description: "Component ID",
+				}),
+				locked: Type.Boolean({ description: "true to lock, false to unlock" }),
+			})
+		),
 	}),
 
 	execute: createExecute(
@@ -166,12 +194,16 @@ export const ghSetHiddenTool = defineTool({
 	name: "gh_set_hidden",
 	label: "Set Hidden",
 	description:
-		"Show or hide a component on the Grasshopper canvas.",
+		"Show or hide one or more components on the Grasshopper canvas. Accepts an array of visibility definitions for batch processing.",
 	parameters: Type.Object({
-		targetId: Type.String({
-			description: "Component ID",
-		}),
-		hidden: Type.Boolean({ description: "true to hide, false to show" }),
+		items: Type.Array(
+			Type.Object({
+				targetId: Type.String({
+					description: "Component ID",
+				}),
+				hidden: Type.Boolean({ description: "true to hide, false to show" }),
+			})
+		),
 	}),
 
 	execute: createExecute(
@@ -186,12 +218,16 @@ export const ghAddGroupTool = defineTool({
 	name: "gh_add_group",
 	label: "Add Group",
 	description:
-		"Group multiple components together under a group name in Grasshopper.",
+		"Group multiple sets of components together under group names in Grasshopper. Accepts an array of group definitions for batch processing.",
 	parameters: Type.Object({
-		componentIds: Type.String({
-			description: "Comma-separated list of component IDs to group",
-		}),
-		groupName: Type.String({ description: "Name for the group" }),
+		items: Type.Array(
+			Type.Object({
+				componentIds: Type.String({
+					description: "Comma-separated list of component IDs to group",
+				}),
+				groupName: Type.String({ description: "Name for the group" }),
+			})
+		),
 	}),
 
 	execute: createExecute(
@@ -209,12 +245,16 @@ export const ghRemoveFromGroupTool = defineTool({
 	name: "gh_remove_from_group",
 	label: "Remove From Group",
 	description:
-		"Remove components from a group in Grasshopper.",
+		"Remove components from groups in Grasshopper. Accepts an array of remove-from-group definitions for batch processing.",
 	parameters: Type.Object({
-		componentIds: Type.String({
-			description: "Comma-separated list of component IDs to remove from group",
-		}),
-		groupName: Type.String({ description: "Name of the group to remove from" }),
+		items: Type.Array(
+			Type.Object({
+				componentIds: Type.String({
+					description: "Comma-separated list of component IDs to remove from group",
+				}),
+				groupName: Type.String({ description: "Name of the group to remove from" }),
+			})
+		),
 	}),
 
 	execute: createExecute(
@@ -232,12 +272,16 @@ export const ghSetSliderValueTool = defineTool({
 	name: "gh_set_slider_value",
 	label: "Set Slider Value",
 	description:
-		"Set the value of a Number Slider component on the canvas.",
+		"Set the values of one or more Number Slider components on the canvas. Accepts an array of slider value definitions for batch processing.",
 	parameters: Type.Object({
-		targetId: Type.String({
-			description: "Slider component ID",
-		}),
-		value: Type.Number({ description: "New slider value" }),
+		items: Type.Array(
+			Type.Object({
+				targetId: Type.String({
+					description: "Slider component ID",
+				}),
+				value: Type.Number({ description: "New slider value" }),
+			})
+		),
 	}),
 
 	execute: createExecute(
@@ -252,12 +296,16 @@ export const ghSetPanelTextTool = defineTool({
 	name: "gh_set_panel_text",
 	label: "Set Panel Text",
 	description:
-		"Set the text content of a Panel component on the canvas.",
+		"Set the text content of one or more Panel components on the canvas. Accepts an array of panel text definitions for batch processing.",
 	parameters: Type.Object({
-		targetId: Type.String({
-			description: "Panel component ID",
-		}),
-		text: Type.String({ description: "New panel text content" }),
+		items: Type.Array(
+			Type.Object({
+				targetId: Type.String({
+					description: "Panel component ID",
+				}),
+				text: Type.String({ description: "New panel text content" }),
+			})
+		),
 	}),
 
 	execute: createExecute(

@@ -98,22 +98,22 @@ These send a request to port 5557 and wait for a response.
 
 ### Edit Tools (PUSH → SUB ack pattern)
 
-These publish a command to port 5556 and wait for a job-queued acknowledgment on port 5555.
+These publish commands to port 5556 and wait for job-queued acknowledgments on port 5555. **All edit tools accept an array of parameter objects (`items`) for batch processing** — each item in the array is executed as a separate command sequentially.
 
-| Tool | Parameters | What it does |
-|------|-----------|--------------|
-| `gh_add_component` | `componentType`, `x`, `y`, `nickName?` | Adds a new component to the canvas at the given position |
-| `gh_delete_component` | `targetId` | Removes a component by its ID |
-| `gh_connect_wire` | `fromComponent`, `fromPort`, `toComponent`, `toPort` | Connects an output port to an input port (port GUIDs required) |
-| `gh_disconnect_wire` | `fromComponent`, `fromPort`, `toComponent`, `toPort` | Removes a wire between two ports |
-| `gh_move_component` | `targetId`, `x`, `y` | Moves a component to a new canvas position |
-| `gh_rename_component` | `targetId`, `nickName` | Changes a component's nickname |
-| `gh_set_locked` | `targetId`, `locked` (bool) | Locks or unlocks a component |
-| `gh_set_hidden` | `targetId`, `hidden` (bool) | Shows or hides a component |
-| `gh_add_group` | `componentIds` (comma-separated), `groupName` | Groups components under a named group |
-| `gh_remove_from_group` | `componentIds` (comma-separated), `groupName` | Removes components from a group |
-| `gh_set_slider_value` | `targetId`, `value` (number) | Sets a Number Slider's current value |
-| `gh_set_panel_text` | `targetId`, `text` | Sets a Panel component's text content |
+| Tool | Parameters (`items[]`) | What it does |
+|------|-----------------------|--------------|
+| `gh_add_component` | `componentType`, `x`, `y`, `nickName?` | Adds one or more components to the canvas at the given positions |
+| `gh_delete_component` | `targetId` | Removes one or more components by their IDs |
+| `gh_connect_wire` | `fromComponent`, `fromPort`, `toComponent`, `toPort` | Connects one or more output ports to input ports (port GUIDs required) |
+| `gh_disconnect_wire` | `fromComponent`, `fromPort`, `toComponent`, `toPort` | Removes one or more wires between ports |
+| `gh_move_component` | `targetId`, `x`, `y` | Moves one or more components to new canvas positions |
+| `gh_rename_component` | `targetId`, `nickName` | Changes one or more components' nicknames |
+| `gh_set_locked` | `targetId`, `locked` (bool) | Locks or unlocks one or more components |
+| `gh_set_hidden` | `targetId`, `hidden` (bool) | Shows or hides one or more components |
+| `gh_add_group` | `componentIds` (comma-separated), `groupName` | Groups multiple sets of components under named groups |
+| `gh_remove_from_group` | `componentIds` (comma-separated), `groupName` | Removes components from groups in batch |
+| `gh_set_slider_value` | `targetId`, `value` (number) | Sets one or more Number Sliders' current values |
+| `gh_set_panel_text` | `targetId`, `text` | Sets one or more Panels' text content |
 
 ### Slash Command
 
@@ -141,10 +141,23 @@ Agent: [calls gh_get_canvas]
 
 You:   Connect the slider to the circle radius, then set it to 42
 
-Agent: [calls gh_connect_wire(from="Number Slider", fromPort="<guid>",
-                               to="Circle", toPort="<guid>")]
-       [calls gh_set_slider_value(targetId="Number Slider", value=42)]
+Agent: [calls gh_connect_wire(items: [{ fromComponent: "<slider-guid>", fromPort: "<port-guid>",
+                                         toComponent: "<circle-guid>", toPort: "<port-guid>" }])]
+       [calls gh_set_slider_value(items: [{ targetId: "<slider-guid>", value: 42 }])]
        Done. The slider is now connected to the Circle radius and set to 42.
+```
+
+### Batch processing
+
+All edit tools accept an `items` array for batch operations. Instead of calling a tool multiple times, pass all operations in a single call:
+
+```
+You:   Delete these 3 components and hide that panel
+
+Agent: [calls gh_delete_component(items: [{ targetId: "abc-123" },
+                                          { targetId: "def-456" },
+                                          { targetId: "ghi-789" }])]
+       [calls gh_set_hidden(items: [{ targetId: "jkl-012", hidden: true }])]
 ```
 
 Key points:
@@ -233,13 +246,14 @@ hopper-pi/src/
 6. Returns formatted summary to the agent
 
 ### Edit flow (e.g., `gh_add_component`)
-1. Tool builds a `SubmitJobRequest` with a unique `jobId` (nanoid)
-2. Creates a `Publisher`, connects to `tcp://localhost:5556`
-3. Sends the command as JSON
-4. Creates a `Subscriber`, connects to `tcp://localhost:5555`
-5. Subscribes to `gh.job.status` topic
-6. Waits up to `COMMAND_ACK_TIMEOUT_MS` (default 5s) for a `queued` status matching our `jobId`
-7. Returns jobId/commandId confirmation to the agent
+1. Tool receives an `items` array of parameter objects
+2. For each item in the array, builds a `SubmitJobRequest` with a unique `jobId` (nanoid)
+3. Creates a `Publisher`, connects to `tcp://localhost:5556`
+4. Sends each command as JSON sequentially
+5. Creates a `Subscriber`, connects to `tcp://localhost:5555`
+6. Subscribes to `gh.job.status` topic
+7. Waits up to `COMMAND_ACK_TIMEOUT_MS` (default 5s) for each `queued` status matching its `jobId`
+8. Returns all jobId/commandId confirmations to the agent
 
 ---
 
