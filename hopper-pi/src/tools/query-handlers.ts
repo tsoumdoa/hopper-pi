@@ -1,6 +1,20 @@
 import { Requester } from "../infra/requester.js";
-import type { ListAllComponentsResponse, GetCurrentCanvasResponse } from "../types/messages.js";
+import { withRequester } from "../infra/request-helpers.js";
+import type { ListAllComponentsResponse, GetCurrentCanvasResponse, GhComponentInfo } from "../types/messages.js";
 import { buildGhJson } from "../services/parser.js";
+
+const CACHE_TTL_MS = 60_000;
+
+let _cache: { data: ListAllComponentsResponse; fetchedAt: number } | null = null;
+
+export async function getCachedOrFetchComponents(): Promise<ListAllComponentsResponse> {
+	if (_cache && Date.now() - _cache.fetchedAt < CACHE_TTL_MS) {
+		return _cache.data;
+	}
+	const data = await withRequester(fetchAllComponents);
+	_cache = { data, fetchedAt: Date.now() };
+	return data;
+}
 
 export async function fetchCurrentCanvas(req: Requester): Promise<GetCurrentCanvasResponse> {
 	return req.request<GetCurrentCanvasResponse>({ type: "getCurrentCanvas" });
@@ -81,41 +95,48 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse) {
 	};
 }
 
-export function formatComponentsList(response: ListAllComponentsResponse, filter?: string) {
-	let components = response.components;
+function matchComponent(c: GhComponentInfo, f: string) {
+	const lower = f.toLowerCase();
+	return (
+		c.name.toLowerCase().includes(lower) ||
+		c.category.toLowerCase().includes(lower) ||
+		c.subcategory.toLowerCase().includes(lower) ||
+		c.description.toLowerCase().includes(lower)
+	);
+}
 
-	if (filter) {
-		const f = filter.toLowerCase();
-		components = components.filter(
-			(c) =>
-				c.name.toLowerCase().includes(f) ||
-				c.category.toLowerCase().includes(f) ||
-				c.subcategory.toLowerCase().includes(f) ||
-				c.description.toLowerCase().includes(f)
-		);
+function pickSummary(c: GhComponentInfo) {
+	return { name: c.name, typeGuid: c.typeGuid, category: c.category, subcategory: c.subcategory };
+}
+
+export function formatComponentsMultiQuery(response: ListAllComponentsResponse, queries?: string[]) {
+	const all = response.components;
+
+	if (!queries || queries.length === 0) {
+		const lines = all.map((c) => `  ${c.name}  [${c.typeGuid}]  (${c.category}/${c.subcategory}) -- ${c.description}`);
+		return {
+			content: [{ type: "text" as const, text: `All components (${all.length}):\n${lines.join("\n")}` }],
+			details: { results: [], totalAvailable: all.length },
+		};
 	}
 
-	const lines = components.map(
-		(c) =>
-			`  ${c.name}  [${c.typeGuid}]  (${c.category}/${c.subcategory}) -- ${c.description}`
-	);
+	const sections: string[] = [];
+	const results: Array<{ queryKeyword: string; result: Array<{ name: string; typeGuid: string; category: string; subcategory: string }> }> = [];
+
+	for (const q of queries) {
+		const matched = all.filter((c) => matchComponent(c, q));
+		results.push({ queryKeyword: q, result: matched.map(pickSummary) });
+
+		if (matched.length === 0) {
+			sections.push(`"${q}" — no matches`);
+		} else {
+			const lines = matched.map((c) => `  ${c.name}  [${c.typeGuid}]  (${c.category}/${c.subcategory}) -- ${c.description}`);
+			sections.push(`"${q}" (${matched.length} matches):\n${lines.join("\n")}`);
+		}
+	}
 
 	return {
-		content: [
-			{
-				type: "text" as const,
-				text: `Available components (${components.length} of ${response.components.length}):\n${lines.join("\n")}`,
-			},
-		],
-		details: {
-			total: response.components.length,
-			filtered: components.length,
-			components: components.map((c) => ({
-				name: c.name,
-				typeGuid: c.typeGuid,
-				category: c.category,
-				subcategory: c.subcategory,
-			})),
-		},
+		content: [{ type: "text" as const, text: `Components search (${queries.length} queries, ${all.length} available):\n\n${sections.join("\n\n")}` }],
+		details: { results, totalAvailable: all.length },
 	};
 }

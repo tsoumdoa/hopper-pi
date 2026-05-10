@@ -1,12 +1,13 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { withRequester } from "../infra/request-helpers.js";
-import type { ListAllComponentsResponse, GetCurrentCanvasResponse } from "../types/messages.js";
+import type { GetCurrentCanvasResponse } from "../types/messages.js";
 import {
 	fetchCurrentCanvas,
 	fetchAllComponents,
 	formatCanvasResponse,
-	formatComponentsList,
+	formatComponentsMultiQuery,
+	getCachedOrFetchComponents,
 } from "./query-handlers.js";
 
 export const ghGetCanvasTool = defineTool({
@@ -29,19 +30,21 @@ export const ghListComponentsTool = defineTool({
 	name: "gh_list_components",
 	label: "List Components",
 	description:
-		"List all available Grasshopper component types that can be added to the canvas. Returns name, typeGuid, category, subcategory, and description. Use this to find the correct component typeGuid when adding new components.",
+		"Search available Grasshopper component types by query keywords. " +
+		"Pass an array of search strings to batch multiple lookups in one call. " +
+		"Returns results grouped by query keyword, each containing matching components with name, typeGuid, category, and subcategory.",
 	parameters: Type.Object({
-		filter: Type.Optional(
-			Type.String({
+		queries: Type.Optional(
+			Type.Array(Type.String({
 				description:
-					"Optional text filter to search component names, categories, or descriptions (case-insensitive partial match)",
-			})
+					"Search query — filters component names, categories, or descriptions (case-insensitive partial match). Pass multiple to batch.",
+			}))
 		),
 	}),
 
 	async execute(_toolCallId, params, _signal, onUpdate, _ctx) {
 		onUpdate?.({ content: [{ type: "text", text: "Fetching component registry..." }], details: {} });
-		const response = await withRequester<ListAllComponentsResponse>(fetchAllComponents);
-		return formatComponentsList(response, params.filter);
+		const response = await getCachedOrFetchComponents();
+		return formatComponentsMultiQuery(response, params.queries);
 	},
 });

@@ -41,7 +41,7 @@ The backend processes commands asynchronously. After making changes, call `gh_ge
 |---------------|-----------|
 | See everything (components, wires, values) | `gh_get_canvas` |
 | Find a component type to add (get its typeGuid) | `gh_list_components` |
-| Find a specific kind of component | `gh_list_components(filter: "circle")` |
+| Find specific kinds of components | `gh_list_components(queries: ["circle", "slider"])` |
 
 ### Need to CHANGE something?
 
@@ -108,8 +108,8 @@ gh_get_canvas()
 # → Returns: { components: { "Number Slider": {...} }, ... }
 
 # Step 2: Look up the Circle component GUID
-gh_list_components(filter: "circle")
-# → Returns: { components: [{ name: "Circle", typeGuid: "c155f249-...", category: "Curve", ... }] }
+gh_list_components(queries: ["circle"])
+# → Returns: { results: [{ queryKeyword: "circle", result: [{ name: "Circle", typeGuid: "c155f249-...", category: "Curve", ... }] }] }
 
 # Step 3: Add the Circle at position (0, 50)
 gh_add_component(
@@ -189,11 +189,9 @@ gh_get_canvas()
 # Step 1: Check what's on canvas
 gh_get_canvas()
 
-# Step 2: Look up component GUIDs we need
-gh_list_components(filter: "circle")
-# → Circle typeGuid = "c155f249-..."
-gh_list_components(filter: "slider")
-# → Number Slider typeGuid = "..."
+# Step 2: Look up component GUIDs we need (batched in one call)
+gh_list_components(queries: ["circle", "slider"])
+# → Returns results for "circle" and "slider" in one request
 
 # Step 3: Add slider for radius
 gh_add_component(componentType: "<slider-guid>", x: -100, y: 0)
@@ -303,7 +301,7 @@ Grasshopper uses conventional port nicknames. Here are the most common ones:
 
 1. **Batch your reads, chain your writes:** One `gh_get_canvas` gives you everything. Plan all your edits based on one snapshot, then execute them, then verify once at the end.
 
-2. **Use `gh_list_components` with filters:** Don't fetch the full 500+ component list if you only need circles. Use `filter: "curve"` or `filter: "math"` to narrow down.
+2. **Batch component searches:** Pass multiple queries in one `gh_list_components(queries: ["circle", "slider"])` call. The registry is fetched once and filtered locally for each query (cached 60s).
 
 3. **No caching — always fetch fresh:** Every `gh_get_canvas` call hits the live backend. There is no cache. If you think the canvas may have changed (user made manual edits, or you just ran edit tools), call `gh_get_canvas` again to get the latest state.
 
