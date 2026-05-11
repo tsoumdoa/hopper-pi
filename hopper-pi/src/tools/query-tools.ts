@@ -31,8 +31,9 @@ export const ghListComponentsTool = defineTool({
 	label: "List Components",
 	description:
 		"Search available Grasshopper component types by query keywords. " +
-		"Pass an array of search strings to batch multiple lookups in one call. " +
-		"Returns results grouped by query keyword, each containing matching components with name, short typeGuid aliases, category, and subcategory.",
+		"By default returns only **name** and **typeGuid** for each match. " +
+		"Pass `onlyName: false` to also retrieve description, category, and subcategory. " +
+		"Pass an array of search strings to batch multiple lookups in one call.",
 	parameters: Type.Object({
 		queries: Type.Optional(
 			Type.Array(Type.String({
@@ -40,11 +41,15 @@ export const ghListComponentsTool = defineTool({
 					"Search query — filters component names, categories, or descriptions (case-insensitive partial match). Pass multiple to batch.",
 			}))
 		),
+		onlyName: Type.Optional(Type.Boolean({
+			description:
+				"When true (default), returns only name and typeGuid per component. Set false to include description, category, and subcategory.",
+		})),
 	}),
 
 	async execute(_toolCallId, params, _signal, onUpdate, _ctx) {
 		onUpdate?.({ content: [{ type: "text", text: "Fetching component registry..." }], details: {} });
 		const response = await getCachedOrFetchComponents();
-		return formatComponentsMultiQuery(response, params.queries);
+		return formatComponentsMultiQuery(response, params.queries, params.onlyName);
 	},
 });

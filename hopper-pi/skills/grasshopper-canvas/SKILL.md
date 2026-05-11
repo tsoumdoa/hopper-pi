@@ -145,7 +145,7 @@ example:   gh_delete_component(items: [{ targetId: "a" }, { targetId: "b" }, { t
 | Tool | Params | Purpose |
 |------|--------|---------|
 | `gh_get_canvas` | _(none)_ | Full canvas snapshot — always call first |
-| `gh_list_components` | `queries?: string[]` | Find component type GUIDs; supports batch queries |
+| `gh_list_components` | `queries?: string[]`, `onlyName?: boolean` | Find component type GUIDs; defaults to name+id only, pass `onlyName: false` for full details (category, subcategory, description) |
 
 ### Edit (all accept `items: [...]`)
 

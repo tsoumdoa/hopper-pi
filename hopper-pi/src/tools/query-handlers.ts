@@ -139,21 +139,22 @@ function matchComponent(c: GhComponentInfo, f: string) {
 	);
 }
 
-function pickSummary(c: GhComponentInfo) {
-	return {
+function pickSummary(c: GhComponentInfo, onlyName: boolean) {
+	const base = {
 		name: c.name,
 		typeGuid: toShortTypeGuid(c.typeGuid),
-		category: c.category,
-		subcategory: c.subcategory,
 	};
+	if (onlyName) return base;
+	return { ...base, category: c.category, subcategory: c.subcategory };
 }
 
-export function formatComponentsMultiQuery(response: ListAllComponentsResponse, queries?: string[]) {
+export function formatComponentsMultiQuery(response: ListAllComponentsResponse, queries?: string[], onlyName: boolean = true) {
 	const all = response.components;
 
 	if (!queries || queries.length === 0) {
 		const lines = all.map((c) => {
 			const shortTypeGuid = toShortTypeGuid(c.typeGuid);
+			if (onlyName) return `  ${c.name}  [${shortTypeGuid}]`;
 			return `  ${c.name}  [${shortTypeGuid}]  (${c.category}/${c.subcategory}) -- ${c.description}`;
 		});
 		return {
@@ -163,17 +164,18 @@ export function formatComponentsMultiQuery(response: ListAllComponentsResponse, 
 	}
 
 	const sections: string[] = [];
-	const results: Array<{ queryKeyword: string; result: Array<{ name: string; typeGuid: string; category: string; subcategory: string }> }> = [];
+	const results: Array<{ queryKeyword: string; result: Array<Record<string, string>> }> = [];
 
 	for (const q of queries) {
 		const matched = all.filter((c) => matchComponent(c, q));
-		results.push({ queryKeyword: q, result: matched.map(pickSummary) });
+		results.push({ queryKeyword: q, result: matched.map((c) => pickSummary(c, onlyName)) });
 
 		if (matched.length === 0) {
 			sections.push(`"${q}" — no matches`);
 		} else {
 			const lines = matched.map((c) => {
 				const shortTypeGuid = toShortTypeGuid(c.typeGuid);
+				if (onlyName) return `  ${c.name}  [${shortTypeGuid}]`;
 				return `  ${c.name}  [${shortTypeGuid}]  (${c.category}/${c.subcategory}) -- ${c.description}`;
 			});
 			sections.push(`"${q}" (${matched.length} matches):\n${lines.join("\n")}`);
