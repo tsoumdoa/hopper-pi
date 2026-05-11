@@ -5,7 +5,7 @@ description: Inspect and edit Grasshopper canvas components, wires, and values v
 
 # Grasshopper Canvas Tools
 
-**9 tools** for interacting with a Grasshopper canvas via ZeroMQ. Backend (Rhino + rhino-zmq-poc plugin) must be running.
+**8 tools** for interacting with a Grasshopper canvas via ZeroMQ. Backend (Rhino + rhino-zmq-poc plugin) must be running.
 
 ---
 
@@ -152,8 +152,7 @@ example:   gh_edit_components(items: [{ action: "delete", targetId: "a" }, { act
 | Tool | Item params | Purpose |
 |------|------------|---------|
 | `gh_edit_components` | `action`, `targetId?`, `componentType?`, `x?`, `y?`, `nickName?`, `locked?`, `hidden?` | Add/delete/move/rename/lock/hide component(s) — action selects operation |
-| `gh_connect_wire` | `fromComponent`, `fromPort`, `toComponent`, `toPort` | Connect ports |
-| `gh_disconnect_wire` | `fromComponent`, `fromPort`, `toComponent`, `toPort` | Disconnect |
+| `gh_edit_wire` | `action` ("connect"/"disconnect"), `fromComponent`, `fromPort`, `toComponent`, `toPort` | Connect or disconnect wires between ports |
 | `gh_edit_group` | `operation`, `componentIds?`, `groupName?`, `color?`, `name?`, `border?` | Group operations (add/remove/delete/rename/color/style) |
 | `gh_set_slider_value` | `targetId`, `value` | Set slider |
 | `gh_set_panel_text` | `targetId`, `text` | Set panel text |
@@ -179,9 +178,9 @@ From `gh_get_canvas` output:
 |-----------|-------------|----------------------------------|
 | delete/move/rename/lock/hide/slider/panel | `targetId` | `component.instanceGuid` |
 | add (via `gh_edit_components` action="add") | `componentType` | `gh_list_components` → `typeGuid` |
-| connect/disconnect wire | `fromComponent`, `toComponent` | `component.instanceGuid` |
-| connect/disconnect wire | `fromPort` | source `outputPort.instanceGuid` |
-| connect/disconnect wire | `toPort` | target `inputPort.instanceGuid` |
+| connect/disconnect wire (via `gh_edit_wire`) | `fromComponent`, `toComponent` | `component.instanceGuid` |
+| connect/disconnect wire (via `gh_edit_wire`) | `fromPort` | source `outputPort.instanceGuid` |
+| connect/disconnect wire (via `gh_edit_wire`) | `toPort` | target `inputPort.instanceGuid` |
 
 ---
 
@@ -223,7 +222,8 @@ gh_edit_components(items: [
 gh_get_canvas()
 
 # Wire: Radius slider (double) → Circle Radius port (expects double) ✓
-gh_connect_wire(items: [{
+gh_edit_wire(items: [{
+  action: "connect",
   fromComponent: "<radius-slider-guid>",
   fromPort: "<radius-output-port>",
   toComponent: "<circle-guid>",
@@ -307,19 +307,19 @@ gh_edit_components(items: [
 gh_get_canvas()
 
 # Wire parameters to logic
-gh_connect_wire(items: [
+gh_edit_wire(items: [
   # Floors (int) → Series N (int) ✓
-  { fromComponent: "<floors-guid>", fromPort: "<output>", toComponent: "<series-guid>", toPort: "<N>" },
+  { action: "connect", fromComponent: "<floors-guid>", fromPort: "<output>", toComponent: "<series-guid>", toPort: "<N>" },
   # Series (int list) → Z Expr x (will be treated as double in math) ✓
-  { fromComponent: "<series-guid>", fromPort: "<range>", toComponent: "<z-expr-guid>", toPort: "<x>" },
+  { action: "connect", fromComponent: "<series-guid>", fromPort: "<range>", toComponent: "<z-expr-guid>", toPort: "<x>" },
   # Floor Height (double) → Z Expr y ✓
-  { fromComponent: "<height-guid>", fromPort: "<output>", toComponent: "<z-expr-guid>", toPort: "<y>" },
+  { action: "connect", fromComponent: "<height-guid>", fromPort: "<output>", toComponent: "<z-expr-guid>", toPort: "<y>" },
   # Floors (int) → Rotation Expr n (total count for normalization) ✓
-  { fromComponent: "<floors-guid>", fromPort: "<output>", toComponent: "<rot-expr-guid>", toPort: "<n>" },
+  { action: "connect", fromComponent: "<floors-guid>", fromPort: "<output>", toComponent: "<rot-expr-guid>", toPort: "<n>" },
   # Series (list) → Rotation Expr i (current index) ✓
-  { fromComponent: "<series-guid>", fromPort: "<range>", toComponent: "<rot-expr-guid>", toPort: "<i>" },
+  { action: "connect", fromComponent: "<series-guid>", fromPort: "<range>", toComponent: "<rot-expr-guid>", toPort: "<i>" },
   # Total Twist (double) → Rotation Expr t ✓
-  { fromComponent: "<twist-guid>", fromPort: "<output>", toComponent: "<rot-expr-guid>", toPort: "<t>" },
+  { action: "connect", fromComponent: "<twist-guid>", fromPort: "<output>", toComponent: "<rot-expr-guid>", toPort: "<t>" },
 ])
 
 # === GEOMETRY LAYER (right of logic) ===
@@ -330,8 +330,8 @@ gh_edit_components(items: [
 ])
 gh_get_canvas()
 
-gh_connect_wire(items: [
-  { fromComponent: "<radius-guid>", fromPort: "<output>", toComponent: "<circle-guid>", toPort: "<radius>" },
+gh_edit_wire(items: [
+  { action: "connect", fromComponent: "<radius-guid>", fromPort: "<output>", toComponent: "<circle-guid>", toPort: "<radius>" },
 ])
 
 # === TRANSFORM LAYER (right of geometry) ===
@@ -349,20 +349,20 @@ gh_edit_components(items: [
 ])
 gh_get_canvas()
 
-gh_connect_wire(items: [
+gh_edit_wire(items: [
   # Z Elev expression result → Multiply A (double × vector = vector) ✓
-  { fromComponent: "<z-expr-guid>",   fromPort: "<result>", toComponent: "<z-mul-guid>",   toPort: "<A>" },
-  { fromComponent: "<unitz-guid>",    fromPort: "<vector>", toComponent: "<z-mul-guid>",   toPort: "<B>" },
+  { action: "connect", fromComponent: "<z-expr-guid>",   fromPort: "<result>", toComponent: "<z-mul-guid>",   toPort: "<A>" },
+  { action: "connect", fromComponent: "<unitz-guid>",    fromPort: "<vector>", toComponent: "<z-mul-guid>",   toPort: "<B>" },
   # Z Vector → Move direction (Vector3d ✓)
-  { fromComponent: "<z-mul-guid>",    fromPort: "<result>", toComponent: "<move-guid>",    toPort: "<motion>" },
+  { action: "connect", fromComponent: "<z-mul-guid>",    fromPort: "<result>", toComponent: "<move-guid>",    toPort: "<motion>" },
   # Circle → Move geometry (Curve ✓)
-  { fromComponent: "<circle-guid>",   fromPort: "<curve>",  toComponent: "<move-guid>",    toPort: "<geometry>" },
+  { action: "connect", fromComponent: "<circle-guid>",   fromPort: "<curve>",  toComponent: "<move-guid>",    toPort: "<geometry>" },
   # Moved circles → Rotate geometry (Curve ✓)
-  { fromComponent: "<move-guid>",     fromPort: "<result>", toComponent: "<rotate-guid>",   toPort: "<geometry>" },
+  { action: "connect", fromComponent: "<move-guid>",     fromPort: "<result>", toComponent: "<rotate-guid>",   toPort: "<geometry>" },
   # Rotation angle (double) → Rotate angle ✓
-  { fromComponent: "<rot-expr-guid>", fromPort: "<result>", toComponent: "<rotate-guid>",   toPort: "<angle>" },
+  { action: "connect", fromComponent: "<rot-expr-guid>", fromPort: "<result>", toComponent: "<rotate-guid>",   toPort: "<angle>" },
   # Unit Z as rotation axis (Vector3d → plane axis) ✓
-  { fromComponent: "<unitz-guid>",    fromPort: "<vector>", toComponent: "<rotate-guid>",   toPort: "<plane>" },  # or appropriate plane port
+  { action: "connect", fromComponent: "<unitz-guid>",    fromPort: "<vector>", toComponent: "<rotate-guid>",   toPort: "<plane>" },  # or appropriate plane port
 ])
 
 # === OUTPUT LAYER (far right) ===
@@ -373,8 +373,8 @@ gh_edit_components(items: [
 ])
 gh_get_canvas()
 
-gh_connect_wire(items: [
-  { fromComponent: "<rotate-guid>", fromPort: "<result>", toComponent: "<loft-guid>", toPort: "<curves>" },
+gh_edit_wire(items: [
+  { action: "connect", fromComponent: "<rotate-guid>", fromPort: "<result>", toComponent: "<loft-guid>", toPort: "<curves>" },
 ])
 
 gh_get_canvas()  # final verification
@@ -508,10 +508,10 @@ When generating geometry not covered above, follow this strategy:
 | Symptom | Likely Cause | Fix |
 |---------|-------------|-----|
 | Tool hangs / no response | Backend not running | Verify Rhino + rhino-zmq-poc plugin is open |
-| `gh_connect_wire` fails | Stale GUIDs | Re-run `gh_get_canvas` to get fresh GUIDs |
+| `gh_edit_wire` (action="connect") fails | Stale GUIDs | Re-run `gh_get_canvas` to get fresh GUIDs |
 | Component not visible after add | Added off-canvas | Check coordinates; use `gh_edit_components` with action="move" to reposition |
 | Slider value rejected | Outside min/max range | Use `gh_get_canvas` to read slider's min/max first |
-| Wire connection does nothing | Wrong port direction | Ensure `fromPort` is an OUTPUT and `toPort` is an INPUT |
+| Wire connection does nothing | Wrong port direction | Ensure `fromPort` is an OUTPUT and `toPort` is an INPUT (use action="connect" in gh_edit_wire) |
 | Component shows error after wire | **Data type mismatch** | Check source output type vs target input type (Section 1.4) |
 | Geometry invisible / wrong location | **Used Y instead of Z for elevation** | Check all Move/Rotate/Construct components — Z is up (Section 1.3) |
 | Only one result when expecting many | **Single item implicitly consumed** | Check if a list input is receiving a single item; verify data is actually a list |

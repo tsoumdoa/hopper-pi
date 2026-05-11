@@ -5,8 +5,7 @@ import {
 
 import {
 	ghEditComponentsTool,
-	ghConnectWireTool,
-	ghDisconnectWireTool,
+	ghEditWireTool,
 	ghEditGroupTool,
 	ghSetSliderValueTool,
 	ghSetPanelTextTool,
@@ -19,8 +18,7 @@ export const ALL_TOOLS = [
 	ghListComponentsTool,
 	// ── Edit tools ──
 	ghEditComponentsTool,
-	ghConnectWireTool,
-	ghDisconnectWireTool,
+	ghEditWireTool,
 	ghEditGroupTool,
 	ghSetSliderValueTool,
 	ghSetPanelTextTool,
@@ -31,8 +29,7 @@ export {
 	ghGetCanvasTool,
 	ghListComponentsTool,
 	ghEditComponentsTool,
-	ghConnectWireTool,
-	ghDisconnectWireTool,
+	ghEditWireTool,
 	ghEditGroupTool,
 	ghSetSliderValueTool,
 	ghSetPanelTextTool,

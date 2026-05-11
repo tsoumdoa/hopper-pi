@@ -124,14 +124,18 @@ export const ghEditComponentsTool = defineTool({
 	},
 });
 
-export const ghConnectWireTool = defineTool({
-	name: "gh_connect_wire",
-	label: "Connect Wire",
+export const ghEditWireTool = defineTool({
+	name: "gh_edit_wire",
+	label: "Edit Wire",
 	description:
-		"Connect one or more source outputs to target inputs using 4 GUID aliases copied from gh_get_canvas: source COMPONENT_GUID, source output PORT_GUID, target COMPONENT_GUID, target input PORT_GUID. Full GUIDs also work. Do not use names, nicknames, [id] values, or port labels. Accepts an array of wire definitions for batch processing.",
+		"Connect or disconnect wires between component ports using 4 GUID aliases copied from gh_get_canvas: source COMPONENT_GUID, source output PORT_GUID, target COMPONENT_GUID, target input PORT_GUID. Full GUIDs also work. Do not use names, nicknames, [id] values, or port labels. Accepts an array of wire definitions for batch processing.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Object({
+				action: Type.Union([
+					Type.Literal("connect"),
+					Type.Literal("disconnect"),
+				]),
 				fromComponent: Type.String({
 					description: "Copy the COMPONENT_GUID= value from the SOURCE component's header row in gh_get_canvas output.",
 				}),
@@ -148,50 +152,34 @@ export const ghConnectWireTool = defineTool({
 		),
 	}),
 
-	execute: createExecute(
-		"connectWire",
-		(p) => ({
-			from: { componentId: resolveInstanceGuid(p.fromComponent), port: resolveInstanceGuid(p.fromPort) },
-			to: { componentId: resolveInstanceGuid(p.toComponent), port: resolveInstanceGuid(p.toPort) },
-		}),
-		(_p, r) => `Wire connected. jobId=${r.jobId}`,
-		(p) => `Connecting wire ${p.fromComponent}:${p.fromPort} → ${p.toComponent}:${p.toPort}...`,
-	),
-});
+	execute: async (_toolCallId, params, _signal, onUpdate) => {
+		const progressFn = typeof onUpdate === "function"
+			? (onUpdate as (msg: { content: { type: string; text: string }[]; details: unknown }) => void)
+			: undefined;
 
-export const ghDisconnectWireTool = defineTool({
-	name: "gh_disconnect_wire",
-	label: "Disconnect Wire",
-	description:
-		"Disconnect one or more wires using the same 4 GUID aliases from gh_get_canvas used to identify the connection: source COMPONENT_GUID, source output PORT_GUID, target COMPONENT_GUID, and target input PORT_GUID. Full GUIDs also work. Do not use names, nicknames, [id] values, or port labels. Accepts an array of wire definitions for batch processing.",
-	parameters: Type.Object({
-		items: Type.Array(
-			Type.Object({
-				fromComponent: Type.String({
-					description: "Copy the COMPONENT_GUID= value from the SOURCE component's header row in gh_get_canvas output.",
-				}),
-				fromPort: Type.String({
-					description: "Copy the PORT_GUID= value from the SOURCE component's OUTPUTS section in gh_get_canvas output.",
-				}),
-				toComponent: Type.String({
-					description: "Copy the COMPONENT_GUID= value from the TARGET component's header row in gh_get_canvas output.",
-				}),
-				toPort: Type.String({
-					description: "Copy the PORT_GUID= value from the TARGET component's INPUTS section in gh_get_canvas output.",
-				}),
-			})
-		),
-	}),
+		const results: string[] = [];
+		const jobIds: string[] = [];
 
-	execute: createExecute(
-		"disconnectWire",
-		(p) => ({
-			from: { componentId: resolveInstanceGuid(p.fromComponent), port: resolveInstanceGuid(p.fromPort) },
-			to: { componentId: resolveInstanceGuid(p.toComponent), port: resolveInstanceGuid(p.toPort) },
-		}),
-		(_p, r) => `Wire disconnected. jobId=${r.jobId}`,
-		(p) => `Disconnecting wire ${p.fromComponent}:${p.fromPort} → ${p.toComponent}:${p.toPort}...`,
-	),
+		for (const item of params.items) {
+			const action: CommandAction = item.action === "connect" ? "connectWire" : "disconnectWire";
+			const mappedParams = {
+				from: { componentId: resolveInstanceGuid(item.fromComponent), port: resolveInstanceGuid(item.fromPort) },
+				to: { componentId: resolveInstanceGuid(item.toComponent), port: resolveInstanceGuid(item.toPort) },
+			};
+
+			if (progressFn)
+				progressFn({ content: [{ type: "text", text: `${item.action === "connect" ? "Connecting" : "Disconnecting"} wire ${item.fromComponent}:${item.fromPort} → ${item.toComponent}:${item.toPort}...` }], details: {} });
+
+			const result = await submitCommand(action, mappedParams);
+			results.push(`Wire ${item.action === "connect" ? "connected" : "disconnected"}. jobId=${result.jobId}`);
+			jobIds.push(result.jobId);
+		}
+
+		return {
+			content: [{ type: "text" as const, text: results.join("\n") }],
+			details: { jobIds },
+		};
+	},
 });
 
 
