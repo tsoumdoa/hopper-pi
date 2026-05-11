@@ -7,9 +7,124 @@ description: Inspect and edit Grasshopper canvas components, wires, and values v
 
 **14 tools** for interacting with a Grasshopper canvas via ZeroMQ. Backend (Rhino + rhino-zmq-poc plugin) must be running.
 
-## Workflow Rules
+---
 
-These rules apply to **every** canvas interaction — from hiding a component to building a complex parametric tower.
+## 1. Fundamental Scripting Rules
+
+These are the **core conventions** that govern every Grasshopper definition you build. They ensure scripts are readable, maintainable, and logically sound.
+
+### 1.1 Canvas Layout: Left-to-Right Data Flow
+
+The script **must** read like a sentence — from left to right, top to bottom.
+
+```
+INPUTS  →  LOGIC / PROCESSING  →  GEOMETRY  →  OUTPUT
+(left)                         (center)      (right)
+```
+
+**Rules:**
+- **Data flows left → right.** Place input components (sliders, panels, value types) on the **left**. Place output geometry (bake, preview) on the **right**.
+- **Place each processing step to the right of its source.** If component B takes output from component A, B must be positioned to the **right** of A.
+- **Avoid wiring backward (right-to-left).** It breaks readability. If you need feedback loops, use explicit data dam or stream filter components and document them clearly.
+- **Vertical spacing:** Group related operations in the same horizontal band (~50-80px apart vertically). Unrelated parallel data streams should be separated into distinct rows.
+- **Horizontal spacing:** ~100-150px between components in a chain so wires and labels remain readable.
+
+### 1.2 Input Parameter Placement
+
+Input parameters have two roles — distinguish them clearly:
+
+| Role | Position | Examples |
+|------|----------|----------|
+| **Global drivers** (control the overall model) | **Top-left corner** | Building height, floor count, total twist angle, master scale |
+| **Local inputs** (feed directly into a specific component) | **Immediately left of the component they serve** | Circle radius slider placed right next to the Circle component |
+
+**Rule:** When placing an input slider/panel/value, ask: *"Does this drive the whole model, or just one component?"*
+- **Whole model** → top-left area, organized in a parameter block
+- **One component** → place it directly to the left of that component, at the same vertical level as the input port it connects to
+
+This means a reader can trace any wire from right to left and immediately see what value feeds it, without hunting across the canvas.
+
+### 1.3 Coordinate System: Rhino / Grasshopper Conventions
+
+Rhino uses a **right-handed coordinate system**. Always respect these axes:
+
+| Axis | Direction | Typical Use in GH |
+|------|-----------|-------------------|
+| **X** | Horizontal (left-right) | Width, east-west positioning |
+| **Y** | Horizontal (front-back) | Depth, north-south positioning |
+| **Z** | Vertical (up-down) | **Elevation, height, floor levels** |
+
+**Critical rules:**
+- The **ground plane is X-Y**. Z is always elevation/height.
+- When stacking elements (floors of a tower, layers of a facade), vary **Z**, not Y.
+- `Circle`, `Rectangle`, `Plane` components operate in the **X-Y plane by default** (Z = 0). To elevate them, use a `Move` component with a Z-direction vector, or construct an offset plane.
+- When creating points, `Point XYZ` takes (X, Y, Z) — don't accidentally pass elevation into Y.
+- `Line SDL` (Start Direction Length): if direction is Unit Z (0,0,1), the line grows vertically — correct for columns/walls.
+- **Never use Y as elevation.** This is the most common error. Z is always the vertical axis.
+
+### 1.4 Data Type Discipline
+
+Every port in Grasshopper expects a **specific data type**. Providing the wrong type will cause errors or silent failures. **Think carefully about what type each component needs before connecting.**
+
+#### Core Data Types
+
+| Type | What it looks like | Common sources |
+|------|-------------------|----------------|
+| `double` / `float` | Number (e.g., `12.5`) | Number Slider, Panel (numeric text), Math components |
+| `int` | Integer (e.g., `7`) | Slider (integer rounding), Series N, List Item index |
+| `string` | Text (e.g., `"Facade_A"`) | Panel, Text components |
+| `Point3d` | `{x, y, z}` coordinate | Construct Point, Point XYZ, Evaluate Surface |
+| `Vector3d` | Direction + magnitude | Unit X/Y/Z, Vector 2pt, Line direction |
+| `Plane` | Origin + X/Y/Z frame | XY Plane, Plane Origin, Align Plane |
+| `Curve` | Line, arc, circle, nurbs curve | Circle, Line, Polyline, Interpolate |
+| `Surface` / `Brep` | Face, polysurface | Boundary Surfaces, Loft, Extrude |
+| `Mesh` | Vertex-face grid | Mesh Brep, Mesh Plane |
+| `Domain` | Interval `[min, max]` | Construct Domain, Bounds |
+| `Colour` | RGBA value | Colour Swatch, Colour RGB |
+| `boolean` | `true` / `false` | Toggle, Larger Than, Null Item |
+| `List<T>` / `DataTree<T>` | Collection of items | Most components output lists when given multiple inputs |
+
+#### Type Compatibility Rules
+
+Before connecting output → input, verify compatibility:
+
+1. **Number → Geometry parameter (Radius, Length, etc.)**: OK. Double/int feed directly into geometric magnitude ports.
+2. **Number → Index port (i, N)**: Usually expects **integer**. If feeding a slider, ensure it outputs integers or round it first.
+3. **Point → Point input**: OK. But **Point ≠ Vector**. A point is a position; a vector is a direction. Some ports accept either — but many don't. Use `Vector 2Pt` to convert points to vector when needed.
+4. **Curve → Surface input**: NOT OK. You need `Boundary Surfaces`, `Loft`, `Extrude`, or `Planar Srf` to convert curves to surfaces first.
+5. **Single item → List input**: Grasshopper usually auto-wraps (implicit "longest list" matching). But be aware: one curve fed into a component expecting a list of curves will produce one result, not an error.
+6. **List → Single item input**: Takes the **first item only** (or fails depending on component). Use `List Item` to extract explicitly if needed.
+7. **String → Number input**: NOT OK. Panel text is string type. Use `Expression` with formula or `Text Split` to convert.
+8. **Domain → Number input**: NOT OK. A domain is an interval, not a scalar. Use `Deconstruct Domain` or `Interval Components` to extract start/end as numbers.
+
+#### Common Type Mismatches to Avoid
+
+| Wrong Connection | Why It Fails | Fix |
+|-----------------|--------------|-----|
+| Panel (text) → Radius | String ≠ number | Use Number Slider or Expression to parse |
+| Point → Move direction | Point ≠ vector | Use Vector 2Pt or Unit Z/Y/X |
+| Curve → Brep input | Curve ≠ surface/brep | Add Loft/Extrude/Boundary Surfaces |
+| List of points → single Point input | May silently take first only | Use List Item or ensure intentional |
+| Integer slider into expression expecting float | Usually works, but precision loss | Use floating-point slider |
+| Domain into number parameter | Interval ≠ scalar | Deconstruct Domain first |
+
+### 1.5 Component Naming & Organization
+
+- **Always set `nickName`** on every added component. Default names ("Circle", "Expression") are useless when there are multiples.
+- Use descriptive names: `"Floor Radius"`, `"Twist Angle"`, `"Z Elevation"`, not `"Slider 01"`, `"Expr 02"`.
+- Name inputs after **what they represent**, not their data type: `"Building Height"` not `"Number Slider 1"`.
+- Group related components with `gh_add_group` after verification:
+  - `"Parameters"` — global driver sliders (top-left block)
+  - `"Grid / Layout"` — point generation, division logic
+  - `"Geometry"` — primitive creation (circles, lines, rectangles)
+  - `"Transform"` — move, rotate, scale, mirror
+  - `"Output"` — loft, extrude, bake, preview
+
+---
+
+## 2. Workflow Rules (Operational)
+
+These rules apply to **every canvas interaction** — from hiding a component to building a complex parametric tower.
 
 1. **`gh_get_canvas` first** — you need instanceGuids from the response before any edit
 2. **Re-fetch after edits** to confirm state (backend is async)
@@ -21,7 +136,9 @@ These rules apply to **every** canvas interaction — from hiding a component to
 example:   gh_delete_component(items: [{ targetId: "a" }, { targetId: "b" }, { targetId: "c" }])
 ```
 
-## Tool Reference
+---
+
+## 3. Tool Reference
 
 ### Query
 
@@ -47,7 +164,9 @@ example:   gh_delete_component(items: [{ targetId: "a" }, { targetId: "b" }, { t
 | `gh_set_slider_value` | `targetId`, `value` | Set slider |
 | `gh_set_panel_text` | `targetId`, `text` | Set panel text |
 
-## Identifier System
+---
+
+## 4. Identifier System
 
 From `gh_get_canvas` output:
 
@@ -58,7 +177,7 @@ From `gh_get_canvas` output:
 | `TYPE_GUID` | short GUID alias on `TYPE_GUID=` line | `gh_add_component(componentType:)` only |
 | `PORT_INSTANCE_GUID` | short GUID alias per port in OUTPUTS/INPUTS sections | Wire tool `fromPort` / `toPort` |
 
-**Rule:** Always use instanceGuid strings (short aliases are preferred and auto-resolved). Never pass `[id]` or nicknames.
+**Rule:** Always use instanceGuid strings (short aliases are preferred and auto-resolved). Never pass `[id]` or nickNames.
 
 ## Port Resolution Cheat Sheet
 
@@ -70,27 +189,283 @@ From `gh_get_canvas` output:
 | connect/disconnect wire | `fromPort` | source `outputPort.instanceGuid` |
 | connect/disconnect wire | `toPort` | target `inputPort.instanceGuid` |
 
-## Worked Examples
+---
 
-### Add & connect
+## 5. Worked Examples
+
+### Example 1: Simple Circle with Proper Layout
+
+Demonstrates left-to-right flow, input placement next to consumer, and correct data types.
+
 ```text
+# Goal: A circle at origin, radius controlled by slider, elevated in Z
+
 gh_get_canvas()
-gh_list_components(queries: ["circle"])
-# → typeGuid = "c155f249-..."
+gh_list_components(queries: ["slider", "circle", "move", "construct point", "unit z"])
 
-gh_add_component(items: [{ componentType: "c155f249-...", x: 0, y: 50 }])
-gh_get_canvas()  # new component has port GUIDs now
+# --- LAYER 1: INPUTS (left side) ---
+# Global/local input: radius is specific to Circle → place right next to it
+# Elevation is a positional parameter → also near the transform it drives
 
+gh_add_component(items: [
+  # Radius slider: placed left of where Circle will be (x=-150), same Y level
+  { componentType: "<slider-guid>", x: -200, y: 0, nickName: "Radius" },
+  # Height slider: placed left of where Move will be (x=100), same Y level
+  { componentType: "<slider-guid>", x: 0, y: 100, nickName: "Elevation Z" },
+])
+gh_get_canvas()
+
+gh_set_slider_value(items: [
+  { targetId: "<radius-guid>", value: 10 },
+  { targetId: "<elev-guid>", value: 20 },
+])
+
+# --- LAYER 2: GEOMETRY (center) ---
+
+gh_add_component(items: [
+  # Circle: right of its radius slider
+  { componentType: "<circle-guid>", x: -50, y: 0, nickName: "Base Circle" },
+])
+gh_get_canvas()
+
+# Wire: Radius slider (double) → Circle Radius port (expects double) ✓
 gh_connect_wire(items: [{
-  fromComponent: "<slider INSTANCE_GUID>",
-  fromPort: "<slider OUTPUT PORT_INSTANCE_GUID>",
-  toComponent: "<circle INSTANCE_GUID>",
-  toPort: "<circle INPUT PORT_INSTANCE_GUID>"
+  fromComponent: "<radius-slider-guid>",
+  fromPort: "<radius-output-port>",
+  toComponent: "<circle-guid>",
+  toPort: "<radius-input-port>"
 }])
+
+# --- LAYER 3: TRANSFORM (right of geometry) ---
+
+gh_add_component(items: [
+  # Unit Z vector for vertical move (Vector3d type)
+  { componentType: "<unitz-guid>", x: 50, y: 100, nickName: "Up Direction" },
+  # Multiplication: Elevation (double) × Unit Z (vector) → Vector3d (scaled direction)
+  { componentType: "<multiply-guid>", x: 150, y: 100, nickName: "Move Vector" },
+  # Move: takes geometry (Curve) + direction (Vector3d)
+  { componentType: "<move-guid>", x: 270, y: 50, nickName: "Elevate Circle" },
+])
+gh_get_canvas()
+
+# Wire: Elevation slider → Multiply (A: double ✓)
+#        Unit Z → Multiply (B: vector ✓)
+#        Multiply (vector) → Move Geometry direction (vector ✓)
+#        Circle (curve) → Move Geometry (curve ✓)
+
+gh_connect_wire(items: [
+  { fromComponent: "<elev-guid>", fromPort: "<output>", toComponent: "<multiply-guid>", toPort: "<A-input>" },
+  { fromComponent: "<unitz-guid>", fromPort: "<output>", toComponent: "<multiply-guid>", toPort: "<B-input>" },
+  { fromComponent: "<multiply-guid>", fromPort: "<output-vector>", toComponent: "<move-guid>", toPort: "<direction>" },
+  { fromComponent: "<circle-guid>", fromPort: "<output-curve>", toComponent: "<move-guid>", toPort: "<geometry>" },
+])
+
+gh_get_canvas()  # verify complete left-to-right flow
+```
+
+**Layout visualization:**
+
+```
+[Radius Slider]──→[Circle]─────────────→
+                                              [Elevate Circle]
+[Elev Z Slider]→[Unit Z]→[Multiply]──→         (output)
+```
+
+### Example 2: Twisted Tower (Full Pattern)
+
+A parametric tower using stacked twisted circles lofted into volume. Demonstrates all rules together.
+
+```text
+# 1. Discover GUIDs
+gh_get_canvas()
+gh_list_components(queries: ["slider", "series", "expression",
+                              "circle", "move", "rotate", "loft",
+                              "divide curve", "graph mapper", "scale",
+                              "construct point", "unit z", "vector xyz"])
+
+# === PARAMETER BLOCK (top-left: global drivers) ===
+
+gh_add_component(items: [
+  { componentType: "<slider-guid>", x: -450, y: 200, nickName: "Base Radius" },
+  { componentType: "<slider-guid>", x: -450, y: 100, nickName: "Floors" },
+  { componentType: "<slider-guid>", x: -450, y: 0,   nickName: "Total Twist" },
+  { componentType: "<slider-guid>", x: -450, y:-100, nickName: "Floor Height" },
+])
+gh_get_canvas()
+
+gh_set_slider_value(items: [
+  { targetId: "<radius-guid>", value: 15 },
+  { targetId: "<floors-guid>", value: 30 },
+  { targetId: "<twist-guid>", value: 90 },
+  { targetId: "<height-guid>", value: 4 },
+])
+
+# === LOGIC LAYER (right of parameters) ===
+# Generate floor indices and compute per-floor Z rotation using Z for elevation
+
+gh_add_component(items: [
+  { componentType: "<series-guid>",    x: -280, y: 100, nickName: "Floor Indices" },
+  { componentType: "<expression-guid>", x: -140, y: 100, nickName: "Z Elevation" },
+  # Formula: i * h  (floor_index * floor_height) → outputs double (elevation in Z)
+  { componentType: "<expression-guid>", x: -140, y: 0,   nickName: "Per-Floor Rotation" },
+  # Formula: (i / n) * t  (normalized twist) → outputs double (angle)
+])
+gh_get_canvas()
+
+# Wire parameters to logic
+gh_connect_wire(items: [
+  # Floors (int) → Series N (int) ✓
+  { fromComponent: "<floors-guid>", fromPort: "<output>", toComponent: "<series-guid>", toPort: "<N>" },
+  # Series (int list) → Z Expr x (will be treated as double in math) ✓
+  { fromComponent: "<series-guid>", fromPort: "<range>", toComponent: "<z-expr-guid>", toPort: "<x>" },
+  # Floor Height (double) → Z Expr y ✓
+  { fromComponent: "<height-guid>", fromPort: "<output>", toComponent: "<z-expr-guid>", toPort: "<y>" },
+  # Floors (int) → Rotation Expr n (total count for normalization) ✓
+  { fromComponent: "<floors-guid>", fromPort: "<output>", toComponent: "<rot-expr-guid>", toPort: "<n>" },
+  # Series (list) → Rotation Expr i (current index) ✓
+  { fromComponent: "<series-guid>", fromPort: "<range>", toComponent: "<rot-expr-guid>", toPort: "<i>" },
+  # Total Twist (double) → Rotation Expr t ✓
+  { fromComponent: "<twist-guid>", fromPort: "<output>", toComponent: "<rot-expr-guid>", toPort: "<t>" },
+])
+
+# === GEOMETRY LAYER (right of logic) ===
+
+gh_add_component(items: [
+  { componentType: "<circle-guid>",  x: 20,  y: 50,  nickName: "Floor Circle" },
+  # Base Radius (double) → Circle Radius (double) ✓
+])
+gh_get_canvas()
+
+gh_connect_wire(items: [
+  { fromComponent: "<radius-guid>", fromPort: "<output>", toComponent: "<circle-guid>", toPort: "<radius>" },
+])
+
+# === TRANSFORM LAYER (right of geometry) ===
+# Move circles up in Z (NOT Y!), then rotate
+
+gh_add_component(items: [
+  { componentType: "<unitz-guid>",      x: 120, y: 120, nickName: "Z Direction" },
+  { componentType: "<multiply-guid>",   x: 220, y: 120, nickName: "Z Vector" },
+  # Z Elev (double) × Unit Z (vector) → Vector3d (move direction in Z axis) ✓
+  { componentType: "<move-guid>",       x: 340, y: 50,  nickName: "Stack Floors" },
+  # Geometry (Curve) + Move Vector (Vector3d) → moved Curves ✓
+  { componentType: "<rotate-guid>",     x: 460, y: 50,  nickName: "Twist Floors" },
+  # Need a Z-axis for rotation plane — circles are in XY, rotate around Z
+  { componentType: "<unitz-guid>",      x: 340, y: -20, nickName: "Rotation Axis" },
+])
+gh_get_canvas()
+
+gh_connect_wire(items: [
+  # Z Elev expression result → Multiply A (double × vector = vector) ✓
+  { fromComponent: "<z-expr-guid>",   fromPort: "<result>", toComponent: "<z-mul-guid>",   toPort: "<A>" },
+  { fromComponent: "<unitz-guid>",    fromPort: "<vector>", toComponent: "<z-mul-guid>",   toPort: "<B>" },
+  # Z Vector → Move direction (Vector3d ✓)
+  { fromComponent: "<z-mul-guid>",    fromPort: "<result>", toComponent: "<move-guid>",    toPort: "<motion>" },
+  # Circle → Move geometry (Curve ✓)
+  { fromComponent: "<circle-guid>",   fromPort: "<curve>",  toComponent: "<move-guid>",    toPort: "<geometry>" },
+  # Moved circles → Rotate geometry (Curve ✓)
+  { fromComponent: "<move-guid>",     fromPort: "<result>", toComponent: "<rotate-guid>",   toPort: "<geometry>" },
+  # Rotation angle (double) → Rotate angle ✓
+  { fromComponent: "<rot-expr-guid>", fromPort: "<result>", toComponent: "<rotate-guid>",   toPort: "<angle>" },
+  # Unit Z as rotation axis (Vector3d → plane axis) ✓
+  { fromComponent: "<unitz-guid>",    fromPort: "<vector>", toComponent: "<rotate-guid>",   toPort: "<plane>" },  # or appropriate plane port
+])
+
+# === OUTPUT LAYER (far right) ===
+
+gh_add_component(items: [
+  { componentType: "<loft-guid>", x: 580, y: 50, nickName: "Tower Volume" },
+  # Loft takes list of closed curves → Brep (surface/solid) ✓
+])
+gh_get_canvas()
+
+gh_connect_wire(items: [
+  { fromComponent: "<rotate-guid>", fromPort: "<result>", toComponent: "<loft-guid>", toPort: "<curves>" },
+])
+
+gh_get_canvas()  # final verification
+```
+
+**Complete tower wiring reference:**
+
+| From (type) | To (type) | Port Match | Notes |
+|-------------|-----------|------------|-------|
+| Floors (int) | Series N (int) | int → int | Floor count |
+| Series (int\[]) | Z Expr x (double) | list → scalar (implicit) | Index variable |
+| Floor Height (double) | Z Expr y (double) | double → double | Height multiplier |
+| Z Expr result (double) | Multiply A (double) | double → double | Elev magnitude |
+| Unit Z (Vector3d) | Multiply B (Vector3d) | vector → vector | Direction |
+| Multiply result (Vector3d) | Move motion (Vector3d) | vector → vector | Z-up movement |
+| Circle (Curve) | Move geometry (Curve) | curve → curve | Input shape |
+| Move result (Curve) | Rotate geometry (Curve) | curve → curve | Stacked shape |
+| Rotation Expr (double) | Rotate angle (double) | double → double | Per-floor angle |
+| Unit Z (Vector3d) | Rotate plane (Plane) | vector → plane | Axis of rotation |
+| Rotate result (Curve\[]) | Loft curves (Curve\[]) | curve[] → curve[] | Final volume |
+
+**Layout visualization:**
+
+```
+[Base Radius] ─┐
+[Floors] ──────┤→[Series]→[Z Elev Expr]──┐
+[Total Twist] ─┤→[Rot Expr]──────────────┤
+[Floor Ht] ────┘                        ↓
+                    [Circle] → [Move] → [Rotate] → [Loft]
+                                        ↑
+                              [Unit Z]→[Multiply]
+```
+
+### Example 3: Reciprocal Frame Pavilion
+
+Interlocking beam canopy — demonstrates radial geometry in the X-Y plane with Z extrusion.
+
+```text
+gh_list_components(queries: ["slider", "point", "polar array", "line tt", "pipe",
+                              "construct point", "unit z"])
+
+# Parameters (top-left: global drivers)
+gh_add_component(items: [
+  { componentType: "<slider-guid>", x: -300, y: 150, nickName: "Beam Count" },
+  { componentType: "<slider-guid>", x: -300, y: 50,  nickName: "Inner Radius" },
+  { componentType: "<slider-guid>", x: -300, y: -50, nickName: "Outer Radius" },
+  { componentType: "<slider-guid>", x: -300, y:-150, nickName: "Beam Height (Z)" },
+])
+gh_get_canvas()
+
+gh_set_slider_value(items: [
+  { targetId: "<count-guid>", value: 12 },
+  { targetId: "<inner-guid>", value: 8 },
+  { targetId: "<outer-guid>", value: 20 },
+  { targetId: "<height-z-guid>", value: 2 },  # Z elevation!
+])
+
+# Center point (origin, in X-Y plane at Z=0)
+gh_add_component(items: [
+  { componentType: "<point-guid>",  x: -100, y: 0,   nickName: "Center Point" },  # Point3d
+])
+gh_get_canvas()
+
+# Radial generation (right of center + params)
+gh_add_component(items: [
+  { componentType: "<polar-guid>",  x: 40,  y: 50,  nickName: "Radial Points" },
+  { componentType: "<line-guid>",   x: 180, y: 50,  nickName: "Beam Lines" },    # Curve output
+])
+gh_get_canvas()
+# Wire: Center → Polar, Count+Radii → Polar, Polar → Line
+
+# Extrusion in Z direction (right of lines)
+gh_add_component(items: [
+  { componentType: "<unitz-guid>",    x: 180, y: -30,  nickName: "Extrude Dir Z" },  # Vector3d
+  { componentType: "<extrude-guid>",  x: 300, y: 50,   nickName: "Extrude Beams" },  # Surface output
+  { componentType: "<pipe-guid>",     x: 420, y: 50,   nickName: "Pipe Beams" },     # Brep output (optional)
+])
+gh_get_canvas()
+# Wire: Lines → Extrude Geometry, Unit Z → Extrude Direction, Extrude → Pipe (if used)
+
 gh_get_canvas()  # verify
 ```
 
-### Modify existing (batch)
+### Example 4: Modify Existing Components (Batch)
+
 ```text
 gh_get_canvas()
 
@@ -100,7 +475,8 @@ gh_set_hidden(items: [{ targetId: "<panel-guid>", hidden: true }])
 gh_get_canvas()  # confirm both
 ```
 
-### Search & delete
+### Example 5: Search & Delete
+
 ```text
 gh_get_canvas()
 # scan for Panel with text "result" → instanceGuid = "xyz-789"
@@ -109,153 +485,31 @@ gh_delete_component(items: [{ targetId: "xyz-789" }])
 gh_get_canvas()
 ```
 
-### Build from scratch
-```text
-gh_get_canvas()
-gh_list_components(queries: ["circle", "slider"])
+---
 
-gh_add_component(items: [{ componentType: "<slider-guid>", x: -100, y: 0 }])
-gh_get_canvas()  # get slider's instanceGuid
+## 6. Creating Your Own Geometry Patterns
 
-gh_set_slider_value(items: [{ targetId: "<slider-guid>", value: 10 }])
+When generating geometry not covered above, follow this strategy:
 
-gh_add_component(items: [{ componentType: "<circle-guid>", x: 0, y: 0 }])
-gh_get_canvas()  # get circle's port GUIDs
-
-gh_connect_wire(items: [{
-  fromComponent: "<slider guid>", fromPort: "<output port>",
-  toComponent: "<circle guid>", toPort: "<radius input port>"
-}])
-gh_get_canvas()
-```
+1. **Identify parameters** — what should the user control? Classify each as **global driver** (top-left) or **local input** (next to its component).
+2. **Sketch the data flow left-to-right before building:**
+   ```
+   PARAMETERS → DATA GENERATION → GEOMETRY CREATION → TRANSFORM → OUTPUT
+   (left)                                                       (right)
+   ```
+3. **Verify every connection's data type** — trace each wire and confirm source output type matches target input type. Pay special attention to:
+   - Point vs Vector
+   - Curve vs Surface/Brep
+   - Domain vs Number/String vs Number
+   - Single item vs List
+4. **Use Z for elevation always** — never stack in Y.
+5. **Work in batches**: add ~10 components, `gh_get_canvas`, wire that layer, repeat.
+6. **Set descriptive `nickName`** on every component.
+7. **Group logical sections** after verification: Parameters, Logic, Geometry, Transform, Output.
 
 ---
 
-## Geometry Generation Patterns
-
-Use these recipes when the user asks to create, build, or generate geometry — architectural forms, parametric structures, towers, facades, pavilions, or showcase pieces.
-
-### Pattern: Twisted Tower
-
-A classic parametric tower using stacked twisted circles lofted into volume.
-
-```text
-# 1. Discover GUIDs
-gh_get_canvas()
-gh_list_components(queries: ["slider", "series", "expression",
-                              "circle", "move", "rotate", "loft",
-                              "divide curve", "graph mapper", "scale", "extrude"])
-
-# 2. Add input sliders (batched)
-gh_add_component(items: [
-  { componentType: "<slider-guid>", x: -400, y: 200, nickName: "Base Radius" },
-  { componentType: "<slider-guid>", x: -400, y: 100, nickName: "Floors" },
-  { componentType: "<slider-guid>", x: -400, y: 0, nickName: "Twist" },
-  { componentType: "<slider-guid>", x: -400, y: -100, nickName: "Floor Height" },
-])
-gh_get_canvas()  # get slider instanceGuids + port GUIDs
-
-# 3. Set slider values (batched)
-gh_set_slider_value(items: [
-  { targetId: "<radius-guid>", value: 15 },
-  { targetId: "<floors-guid>", value: 30 },
-  { targetId: "<twist-guid>", value: 90 },
-  { targetId: "<height-guid>", value: 4 },
-])
-
-# 4. Add generation components (batched)
-gh_add_component(items: [
-  { componentType: "<series-guid>", x: -150, y: 100, nickName: "Floor Index" },
-  { componentType: "<expression-guid>", x: -50, y: 100, nickName: "Z Position" },
-  { componentType: "<expression-guid>", x: -50, y: 0, nickName: "Rotation" },
-  { componentType: "<circle-guid>", x: 50, y: 50, nickName: "Floor Circle" },
-])
-gh_get_canvas()  # get new component GUIDs
-
-# 5. Add transform + volume (batched)
-gh_add_component(items: [
-  { componentType: "<move-guid>", x: 150, y: 100, nickName: "Move Up" },
-  { componentType: "<rotate-guid>", x: 250, y: 50, nickName: "Twist" },
-  { componentType: "<loft-guid>", x: 350, y: 50, nickName: "Tower Loft" },
-])
-gh_get_canvas()
-
-# 6. Wire everything (batched per tool)
-gh_connect_wire(items: [
-  # Floors → Series N
-  { fromComponent: "<floors>", fromPort: "<output>", toComponent: "<series>", toPort: "<N>" },
-  # Series → Z Expression (i variable)
-  { fromComponent: "<series>", fromPort: "<range>", toComponent: "<z-expr>", toPort: "<x>" },
-  # Floor Height → Z Expression (h variable)
-  { fromComponent: "<height>", fromPort: "<output>", toComponent: "<z-expr>", toPort: "<y>" },
-  # ... continue all connections
-])
-
-# 7. Verify
-gh_get_canvas()
-```
-
-**Tower wiring reference** (specific to this pattern):
-
-| From | To | Purpose |
-|------|----|---------|
-| Floors (slider) | Series N | Floor count |
-| Series Range | Expression Z (x) | Index variable |
-| Floor Height | Expression Z (y) | Height multiplier |
-| Expression Z | Move Up (vector) | Z offset |
-| Floors | Expression Rotation (n) | Total count |
-| Series Range | Expression Rotation (i) | Index |
-| Twist | Expression Rotation (t) | Total twist angle |
-| Expression Rotation | Rotate (angle) | Per-floor rotation |
-| Base Radius | Circle (radius) | Plate size |
-| Circle | Move Up (geometry) | Stack circles |
-| Moved circles | Rotate (geometry) | Twist plates |
-| Rotated circles | Loft (curves) | Tower volume |
-
-### Pattern: Reciprocal Frame Pavilion
-
-Interlocking beam canopy — simpler but visually striking.
-
-```text
-gh_list_components(queries: ["slider", "point", "polar array", "line tt", "pipe"])
-
-gh_add_component(items: [
-  { componentType: "<slider-guid>", x: -200, y: 100, nickName: "Beam Count" },
-  { componentType: "<slider-guid>", x: -200, y: 0, nickName: "Inner Radius" },
-  { componentType: "<slider-guid>", x: -200, y: -100, nickName: "Outer Radius" },
-  { componentType: "<slider-guid>", x: -200, y: -200, nickName: "Beam Height" },
-])
-gh_get_canvas()
-
-gh_set_slider_value(items: [
-  { targetId: "<count-guid>", value: 12 },
-  { targetId: "<inner-guid>", value: 8 },
-  { targetId: "<outer-guid>", value: 20 },
-  { targetId: "<height-guid>", value: 2 },
-])
-
-gh_add_component(items: [
-  { componentType: "<point-guid>", x: 0, y: 0, nickName: "Center" },
-  { componentType: "<polar-guid>", x: 150, y: 50, nickName: "Polar Array" },
-  { componentType: "<line-guid>", x: 300, y: 50, nickName: "Beams" },
-  { componentType: "<pipe-guid>", x: 450, y: 50, nickName: "Pipe Beams" },
-])
-gh_get_canvas()
-# wire: Center → Polar, Sliders → Polar params, Polar → Line → Pipe
-gh_get_canvas()  # verify
-```
-
-### Creating Your Own Geometry Patterns
-
-When generating geometry not covered above, follow this general strategy:
-
-1. **Identify parameters** — what should the user control? (sliders for count, size, height, etc.)
-2. **Lay out data flow left-to-right**: inputs (sliders/panels) → logic (series/expression/math) → geometry (primitives) → transform (move/rotate/scale) → output (loft/extrude/pipe)
-3. **Work in batches**: add ~10 components, `gh_get_canvas`, wire that layer, repeat
-4. **Use descriptive nickNames** — helps you track components in `gh_get_canvas` output
-5. **Group logical sections** with `gh_add_group` after verification (Inputs, Logic, Geometry, Output)
-
-## Troubleshooting
+## 7. Troubleshooting
 
 | Symptom | Likely Cause | Fix |
 |---------|-------------|-----|
@@ -264,3 +518,7 @@ When generating geometry not covered above, follow this general strategy:
 | Component not visible after add | Added off-canvas | Check coordinates; use `gh_move_component` to reposition |
 | Slider value rejected | Outside min/max range | Use `gh_get_canvas` to read slider's min/max first |
 | Wire connection does nothing | Wrong port direction | Ensure `fromPort` is an OUTPUT and `toPort` is an INPUT |
+| Component shows error after wire | **Data type mismatch** | Check source output type vs target input type (Section 1.4) |
+| Geometry invisible / wrong location | **Used Y instead of Z for elevation** | Check all Move/Rotate/Construct components — Z is up (Section 1.3) |
+| Only one result when expecting many | **Single item implicitly consumed** | Check if a list input is receiving a single item; verify data is actually a list |
+| Wires cross chaotically | Poor layout | Reorganize left-to-right; group related rows vertically |
