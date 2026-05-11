@@ -7,55 +7,121 @@ import {
 	resolveTypeGuid,
 } from "../services/guid-shortener.js";
 
-export const ghAddComponentTool = defineTool({
-	name: "gh_add_component",
-	label: "Add Component",
+export const ghEditComponentsTool = defineTool({
+	name: "gh_edit_components",
+	label: "Edit Components",
 	description:
-		"Add one or more new components to the Grasshopper canvas. You need the component type GUID alias from gh_list_components (or full GUID). Accepts an array of component definitions for batch processing.",
+		"Perform component operations on the Grasshopper canvas: add, delete, move, rename, set_locked, or set_hidden. Use gh_get_canvas first to get instance GUIDs for existing components. Use gh_list_components to find type GUIDs for adding new components. Accepts an array of operation items for batch processing.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Object({
-				componentType: Type.String({
-					description: "Component type GUID (e.g. from gh_list_components)",
-				}),
-				nickName: Type.Optional(
-					Type.String({ description: "Optional nickname for the component" })
+				action: Type.Union([
+					Type.Literal("add"),
+					Type.Literal("delete"),
+					Type.Literal("move"),
+					Type.Literal("rename"),
+					Type.Literal("set_locked"),
+					Type.Literal("set_hidden"),
+				]),
+				targetId: Type.Optional(
+					Type.String({ description: "Component instance GUID (from gh_get_canvas) — required for delete/move/rename/set_locked/set_hidden" })
 				),
-				x: Type.Number({ description: "X position on canvas" }),
-				y: Type.Number({ description: "Y position on canvas" }),
+				componentType: Type.Optional(
+					Type.String({ description: "Component type GUID (from gh_list_components) — required for add" })
+				),
+				x: Type.Optional(
+					Type.Number({ description: "X position on canvas — required for add/move" })
+				),
+				y: Type.Optional(
+					Type.Number({ description: "Y position on canvas — required for add/move" })
+				),
+				nickName: Type.Optional(
+					Type.String({ description: "Nickname — optional for add, required for rename" })
+				),
+				locked: Type.Optional(
+					Type.Boolean({ description: "true to lock, false to unlock — required for set_locked" })
+				),
+				hidden: Type.Optional(
+					Type.Boolean({ description: "true to hide, false to show — required for set_hidden" })
+				),
 			})
 		),
 	}),
 
-	execute: createExecute(
-		"addComponent",
-		(p) => ({ guid: resolveTypeGuid(p.componentType), position: { x: p.x, y: p.y }, nickName: p.nickName }),
-		(_p, r) => `Component added. jobId=${r.jobId}`,
-		(p) => `Adding component ${p.componentType} at (${p.x}, ${p.y})...`,
-	),
-});
+	execute: async (_toolCallId, params, _signal, onUpdate) => {
+		const progressFn = typeof onUpdate === "function"
+			? (onUpdate as (msg: { content: { type: string; text: string }[]; details: unknown }) => void)
+			: undefined;
 
-export const ghDeleteComponentTool = defineTool({
-	name: "gh_delete_component",
-	label: "Delete Component",
-	description:
-		"Delete one or more components from the Grasshopper canvas by instance GUID alias (or full GUID). Use gh_get_canvas first to get identifiers. Accepts an array of target definitions for batch processing.",
-	parameters: Type.Object({
-		items: Type.Array(
-			Type.Object({
-				targetId: Type.String({
-					description: "Component ID to delete (from gh_get_canvas)",
-				}),
-			})
-		),
-	}),
+		const results: string[] = [];
+		const jobIds: string[] = [];
 
-	execute: createExecute(
-		"deleteComponent",
-		(p) => ({ targetId: resolveInstanceGuid(p.targetId) }),
-		(_p, r) => `Component deleted. jobId=${r.jobId}`,
-		(p) => `Deleting component ${p.targetId}...`,
-	),
+		for (const item of params.items) {
+			let action: CommandAction;
+			let mappedParams: unknown;
+
+			switch (item.action) {
+				case "add": {
+					action = "addComponent";
+					mappedParams = {
+						guid: resolveTypeGuid(item.componentType!),
+						position: { x: item.x!, y: item.y! },
+						nickName: item.nickName,
+					};
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `Adding component ${item.componentType} at (${item.x}, ${item.y})...` }], details: {} });
+					break;
+				}
+				case "delete": {
+					action = "deleteComponent";
+					mappedParams = { targetId: resolveInstanceGuid(item.targetId!) };
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `Deleting component ${item.targetId}...` }], details: {} });
+					break;
+				}
+				case "move": {
+					action = "moveComponent";
+					mappedParams = { targetId: resolveInstanceGuid(item.targetId!), position: { x: item.x!, y: item.y! } };
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `Moving component ${item.targetId} to (${item.x}, ${item.y})...` }], details: {} });
+					break;
+				}
+				case "rename": {
+					action = "renameComponent";
+					mappedParams = { targetId: resolveInstanceGuid(item.targetId!), nickName: item.nickName };
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `Renaming component ${item.targetId} to "${item.nickName}"...` }], details: {} });
+					break;
+				}
+				case "set_locked": {
+					action = "setComponentLocked";
+					mappedParams = { targetId: resolveInstanceGuid(item.targetId!), locked: item.locked };
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `${item.locked ? "Locking" : "Unlocking"} component ${item.targetId}...` }], details: {} });
+					break;
+				}
+				case "set_hidden": {
+					action = "setComponentHidden";
+					mappedParams = { targetId: resolveInstanceGuid(item.targetId!), hidden: item.hidden };
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `${item.hidden ? "Hiding" : "Showing"} component ${item.targetId}...` }], details: {} });
+					break;
+				}
+				default:
+					results.push(`Unknown action: ${item.action}`);
+					continue;
+			}
+
+			const result = await submitCommand(action, mappedParams);
+			results.push(`${item.action} completed. jobId=${result.jobId}`);
+			jobIds.push(result.jobId);
+		}
+
+		return {
+			content: [{ type: "text" as const, text: results.join("\n") }],
+			details: { jobIds },
+		};
+	},
 });
 
 export const ghConnectWireTool = defineTool({
@@ -128,102 +194,7 @@ export const ghDisconnectWireTool = defineTool({
 	),
 });
 
-export const ghMoveComponentTool = defineTool({
-	name: "gh_move_component",
-	label: "Move Component",
-	description:
-		"Move one or more components to new positions on the canvas. Accepts an array of move definitions for batch processing.",
-	parameters: Type.Object({
-		items: Type.Array(
-			Type.Object({
-				targetId: Type.String({
-					description: "Component ID to move",
-				}),
-				x: Type.Number({ description: "New X position" }),
-				y: Type.Number({ description: "New Y position" }),
-			})
-		),
-	}),
 
-	execute: createExecute(
-		"moveComponent",
-		(p) => ({ targetId: resolveInstanceGuid(p.targetId), position: { x: p.x, y: p.y } }),
-		(_p, r) => `Component moved. jobId=${r.jobId}`,
-		(p) => `Moving component ${p.targetId} to (${p.x}, ${p.y})...`,
-	),
-});
-
-export const ghRenameComponentTool = defineTool({
-	name: "gh_rename_component",
-	label: "Rename Component",
-	description:
-		"Rename one or more components' nicknames on the canvas. Accepts an array of rename definitions for batch processing.",
-	parameters: Type.Object({
-		items: Type.Array(
-			Type.Object({
-				targetId: Type.String({
-					description: "Component ID to rename",
-				}),
-				nickName: Type.String({ description: "New nickname" }),
-			})
-		),
-	}),
-
-	execute: createExecute(
-		"renameComponent",
-		(p) => ({ targetId: resolveInstanceGuid(p.targetId), nickName: p.nickName }),
-		(_p, r) => `Component renamed. jobId=${r.jobId}`,
-		(p) => `Renaming component ${p.targetId} to "${p.nickName}"...`,
-	),
-});
-
-export const ghSetLockedTool = defineTool({
-	name: "gh_set_locked",
-	label: "Set Locked",
-	description:
-		"Lock or unlock one or more components on the Grasshopper canvas. Accepts an array of lock definitions for batch processing.",
-	parameters: Type.Object({
-		items: Type.Array(
-			Type.Object({
-				targetId: Type.String({
-					description: "Component ID",
-				}),
-				locked: Type.Boolean({ description: "true to lock, false to unlock" }),
-			})
-		),
-	}),
-
-	execute: createExecute(
-		"setComponentLocked",
-		(p) => ({ targetId: resolveInstanceGuid(p.targetId), locked: p.locked }),
-		(_p, r) => `Lock state set. jobId=${r.jobId}`,
-		(p) => `${p.locked ? "Locking" : "Unlocking"} component ${p.targetId}...`,
-	),
-});
-
-export const ghSetHiddenTool = defineTool({
-	name: "gh_set_hidden",
-	label: "Set Hidden",
-	description:
-		"Show or hide one or more components on the Grasshopper canvas. Accepts an array of visibility definitions for batch processing.",
-	parameters: Type.Object({
-		items: Type.Array(
-			Type.Object({
-				targetId: Type.String({
-					description: "Component ID",
-				}),
-				hidden: Type.Boolean({ description: "true to hide, false to show" }),
-			})
-		),
-	}),
-
-	execute: createExecute(
-		"setComponentHidden",
-		(p) => ({ targetId: resolveInstanceGuid(p.targetId), hidden: p.hidden }),
-		(_p, r) => `Visibility set. jobId=${r.jobId}`,
-		(p) => `${p.hidden ? "Hiding" : "Showing"} component ${p.targetId}...`,
-	),
-});
 
 export const ghEditGroupTool = defineTool({
 	name: "gh_edit_group",

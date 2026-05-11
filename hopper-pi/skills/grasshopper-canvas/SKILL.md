@@ -5,7 +5,7 @@ description: Inspect and edit Grasshopper canvas components, wires, and values v
 
 # Grasshopper Canvas Tools
 
-**14 tools** for interacting with a Grasshopper canvas via ZeroMQ. Backend (Rhino + rhino-zmq-poc plugin) must be running.
+**9 tools** for interacting with a Grasshopper canvas via ZeroMQ. Backend (Rhino + rhino-zmq-poc plugin) must be running.
 
 ---
 
@@ -133,7 +133,7 @@ These rules apply to **every canvas interaction** — from hiding a component to
 5. **Layout left-to-right** following data flow; space components ~100-150px apart horizontally, ~50-80px vertically; group related components
 
 ```
-example:   gh_delete_component(items: [{ targetId: "a" }, { targetId: "b" }, { targetId: "c" }])
+example:   gh_edit_components(items: [{ action: "delete", targetId: "a" }, { action: "delete", targetId: "b" }, { action: "delete", targetId: "c" }])
 ```
 
 ---
@@ -151,16 +151,10 @@ example:   gh_delete_component(items: [{ targetId: "a" }, { targetId: "b" }, { t
 
 | Tool | Item params | Purpose |
 |------|------------|---------|
-| `gh_add_component` | `componentType`, `x`, `y`, `nickName?` | Add component(s) |
-| `gh_delete_component` | `targetId` | Delete by ID |
+| `gh_edit_components` | `action`, `targetId?`, `componentType?`, `x?`, `y?`, `nickName?`, `locked?`, `hidden?` | Add/delete/move/rename/lock/hide component(s) — action selects operation |
 | `gh_connect_wire` | `fromComponent`, `fromPort`, `toComponent`, `toPort` | Connect ports |
 | `gh_disconnect_wire` | `fromComponent`, `fromPort`, `toComponent`, `toPort` | Disconnect |
-| `gh_move_component` | `targetId`, `x`, `y` | Reposition |
-| `gh_rename_component` | `targetId`, `nickName` | Rename |
-| `gh_set_locked` | `targetId`, `locked` | Lock/unlock |
-| `gh_set_hidden` | `targetId`, `hidden` | Show/hide |
-| `gh_add_group` | `componentIds` (comma-str), `groupName` | Group components |
-| `gh_remove_from_group` | `componentIds` (comma-str), `groupName` | Ungroup |
+| `gh_edit_group` | `operation`, `componentIds?`, `groupName?`, `color?`, `name?`, `border?` | Group operations (add/remove/delete/rename/color/style) |
 | `gh_set_slider_value` | `targetId`, `value` | Set slider |
 | `gh_set_panel_text` | `targetId`, `text` | Set panel text |
 
@@ -184,7 +178,7 @@ From `gh_get_canvas` output:
 | Operation | Field needed | Where in `gh_get_canvas` result |
 |-----------|-------------|----------------------------------|
 | delete/move/rename/lock/hide/slider/panel | `targetId` | `component.instanceGuid` |
-| add | `componentType` | `gh_list_components` → `typeGuid` |
+| add (via `gh_edit_components` action="add") | `componentType` | `gh_list_components` → `typeGuid` |
 | connect/disconnect wire | `fromComponent`, `toComponent` | `component.instanceGuid` |
 | connect/disconnect wire | `fromPort` | source `outputPort.instanceGuid` |
 | connect/disconnect wire | `toPort` | target `inputPort.instanceGuid` |
@@ -207,11 +201,11 @@ gh_list_components(queries: ["slider", "circle", "move", "construct point", "uni
 # Global/local input: radius is specific to Circle → place right next to it
 # Elevation is a positional parameter → also near the transform it drives
 
-gh_add_component(items: [
+gh_edit_components(items: [
   # Radius slider: placed left of where Circle will be (x=-150), same Y level
-  { componentType: "<slider-guid>", x: -200, y: 0, nickName: "Radius" },
+  { action: "add", componentType: "<slider-guid>", x: -200, y: 0, nickName: "Radius" },
   # Height slider: placed left of where Move will be (x=100), same Y level
-  { componentType: "<slider-guid>", x: 0, y: 100, nickName: "Elevation Z" },
+  { action: "add", componentType: "<slider-guid>", x: 0, y: 100, nickName: "Elevation Z" },
 ])
 gh_get_canvas()
 
@@ -222,9 +216,9 @@ gh_set_slider_value(items: [
 
 # --- LAYER 2: GEOMETRY (center) ---
 
-gh_add_component(items: [
+gh_edit_components(items: [
   # Circle: right of its radius slider
-  { componentType: "<circle-guid>", x: -50, y: 0, nickName: "Base Circle" },
+  { action: "add", componentType: "<circle-guid>", x: -50, y: 0, nickName: "Base Circle" },
 ])
 gh_get_canvas()
 
@@ -238,13 +232,13 @@ gh_connect_wire(items: [{
 
 # --- LAYER 3: TRANSFORM (right of geometry) ---
 
-gh_add_component(items: [
+gh_edit_components(items: [
   # Unit Z vector for vertical move (Vector3d type)
-  { componentType: "<unitz-guid>", x: 50, y: 100, nickName: "Up Direction" },
+  { action: "add", componentType: "<unitz-guid>", x: 50, y: 100, nickName: "Up Direction" },
   # Multiplication: Elevation (double) × Unit Z (vector) → Vector3d (scaled direction)
-  { componentType: "<multiply-guid>", x: 150, y: 100, nickName: "Move Vector" },
+  { action: "add", componentType: "<multiply-guid>", x: 150, y: 100, nickName: "Move Vector" },
   # Move: takes geometry (Curve) + direction (Vector3d)
-  { componentType: "<move-guid>", x: 270, y: 50, nickName: "Elevate Circle" },
+  { action: "add", componentType: "<move-guid>", x: 270, y: 50, nickName: "Elevate Circle" },
 ])
 gh_get_canvas()
 
@@ -285,11 +279,11 @@ gh_list_components(queries: ["slider", "series", "expression",
 
 # === PARAMETER BLOCK (top-left: global drivers) ===
 
-gh_add_component(items: [
-  { componentType: "<slider-guid>", x: -450, y: 200, nickName: "Base Radius" },
-  { componentType: "<slider-guid>", x: -450, y: 100, nickName: "Floors" },
-  { componentType: "<slider-guid>", x: -450, y: 0,   nickName: "Total Twist" },
-  { componentType: "<slider-guid>", x: -450, y:-100, nickName: "Floor Height" },
+gh_edit_components(items: [
+  { action: "add", componentType: "<slider-guid>", x: -450, y: 200, nickName: "Base Radius" },
+  { action: "add", componentType: "<slider-guid>", x: -450, y: 100, nickName: "Floors" },
+  { action: "add", componentType: "<slider-guid>", x: -450, y: 0,   nickName: "Total Twist" },
+  { action: "add", componentType: "<slider-guid>", x: -450, y:-100, nickName: "Floor Height" },
 ])
 gh_get_canvas()
 
@@ -303,11 +297,11 @@ gh_set_slider_value(items: [
 # === LOGIC LAYER (right of parameters) ===
 # Generate floor indices and compute per-floor Z rotation using Z for elevation
 
-gh_add_component(items: [
-  { componentType: "<series-guid>",    x: -280, y: 100, nickName: "Floor Indices" },
-  { componentType: "<expression-guid>", x: -140, y: 100, nickName: "Z Elevation" },
+gh_edit_components(items: [
+  { action: "add", componentType: "<series-guid>",    x: -280, y: 100, nickName: "Floor Indices" },
+  { action: "add", componentType: "<expression-guid>", x: -140, y: 100, nickName: "Z Elevation" },
   # Formula: i * h  (floor_index * floor_height) → outputs double (elevation in Z)
-  { componentType: "<expression-guid>", x: -140, y: 0,   nickName: "Per-Floor Rotation" },
+  { action: "add", componentType: "<expression-guid>", x: -140, y: 0,   nickName: "Per-Floor Rotation" },
   # Formula: (i / n) * t  (normalized twist) → outputs double (angle)
 ])
 gh_get_canvas()
@@ -330,8 +324,8 @@ gh_connect_wire(items: [
 
 # === GEOMETRY LAYER (right of logic) ===
 
-gh_add_component(items: [
-  { componentType: "<circle-guid>",  x: 20,  y: 50,  nickName: "Floor Circle" },
+gh_edit_components(items: [
+  { action: "add", componentType: "<circle-guid>",  x: 20,  y: 50,  nickName: "Floor Circle" },
   # Base Radius (double) → Circle Radius (double) ✓
 ])
 gh_get_canvas()
@@ -343,15 +337,15 @@ gh_connect_wire(items: [
 # === TRANSFORM LAYER (right of geometry) ===
 # Move circles up in Z (NOT Y!), then rotate
 
-gh_add_component(items: [
-  { componentType: "<unitz-guid>",      x: 120, y: 120, nickName: "Z Direction" },
-  { componentType: "<multiply-guid>",   x: 220, y: 120, nickName: "Z Vector" },
+gh_edit_components(items: [
+  { action: "add", componentType: "<unitz-guid>",      x: 120, y: 120, nickName: "Z Direction" },
+  { action: "add", componentType: "<multiply-guid>",   x: 220, y: 120, nickName: "Z Vector" },
   # Z Elev (double) × Unit Z (vector) → Vector3d (move direction in Z axis) ✓
-  { componentType: "<move-guid>",       x: 340, y: 50,  nickName: "Stack Floors" },
+  { action: "add", componentType: "<move-guid>",       x: 340, y: 50,  nickName: "Stack Floors" },
   # Geometry (Curve) + Move Vector (Vector3d) → moved Curves ✓
-  { componentType: "<rotate-guid>",     x: 460, y: 50,  nickName: "Twist Floors" },
+  { action: "add", componentType: "<rotate-guid>",     x: 460, y: 50,  nickName: "Twist Floors" },
   # Need a Z-axis for rotation plane — circles are in XY, rotate around Z
-  { componentType: "<unitz-guid>",      x: 340, y: -20, nickName: "Rotation Axis" },
+  { action: "add", componentType: "<unitz-guid>",      x: 340, y: -20, nickName: "Rotation Axis" },
 ])
 gh_get_canvas()
 
@@ -373,8 +367,8 @@ gh_connect_wire(items: [
 
 # === OUTPUT LAYER (far right) ===
 
-gh_add_component(items: [
-  { componentType: "<loft-guid>", x: 580, y: 50, nickName: "Tower Volume" },
+gh_edit_components(items: [
+  { action: "add", componentType: "<loft-guid>", x: 580, y: 50, nickName: "Tower Volume" },
   # Loft takes list of closed curves → Brep (surface/solid) ✓
 ])
 gh_get_canvas()
@@ -423,11 +417,11 @@ gh_list_components(queries: ["slider", "point", "polar array", "line tt", "pipe"
                               "construct point", "unit z"])
 
 # Parameters (top-left: global drivers)
-gh_add_component(items: [
-  { componentType: "<slider-guid>", x: -300, y: 150, nickName: "Beam Count" },
-  { componentType: "<slider-guid>", x: -300, y: 50,  nickName: "Inner Radius" },
-  { componentType: "<slider-guid>", x: -300, y: -50, nickName: "Outer Radius" },
-  { componentType: "<slider-guid>", x: -300, y:-150, nickName: "Beam Height (Z)" },
+gh_edit_components(items: [
+  { action: "add", componentType: "<slider-guid>", x: -300, y: 150, nickName: "Beam Count" },
+  { action: "add", componentType: "<slider-guid>", x: -300, y: 50,  nickName: "Inner Radius" },
+  { action: "add", componentType: "<slider-guid>", x: -300, y: -50, nickName: "Outer Radius" },
+  { action: "add", componentType: "<slider-guid>", x: -300, y:-150, nickName: "Beam Height (Z)" },
 ])
 gh_get_canvas()
 
@@ -439,24 +433,24 @@ gh_set_slider_value(items: [
 ])
 
 # Center point (origin, in X-Y plane at Z=0)
-gh_add_component(items: [
-  { componentType: "<point-guid>",  x: -100, y: 0,   nickName: "Center Point" },  # Point3d
+gh_edit_components(items: [
+  { action: "add", componentType: "<point-guid>",  x: -100, y: 0,   nickName: "Center Point" },  # Point3d
 ])
 gh_get_canvas()
 
 # Radial generation (right of center + params)
-gh_add_component(items: [
-  { componentType: "<polar-guid>",  x: 40,  y: 50,  nickName: "Radial Points" },
-  { componentType: "<line-guid>",   x: 180, y: 50,  nickName: "Beam Lines" },    # Curve output
+gh_edit_components(items: [
+  { action: "add", componentType: "<polar-guid>",  x: 40,  y: 50,  nickName: "Radial Points" },
+  { action: "add", componentType: "<line-guid>",   x: 180, y: 50,  nickName: "Beam Lines" },    # Curve output
 ])
 gh_get_canvas()
 # Wire: Center → Polar, Count+Radii → Polar, Polar → Line
 
 # Extrusion in Z direction (right of lines)
-gh_add_component(items: [
-  { componentType: "<unitz-guid>",    x: 180, y: -30,  nickName: "Extrude Dir Z" },  # Vector3d
-  { componentType: "<extrude-guid>",  x: 300, y: 50,   nickName: "Extrude Beams" },  # Surface output
-  { componentType: "<pipe-guid>",     x: 420, y: 50,   nickName: "Pipe Beams" },     # Brep output (optional)
+gh_edit_components(items: [
+  { action: "add", componentType: "<unitz-guid>",    x: 180, y: -30,  nickName: "Extrude Dir Z" },  # Vector3d
+  { action: "add", componentType: "<extrude-guid>",  x: 300, y: 50,   nickName: "Extrude Beams" },  # Surface output
+  { action: "add", componentType: "<pipe-guid>",     x: 420, y: 50,   nickName: "Pipe Beams" },     # Brep output (optional)
 ])
 gh_get_canvas()
 # Wire: Lines → Extrude Geometry, Unit Z → Extrude Direction, Extrude → Pipe (if used)
@@ -470,7 +464,7 @@ gh_get_canvas()  # verify
 gh_get_canvas()
 
 gh_set_slider_value(items: [{ targetId: "<slider-guid>", value: 25 }])
-gh_set_hidden(items: [{ targetId: "<panel-guid>", hidden: true }])
+gh_edit_components(items: [{ action: "set_hidden", targetId: "<panel-guid>", hidden: true }])
 
 gh_get_canvas()  # confirm both
 ```
@@ -481,7 +475,7 @@ gh_get_canvas()  # confirm both
 gh_get_canvas()
 # scan for Panel with text "result" → instanceGuid = "xyz-789"
 
-gh_delete_component(items: [{ targetId: "xyz-789" }])
+gh_edit_components(items: [{ action: "delete", targetId: "xyz-789" }])
 gh_get_canvas()
 ```
 
@@ -515,7 +509,7 @@ When generating geometry not covered above, follow this strategy:
 |---------|-------------|-----|
 | Tool hangs / no response | Backend not running | Verify Rhino + rhino-zmq-poc plugin is open |
 | `gh_connect_wire` fails | Stale GUIDs | Re-run `gh_get_canvas` to get fresh GUIDs |
-| Component not visible after add | Added off-canvas | Check coordinates; use `gh_move_component` to reposition |
+| Component not visible after add | Added off-canvas | Check coordinates; use `gh_edit_components` with action="move" to reposition |
 | Slider value rejected | Outside min/max range | Use `gh_get_canvas` to read slider's min/max first |
 | Wire connection does nothing | Wrong port direction | Ensure `fromPort` is an OUTPUT and `toPort` is an INPUT |
 | Component shows error after wire | **Data type mismatch** | Check source output type vs target input type (Section 1.4) |
