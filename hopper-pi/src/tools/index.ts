@@ -12,8 +12,7 @@ import {
 	ghRenameComponentTool,
 	ghSetLockedTool,
 	ghSetHiddenTool,
-	ghAddGroupTool,
-	ghRemoveFromGroupTool,
+	ghEditGroupTool,
 	ghSetSliderValueTool,
 	ghSetPanelTextTool,
 } from "./edit-tools.js";
@@ -32,8 +31,7 @@ export const ALL_TOOLS = [
 	ghRenameComponentTool,
 	ghSetLockedTool,
 	ghSetHiddenTool,
-	ghAddGroupTool,
-	ghRemoveFromGroupTool,
+	ghEditGroupTool,
 	ghSetSliderValueTool,
 	ghSetPanelTextTool,
 ] as const;
@@ -50,8 +48,7 @@ export {
 	ghRenameComponentTool,
 	ghSetLockedTool,
 	ghSetHiddenTool,
-	ghAddGroupTool,
-	ghRemoveFromGroupTool,
+	ghEditGroupTool,
 	ghSetSliderValueTool,
 	ghSetPanelTextTool,
 };

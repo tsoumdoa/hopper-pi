@@ -1,6 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { createExecute } from "./edit-handlers.js";
+import { createExecute, submitCommand } from "./edit-handlers.js";
+import type { CommandAction } from "../types/commands.js";
 import {
 	resolveInstanceGuid,
 	resolveTypeGuid,
@@ -224,70 +225,140 @@ export const ghSetHiddenTool = defineTool({
 	),
 });
 
-export const ghAddGroupTool = defineTool({
-	name: "gh_add_group",
-	label: "Add Group",
+export const ghEditGroupTool = defineTool({
+	name: "gh_edit_group",
+	label: "Edit Group",
 	description:
-		"Group multiple sets of components together under group names in Grasshopper. Accepts an array of group definitions for batch processing.",
+		"Perform group operations on Grasshopper canvas: add, remove from, delete, change color, rename, or change style (color/name/border). Accepts an array of operation items for batch processing. The 'border' field (Box/Blob/Rectangles) only applies to 'add' and 'changeStyle' operations.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Object({
-				componentIds: Type.String({
-					description: "Comma-separated list of component IDs to group",
-				}),
-				groupName: Type.String({ description: "Name for the group" }),
+				operation: Type.Union([
+					Type.Literal("add"),
+					Type.Literal("remove"),
+					Type.Literal("delete"),
+					Type.Literal("changeColor"),
+					Type.Literal("rename"),
+					Type.Literal("changeStyle"),
+				]),
+				componentIds: Type.Optional(
+					Type.String({ description: "Comma-separated component IDs (for add/remove)" })
+				),
+				groupName: Type.Optional(
+					Type.String({ description: "Name of the target group" })
+				),
+				color: Type.Optional(
+					Type.String({ description: "Group color as rgba string (default rgba(255,255,255,150)) - alpha should always be 150 unless instructed otherwise. Used by add, changeColor, changeStyle" })
+				),
+				name: Type.Optional(
+					Type.String({ description: "Name for the group (for add/rename) or new title (for changeStyle)" })
+				),
+				border: Type.Optional(
+					Type.Union([
+						Type.Literal("Box"),
+						Type.Literal("Blob"),
+						Type.Literal("Rectangles"),
+					])
+				),
 			})
 		),
 	}),
 
-	execute: createExecute(
-		"addGroup",
-		(p) => ({
-			componentIds: p.componentIds
-				.split(",")
-				.map((s) => s.trim())
-				.map((s) => resolveInstanceGuid(s)),
-			groupName: p.groupName,
-		}),
-		(_p, r) => `Group created. jobId=${r.jobId}`,
-		(p) => {
-			const ids = p.componentIds.split(",").map((s) => s.trim());
-			return `Grouping [${ids.join(", ")}] as "${p.groupName}"...`;
-		},
-	),
-});
+	execute: async (_toolCallId, params, _signal, onUpdate) => {
+		const progressFn = typeof onUpdate === "function"
+			? (onUpdate as (msg: { content: { type: string; text: string }[]; details: unknown }) => void)
+			: undefined;
 
-export const ghRemoveFromGroupTool = defineTool({
-	name: "gh_remove_from_group",
-	label: "Remove From Group",
-	description:
-		"Remove components from groups in Grasshopper. Accepts an array of remove-from-group definitions for batch processing.",
-	parameters: Type.Object({
-		items: Type.Array(
-			Type.Object({
-				componentIds: Type.String({
-					description: "Comma-separated list of component IDs to remove from group",
-				}),
-				groupName: Type.String({ description: "Name of the group to remove from" }),
-			})
-		),
-	}),
+		const results: string[] = [];
+		const jobIds: string[] = [];
 
-	execute: createExecute(
-		"removeFromGroup",
-		(p) => ({
-			componentIds: p.componentIds
-				.split(",")
-				.map((s) => s.trim())
-				.map((s) => resolveInstanceGuid(s)),
-			groupName: p.groupName,
-		}),
-		(_p, r) => `Removed from group. jobId=${r.jobId}`,
-		(p) => {
-			const ids = p.componentIds.split(",").map((s) => s.trim());
-			return `Removing [${ids.join(", ")}] from group "${p.groupName}"...`;
-		},
-	),
+		for (const item of params.items) {
+			let action: CommandAction;
+			let mappedParams: unknown;
+
+			switch (item.operation) {
+				case "add": {
+					action = "addGroup";
+					mappedParams = {
+						componentIds: item.componentIds
+							?.split(",")
+							?.map((s) => s.trim())
+							?.map((s) => resolveInstanceGuid(s)),
+						groupName: item.groupName,
+						color: item.color ?? "rgba(255,255,255,150)",
+						border: item.border,
+					};
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `Adding group "${item.groupName}"...` }], details: {} });
+					break;
+				}
+				case "remove": {
+					action = "removeFromGroup";
+					mappedParams = {
+						componentIds: item.componentIds
+							?.split(",")
+							?.map((s) => s.trim())
+							?.map((s) => resolveInstanceGuid(s)),
+						groupName: item.groupName,
+					};
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `Removing from group "${item.groupName}"...` }], details: {} });
+					break;
+				}
+				case "delete": {
+					action = "deleteGroup";
+					mappedParams = { groupName: item.groupName };
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `Deleting group "${item.groupName}"...` }], details: {} });
+					break;
+				}
+				case "changeColor": {
+					action = "changeGroupColor";
+					mappedParams = {
+						groupName: item.groupName,
+						color: item.color ?? "rgba(255,255,255,150)",
+					};
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `Changing color of group "${item.groupName}"...` }], details: {} });
+					break;
+				}
+				case "rename": {
+					action = "renameGroup";
+					mappedParams = {
+						groupName: item.groupName,
+						name: item.name,
+					};
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `Renaming group "${item.groupName}" to "${item.name}"...` }], details: {} });
+					break;
+				}
+				case "changeStyle": {
+					action = "changeGroupStyle";
+					mappedParams = {
+						groupName: item.groupName,
+						color: item.color,
+						name: item.name,
+						border: item.border,
+					};
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `Changing style of group "${item.groupName}"...` }], details: {} });
+					break;
+				}
+				default:
+					results.push(`Unknown operation: ${item.operation}`);
+					continue;
+			}
+
+			const result = await submitCommand(action, mappedParams);
+			results.push(`${item.operation} on "${item.groupName}". jobId=${result.jobId}`);
+			jobIds.push(result.jobId);
+		}
+
+		return {
+			content: [{ type: "text" as const, text: results.join("\n") }],
+			details: { jobIds },
+		};
+	},
 });
 
 export const ghSetSliderValueTool = defineTool({

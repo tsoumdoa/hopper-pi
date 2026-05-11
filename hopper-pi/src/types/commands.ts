@@ -65,11 +65,34 @@ export type SetComponentHiddenParams = {
 export type AddGroupParams = {
 	componentIds: string[];
 	groupName: string;
+	color?: string;
+	border?: "Box" | "Blob" | "Rectangles";
 };
 
 export type RemoveFromGroupParams = {
 	componentIds: string[];
 	groupName: string;
+};
+
+export type DeleteGroupParams = {
+	groupName: string;
+};
+
+export type ChangeGroupColorParams = {
+	groupName: string;
+	color?: string;
+};
+
+export type RenameGroupParams = {
+	groupName: string;
+	name: string;
+};
+
+export type ChangeGroupStyleParams = {
+	groupName: string;
+	color?: string;
+	name?: string;
+	border?: "Box" | "Blob" | "Rectangles";
 };
 
 export type SetSliderValueParams = {
@@ -93,6 +116,10 @@ export type CommandAction =
 	| "setComponentHidden"
 	| "addGroup"
 	| "removeFromGroup"
+	| "deleteGroup"
+	| "changeGroupColor"
+	| "renameGroup"
+	| "changeGroupStyle"
 	| "setSliderValue"
 	| "setPanelText";
 
@@ -107,6 +134,10 @@ export type CommandParams =
 	| SetComponentHiddenParams
 	| AddGroupParams
 	| RemoveFromGroupParams
+	| DeleteGroupParams
+	| ChangeGroupColorParams
+	| RenameGroupParams
+	| ChangeGroupStyleParams
 	| SetSliderValueParams
 	| SetPanelTextParams;
 

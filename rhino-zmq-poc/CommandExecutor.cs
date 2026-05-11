@@ -32,6 +32,10 @@ namespace rhino_zmq_poc
                 "setComponentHidden" => ExecuteSetComponentHidden(doc, command.Params),
                 "addGroup" => ExecuteAddGroup(doc, command.Params),
                 "removeFromGroup" => ExecuteRemoveFromGroup(doc, command.Params),
+                "deleteGroup" => ExecuteDeleteGroup(doc, command.Params),
+                "changeGroupColor" => ExecuteChangeGroupColor(doc, command.Params),
+                "renameGroup" => ExecuteRenameGroup(doc, command.Params),
+                "changeGroupStyle" => ExecuteChangeGroupStyle(doc, command.Params),
                 "setSliderValue" => ExecuteSetSliderValue(doc, command.Params),
                 "setPanelText" => ExecuteSetPanelText(doc, command.Params),
                 _ => $"Unknown action: {command.Action}"
@@ -109,6 +113,34 @@ namespace rhino_zmq_poc
             var param = p.Deserialize<RemoveFromGroupParams>();
             if (param == null) return "removeFromGroup: invalid params";
             return GroupOperations.RemoveFromGroup(doc, param);
+        }
+
+        private string ExecuteDeleteGroup(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<DeleteGroupParams>();
+            if (param == null) return "deleteGroup: invalid params";
+            return GroupOperations.DeleteGroup(doc, param);
+        }
+
+        private string ExecuteChangeGroupColor(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<ChangeGroupColorParams>();
+            if (param == null) return "changeGroupColor: invalid params";
+            return GroupOperations.ChangeGroupColor(doc, param);
+        }
+
+        private string ExecuteRenameGroup(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<RenameGroupParams>();
+            if (param == null) return "renameGroup: invalid params";
+            return GroupOperations.RenameGroup(doc, param);
+        }
+
+        private string ExecuteChangeGroupStyle(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<ChangeGroupStyleParams>();
+            if (param == null) return "changeGroupStyle: invalid params";
+            return GroupOperations.ChangeGroupStyle(doc, param);
         }
 
         private string ExecuteSetSliderValue(GH_Document doc, JsonElement p)

@@ -90,6 +90,12 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("groupName")]
         public string GroupName { get; set; }
+
+        [JsonPropertyName("color")]
+        public string Color { get; set; } = "rgba(255,255,255,150)";
+
+        [JsonPropertyName("border")]
+        public string Border { get; set; }
     }
 
     public class RemoveFromGroupParams
@@ -99,6 +105,45 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("groupName")]
         public string GroupName { get; set; }
+    }
+
+    public class DeleteGroupParams
+    {
+        [JsonPropertyName("groupName")]
+        public string GroupName { get; set; }
+    }
+
+    public class ChangeGroupColorParams
+    {
+        [JsonPropertyName("groupName")]
+        public string GroupName { get; set; }
+
+        [JsonPropertyName("color")]
+        public string Color { get; set; } = "rgba(255,255,255,150)";
+    }
+
+    public class RenameGroupParams
+    {
+        [JsonPropertyName("groupName")]
+        public string GroupName { get; set; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; }
+    }
+
+    public class ChangeGroupStyleParams
+    {
+        [JsonPropertyName("groupName")]
+        public string GroupName { get; set; }
+
+        [JsonPropertyName("color")]
+        public string Color { get; set; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; }
+
+        [JsonPropertyName("border")]
+        public string Border { get; set; }
     }
 
     public class SetSliderValueParams
