@@ -4,7 +4,6 @@ import { withRequester } from "../infra/request-helpers.js";
 import type { GetCurrentCanvasResponse } from "../types/messages.js";
 import {
 	fetchCurrentCanvas,
-	fetchAllComponents,
 	formatCanvasResponse,
 	formatComponentsMultiQuery,
 	getCachedOrFetchComponents,
@@ -35,12 +34,12 @@ export const ghListComponentsTool = defineTool({
 		"Pass `onlyName: false` to also retrieve description, category, and subcategory. " +
 		"Pass an array of search strings to batch multiple lookups in one call.",
 	parameters: Type.Object({
-		queries: Type.Optional(
+		queries:
 			Type.Array(Type.String({
 				description:
 					"Search query — filters component names, categories, or descriptions (case-insensitive partial match). Pass multiple to batch.",
 			}))
-		),
+		,
 		onlyName: Type.Optional(Type.Boolean({
 			description:
 				"When true (default), returns only name and typeGuid per component. Set false to include description, category, and subcategory.",
