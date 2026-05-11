@@ -7,7 +7,7 @@ import {
 	ghEditComponentsTool,
 	ghEditWireTool,
 	ghEditGroupTool,
-	ghSetSliderValueTool,
+	ghEditSliderTool,
 	ghSetPanelTextTool,
 } from "./edit-tools.js";
 
@@ -20,7 +20,7 @@ export const ALL_TOOLS = [
 	ghEditComponentsTool,
 	ghEditWireTool,
 	ghEditGroupTool,
-	ghSetSliderValueTool,
+	ghEditSliderTool,
 	ghSetPanelTextTool,
 ] as const;
 
@@ -31,6 +31,6 @@ export {
 	ghEditComponentsTool,
 	ghEditWireTool,
 	ghEditGroupTool,
-	ghSetSliderValueTool,
+	ghEditSliderTool,
 	ghSetPanelTextTool,
 };

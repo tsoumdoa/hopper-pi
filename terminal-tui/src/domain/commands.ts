@@ -98,15 +98,42 @@ export const ACTION_REGISTRY: readonly ActionDef[] = [
 	},
 	{
 		id: 11,
+		action: "createSlider",
+		label: "create-slider",
+		params: [
+			{ name: "x", cliFlag: "--x <number>", cliDescription: "X position on canvas", prompt: "  x position: ", parse: (v) => Number(v) },
+			{ name: "y", cliFlag: "--y <number>", cliDescription: "Y position on canvas", prompt: "  y position: ", parse: (v) => Number(v) },
+			{ name: "nickName", cliFlag: "--nickName <name>", cliDescription: "Slider nickname (optional)", prompt: "  nickname: " },
+			{ name: "min", cliFlag: "--min <number>", cliDescription: "Minimum value", prompt: "  min: ", parse: (v) => Number(v) },
+			{ name: "max", cliFlag: "--max <number>", cliDescription: "Maximum value", prompt: "  max: ", parse: (v) => Number(v) },
+			{ name: "value", cliFlag: "--value <number>", cliDescription: "Initial value", prompt: "  value: ", parse: (v) => Number(v) },
+			{ name: "digits", cliFlag: "--digits <int>", cliDescription: "Decimal digits", prompt: "  digits: ", parse: (v) => Number(v) },
+			{ name: "interval", cliFlag: "--interval <number>", cliDescription: "Step interval", prompt: "  interval: ", parse: (v) => Number(v) },
+		],
+	},
+	{
+		id: 12,
+		action: "editSliderRange",
+		label: "edit-range",
+		params: [
+			{ name: "targetId", cliFlag: "--targetId <id>", cliDescription: "Target component ID", prompt: "  target id: " },
+			{ name: "min", cliFlag: "--min <number>", cliDescription: "Minimum value", prompt: "  min: ", parse: (v) => Number(v) },
+			{ name: "max", cliFlag: "--max <number>", cliDescription: "Maximum value", prompt: "  max: ", parse: (v) => Number(v) },
+			{ name: "digits", cliFlag: "--digits <int>", cliDescription: "Decimal digits", prompt: "  digits: ", parse: (v) => Number(v) },
+			{ name: "interval", cliFlag: "--interval <number>", cliDescription: "Step interval", prompt: "  interval: ", parse: (v) => Number(v) },
+		],
+	},
+	{
+		id: 13,
 		action: "setSliderValue",
-		label: "set-slider",
+		label: "set-value",
 		params: [
 			{ name: "targetId", cliFlag: "--targetId <id>", cliDescription: "Target component ID", prompt: "  target id: " },
 			{ name: "value", cliFlag: "--value <number>", cliDescription: "Slider value", prompt: "  value: ", parse: (v) => Number(v) },
 		],
 	},
 	{
-		id: 12,
+		id: 14,
 		action: "setPanelText",
 		label: "set-panel",
 		params: [

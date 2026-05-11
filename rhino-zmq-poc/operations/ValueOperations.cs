@@ -1,11 +1,67 @@
 using System;
+using System.Drawing;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Special;
+
 
 namespace rhino_zmq_poc
 {
     public static class ValueOperations
     {
+        public static string CreateSlider(GH_Document doc, CreateSliderParams param)
+        {
+            if (doc == null)
+                return "createSlider error: document is null";
+
+            try
+            {
+                var slider = new GH_NumberSlider();
+                slider.CreateAttributes();
+                slider.Attributes.Pivot = new PointF((float)param.Position.X, (float)param.Position.Y);
+
+                slider.Slider.Minimum = (decimal)param.Min;
+                slider.Slider.Maximum = (decimal)param.Max;
+                slider.SetSliderValue((decimal)param.Value);
+                slider.Slider.DecimalPlaces = param.Digits;
+                slider.NickName = param.NickName ?? "Number Slider";
+
+                doc.AddObject(slider, false);
+
+                return $"createSlider: created ({slider.InstanceGuid}) at ({param.Position.X}, {param.Position.Y})";
+            }
+            catch (Exception ex)
+            {
+                return $"createSlider CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+            }
+        }
+
+        public static string EditSliderRange(GH_Document doc, EditSliderRangeParams param)
+        {
+            if (doc == null)
+                return "editSliderRange error: document is null";
+
+            if (!Guid.TryParse(param.TargetId, out var targetGuid))
+                return $"editSliderRange error: invalid targetId '{param.TargetId}'";
+
+            IGH_DocumentObject obj = doc.FindObject(targetGuid, false);
+            if (obj == null)
+                return $"editSliderRange error: object not found '{param.TargetId}'";
+
+            if (obj is GH_NumberSlider slider)
+            {
+                slider.Slider.Minimum = (decimal)param.Min;
+                slider.Slider.Maximum = (decimal)param.Max;
+                slider.Slider.DecimalPlaces = param.Digits;
+                slider.Attributes?.ExpireLayout();
+                slider.OnDisplayExpired(true);
+                slider.ExpireSolution(true);
+
+                return $"editSliderRange: updated ({param.TargetId}) min={param.Min} max={param.Max} digits={param.Digits}";
+            }
+
+            return $"editSliderRange error: object '{param.TargetId}' is not a Number Slider";
+        }
+
         public static string SetSliderValue(GH_Document doc, SetSliderValueParams param)
         {
             if (doc == null)

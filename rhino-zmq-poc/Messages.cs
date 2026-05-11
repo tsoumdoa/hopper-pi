@@ -155,6 +155,48 @@ namespace rhino_zmq_poc
         public double Value { get; set; }
     }
 
+    public class CreateSliderParams
+    {
+        [JsonPropertyName("position")]
+        public Position Position { get; set; }
+
+        [JsonPropertyName("nickName")]
+        public string NickName { get; set; }
+
+        [JsonPropertyName("min")]
+        public double Min { get; set; }
+
+        [JsonPropertyName("max")]
+        public double Max { get; set; }
+
+        [JsonPropertyName("value")]
+        public double Value { get; set; }
+
+        [JsonPropertyName("digits")]
+        public int Digits { get; set; }
+
+        [JsonPropertyName("interval")]
+        public double Interval { get; set; }
+    }
+
+    public class EditSliderRangeParams
+    {
+        [JsonPropertyName("targetId")]
+        public string TargetId { get; set; }
+
+        [JsonPropertyName("min")]
+        public double Min { get; set; }
+
+        [JsonPropertyName("max")]
+        public double Max { get; set; }
+
+        [JsonPropertyName("digits")]
+        public int Digits { get; set; }
+
+        [JsonPropertyName("interval")]
+        public double Interval { get; set; }
+    }
+
     public class SetPanelTextParams
     {
         [JsonPropertyName("targetId")]

@@ -36,6 +36,8 @@ namespace rhino_zmq_poc
                 "changeGroupColor" => ExecuteChangeGroupColor(doc, command.Params),
                 "renameGroup" => ExecuteRenameGroup(doc, command.Params),
                 "changeGroupStyle" => ExecuteChangeGroupStyle(doc, command.Params),
+                "createSlider" => ExecuteCreateSlider(doc, command.Params),
+                "editSliderRange" => ExecuteEditSliderRange(doc, command.Params),
                 "setSliderValue" => ExecuteSetSliderValue(doc, command.Params),
                 "setPanelText" => ExecuteSetPanelText(doc, command.Params),
                 _ => $"Unknown action: {command.Action}"
@@ -141,6 +143,20 @@ namespace rhino_zmq_poc
             var param = p.Deserialize<ChangeGroupStyleParams>();
             if (param == null) return "changeGroupStyle: invalid params";
             return GroupOperations.ChangeGroupStyle(doc, param);
+        }
+
+        private string ExecuteCreateSlider(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<CreateSliderParams>();
+            if (param == null) return "createSlider: invalid params";
+            return ValueOperations.CreateSlider(doc, param);
+        }
+
+        private string ExecuteEditSliderRange(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<EditSliderRangeParams>();
+            if (param == null) return "editSliderRange: invalid params";
+            return ValueOperations.EditSliderRange(doc, param);
         }
 
         private string ExecuteSetSliderValue(GH_Document doc, JsonElement p)

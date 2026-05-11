@@ -154,7 +154,7 @@ example:   gh_edit_components(items: [{ action: "delete", targetId: "a" }, { act
 | `gh_edit_components` | `action`, `targetId?`, `componentType?`, `x?`, `y?`, `nickName?`, `locked?`, `hidden?` | Add/delete/move/rename/lock/hide component(s) — action selects operation |
 | `gh_edit_wire` | `action` ("connect"/"disconnect"), `fromComponent`, `fromPort`, `toComponent`, `toPort` | Connect or disconnect wires between ports |
 | `gh_edit_group` | `operation`, `componentIds?`, `groupName?`, `color?`, `name?`, `border?` | Group operations (add/remove/delete/rename/color/style) |
-| `gh_set_slider_value` | `targetId`, `value` | Set slider |
+| `gh_edit_slider` | `action`, `targetId?`, `x?`, `y?`, `nickName?`, `min?`, `max?`, `value?`, `digits?`, `interval?` | Create/edit/set slider — action selects operation |
 | `gh_set_panel_text` | `targetId`, `text` | Set panel text |
 
 ---
@@ -194,24 +194,20 @@ Demonstrates left-to-right flow, input placement next to consumer, and correct d
 # Goal: A circle at origin, radius controlled by slider, elevated in Z
 
 gh_get_canvas()
-gh_list_components(queries: ["slider", "circle", "move", "construct point", "unit z"])
+gh_list_components(queries: ["circle", "move", "construct point", "unit z"])
 
 # --- LAYER 1: INPUTS (left side) ---
 # Global/local input: radius is specific to Circle → place right next to it
 # Elevation is a positional parameter → also near the transform it drives
+# Use createSlider to create AND configure in one call (no need for addComponent + separate setValue)
 
-gh_edit_components(items: [
-  # Radius slider: placed left of where Circle will be (x=-150), same Y level
-  { action: "add", componentType: "<slider-guid>", x: -200, y: 0, nickName: "Radius" },
+gh_edit_slider(items: [
+  # Radius slider: placed left of where Circle will be (x=-200), same Y level
+  { action: "createSlider", x: -200, y: 0, nickName: "Radius", min: 0, max: 50, value: 10, digits: 2, interval: 0.5 },
   # Height slider: placed left of where Move will be (x=100), same Y level
-  { action: "add", componentType: "<slider-guid>", x: 0, y: 100, nickName: "Elevation Z" },
+  { action: "createSlider", x: 0, y: 100, nickName: "Elevation Z", min: 0, max: 100, value: 20, digits: 1, interval: 1 },
 ])
 gh_get_canvas()
-
-gh_set_slider_value(items: [
-  { targetId: "<radius-guid>", value: 10 },
-  { targetId: "<elev-guid>", value: 20 },
-])
 
 # --- LAYER 2: GEOMETRY (center) ---
 
@@ -272,27 +268,21 @@ A parametric tower using stacked twisted circles lofted into volume. Demonstrate
 ```text
 # 1. Discover GUIDs
 gh_get_canvas()
-gh_list_components(queries: ["slider", "series", "expression",
+gh_list_components(queries: ["series", "expression",
                               "circle", "move", "rotate", "loft",
                               "divide curve", "graph mapper", "scale",
                               "construct point", "unit z", "vector xyz"])
 
 # === PARAMETER BLOCK (top-left: global drivers) ===
+# Use createSlider to create AND configure in one call
 
-gh_edit_components(items: [
-  { action: "add", componentType: "<slider-guid>", x: -450, y: 200, nickName: "Base Radius" },
-  { action: "add", componentType: "<slider-guid>", x: -450, y: 100, nickName: "Floors" },
-  { action: "add", componentType: "<slider-guid>", x: -450, y: 0,   nickName: "Total Twist" },
-  { action: "add", componentType: "<slider-guid>", x: -450, y:-100, nickName: "Floor Height" },
+gh_edit_slider(items: [
+  { action: "createSlider", x: -450, y: 200, nickName: "Base Radius", min: 0, max: 50, value: 15, digits: 2, interval: 1 },
+  { action: "createSlider", x: -450, y: 100, nickName: "Floors",     min: 1, max: 100, value: 30, digits: 0, interval: 1 },
+  { action: "createSlider", x: -450, y: 0,   nickName: "Total Twist", min: 0, max: 360, value: 90, digits: 1, interval: 5 },
+  { action: "createSlider", x: -450, y:-100, nickName: "Floor Height",min: 0.1, max: 10, value: 4, digits: 2, interval: 0.1 },
 ])
 gh_get_canvas()
-
-gh_set_slider_value(items: [
-  { targetId: "<radius-guid>", value: 15 },
-  { targetId: "<floors-guid>", value: 30 },
-  { targetId: "<twist-guid>", value: 90 },
-  { targetId: "<height-guid>", value: 4 },
-])
 
 # === LOGIC LAYER (right of parameters) ===
 # Generate floor indices and compute per-floor Z rotation using Z for elevation
@@ -413,24 +403,17 @@ gh_get_canvas()  # final verification
 Interlocking beam canopy — demonstrates radial geometry in the X-Y plane with Z extrusion.
 
 ```text
-gh_list_components(queries: ["slider", "point", "polar array", "line tt", "pipe",
+gh_list_components(queries: ["point", "polar array", "line tt", "pipe",
                               "construct point", "unit z"])
 
 # Parameters (top-left: global drivers)
-gh_edit_components(items: [
-  { action: "add", componentType: "<slider-guid>", x: -300, y: 150, nickName: "Beam Count" },
-  { action: "add", componentType: "<slider-guid>", x: -300, y: 50,  nickName: "Inner Radius" },
-  { action: "add", componentType: "<slider-guid>", x: -300, y: -50, nickName: "Outer Radius" },
-  { action: "add", componentType: "<slider-guid>", x: -300, y:-150, nickName: "Beam Height (Z)" },
+gh_edit_slider(items: [
+  { action: "createSlider", x: -300, y: 150, nickName: "Beam Count",      min: 3, max: 24, value: 12, digits: 0, interval: 1 },
+  { action: "createSlider", x: -300, y: 50,  nickName: "Inner Radius",    min: 0, max: 30, value: 8,  digits: 2, interval: 0.5 },
+  { action: "createSlider", x: -300, y: -50, nickName: "Outer Radius",    min: 5, max: 50, value: 20, digits: 2, interval: 1 },
+  { action: "createSlider", x: -300, y:-150, nickName: "Beam Height (Z)",  min: 0, max: 10, value: 2,  digits: 2, interval: 0.1 },
 ])
 gh_get_canvas()
-
-gh_set_slider_value(items: [
-  { targetId: "<count-guid>", value: 12 },
-  { targetId: "<inner-guid>", value: 8 },
-  { targetId: "<outer-guid>", value: 20 },
-  { targetId: "<height-z-guid>", value: 2 },  # Z elevation!
-])
 
 # Center point (origin, in X-Y plane at Z=0)
 gh_edit_components(items: [
@@ -463,7 +446,7 @@ gh_get_canvas()  # verify
 ```text
 gh_get_canvas()
 
-gh_set_slider_value(items: [{ targetId: "<slider-guid>", value: 25 }])
+gh_edit_slider(items: [{ action: "setValue", targetId: "<slider-guid>", value: 25 }])
 gh_edit_components(items: [{ action: "set_hidden", targetId: "<panel-guid>", hidden: true }])
 
 gh_get_canvas()  # confirm both
@@ -510,7 +493,7 @@ When generating geometry not covered above, follow this strategy:
 | Tool hangs / no response | Backend not running | Verify Rhino + rhino-zmq-poc plugin is open |
 | `gh_edit_wire` (action="connect") fails | Stale GUIDs | Re-run `gh_get_canvas` to get fresh GUIDs |
 | Component not visible after add | Added off-canvas | Check coordinates; use `gh_edit_components` with action="move" to reposition |
-| Slider value rejected | Outside min/max range | Use `gh_get_canvas` to read slider's min/max first |
+| Slider value rejected | Outside min/max range | Use `gh_get_canvas` to read slider's current min/max first, or use `gh_edit_slider` with action="editRange" to change the range before setting value |
 | Wire connection does nothing | Wrong port direction | Ensure `fromPort` is an OUTPUT and `toPort` is an INPUT (use action="connect" in gh_edit_wire) |
 | Component shows error after wire | **Data type mismatch** | Check source output type vs target input type (Section 1.4) |
 | Geometry invisible / wrong location | **Used Y instead of Z for elevation** | Check all Move/Rotate/Construct components — Z is up (Section 1.3) |

@@ -320,28 +320,113 @@ export const ghEditGroupTool = defineTool({
 	},
 });
 
-export const ghSetSliderValueTool = defineTool({
-	name: "gh_set_slider_value",
-	label: "Set Slider Value",
+export const ghEditSliderTool = defineTool({
+	name: "gh_edit_slider",
+	label: "Edit Slider",
 	description:
-		"Set the values of one or more Number Slider components on the canvas. Accepts an array of slider value definitions for batch processing.",
+		"Perform slider operations on the Grasshopper canvas: create a new Number Slider with full configuration, edit the range/digits of an existing slider, or set the current value. Accepts an array of operation items for batch processing.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Object({
-				targetId: Type.String({
-					description: "Slider component ID",
-				}),
-				value: Type.Number({ description: "New slider value" }),
+				action: Type.Union([
+					Type.Literal("createSlider"),
+					Type.Literal("editRange"),
+					Type.Literal("setValue"),
+				]),
+				targetId: Type.Optional(
+					Type.String({ description: "Slider component ID (from gh_get_canvas) — required for editRange and setValue" })
+				),
+				x: Type.Optional(
+					Type.Number({ description: "X position on canvas — required for createSlider" })
+				),
+				y: Type.Optional(
+					Type.Number({ description: "Y position on canvas — required for createSlider" })
+				),
+				nickName: Type.Optional(
+					Type.String({ description: "Slider nickname — optional for createSlider (defaults to 'Number Slider')" })
+				),
+				min: Type.Optional(
+					Type.Number({ description: "Minimum value — required for createSlider and editRange" })
+				),
+				max: Type.Optional(
+					Type.Number({ description: "Maximum value — required for createSlider and editRange" })
+				),
+				value: Type.Optional(
+					Type.Number({ description: "Slider value — required for createSlider and setValue" })
+				),
+				digits: Type.Optional(
+					Type.Number({ description: "Decimal digits — required for createSlider and editRange" })
+				),
+				interval: Type.Optional(
+					Type.Number({ description: "Step interval — required for createSlider and editRange" })
+				),
 			})
 		),
 	}),
 
-	execute: createExecute(
-		"setSliderValue",
-		(p) => ({ targetId: resolveInstanceGuid(p.targetId), value: p.value }),
-		(_p, r) => `Slider value set. jobId=${r.jobId}`,
-		(p) => `Setting slider ${p.targetId} to ${p.value}...`,
-	),
+	execute: async (_toolCallId, params, _signal, onUpdate) => {
+		const progressFn = typeof onUpdate === "function"
+			? (onUpdate as (msg: { content: { type: string; text: string }[]; details: unknown }) => void)
+			: undefined;
+
+		const results: string[] = [];
+		const jobIds: string[] = [];
+
+		for (const item of params.items) {
+			let action: CommandAction;
+			let mappedParams: unknown;
+
+			switch (item.action) {
+				case "createSlider": {
+					action = "createSlider";
+					mappedParams = {
+						position: { x: item.x!, y: item.y! },
+						nickName: item.nickName,
+						min: item.min!,
+						max: item.max!,
+						value: item.value!,
+						digits: item.digits!,
+						interval: item.interval!,
+					};
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `Creating slider "${item.nickName ?? "Number Slider"}" at (${item.x}, ${item.y})...` }], details: {} });
+					break;
+				}
+				case "editRange": {
+					action = "editSliderRange";
+					mappedParams = {
+						targetId: resolveInstanceGuid(item.targetId!),
+						min: item.min!,
+						max: item.max!,
+						digits: item.digits!,
+						interval: item.interval!,
+					};
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `Editing range of slider ${item.targetId}...` }], details: {} });
+					break;
+				}
+				case "setValue": {
+					action = "setSliderValue";
+					mappedParams = { targetId: resolveInstanceGuid(item.targetId!), value: item.value! };
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `Setting slider ${item.targetId} to ${item.value}...` }], details: {} });
+					break;
+				}
+				default:
+					results.push(`Unknown action: ${item.action}`);
+					continue;
+			}
+
+			const result = await submitCommand(action, mappedParams);
+			results.push(`${item.action} completed. jobId=${result.jobId}`);
+			jobIds.push(result.jobId);
+		}
+
+		return {
+			content: [{ type: "text" as const, text: results.join("\n") }],
+			details: { jobIds },
+		};
+	},
 });
 
 export const ghSetPanelTextTool = defineTool({

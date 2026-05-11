@@ -100,6 +100,24 @@ export type SetSliderValueParams = {
 	value: number;
 };
 
+export type CreateSliderParams = {
+	position: Position;
+	nickName?: string;
+	min: number;
+	max: number;
+	value: number;
+	digits: number;
+	interval: number;
+};
+
+export type EditSliderRangeParams = {
+	targetId: string;
+	min: number;
+	max: number;
+	digits: number;
+	interval: number;
+};
+
 export type SetPanelTextParams = {
 	targetId: string;
 	text: string;
@@ -120,6 +138,8 @@ export type CommandAction =
 	| "changeGroupColor"
 	| "renameGroup"
 	| "changeGroupStyle"
+	| "createSlider"
+	| "editSliderRange"
 	| "setSliderValue"
 	| "setPanelText";
 
@@ -138,6 +158,8 @@ export type CommandParams =
 	| ChangeGroupColorParams
 	| RenameGroupParams
 	| ChangeGroupStyleParams
+	| CreateSliderParams
+	| EditSliderRangeParams
 	| SetSliderValueParams
 	| SetPanelTextParams;
 
