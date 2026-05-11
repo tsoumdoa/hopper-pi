@@ -155,7 +155,7 @@ example:   gh_edit_components(items: [{ action: "delete", targetId: "a" }, { act
 | `gh_edit_wire` | `action` ("connect"/"disconnect"), `fromComponent`, `fromPort`, `toComponent`, `toPort` | Connect or disconnect wires between ports |
 | `gh_edit_group` | `operation`, `componentIds?`, `groupName?`, `color?`, `name?`, `border?` | Group operations (add/remove/delete/rename/color/style) |
 | `gh_edit_slider` | `action`, `targetId?`, `x?`, `y?`, `nickName?`, `min?`, `max?`, `value?`, `digits?`, `interval?` | Create/edit/set slider — action selects operation |
-| `gh_set_panel_text` | `targetId`, `text` | Set panel text |
+| `gh_edit_panel` | `action`, `targetId?`, `x?`, `y?`, `text?`, `nickName?`, `width?`, `height?`, `multiline?`, `bgColor?` | Create/edit/set panel — action selects operation |
 
 ---
 
@@ -177,6 +177,8 @@ From `gh_get_canvas` output:
 | Operation | Field needed | Where in `gh_get_canvas` result |
 |-----------|-------------|----------------------------------|
 | delete/move/rename/lock/hide/slider/panel | `targetId` | `component.instanceGuid` |
+| setParam/setText (via `gh_edit_panel`) | `targetId` | `component.instanceGuid` |
+| createPanel (via `gh_edit_panel`) | `x`, `y` | N/A — position is provided directly |
 | add (via `gh_edit_components` action="add") | `componentType` | `gh_list_components` → `typeGuid` |
 | connect/disconnect wire (via `gh_edit_wire`) | `fromComponent`, `toComponent` | `component.instanceGuid` |
 | connect/disconnect wire (via `gh_edit_wire`) | `fromPort` | source `outputPort.instanceGuid` |
@@ -460,6 +462,27 @@ gh_get_canvas()
 
 gh_edit_components(items: [{ action: "delete", targetId: "xyz-789" }])
 gh_get_canvas()
+```
+
+### Example 6: Panel Operations (Create, Set Properties, Set Text)
+
+```text
+# Create a multiline output panel with fixed size and background color
+gh_edit_panel(items: [
+  { action: "createPanel", x: 400, y: 0, text: "Results will appear here", nickName: "Output",
+    width: 300, height: 150, multiline: true, bgColor: "rgba(240,248,255,255)" },
+])
+gh_get_canvas()
+
+# Update text content of an existing panel
+gh_edit_panel(items: [
+  { action: "setText", targetId: "<panel-guid>", text: "Tower generated successfully\nFloors: 30\nHeight: 120m" },
+])
+
+# Change visual properties (resize, toggle multiline, change color)
+gh_edit_panel(items: [
+  { action: "setParam", targetId: "<panel-guid>", width: 400, height: 200, multiline: true, bgColor: "rgba(255,250,240,255)" },
+])
 ```
 
 ---

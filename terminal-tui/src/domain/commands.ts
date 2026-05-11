@@ -134,8 +134,35 @@ export const ACTION_REGISTRY: readonly ActionDef[] = [
 	},
 	{
 		id: 14,
+		action: "createPanel",
+		label: "create-panel",
+		params: [
+			{ name: "x", cliFlag: "--x <number>", cliDescription: "X position on canvas", prompt: "  x position: ", parse: (v) => Number(v) },
+			{ name: "y", cliFlag: "--y <number>", cliDescription: "Y position on canvas", prompt: "  y position: ", parse: (v) => Number(v) },
+			{ name: "nickName", cliFlag: "--nickName <name>", cliDescription: "Panel nickname (optional)", prompt: "  nickname: " },
+			{ name: "text", cliFlag: "--text <text>", cliDescription: "Initial panel text", prompt: "  text: " },
+			{ name: "width", cliFlag: "--width <number>", cliDescription: "Fixed width in pixels (overrides auto-size)", prompt: "  width: ", parse: (v) => Number(v) },
+			{ name: "height", cliFlag: "--height <number>", cliDescription: "Fixed height in pixels (overrides auto-size)", prompt: "  height: ", parse: (v) => Number(v) },
+			{ name: "multiline", cliFlag: "--multiline <boolean>", cliDescription: "Enable multiline mode", prompt: "  multiline (true/false): ", parse: (v) => v === "true" },
+			{ name: "bgColor", cliFlag: "--bgColor <color>", cliDescription: "Background color rgba e.g. 'rgba(240,248,255,255)'", prompt: "  bg color: " },
+		],
+	},
+	{
+		id: 15,
+		action: "setPanelParams",
+		label: "set-param",
+		params: [
+			{ name: "targetId", cliFlag: "--targetId <id>", cliDescription: "Target component ID", prompt: "  target id: " },
+			{ name: "width", cliFlag: "--width <number>", cliDescription: "Fixed width in pixels (overrides auto-size)", prompt: "  width: ", parse: (v) => Number(v) },
+			{ name: "height", cliFlag: "--height <number>", cliDescription: "Fixed height in pixels (overrides auto-size)", prompt: "  height: ", parse: (v) => Number(v) },
+			{ name: "multiline", cliFlag: "--multiline <boolean>", cliDescription: "Enable multiline mode", prompt: "  multiline (true/false): ", parse: (v) => v === "true" },
+			{ name: "bgColor", cliFlag: "--bgColor <color>", cliDescription: "Background color rgba e.g. 'rgba(240,248,255,255)'", prompt: "  bg color: " },
+		],
+	},
+	{
+		id: 16,
 		action: "setPanelText",
-		label: "set-panel",
+		label: "set-text",
 		params: [
 			{ name: "targetId", cliFlag: "--targetId <id>", cliDescription: "Target component ID", prompt: "  target id: " },
 			{ name: "text", cliFlag: "--text <text>", cliDescription: "Panel text", prompt: "  text: " },

@@ -123,6 +123,24 @@ export type SetPanelTextParams = {
 	text: string;
 };
 
+export type CreatePanelParams = {
+	position: Position;
+	nickName?: string;
+	text: string;
+	width?: number;
+	height?: number;
+	multiline?: boolean;
+	bgColor?: string;
+};
+
+export type SetPanelParams = {
+	targetId: string;
+	width?: number;
+	height?: number;
+	multiline?: boolean;
+	bgColor?: string;
+};
+
 export type CommandAction =
 	| "addComponent"
 	| "deleteComponent"
@@ -141,6 +159,8 @@ export type CommandAction =
 	| "createSlider"
 	| "editSliderRange"
 	| "setSliderValue"
+	| "createPanel"
+	| "setPanelParams"
 	| "setPanelText";
 
 export type CommandParams =
@@ -161,6 +181,8 @@ export type CommandParams =
 	| CreateSliderParams
 	| EditSliderRangeParams
 	| SetSliderValueParams
+	| CreatePanelParams
+	| SetPanelParams
 	| SetPanelTextParams;
 
 export type Command = {

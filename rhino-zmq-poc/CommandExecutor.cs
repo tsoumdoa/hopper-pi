@@ -39,6 +39,8 @@ namespace rhino_zmq_poc
                 "createSlider" => ExecuteCreateSlider(doc, command.Params),
                 "editSliderRange" => ExecuteEditSliderRange(doc, command.Params),
                 "setSliderValue" => ExecuteSetSliderValue(doc, command.Params),
+                "createPanel" => ExecuteCreatePanel(doc, command.Params),
+                "setPanelParams" => ExecuteSetPanelParams(doc, command.Params),
                 "setPanelText" => ExecuteSetPanelText(doc, command.Params),
                 _ => $"Unknown action: {command.Action}"
             };
@@ -164,6 +166,20 @@ namespace rhino_zmq_poc
             var param = p.Deserialize<SetSliderValueParams>();
             if (param == null) return "setSliderValue: invalid params";
             return ValueOperations.SetSliderValue(doc, param);
+        }
+
+        private string ExecuteCreatePanel(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<CreatePanelParams>();
+            if (param == null) return "createPanel: invalid params";
+            return ValueOperations.CreatePanel(doc, param);
+        }
+
+        private string ExecuteSetPanelParams(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<SetPanelParams>();
+            if (param == null) return "setPanelParams: invalid params";
+            return ValueOperations.SetPanelParams(doc, param);
         }
 
         private string ExecuteSetPanelText(GH_Document doc, JsonElement p)

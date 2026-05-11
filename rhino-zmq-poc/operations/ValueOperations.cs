@@ -87,6 +87,82 @@ namespace rhino_zmq_poc
             return $"setSliderValue error: object '{param.TargetId}' is not a Number Slider";
         }
 
+        public static string CreatePanel(GH_Document doc, CreatePanelParams param)
+        {
+            if (doc == null)
+                return "createPanel error: document is null";
+
+            try
+            {
+                var panel = new GH_Panel();
+                panel.CreateAttributes();
+                panel.Attributes.Pivot = new PointF((float)param.Position.X, (float)param.Position.Y);
+
+                panel.UserText = param.Text;
+                panel.NickName = param.NickName ?? "Panel";
+
+                if (param.Multiline.HasValue)
+                    panel.Properties.Multiline = param.Multiline.Value;
+
+                if (!string.IsNullOrEmpty(param.BgColor))
+                    panel.Properties.Colour = ParseRgbaColor(param.BgColor);
+
+                if (param.Width.HasValue || param.Height.HasValue)
+                {
+                    var bounds = panel.Attributes.Bounds;
+                    if (param.Width.HasValue) bounds.Width = (float)param.Width.Value;
+                    if (param.Height.HasValue) bounds.Height = (float)param.Height.Value;
+                    panel.Attributes.Bounds = bounds;
+                }
+
+                doc.AddObject(panel, false);
+
+                return $"createPanel: created ({panel.InstanceGuid}) at ({param.Position.X}, {param.Position.Y})";
+            }
+            catch (Exception ex)
+            {
+                return $"createPanel CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+            }
+        }
+
+        public static string SetPanelParams(GH_Document doc, SetPanelParams param)
+        {
+            if (doc == null)
+                return "setPanelParams error: document is null";
+
+            if (!Guid.TryParse(param.TargetId, out var targetGuid))
+                return $"setPanelParams error: invalid targetId '{param.TargetId}'";
+
+            IGH_DocumentObject obj = doc.FindObject(targetGuid, false);
+            if (obj == null)
+                return $"setPanelParams error: object not found '{param.TargetId}'";
+
+            if (obj is GH_Panel panel)
+            {
+                if (param.Multiline.HasValue)
+                    panel.Properties.Multiline = param.Multiline.Value;
+
+                if (!string.IsNullOrEmpty(param.BgColor))
+                    panel.Properties.Colour = ParseRgbaColor(param.BgColor);
+
+                if (param.Width.HasValue || param.Height.HasValue)
+                {
+                    var bounds = panel.Attributes.Bounds;
+                    if (param.Width.HasValue) bounds.Width = (float)param.Width.Value;
+                    if (param.Height.HasValue) bounds.Height = (float)param.Height.Value;
+                    panel.Attributes.Bounds = bounds;
+                }
+
+                panel.Attributes?.ExpireLayout();
+                panel.OnDisplayExpired(true);
+                panel.ExpireSolution(true);
+
+                return $"setPanelParams: updated properties on ({param.TargetId})";
+            }
+
+            return $"setPanelParams error: object '{param.TargetId}' is not a Panel";
+        }
+
         public static string SetPanelText(GH_Document doc, SetPanelTextParams param)
         {
             if (doc == null)
@@ -110,6 +186,25 @@ namespace rhino_zmq_poc
             }
 
             return $"setPanelText error: object '{param.TargetId}' is not a Panel";
+        }
+
+        private static Color ParseRgbaColor(string rgba)
+        {
+            try
+            {
+                var inner = rgba.Replace("rgba(", "").Replace(")", "");
+                var parts = inner.Split(',');
+                if (parts.Length >= 3)
+                {
+                    var r = int.Parse(parts[0].Trim());
+                    var g = int.Parse(parts[1].Trim());
+                    var b = int.Parse(parts[2].Trim());
+                    var a = parts.Length > 4 ? int.Parse(parts[3].Trim()) : 255;
+                    return Color.FromArgb(a, r, g, b);
+                }
+            }
+            catch { }
+            return Color.White;
         }
     }
 }

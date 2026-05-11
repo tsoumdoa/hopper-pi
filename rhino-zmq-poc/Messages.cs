@@ -206,6 +206,48 @@ namespace rhino_zmq_poc
         public string Text { get; set; }
     }
 
+    public class CreatePanelParams
+    {
+        [JsonPropertyName("position")]
+        public Position Position { get; set; }
+
+        [JsonPropertyName("nickName")]
+        public string NickName { get; set; }
+
+        [JsonPropertyName("text")]
+        public string Text { get; set; }
+
+        [JsonPropertyName("width")]
+        public double? Width { get; set; }
+
+        [JsonPropertyName("height")]
+        public double? Height { get; set; }
+
+        [JsonPropertyName("multiline")]
+        public bool? Multiline { get; set; }
+
+        [JsonPropertyName("bgColor")]
+        public string BgColor { get; set; }
+    }
+
+    public class SetPanelParams
+    {
+        [JsonPropertyName("targetId")]
+        public string TargetId { get; set; }
+
+        [JsonPropertyName("width")]
+        public double? Width { get; set; }
+
+        [JsonPropertyName("height")]
+        public double? Height { get; set; }
+
+        [JsonPropertyName("multiline")]
+        public bool? Multiline { get; set; }
+
+        [JsonPropertyName("bgColor")]
+        public string BgColor { get; set; }
+    }
+
     public class PortRef
     {
         [JsonPropertyName("componentId")]

@@ -429,26 +429,111 @@ export const ghEditSliderTool = defineTool({
 	},
 });
 
-export const ghSetPanelTextTool = defineTool({
-	name: "gh_set_panel_text",
-	label: "Set Panel Text",
+export const ghEditPanelTool = defineTool({
+	name: "gh_edit_panel",
+	label: "Edit Panel",
 	description:
-		"Set the text content of one or more Panel components on the canvas. Accepts an array of panel text definitions for batch processing.",
+		"Perform panel operations on the Grasshopper canvas: create a new Panel with initial text and visual properties, edit visual properties of an existing panel (width, height, multiline mode, background color), or set the text content. Accepts an array of operation items for batch processing.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Object({
-				targetId: Type.String({
-					description: "Panel component ID",
-				}),
-				text: Type.String({ description: "New panel text content" }),
+				action: Type.Union([
+					Type.Literal("createPanel"),
+					Type.Literal("setParam"),
+					Type.Literal("setText"),
+				]),
+				targetId: Type.Optional(
+					Type.String({ description: "Panel component ID (from gh_get_canvas) — required for setParam and setText" })
+				),
+				x: Type.Optional(
+					Type.Number({ description: "X position on canvas — required for createPanel" })
+				),
+				y: Type.Optional(
+					Type.Number({ description: "Y position on canvas — required for createPanel" })
+				),
+				text: Type.Optional(
+					Type.String({ description: "Panel text content — required for createPanel and setText" })
+				),
+				nickName: Type.Optional(
+					Type.String({ description: "Panel nickname — optional for createPanel (defaults to 'Panel')" })
+				),
+				width: Type.Optional(
+					Type.Number({ description: "Panel fixed width in pixels — overrides auto-size; use with createPanel or setParam" })
+				),
+				height: Type.Optional(
+					Type.Number({ description: "Panel fixed height in pixels — overrides auto-size; use with createPanel or setParam" })
+				),
+				multiline: Type.Optional(
+					Type.Boolean({ description: "Enable multiline text mode — use with createPanel or setParam" })
+				),
+				bgColor: Type.Optional(
+					Type.String({ description: "Background color as rgba string e.g. 'rgba(255,255,255,255)' — use with createPanel or setParam" })
+				),
 			})
 		),
 	}),
 
-	execute: createExecute(
-		"setPanelText",
-		(p) => ({ targetId: resolveInstanceGuid(p.targetId), text: p.text }),
-		(_p, r) => `Panel text set. jobId=${r.jobId}`,
-		(p) => `Setting panel ${p.targetId} text...`,
-	),
+	execute: async (_toolCallId, params, _signal, onUpdate) => {
+		const progressFn = typeof onUpdate === "function"
+			? (onUpdate as (msg: { content: { type: string; text: string }[]; details: unknown }) => void)
+			: undefined;
+
+		const results: string[] = [];
+		const jobIds: string[] = [];
+
+		for (const item of params.items) {
+			let action: CommandAction;
+			let mappedParams: unknown;
+
+			switch (item.action) {
+				case "createPanel": {
+					action = "createPanel";
+					mappedParams = {
+						position: { x: item.x!, y: item.y! },
+						nickName: item.nickName,
+						text: item.text!,
+						width: item.width,
+						height: item.height,
+						multiline: item.multiline,
+						bgColor: item.bgColor,
+					};
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `Creating panel "${item.nickName ?? "Panel"}" at (${item.x}, ${item.y})...` }], details: {} });
+					break;
+				}
+				case "setParam": {
+					action = "setPanelParams";
+					mappedParams = {
+						targetId: resolveInstanceGuid(item.targetId!),
+						width: item.width,
+						height: item.height,
+						multiline: item.multiline,
+						bgColor: item.bgColor,
+					};
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `Setting properties of panel ${item.targetId}...` }], details: {} });
+					break;
+				}
+				case "setText": {
+					action = "setPanelText";
+					mappedParams = { targetId: resolveInstanceGuid(item.targetId!), text: item.text! };
+					if (progressFn)
+						progressFn({ content: [{ type: "text", text: `Setting text of panel ${item.targetId}...` }], details: {} });
+					break;
+				}
+				default:
+					results.push(`Unknown action: ${item.action}`);
+					continue;
+			}
+
+			const result = await submitCommand(action, mappedParams);
+			results.push(`${item.action} completed. jobId=${result.jobId}`);
+			jobIds.push(result.jobId);
+		}
+
+		return {
+			content: [{ type: "text" as const, text: results.join("\n") }],
+			details: { jobIds },
+		};
+	},
 });
