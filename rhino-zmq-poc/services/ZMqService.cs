@@ -1,11 +1,8 @@
-using GH_IO.Serialization;
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Grasshopper;
 using Grasshopper.Kernel;
 using NetMQ;
 using NetMQ.Sockets;
@@ -27,6 +24,7 @@ namespace rhino_zmq_poc
         private Task _repTask;
         private readonly JobQueue _jobQueue;
         private readonly GH_Document _doc;
+        private readonly UiRequestDispatcher _requestDispatcher = new UiRequestDispatcher();
         private readonly ConcurrentQueue<(string topic, string json)> _publishQueue = new ConcurrentQueue<(string, string)>();
         private readonly object _uiLock = new object();
 
@@ -38,6 +36,11 @@ namespace rhino_zmq_poc
         {
             _jobQueue = jobQueue;
             _doc = doc;
+            _requestDispatcher.Register("listAllComponents", new ListAllComponentsHandler());
+            _requestDispatcher.Register("getCurrentCanvas", new GetCurrentCanvasHandler());
+            _requestDispatcher.Register("getCanvasErrors", new GetCanvasErrorsHandler());
+            _requestDispatcher.Register("listScriptParams", new ListScriptParamsHandler());
+            _requestDispatcher.Register("getScriptCode", new GetScriptCodeHandler());
             _jobQueue.OnStatusChanged += status =>
             {
                 OnJobStatus?.Invoke(status);
@@ -162,10 +165,8 @@ namespace rhino_zmq_poc
                 using var doc = JsonDocument.Parse(message);
                 var type = doc.RootElement.GetProperty("type").GetString();
 
-                if (type == "listAllComponents" || type == "getCurrentCanvas")
-                {
-                    return RunOnUiThread(() => HandleRequestOnUiThread(type));
-                }
+                if (_requestDispatcher.TryDispatch(type, _doc, doc.RootElement, out var response))
+                    return RunOnUiThread(() => response);
 
                 return JsonSerializer.Serialize(new { error = $"Unknown request type: {type}" });
             }
@@ -174,104 +175,6 @@ namespace rhino_zmq_poc
                 DebugLog($"[REP] HandleRequest error: {ex.Message}");
                 return JsonSerializer.Serialize(new { error = ex.Message });
             }
-        }
-
-        private string HandleRequestOnUiThread(string type)
-        {
-            if (type == "listAllComponents")
-            {
-                var components = new List<GhComponentInfo>();
-
-                foreach (var proxy in Instances.ComponentServer.ObjectProxies)
-                {
-                    if (proxy.Obsolete) continue;
-                    var d = proxy.Desc;
-                    if (d == null) continue;
-
-                    string pluginName = "Unknown";
-                    string assemblyName = "Unknown";
-
-                    try
-                    {
-                        if (!string.IsNullOrEmpty(proxy.Location))
-                        {
-                            assemblyName =
-                                System.IO.Path.GetFileNameWithoutExtension(proxy.Location);
-                        }
-
-                        foreach (var lib in Instances.ComponentServer.Libraries)
-                        {
-                            if (lib == null || lib.Assembly == null) continue;
-
-                            string libLocation = "";
-                            try { libLocation = lib.Assembly.Location; }
-                            catch { }
-
-                            if (!string.IsNullOrEmpty(libLocation) &&
-                                string.Equals(libLocation, proxy.Location,
-                                    StringComparison.OrdinalIgnoreCase))
-                            {
-                                pluginName = lib.Name;
-                                break;
-                            }
-                        }
-                    }
-                    catch
-                    {
-                    }
-
-                    components.Add(new GhComponentInfo
-                    {
-                        Name = d.Name,
-                        Guid = proxy.Guid.ToString(),
-                        PluginName = pluginName,
-                        AssemblyName = assemblyName,
-                        Category = d.Category,
-                        SubCategory = d.SubCategory,
-                        Description = d.Description
-                    });
-                }
-
-                var response = new ListAllComponentsResponse
-                {
-                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    Components = components
-                };
-
-                return JsonSerializer.Serialize(response);
-            }
-
-            if (type == "getCurrentCanvas")
-            {
-                string xml = null;
-                string docName = "Untitled";
-
-                if (_doc != null)
-                {
-                    docName = _doc.FilePath ?? "Untitled";
-                    try
-                    {
-                        var archive = new GH_Archive();
-                        archive.AppendObject(_doc, "Definition");
-                        xml = archive.Serialize_Xml();
-                    }
-                    catch (Exception ex)
-                    {
-                        DebugLog($"[REP] getCurrentCanvas serialize error: {ex.Message}");
-                    }
-                }
-
-                var canvasResponse = new GetCurrentCanvasResponse
-                {
-                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    DocName = docName,
-                    Xml = xml ?? ""
-                };
-
-                return JsonSerializer.Serialize(canvasResponse);
-            }
-
-            return JsonSerializer.Serialize(new { error = $"Unknown request type: {type}" });
         }
 
         private string RunOnUiThread(Func<string> func)

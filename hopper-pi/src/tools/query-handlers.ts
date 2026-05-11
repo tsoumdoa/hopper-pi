@@ -1,6 +1,6 @@
 import { Requester } from "../infra/requester.js";
 import { withRequester } from "../infra/request-helpers.js";
-import type { ListAllComponentsResponse, GetCurrentCanvasResponse, GhComponentInfo } from "../types/messages.js";
+import type { ListAllComponentsResponse, GetCurrentCanvasResponse, GetCanvasErrorsResponse, GhComponentInfo, ListScriptParamsResponse, GetScriptCodeResponse } from "../types/messages.js";
 import type { Component } from "../types/gh.js";
 import { buildGhJson } from "../services/parser.js";
 import {
@@ -47,12 +47,58 @@ export async function getCachedOrFetchComponents(): Promise<ListAllComponentsRes
 	return data;
 }
 
+export async function fetchGh<T>(req: Requester, type: string): Promise<T> {
+	return req.request<T>({ type });
+}
+
 export async function fetchCurrentCanvas(req: Requester): Promise<GetCurrentCanvasResponse> {
-	return req.request<GetCurrentCanvasResponse>({ type: "getCurrentCanvas" });
+	return fetchGh<GetCurrentCanvasResponse>(req, "getCurrentCanvas");
 }
 
 export async function fetchAllComponents(req: Requester): Promise<ListAllComponentsResponse> {
-	return req.request<ListAllComponentsResponse>({ type: "listAllComponents" });
+	return fetchGh<ListAllComponentsResponse>(req, "listAllComponents");
+}
+
+export async function fetchCanvasErrors(req: Requester): Promise<GetCanvasErrorsResponse> {
+	return fetchGh<GetCanvasErrorsResponse>(req, "getCanvasErrors");
+}
+
+export async function fetchScriptParams(req: Requester, targetId: string): Promise<ListScriptParamsResponse> {
+	return req.request<ListScriptParamsResponse>({ type: "listScriptParams", targetId });
+}
+
+export async function fetchScriptCode(req: Requester, targetId: string): Promise<GetScriptCodeResponse> {
+	return req.request<GetScriptCodeResponse>({ type: "getScriptCode", targetId });
+}
+
+export function formatScriptParamsResponse(response: ListScriptParamsResponse) {
+	const lines: string[] = [];
+
+	if (response.inputs.length > 0) {
+		lines.push("INPUTS:");
+		for (const p of response.inputs) {
+			lines.push(`  ${p.name} [${p.access}, ${p.dataMapping}, simplify=${p.simplify}, reverse=${p.reverse}]`);
+		}
+	}
+
+	if (response.outputs.length > 0) {
+		lines.push("OUTPUTS:");
+		for (const p of response.outputs) {
+			lines.push(`  ${p.name} [${p.access}, ${p.dataMapping}, simplify=${p.simplify}, reverse=${p.reverse}]`);
+		}
+	}
+
+	return {
+		content: [{ type: "text" as const, text: lines.join("\n") }],
+		details: response,
+	};
+}
+
+export function formatScriptCodeResponse(response: GetScriptCodeResponse) {
+	return {
+		content: [{ type: "text" as const, text: response.code }],
+		details: { code: response.code },
+	};
 }
 
 export function formatCanvasResponse(response: GetCurrentCanvasResponse) {
@@ -68,15 +114,6 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse) {
 
 	const lines: string[] = [
 		`Canvas: ${response.docName} (${compCount} components, ${wireCount} wires)`,
-		"Each component line below shows:",
-		"  [id] = readable label (for delete/move/rename/etc tools only)",
-		"  guid=COMPONENT_GUID (use THIS for gh_connect_wire / gh_disconnect_wire fromComponent & toComponent)",
-		"",
-		"Each port line shows:",
-		"  guid=PORT_GUID (use THIS for gh_connect_wire / gh_disconnect_wire fromPort & toPort)",
-		"  (nick) = nickname for reference ONLY — never pass nicknames to wire tools",
-		"",
-		"---",
 		"",
 	];
 
@@ -85,16 +122,18 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse) {
 		lines.push(`  COMPONENT_GUID=${c.instanceGuid}`);
 
 		if (Object.keys(c.outputs).length > 0) {
-			lines.push("  OUTPUTS (fromPort values):");
-			for (const [key, p] of Object.entries(c.outputs)) {
-				lines.push(`    PORT_GUID=${p.instanceGuid}  (${p.nick})`);
+			lines.push("  OUTPUTS:");
+			for (const [_key, p] of Object.entries(c.outputs)) {
+				const desc = p.description ? ` - ${p.description}` : "";
+				lines.push(`    ${p.nick} (PORT_GUID=${p.instanceGuid})${desc}`);
 			}
 		}
 
 		if (Object.keys(c.inputs).length > 0) {
-			lines.push("  INPUTS (toPort values):");
-			for (const [key, p] of Object.entries(c.inputs)) {
-				lines.push(`    PORT_GUID=${p.instanceGuid}  (${p.nick})`);
+			lines.push("  INPUTS:");
+			for (const [_key, p] of Object.entries(c.inputs)) {
+				const desc = p.description ? ` - ${p.description}` : "";
+				lines.push(`    ${p.nick} (PORT_GUID=${p.instanceGuid})${desc}`);
 			}
 		}
 
@@ -107,6 +146,12 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse) {
 		}
 		if (c.state?.locked) lines.push("  locked");
 		if (c.state?.hidden) lines.push("  hidden");
+		if (c.visuals?.pivot) {
+			lines.push(`  pivot: (${c.visuals.pivot.x}, ${c.visuals.pivot.y})`);
+		}
+		if (c.visuals?.bounds) {
+			lines.push(`  bounds: x=${c.visuals.bounds.x} y=${c.visuals.bounds.y} w=${c.visuals.bounds.width} h=${c.visuals.bounds.height}`);
+		}
 		lines.push("");
 	}
 
@@ -139,22 +184,21 @@ function matchComponent(c: GhComponentInfo, f: string) {
 	);
 }
 
-function pickSummary(c: GhComponentInfo, onlyName: boolean) {
-	const base = {
+function pickSummary(c: GhComponentInfo) {
+	return {
 		name: c.name,
 		typeGuid: toShortTypeGuid(c.typeGuid),
+		category: c.category,
+		subcategory: c.subcategory,
 	};
-	if (onlyName) return base;
-	return { ...base, category: c.category, subcategory: c.subcategory };
 }
 
-export function formatComponentsMultiQuery(response: ListAllComponentsResponse, queries?: string[], onlyName: boolean = true) {
+export function formatComponentsMultiQuery(response: ListAllComponentsResponse, queries?: string[]) {
 	const all = response.components;
 
 	if (!queries || queries.length === 0) {
 		const lines = all.map((c) => {
 			const shortTypeGuid = toShortTypeGuid(c.typeGuid);
-			if (onlyName) return `  ${c.name}  [${shortTypeGuid}]`;
 			return `  ${c.name}  [${shortTypeGuid}]  (${c.category}/${c.subcategory}) -- ${c.description}`;
 		});
 		return {
@@ -168,14 +212,13 @@ export function formatComponentsMultiQuery(response: ListAllComponentsResponse, 
 
 	for (const q of queries) {
 		const matched = all.filter((c) => matchComponent(c, q));
-		results.push({ queryKeyword: q, result: matched.map((c) => pickSummary(c, onlyName)) });
+		results.push({ queryKeyword: q, result: matched.map((c) => pickSummary(c)) });
 
 		if (matched.length === 0) {
 			sections.push(`"${q}" — no matches`);
 		} else {
 			const lines = matched.map((c) => {
 				const shortTypeGuid = toShortTypeGuid(c.typeGuid);
-				if (onlyName) return `  ${c.name}  [${shortTypeGuid}]`;
 				return `  ${c.name}  [${shortTypeGuid}]  (${c.category}/${c.subcategory}) -- ${c.description}`;
 			});
 			sections.push(`"${q}" (${matched.length} matches):\n${lines.join("\n")}`);
@@ -185,5 +228,34 @@ export function formatComponentsMultiQuery(response: ListAllComponentsResponse, 
 	return {
 		content: [{ type: "text" as const, text: `Components search (${queries.length} queries, ${all.length} available):\n\n${sections.join("\n\n")}` }],
 		details: { results, totalAvailable: all.length },
+	};
+}
+
+export function formatCanvasErrorsResponse(response: GetCanvasErrorsResponse) {
+	const errors = response.errors;
+	const errorCount = errors.length;
+
+	if (errorCount === 0) {
+		return {
+			content: [{ type: "text" as const, text: `Canvas "${response.docName}": no errors or warnings.` }],
+			details: { docName: response.docName, errorCount: 0, errors: [] },
+		};
+	}
+
+	const lines: string[] = [
+		`Canvas "${response.docName}": ${errorCount} error(s)/warning(s):`,
+		"",
+	];
+
+	for (const err of errors) {
+		const levelIcon = err.level === "error" ? "❌" : err.level === "warning" ? "⚠️" : "ℹ️";
+		lines.push(`${levelIcon} [${err.level}] ${err.componentNickName} (${err.componentId})`);
+		lines.push(`   ${err.text}`);
+		lines.push("");
+	}
+
+	return {
+		content: [{ type: "text" as const, text: lines.join("\n") }],
+		details: { docName: response.docName, errorCount, errors },
 	};
 }

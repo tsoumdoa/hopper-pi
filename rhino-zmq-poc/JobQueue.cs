@@ -85,8 +85,7 @@ namespace rhino_zmq_poc
 
                 try
                 {
-                    string result = RhinoZmqPlugin.Instance?.Component?.ExecuteCommand(job.Command)
-                                    ?? "Plugin not initialized";
+                    RhinoZmqPlugin.Instance?.Component?.ExecuteCommand(job.Command);
                     job.Progress = 100;
                     job.State = JobState.Completed;
                 }

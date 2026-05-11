@@ -5,7 +5,6 @@ import type {
 	InputPort,
 	OutputPort,
 	Wire,
-	ParseOptions,
 	Visuals,
 	ComponentState,
 	DataMapping,
@@ -411,7 +410,6 @@ function parseComponentState(
 
 function parseComponent(
 	objectChunk: XmlChunk,
-	options?: ParseOptions,
 	libraryMap?: Map<string, string>
 ): ParsedComponent | null {
 	const items = extractItems(objectChunk);
@@ -548,24 +546,21 @@ function parseComponent(
 		};
 	}
 
-	if (options?.includeVisuals) {
-		const visuals = parseVisuals(containerChunk, containerItems);
-		if (visuals) {
-			component.visuals = visuals;
-		}
+	const visuals = parseVisuals(containerChunk, containerItems);
+	if (visuals) {
+		component.visuals = visuals;
+	}
 
-		const state = parseComponentState(containerItems);
-		if (state) {
-			component.state = state;
-		}
+	const state = parseComponentState(containerItems);
+	if (state) {
+		component.state = state;
 	}
 
 	return { component, instanceGuid: instanceGuid, objectChunk };
 }
 
 export function parseGrasshopper(
-	xmlData: ParsedXml,
-	options?: ParseOptions
+	xmlData: ParsedXml
 ): ParsedGrasshopper {
 	const archive = xmlData.Archive;
 	if (!archive) {
@@ -631,7 +626,7 @@ export function parseGrasshopper(
 	const parsedComponents: Array<{ parsed: ParsedComponent; id: string }> = [];
 
 	for (const objectChunk of objectChunks) {
-		const parsed = parseComponent(objectChunk, options, libraryMap);
+		const parsed = parseComponent(objectChunk, libraryMap);
 		if (!parsed) continue;
 
 		const baseNick = parsed.component.nickName || parsed.component.type;
@@ -760,8 +755,7 @@ export function parseGrasshopper(
 }
 
 export function buildGhJson(
-	xmlContent: string,
-	options?: ParseOptions
+	xmlContent: string
 ): ParsedGrasshopper {
 	const parser = new XMLParser({
 		ignoreAttributes: false,
@@ -775,5 +769,5 @@ export function buildGhJson(
 	});
 
 	const parsed = parser.parse(xmlContent) as ParsedXml;
-	return parseGrasshopper(parsed, options);
+	return parseGrasshopper(parsed);
 }

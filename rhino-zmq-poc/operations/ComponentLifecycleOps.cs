@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Grasshopper;
 using Grasshopper.Kernel;
 
@@ -13,12 +14,12 @@ namespace rhino_zmq_poc
                 if (doc == null)
                     return "addComponent error: document is null";
 
-                if (!Guid.TryParse(param.Guid, out var componentGuid))
-                    return $"addComponent error: invalid guid '{param.Guid}'";
+                if (!Guid.TryParse(param.TypeGuid, out var componentGuid))
+                    return $"addComponent error: invalid typeGuid '{param.TypeGuid}'";
 
                 var obj = Instances.ComponentServer.EmitObject(componentGuid);
                 if (obj == null)
-                    return $"addComponent error: failed to emit object for guid '{param.Guid}'";
+                    return $"addComponent error: failed to emit object for typeGuid '{param.TypeGuid}'";
 
                 doc.AddObject(obj, false);
 
@@ -72,6 +73,188 @@ namespace rhino_zmq_poc
 
 
             return $"moveComponent: moved ({param.TargetId}) to ({param.Position.X}, {param.Position.Y})";
+        }
+
+        public static void AddScriptInputParam(GH_Component comp, string name, IGH_Param param = null)
+        {
+            if (comp is IGH_VariableParameterComponent vpc)
+            {
+                int index = comp.Params.Input.Count;
+                if (vpc.CanInsertParameter(GH_ParameterSide.Input, index))
+                {
+                    IGH_Param p = param ?? vpc.CreateParameter(GH_ParameterSide.Input, index);
+                    p.Name = name;
+                    p.NickName = name;
+                    p.Access = GH_ParamAccess.item;
+                    comp.Params.RegisterInputParam(p);
+                    vpc.VariableParameterMaintenance();
+                    comp.Params.OnParametersChanged();
+                }
+            }
+        }
+
+        public static void RemoveScriptInputParam(GH_Component comp, string name)
+        {
+            var target = comp.Params.Input.FirstOrDefault(x =>
+                string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (target == null) return;
+            comp.RecordUndoEvent("Remove input");
+            if (comp is IGH_VariableParameterComponent vpc)
+            {
+                int index = comp.Params.Input.IndexOf(target);
+                if (!vpc.CanRemoveParameter(GH_ParameterSide.Input, index)) return;
+                vpc.DestroyParameter(GH_ParameterSide.Input, index);
+            }
+            comp.Params.UnregisterInputParameter(target, true);
+            comp.Params.OnParametersChanged();
+            comp.ExpireSolution(true);
+        }
+
+        public static void AddScriptOutputParam(GH_Component comp, string name)
+        {
+            if (comp is IGH_VariableParameterComponent vpc)
+            {
+                int index = comp.Params.Output.Count;
+                if (vpc.CanInsertParameter(GH_ParameterSide.Output, index))
+                {
+                    IGH_Param p = vpc.CreateParameter(GH_ParameterSide.Output, index);
+                    p.Name = name;
+                    p.NickName = name;
+                    p.Access = GH_ParamAccess.item;
+                    comp.Params.RegisterOutputParam(p);
+                    vpc.VariableParameterMaintenance();
+                    comp.Params.OnParametersChanged();
+                }
+            }
+        }
+
+        public static void RemoveScriptOutputParam(GH_Component comp, string name)
+        {
+            var target = comp.Params.Output.FirstOrDefault(x =>
+                string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (target == null) return;
+            comp.RecordUndoEvent("Remove output");
+            if (comp is IGH_VariableParameterComponent vpc)
+            {
+                int index = comp.Params.Output.IndexOf(target);
+                if (!vpc.CanRemoveParameter(GH_ParameterSide.Output, index)) return;
+                vpc.DestroyParameter(GH_ParameterSide.Output, index);
+            }
+            comp.Params.UnregisterOutputParameter(target, true);
+            comp.Params.OnParametersChanged();
+            comp.ExpireSolution(true);
+        }
+
+        public static string EditScriptAccessType(GH_Document doc, EditScriptAccessParams param)
+        {
+            try
+            {
+                if (doc == null) return "editScriptAccess error: document is null";
+                if (!Guid.TryParse(param.TargetId, out var targetGuid))
+                    return $"editScriptAccess error: invalid targetId '{param.TargetId}'";
+                var obj = doc.FindObject(targetGuid, false);
+                if (obj == null) return $"editScriptAccess error: object not found '{param.TargetId}'";
+                var comp = obj as GH_Component;
+                if (comp == null) return $"editScriptAccess error: '{param.TargetId}' is not a GH_Component";
+                var target = comp.Params.Input.FirstOrDefault(x =>
+                    string.Equals(x.Name, param.Name, StringComparison.OrdinalIgnoreCase));
+                if (target == null) return $"editScriptAccess error: input '{param.Name}' not found";
+                switch (param.Access.ToLowerInvariant())
+                {
+                    case "item": target.Access = GH_ParamAccess.item; break;
+                    case "list": target.Access = GH_ParamAccess.list; break;
+                    case "tree": target.Access = GH_ParamAccess.tree; break;
+                    default: return $"editScriptAccess error: unknown access type '{param.Access}' (supported: item, list, tree)";
+                }
+                comp.ExpireSolution(true);
+                return $"editScriptAccess: set input '{param.Name}' access to {param.Access} on ({param.TargetId})";
+            }
+            catch (Exception ex)
+            {
+                return $"editScriptAccess CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+            }
+        }
+
+        public static string ListScriptParams(GH_Document doc, ListScriptParamsParams param)
+        {
+            try
+            {
+                if (doc == null) return "listScriptParams error: document is null";
+                if (!Guid.TryParse(param.TargetId, out var targetGuid))
+                    return $"listScriptParams error: invalid targetId '{param.TargetId}'";
+                var obj = doc.FindObject(targetGuid, false);
+                if (obj == null) return $"listScriptParams error: object not found '{param.TargetId}'";
+                var comp = obj as GH_Component;
+                if (comp == null) return $"listScriptParams error: '{param.TargetId}' is not a GH_Component";
+
+                string AccessStr(GH_ParamAccess a) => a switch
+                {
+                    GH_ParamAccess.item => "item",
+                    GH_ParamAccess.list => "list",
+                    GH_ParamAccess.tree => "tree",
+                    _ => a.ToString()
+                };
+                string MappingStr(GH_DataMapping m) => m switch
+                {
+                    GH_DataMapping.None => "none",
+                    GH_DataMapping.Flatten => "flatten",
+                    GH_DataMapping.Graft => "graft",
+                    _ => m.ToString()
+                };
+
+                var inputInfo = comp.Params.Input.Select(p =>
+                    $"{p.Name}({AccessStr(p.Access)},{MappingStr(p.DataMapping)},{p.Simplify.ToString().ToLower()},{p.Reverse.ToString().ToLower()})").ToArray();
+                var outputInfo = comp.Params.Output.Select(p =>
+                    $"{p.Name}({AccessStr(p.Access)},{MappingStr(p.DataMapping)},{p.Simplify.ToString().ToLower()},{p.Reverse.ToString().ToLower()})").ToArray();
+
+                return $"inputs: [{string.Join(", ", inputInfo)}] outputs: [{string.Join(", ", outputInfo)}]";
+            }
+            catch (Exception ex)
+            {
+                return $"listScriptParams CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+            }
+        }
+
+        public static string EditDataMapping(GH_Document doc, EditDataMappingParams param)
+        {
+            try
+            {
+                if (doc == null) return "editDataMapping error: document is null";
+                if (!Guid.TryParse(param.TargetId, out var targetGuid))
+                    return $"editDataMapping error: invalid targetId '{param.TargetId}'";
+                var obj = doc.FindObject(targetGuid, false);
+                if (obj == null) return $"editDataMapping error: object not found '{param.TargetId}'";
+                var comp = obj as GH_Component;
+                if (comp == null) return $"editDataMapping error: '{param.TargetId}' is not a GH_Component";
+
+                var target = comp.Params.Input.FirstOrDefault(x =>
+                    string.Equals(x.Name, param.Name, StringComparison.OrdinalIgnoreCase));
+                if (target == null) return $"editDataMapping error: input '{param.Name}' not found";
+
+                if (param.DataMapping != null)
+                {
+                    switch (param.DataMapping.ToLowerInvariant())
+                    {
+                        case "none": target.DataMapping = GH_DataMapping.None; break;
+                        case "flatten": target.DataMapping = GH_DataMapping.Flatten; break;
+                        case "graft": target.DataMapping = GH_DataMapping.Graft; break;
+                        default: return $"editDataMapping error: unknown dataMapping '{param.DataMapping}' (supported: none, flatten, graft)";
+                    }
+                }
+
+                if (param.Simplify.HasValue)
+                    target.Simplify = param.Simplify.Value;
+
+                if (param.Reverse.HasValue)
+                    target.Reverse = param.Reverse.Value;
+
+                comp.ExpireSolution(true);
+                return $"editDataMapping: updated input '{param.Name}' on ({param.TargetId})";
+            }
+            catch (Exception ex)
+            {
+                return $"editDataMapping CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+            }
         }
     }
 }

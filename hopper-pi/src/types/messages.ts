@@ -41,3 +41,38 @@ export type GetCurrentCanvasResponse = {
 	docName: string;
 	xml: string;
 };
+
+export type CanvasError = {
+	componentId: string;
+	componentNickName: string;
+	level: "error" | "warning" | "message" | "unknown";
+	text: string;
+};
+
+export type ScriptParamInfo = {
+	name: string;
+	access: string;
+	dataMapping: string;
+	simplify: boolean;
+	reverse: boolean;
+};
+
+export type ListScriptParamsResponse = {
+	type: "listScriptParams.response";
+	timestamp: number;
+	inputs: ScriptParamInfo[];
+	outputs: ScriptParamInfo[];
+};
+
+export type GetScriptCodeResponse = {
+	type: "getScriptCode.response";
+	timestamp: number;
+	code: string;
+};
+
+export type GetCanvasErrorsResponse = {
+	type: "getCanvasErrors.response";
+	timestamp: number;
+	docName: string;
+	errors: CanvasError[];
+};

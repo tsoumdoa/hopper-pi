@@ -42,6 +42,24 @@ namespace rhino_zmq_poc
                 "createPanel" => ExecuteCreatePanel(doc, command.Params),
                 "setPanelParams" => ExecuteSetPanelParams(doc, command.Params),
                 "setPanelText" => ExecuteSetPanelText(doc, command.Params),
+                "createToggle" => ExecuteCreateToggle(doc, command.Params),
+                "setToggleValue" => ExecuteSetToggleValue(doc, command.Params),
+                "createSwatch" => ExecuteCreateSwatch(doc, command.Params),
+                "setSwatchColor" => ExecuteSetSwatchColor(doc, command.Params),
+                "createScribble" => ExecuteCreateScribble(doc, command.Params),
+                "setScribbleText" => ExecuteSetScribbleText(doc, command.Params),
+                "createValueList" => ExecuteCreateValueList(doc, command.Params),
+                "setValueListSelected" => ExecuteSetValueListSelected(doc, command.Params),
+                "createScriptNode" => ExecuteCreateScriptNode(doc, command.Params),
+                "setScriptCode" => ExecuteSetScriptCode(doc, command.Params),
+                "getScriptCode" => ExecuteGetScriptCode(doc, command.Params),
+                "addScriptInput" => ExecuteAddScriptInput(doc, command.Params),
+                "removeScriptInput" => ExecuteRemoveScriptInput(doc, command.Params),
+                "addScriptOutput" => ExecuteAddScriptOutput(doc, command.Params),
+                "removeScriptOutput" => ExecuteRemoveScriptOutput(doc, command.Params),
+                "editScriptAccess" => ExecuteEditScriptAccess(doc, command.Params),
+                "listScriptParams" => ExecuteListScriptParams(doc, command.Params),
+                "editDataMapping" => ExecuteEditDataMapping(doc, command.Params),
                 _ => $"Unknown action: {command.Action}"
             };
 
@@ -188,5 +206,132 @@ namespace rhino_zmq_poc
             if (param == null) return "setPanelText: invalid params";
             return ValueOperations.SetPanelText(doc, param);
         }
+
+        private string ExecuteCreateToggle(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<CreateToggleParams>();
+            if (param == null) return "createToggle: invalid params";
+            return SpecialOperations.CreateToggle(doc, param);
+        }
+
+        private string ExecuteSetToggleValue(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<SetToggleValueParams>();
+            if (param == null) return "setToggleValue: invalid params";
+            return SpecialOperations.SetToggleValue(doc, param);
+        }
+
+        private string ExecuteCreateSwatch(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<CreateSwatchParams>();
+            if (param == null) return "createSwatch: invalid params";
+            return SpecialOperations.CreateSwatch(doc, param);
+        }
+
+        private string ExecuteSetSwatchColor(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<SetSwatchColorParams>();
+            if (param == null) return "setSwatchColor: invalid params";
+            return SpecialOperations.SetSwatchColor(doc, param);
+        }
+
+        private string ExecuteCreateScribble(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<CreateScribbleParams>();
+            if (param == null) return "createScribble: invalid params";
+            return SpecialOperations.CreateScribble(doc, param);
+        }
+
+        private string ExecuteSetScribbleText(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<SetScribbleTextParams>();
+            if (param == null) return "setScribbleText: invalid params";
+            return SpecialOperations.SetScribbleText(doc, param);
+        }
+
+        private string ExecuteCreateValueList(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<CreateValueListParams>();
+            if (param == null) return "createValueList: invalid params";
+            return SpecialOperations.CreateValueList(doc, param);
+        }
+
+        private string ExecuteSetValueListSelected(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<SetValueListSelectedParams>();
+            if (param == null) return "setValueListSelected: invalid params";
+            return SpecialOperations.SetValueListSelected(doc, param);
+        }
+
+        private string ExecuteCreateScriptNode(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<CreateScriptNodeParams>();
+            if (param == null) return "createScriptNode: invalid params";
+            return ScriptOperations.CreateScriptNode(doc, param);
+        }
+
+        private string ExecuteSetScriptCode(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<SetScriptCodeParams>();
+            if (param == null) return "setScriptCode: invalid params";
+            return ScriptOperations.SetScriptCode(doc, param);
+        }
+
+        private string ExecuteGetScriptCode(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<GetScriptCodeParams>();
+            if (param == null) return "getScriptCode: invalid params";
+            return ScriptOperations.GetScriptCode(doc, param);
+        }
+
+        private string ExecuteAddScriptInput(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<AddScriptInputParams>();
+            if (param == null) return "addScriptInput: invalid params";
+            return ScriptOperations.AddInputParam(doc, param);
+        }
+
+        private string ExecuteRemoveScriptInput(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<RemoveScriptInputParams>();
+            if (param == null) return "removeScriptInput: invalid params";
+            return ScriptOperations.RemoveInputParam(doc, param);
+        }
+
+        private string ExecuteAddScriptOutput(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<AddScriptOutputParams>();
+            if (param == null) return "addScriptOutput: invalid params";
+            return ScriptOperations.AddOutputParam(doc, param);
+        }
+
+        private string ExecuteRemoveScriptOutput(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<RemoveScriptOutputParams>();
+            if (param == null) return "removeScriptOutput: invalid params";
+            return ScriptOperations.RemoveOutputParam(doc, param);
+        }
+
+        private string ExecuteEditScriptAccess(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<EditScriptAccessParams>();
+            if (param == null) return "editScriptAccess: invalid params";
+            return ComponentLifecycleOps.EditScriptAccessType(doc, param);
+        }
+
+        private string ExecuteListScriptParams(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<ListScriptParamsParams>();
+            if (param == null) return "listScriptParams: invalid params";
+            return ComponentLifecycleOps.ListScriptParams(doc, param);
+        }
+
+        private string ExecuteEditDataMapping(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<EditDataMappingParams>();
+            if (param == null) return "editDataMapping: invalid params";
+            return ComponentLifecycleOps.EditDataMapping(doc, param);
+        }
     }
 }
+

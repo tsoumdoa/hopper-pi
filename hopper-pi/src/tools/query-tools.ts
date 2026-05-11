@@ -1,12 +1,14 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { withRequester } from "../infra/request-helpers.js";
-import type { GetCurrentCanvasResponse } from "../types/messages.js";
+import type { GetCurrentCanvasResponse, GetCanvasErrorsResponse } from "../types/messages.js";
 import {
 	fetchCurrentCanvas,
 	formatCanvasResponse,
 	formatComponentsMultiQuery,
 	getCachedOrFetchComponents,
+	fetchCanvasErrors,
+	formatCanvasErrorsResponse,
 } from "./query-handlers.js";
 
 export const ghGetCanvasTool = defineTool({
@@ -30,25 +32,33 @@ export const ghListComponentsTool = defineTool({
 	label: "List Components",
 	description:
 		"Search available Grasshopper component types by query keywords. " +
-		"By default returns only **name** and **typeGuid** for each match. " +
-		"Pass `onlyName: false` to also retrieve description, category, and subcategory. " +
+		"Returns name, typeGuid, category, subcategory, and description for each match. " +
 		"Pass an array of search strings to batch multiple lookups in one call.",
 	parameters: Type.Object({
 		queries:
 			Type.Array(Type.String({
 				description:
 					"Search query — filters component names, categories, or descriptions (case-insensitive partial match). Pass multiple to batch.",
-			}))
-		,
-		onlyName: Type.Optional(Type.Boolean({
-			description:
-				"When true (default), returns only name and typeGuid per component. Set false to include description, category, and subcategory.",
-		})),
+			})),
 	}),
 
 	async execute(_toolCallId, params, _signal, onUpdate, _ctx) {
 		onUpdate?.({ content: [{ type: "text", text: "Fetching component registry..." }], details: {} });
 		const response = await getCachedOrFetchComponents();
-		return formatComponentsMultiQuery(response, params.queries, params.onlyName);
+		return formatComponentsMultiQuery(response, params.queries);
+	},
+});
+
+export const ghGetCanvasErrorsTool = defineTool({
+	name: "gh_get_canvas_errors",
+	label: "Get Canvas Errors",
+	description:
+		"Retrieve all runtime errors, warnings, and messages from the Grasshopper canvas. Returns a per-component list of error/warning bubbles currently showing on the canvas, including script compilation errors.",
+	parameters: Type.Object({}),
+
+	async execute(_toolCallId, _params, _signal, onUpdate) {
+		onUpdate?.({ content: [{ type: "text", text: "Fetching canvas errors from backend..." }], details: {} });
+		const response = await withRequester<GetCanvasErrorsResponse>(fetchCanvasErrors);
+		return formatCanvasErrorsResponse(response);
 	},
 });

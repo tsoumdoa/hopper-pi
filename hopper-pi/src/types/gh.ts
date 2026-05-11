@@ -124,6 +124,4 @@ export type ParsedGrasshopper = {
 	};
 };
 
-export type ParseOptions = {
-	includeVisuals: boolean;
-};
+

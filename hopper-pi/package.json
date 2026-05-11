@@ -1,23 +1,40 @@
 {
-  "name": "hopper-pi",
-  "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "dev": "tsx src/index.ts",
-    "build": "tsc -p tsconfig.json",
-    "pi": "pi -e ./src/index.ts"
-  },
-  "devDependencies": {
-    "@types/node": "^20.0.0",
-    "tsx": "^4.7.0",
-    "typescript": "^5.3.0"
-  },
-  "dependencies": {
-    "@earendil-works/pi-ai": "^0.74.0",
-    "@earendil-works/pi-coding-agent": "^0.74.0",
-    "chalk": "^5.6.2",
-    "fast-xml-parser": "^5.7.3",
-    "nanoid": "^5.1.11",
-    "zeromq": "^6.5.0"
-  }
+	"name": "hopper-pi",
+	"version": "0.1.0",
+	"keywords": [
+		"pi-package"
+	],
+	"type": "module",
+	"scripts": {
+		"dev": "tsx src/index.ts",
+		"build": "tsc -p tsconfig.json",
+		"pi": "pi -e .",
+		"postinstall": "npm run setup"
+	},
+	"devDependencies": {
+		"@types/node": "^20.0.0",
+		"tsx": "^4.7.0",
+		"typescript": "^5.3.0"
+	},
+	"dependencies": {
+		"@earendil-works/pi-ai": "^0.74.0",
+		"@earendil-works/pi-coding-agent": "^0.74.0",
+		"chalk": "^5.6.2",
+		"fast-xml-parser": "^5.7.3",
+		"nanoid": "^5.1.11",
+		"zeromq": "^6.5.0"
+	},
+	"pi": {
+		"extensions": [
+			"./src/index.ts",
+			"./mds/extensions"
+		],
+		"skills": [
+			"./mds/skills",
+			"./mds/agents"
+		],
+		"prompts": [
+			"./mds/prompts"
+		]
+	}
 }

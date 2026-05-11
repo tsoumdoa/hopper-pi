@@ -123,6 +123,57 @@ export type SetPanelTextParams = {
 	text: string;
 };
 
+export type CreateToggleParams = {
+	position: Position;
+	nickName?: string;
+	value: boolean;
+};
+
+export type SetToggleValueParams = {
+	targetId: string;
+	value: boolean;
+};
+
+export type CreateSwatchParams = {
+	position: Position;
+	nickName?: string;
+	color: string;
+};
+
+export type SetSwatchColorParams = {
+	targetId: string;
+	color: string;
+};
+
+export type CreateScribbleParams = {
+	position: Position;
+	nickName?: string;
+	text: string;
+	size?: number;
+};
+
+export type SetScribbleTextParams = {
+	targetId: string;
+	text: string;
+};
+
+export type CreateValueListItem = {
+	name: string;
+	value: string;
+};
+
+export type CreateValueListParams = {
+	position: Position;
+	nickName?: string;
+	items: CreateValueListItem[];
+	selectedIndex?: number;
+};
+
+export type SetValueListSelectedParams = {
+	targetId: string;
+	selectedIndex: number;
+};
+
 export type CreatePanelParams = {
 	position: Position;
 	nickName?: string;
@@ -139,6 +190,123 @@ export type SetPanelParams = {
 	height?: number;
 	multiline?: boolean;
 	bgColor?: string;
+};
+
+export type ScriptIOParam = {
+	name: string;
+};
+
+export type CreateScriptNodeParams = {
+	position: Position;
+	language: "python" | "csharp";
+	code: string;
+	nickName?: string;
+	inputs?: ScriptIOParam[];
+	outputs?: ScriptIOParam[];
+};
+
+export type SetScriptCodeParams = {
+	targetId: string;
+	code: string;
+};
+
+export type GetScriptCodeParams = {
+	targetId: string;
+};
+
+export type ParamType =
+	| "GH_ProxyParameter"
+	| "GH_Receiver"
+	| "Param_AngularDimension"
+	| "Param_Arc"
+	| "Param_Boolean"
+	| "Param_Box"
+	| "Param_Brep"
+	| "Param_Centermark"
+	| "Param_Circle"
+	| "Param_Colour"
+	| "Param_Complex"
+	| "Param_Culture"
+	| "Param_Curve"
+	| "Param_Extrusion"
+	| "Param_Field"
+	| "Param_FilePath"
+	| "Param_GenericObject"
+	| "Param_Geometry"
+	| "Param_Group"
+	| "Param_Guid"
+	| "Param_Hatch"
+	| "Param_InstanceReference"
+	| "Param_Integer"
+	| "Param_Interval"
+	| "Param_Interval2D"
+	| "Param_Interval2D_OBSOLETE"
+	| "Param_LatLonLocation"
+	| "Param_Leader"
+	| "Param_Light"
+	| "Param_Line"
+	| "Param_LinearDimension"
+	| "Param_Matrix"
+	| "Param_Mesh"
+	| "Param_MeshFace"
+	| "Param_MeshParameters"
+	| "Param_Number"
+	| "Param_OGLShader"
+	| "Param_OrdinateDimension"
+	| "Param_Plane"
+	| "Param_Point"
+	| "Param_PointCloud"
+	| "Param_Predicate"
+	| "Param_RadialDimension"
+	| "Param_Rectangle"
+	| "Param_ScriptVariable"
+	| "Param_String"
+	| "Param_StructurePath"
+	| "Param_SubD"
+	| "Param_Surface"
+	| "Param_TextDot"
+	| "Param_TextEntity"
+	| "Param_Time"
+	| "Param_Transform"
+	| "Param_Vector";
+
+export type AddScriptInputParams = {
+	targetId: string;
+	name: string;
+	paramType?: ParamType;
+};
+
+export type RemoveScriptInputParams = {
+	targetId: string;
+	name: string;
+};
+
+export type AddScriptOutputParams = {
+	targetId: string;
+	name: string;
+};
+
+export type RemoveScriptOutputParams = {
+	targetId: string;
+	name: string;
+};
+
+export type EditScriptAccessParams = {
+	targetId: string;
+	name: string;
+	access: "item" | "list" | "tree";
+};
+
+export type ListScriptParamsParams = {
+	targetId: string;
+};
+
+export type EditDataMappingParams = {
+	targetId: string;
+	name: string;
+	dataMapping?: "none" | "flatten" | "graft";
+	simplify?: boolean;
+	reverse?: boolean;
 };
 
 export type CommandAction =
@@ -161,7 +329,25 @@ export type CommandAction =
 	| "setSliderValue"
 	| "createPanel"
 	| "setPanelParams"
-	| "setPanelText";
+	| "setPanelText"
+	| "createToggle"
+	| "setToggleValue"
+	| "createSwatch"
+	| "setSwatchColor"
+	| "createScribble"
+	| "setScribbleText"
+	| "createValueList"
+	| "setValueListSelected"
+	| "createScriptNode"
+	| "setScriptCode"
+	| "getScriptCode"
+	| "addScriptInput"
+	| "removeScriptInput"
+	| "addScriptOutput"
+	| "removeScriptOutput"
+	| "editScriptAccess"
+	| "listScriptParams"
+	| "editDataMapping";
 
 export type CommandParams =
 	| AddComponentParams
@@ -183,7 +369,24 @@ export type CommandParams =
 	| SetSliderValueParams
 	| CreatePanelParams
 	| SetPanelParams
-	| SetPanelTextParams;
+	| SetPanelTextParams
+	| CreateToggleParams
+	| SetToggleValueParams
+	| CreateSwatchParams
+	| SetSwatchColorParams
+	| CreateScribbleParams
+	| SetScribbleTextParams
+	| CreateValueListParams
+	| SetValueListSelectedParams
+	| CreateScriptNodeParams
+	| SetScriptCodeParams
+	| AddScriptInputParams
+	| RemoveScriptInputParams
+	| AddScriptOutputParams
+	| RemoveScriptOutputParams
+	| EditScriptAccessParams
+	| ListScriptParamsParams
+	| EditDataMappingParams;
 
 export type Command = {
 	action: CommandAction;

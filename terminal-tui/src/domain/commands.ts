@@ -143,7 +143,7 @@ export const ACTION_REGISTRY: readonly ActionDef[] = [
 			{ name: "text", cliFlag: "--text <text>", cliDescription: "Initial panel text", prompt: "  text: " },
 			{ name: "width", cliFlag: "--width <number>", cliDescription: "Fixed width in pixels (overrides auto-size)", prompt: "  width: ", parse: (v) => Number(v) },
 			{ name: "height", cliFlag: "--height <number>", cliDescription: "Fixed height in pixels (overrides auto-size)", prompt: "  height: ", parse: (v) => Number(v) },
-			{ name: "multiline", cliFlag: "--multiline <boolean>", cliDescription: "Enable multiline mode", prompt: "  multiline (true/false): ", parse: (v) => v === "true" },
+			{ name: "multiline", cliFlag: "--multiline <boolean>", cliDescription: "Enable for multi line entry, set to false for list of items", prompt: "  multiline (true/false): ", parse: (v) => v === "true" },
 			{ name: "bgColor", cliFlag: "--bgColor <color>", cliDescription: "Background color rgba e.g. 'rgba(240,248,255,255)'", prompt: "  bg color: " },
 		],
 	},
@@ -166,6 +166,88 @@ export const ACTION_REGISTRY: readonly ActionDef[] = [
 		params: [
 			{ name: "targetId", cliFlag: "--targetId <id>", cliDescription: "Target component ID", prompt: "  target id: " },
 			{ name: "text", cliFlag: "--text <text>", cliDescription: "Panel text", prompt: "  text: " },
+		],
+	},
+	{
+		id: 17,
+		action: "createToggle",
+		label: "create-toggle",
+		params: [
+			{ name: "x", cliFlag: "--x <number>", cliDescription: "X position on canvas", prompt: "  x position: ", parse: (v) => Number(v) },
+			{ name: "y", cliFlag: "--y <number>", cliDescription: "Y position on canvas", prompt: "  y position: ", parse: (v) => Number(v) },
+			{ name: "value", cliFlag: "--value <boolean>", cliDescription: "Initial boolean value", prompt: "  value (true/false): ", parse: (v) => v === "true" },
+			{ name: "nickName", cliFlag: "--nickName <name>", cliDescription: "Toggle nickname (optional)", prompt: "  nickname: " },
+		],
+	},
+	{
+		id: 18,
+		action: "setToggleValue",
+		label: "set-toggle-value",
+		params: [
+			{ name: "targetId", cliFlag: "--targetId <id>", cliDescription: "Target component ID", prompt: "  target id: " },
+			{ name: "value", cliFlag: "--value <boolean>", cliDescription: "Boolean value", prompt: "  value (true/false): ", parse: (v) => v === "true" },
+		],
+	},
+	{
+		id: 19,
+		action: "createSwatch",
+		label: "create-swatch",
+		params: [
+			{ name: "x", cliFlag: "--x <number>", cliDescription: "X position on canvas", prompt: "  x position: ", parse: (v) => Number(v) },
+			{ name: "y", cliFlag: "--y <number>", cliDescription: "Y position on canvas", prompt: "  y position: ", parse: (v) => Number(v) },
+			{ name: "color", cliFlag: "--color <rgba>", cliDescription: "Color as rgba e.g. 'rgba(255,0,0,255)'", prompt: "  color (rgba): " },
+			{ name: "nickName", cliFlag: "--nickName <name>", cliDescription: "Swatch nickname (optional)", prompt: "  nickname: " },
+		],
+	},
+	{
+		id: 20,
+		action: "setSwatchColor",
+		label: "set-swatch-color",
+		params: [
+			{ name: "targetId", cliFlag: "--targetId <id>", cliDescription: "Target component ID", prompt: "  target id: " },
+			{ name: "color", cliFlag: "--color <rgba>", cliDescription: "Color as rgba e.g. 'rgba(255,0,0,255)'", prompt: "  color (rgba): " },
+		],
+	},
+	{
+		id: 21,
+		action: "createScribble",
+		label: "create-scribble",
+		params: [
+			{ name: "x", cliFlag: "--x <number>", cliDescription: "X position on canvas", prompt: "  x position: ", parse: (v) => Number(v) },
+			{ name: "y", cliFlag: "--y <number>", cliDescription: "Y position on canvas", prompt: "  y position: ", parse: (v) => Number(v) },
+			{ name: "text", cliFlag: "--text <text>", cliDescription: "Scribble text content", prompt: "  text: " },
+			{ name: "nickName", cliFlag: "--nickName <name>", cliDescription: "Scribble nickname (optional)", prompt: "  nickname: " },
+			{ name: "size", cliFlag: "--size <number>", cliDescription: "Font size in points (optional, default 10)", prompt: "  size: ", parse: (v) => Number(v) },
+		],
+	},
+	{
+		id: 22,
+		action: "setScribbleText",
+		label: "set-scribble-text",
+		params: [
+			{ name: "targetId", cliFlag: "--targetId <id>", cliDescription: "Target component ID", prompt: "  target id: " },
+			{ name: "text", cliFlag: "--text <text>", cliDescription: "Scribble text", prompt: "  text: " },
+		],
+	},
+	{
+		id: 23,
+		action: "createValueList",
+		label: "create-value-list",
+		params: [
+			{ name: "x", cliFlag: "--x <number>", cliDescription: "X position on canvas", prompt: "  x position: ", parse: (v) => Number(v) },
+			{ name: "y", cliFlag: "--y <number>", cliDescription: "Y position on canvas", prompt: "  y position: ", parse: (v) => Number(v) },
+			{ name: "items", cliFlag: "--items <json>", cliDescription: 'Items as JSON array [{name,value}]', prompt: "  items (JSON): " },
+			{ name: "nickName", cliFlag: "--nickName <name>", cliDescription: "Value List nickname (optional)", prompt: "  nickname: " },
+			{ name: "selectedIndex", cliFlag: "--selectedIndex <int>", cliDescription: "Initially selected item index (0-based, optional)", prompt: "  selected index: ", parse: (v) => Number(v) },
+		],
+	},
+	{
+		id: 24,
+		action: "setValueListSelected",
+		label: "set-selected",
+		params: [
+			{ name: "targetId", cliFlag: "--targetId <id>", cliDescription: "Target component ID", prompt: "  target id: " },
+			{ name: "selectedIndex", cliFlag: "--selectedIndex <int>", cliDescription: "Selected item index (0-based)", prompt: "  selected index: ", parse: (v) => Number(v) },
 		],
 	},
 ] as const;

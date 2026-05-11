@@ -105,7 +105,7 @@ namespace rhino_zmq_poc
                     panel.Properties.Multiline = param.Multiline.Value;
 
                 if (!string.IsNullOrEmpty(param.BgColor))
-                    panel.Properties.Colour = ParseRgbaColor(param.BgColor);
+                    panel.Properties.Colour = Utilities.ParseRgbaColor(param.BgColor);
 
                 if (param.Width.HasValue || param.Height.HasValue)
                 {
@@ -143,7 +143,7 @@ namespace rhino_zmq_poc
                     panel.Properties.Multiline = param.Multiline.Value;
 
                 if (!string.IsNullOrEmpty(param.BgColor))
-                    panel.Properties.Colour = ParseRgbaColor(param.BgColor);
+                    panel.Properties.Colour = Utilities.ParseRgbaColor(param.BgColor);
 
                 if (param.Width.HasValue || param.Height.HasValue)
                 {
@@ -178,33 +178,14 @@ namespace rhino_zmq_poc
             if (obj is GH_Panel panel)
             {
                 panel.UserText = param.Text;
-								panel.Attributes?.ExpireLayout();
-								panel.OnDisplayExpired(true);
-								panel.ExpireSolution(true);
+                                panel.Attributes?.ExpireLayout();
+                                panel.OnDisplayExpired(true);
+                                panel.ExpireSolution(true);
 
                 return $"setPanelText: set ({param.TargetId}) text = \"{param.Text}\"";
             }
 
             return $"setPanelText error: object '{param.TargetId}' is not a Panel";
-        }
-
-        private static Color ParseRgbaColor(string rgba)
-        {
-            try
-            {
-                var inner = rgba.Replace("rgba(", "").Replace(")", "");
-                var parts = inner.Split(',');
-                if (parts.Length >= 3)
-                {
-                    var r = int.Parse(parts[0].Trim());
-                    var g = int.Parse(parts[1].Trim());
-                    var b = int.Parse(parts[2].Trim());
-                    var a = parts.Length > 4 ? int.Parse(parts[3].Trim()) : 255;
-                    return Color.FromArgb(a, r, g, b);
-                }
-            }
-            catch { }
-            return Color.White;
         }
     }
 }

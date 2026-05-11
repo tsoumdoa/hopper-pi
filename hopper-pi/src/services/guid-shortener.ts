@@ -89,15 +89,23 @@ function registerGuid(guid: string, kind: GuidKind): string {
 function resolveGuid(value: string, kind: GuidKind): string {
 	const store = stores[kind];
 	const byShort = store.shortToFull.get(value);
-	if (byShort) return byShort;
+	if (byShort) {
+		console.log(`[guid-resolve] shortId="${value}" resolvedGuid="${byShort}" kind=${kind}`);
+		return byShort;
+	}
 
 	if (looksLikeGuid(value)) {
 		const normalized = normalizeGuid(value);
 		const knownFull = store.normalizedToFull.get(normalized);
-		if (knownFull) return knownFull;
+		if (knownFull) {
+			console.log(`[guid-resolve] shortId="${value}" resolvedGuid="${knownFull}" kind=${kind}`);
+			return knownFull;
+		}
+		console.log(`[guid-resolve] shortId="${value}" resolvedGuid="${value}" kind=${kind} (passthrough full guid, not in store)`);
 		return value;
 	}
 
+	console.log(`[guid-resolve] shortId="${value}" resolvedGuid=UNRESOLVED kind=${kind}`);
 	return value;
 }
 

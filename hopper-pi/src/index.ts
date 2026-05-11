@@ -7,7 +7,6 @@
  * Architecture:
  *   - infra/        → ZMQ transport (REQ/REP, PUSH, SUB sockets)
  *   - types/        → Message & domain schemas
- *   - domain/       → Action registry
  *   - services/     → XML parser (Grasshopper archive → JSON)
  *   - tools/        → Pi extension tool definitions (14 tools)
  *
