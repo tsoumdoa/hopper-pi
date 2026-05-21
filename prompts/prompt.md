@@ -12,4 +12,4 @@ model gherkin tower in lodon, plz do research to make it as realistic as possibl
 add preview par elements to reflect the material (e.g. glass => blue, steel=> gray) and
 disable previwe for those elements other than preview.
 
-generate interesting mathematical shapes using c# node
+generate interesting mathematical shape using c# node
