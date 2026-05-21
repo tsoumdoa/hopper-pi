@@ -120,7 +120,8 @@ function parseMapping(mappingValue: number): DataMapping {
 
 function parseParamChunk(
 	paramChunk: XmlChunk,
-	type: "input" | "output"
+	type: "input" | "output",
+	options?: ParseOptions
 ): InputPort | OutputPort | null {
 	const items = extractItems(paramChunk);
 
@@ -146,31 +147,47 @@ function parseParamChunk(
 		}
 	}
 
-	const options: PortOptions = {};
+	const portOptions: PortOptions = {};
 	let hasOptions = false;
 
 	if (items.Mapping !== undefined) {
-		options.mapping = parseMapping(items.Mapping as number);
+		portOptions.mapping = parseMapping(items.Mapping as number);
 		hasOptions = true;
 	}
 
 	if (items.SimplifyData === true) {
-		options.simplify = true;
+		portOptions.simplify = true;
 		hasOptions = true;
 	}
 
 	if (items.Reverse === true) {
-		options.reverse = true;
+		portOptions.reverse = true;
 		hasOptions = true;
 	}
 
 	if (items.Expression && typeof items.Expression === "string") {
-		options.expression = items.Expression as string;
+		portOptions.expression = items.Expression as string;
 		hasOptions = true;
 	}
 
 	if (hasOptions) {
-		port.options = options;
+		port.options = portOptions;
+	}
+
+	if (options?.includeVisuals) {
+		const attributesChunk = findChunk(paramChunk, "Attributes");
+		if (attributesChunk) {
+			const attrItems = extractItems(attributesChunk);
+
+			if (attrItems.Pivot) {
+				port.pivot = attrItems.Pivot as { x: number; y: number };
+			}
+
+			if (attrItems.Bounds) {
+				const b = attrItems.Bounds as { width: number; height: number; x: number; y: number };
+				port.bounds = { width: b.width, height: b.height };
+			}
+		}
 	}
 
 	return port;
@@ -455,7 +472,7 @@ function parseComponent(
 		const inputParams = findAllChunks(paramDataChunk, "InputParam");
 
 		for (let i = 0; i < inputCount && i < inputParams.length; i++) {
-			const param = parseParamChunk(inputParams[i], "input");
+			const param = parseParamChunk(inputParams[i], "input", options);
 			if (param && param.nick) {
 				const key = String(param.nick).toLowerCase();
 				component.inputs[key] = param;
@@ -466,7 +483,7 @@ function parseComponent(
 		const outputParams = findAllChunks(paramDataChunk, "OutputParam");
 
 		for (let i = 0; i < outputCount && i < outputParams.length; i++) {
-			const param = parseParamChunk(outputParams[i], "output");
+			const param = parseParamChunk(outputParams[i], "output", options);
 			if (param && param.nick) {
 				const key = String(param.nick).toLowerCase();
 				component.outputs[key] = param;
@@ -477,7 +494,7 @@ function parseComponent(
 	const seenInputKeys = new Set<string>();
 	const paramInputs = findAllChunks(containerChunk, "param_input");
 	for (const paramChunk of paramInputs) {
-		const param = parseParamChunk(paramChunk, "input");
+		const param = parseParamChunk(paramChunk, "input", options);
 		if (param && param.nick) {
 			let key = String(param.nick).toLowerCase();
 			if (seenInputKeys.has(key)) {
@@ -491,7 +508,7 @@ function parseComponent(
 	const seenOutputKeys = new Set<string>();
 	const paramOutputs = findAllChunks(containerChunk, "param_output");
 	for (const paramChunk of paramOutputs) {
-		const param = parseParamChunk(paramChunk, "output");
+		const param = parseParamChunk(paramChunk, "output", options);
 		if (param && param.nick) {
 			let key = String(param.nick).toLowerCase();
 			if (seenOutputKeys.has(key)) {

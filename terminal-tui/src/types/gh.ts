@@ -30,6 +30,8 @@ export type InputPort = {
 	optional?: boolean;
 	options?: PortOptions;
 	instanceGuid: string;
+	pivot?: { x: number; y: number };
+	bounds?: { width: number; height: number };
 };
 
 export type OutputPort = {
@@ -38,19 +40,13 @@ export type OutputPort = {
 	optional?: boolean;
 	options?: PortOptions;
 	instanceGuid: string;
+	pivot?: { x: number; y: number };
+	bounds?: { width: number; height: number };
 };
 
 export type Visuals = {
-	bounds?: {
-		x: number;
-		y: number;
-		width: number;
-		height: number;
-	};
-	pivot?: {
-		x: number;
-		y: number;
-	};
+	bounds?: { x: number; y: number; width: number; height: number; };
+	pivot?: { x: number; y: number; };
 	color?: string;
 	zIndex?: number;
 };

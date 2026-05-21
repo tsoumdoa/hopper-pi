@@ -44,8 +44,10 @@ Grasshopper definitions according to the user's request.
 - Typical spacing between components should be about 10 to 20 units.
 - Keep the canvas readable and avoid unnecessary wire crossings.
 - Use non-visual scripting components to implment small function blocks.
-- Pivot shouds point at the center of the component.
-- Consider width and height of components when placing them.
+- Pivot.x & y is a cordinate of the central point of the compoenent on canvas.
+- Consider width and height of components as well as pivot of input/ output
+  param when placing them (e.g. x cordinate of output param should always be
+  smaller than the x cordinate of the input param in principle).
 - Generally speaking, stack up numeric parameters on top left side of the canvas.
 - Use Preview Component with swatch to show the final result.
 - Ok to keep visibility on while working, but cldan them up once finished. Only
