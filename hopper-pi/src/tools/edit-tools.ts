@@ -1,10 +1,9 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import type { TextContent } from "@earendil-works/pi-ai";
 import { createExecute, formatDefaultResult, defaultProgressMsg, createHybridExecute } from "./edit-handlers.js";
 import { withRequester } from "../infra/request-helpers.js";
 import { fetchScriptParams, fetchScriptCode, formatScriptParamsResponse, formatScriptCodeResponse } from "./query-handlers.js";
-import type { CommandAction, ParamType } from "../types/commands.js";
+import type { CommandAction } from "../types/commands.js";
 import {
 	resolveInstanceGuid,
 	resolveTypeGuid,
@@ -101,9 +100,7 @@ export const ghEditComponentsTool = defineTool({
 				locked: Type.Optional(
 					Type.Boolean({ description: "true to lock, false to unlock — required for set_locked" })
 				),
-				hidden: Type.Optional(
-					Type.Boolean({ description: "true to hide, false to show — required for set_hidden" })
-				),
+				hidden: Type.Boolean({ description: "set hidden by default except for Preview functions" }),
 			})
 		),
 	}),
