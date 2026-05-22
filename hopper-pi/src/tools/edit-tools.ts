@@ -380,7 +380,7 @@ const SliderCreateFields = Type.Object({
 	max: Type.Number({ description: "Maximum value" }),
 	value: Type.Number({ description: "Initial/current value" }),
 	digits: Type.Number({ description: "Decimal digits" }),
-	interval: Type.Number({ description: "Step interval" }),
+	interval: Type.Optional(Type.Number({ description: "Step interval (not yet processed by backend)" })),
 });
 
 const SliderSetFields = Type.Object({
@@ -391,7 +391,7 @@ const SliderRangeFields = Type.Object({
 	min: Type.Number({ description: "New minimum value" }),
 	max: Type.Number({ description: "New maximum value" }),
 	digits: Type.Number({ description: "New decimal digits" }),
-	interval: Type.Number({ description: "New step interval" }),
+	interval: Type.Optional(Type.Number({ description: "New step interval (not yet processed by backend)" })),
 });
 
 const PanelCreateFields = Type.Object({
@@ -432,7 +432,7 @@ const ScribbleTextFields = Type.Object({
 
 const ValueListItemFields = Type.Object({
 	name: Type.String({ description: "Display name for the list item" }),
-	itemValue: Type.String({ description: "Value associated with this item" }),
+	value: Type.String({ description: "Value associated with this item" }),
 });
 
 const ValueListCreateFields = Type.Object({
@@ -452,7 +452,7 @@ export const ghEditWidgetTool = defineTool({
 		"Replaces the individual gh_edit_slider, gh_edit_panel, gh_edit_toggle, gh_edit_swatch, gh_edit_scribble, and gh_edit_value_list tools. " +
 		"Use widgetType to specify which kind of widget, and action for the operation. Accepts an array of operation items for batch processing.\n\n" +
 		"**Actions per widget type:**\n" +
-		"- **slider**: `create` (requires min, max, value, digits, interval), `setValue` (requires value), `setRange` (requires min, max, digits, interval)\n" +
+		"- **slider**: `create` (requires min, max, value, digits; optional interval), `setValue` (requires value), `setRange` (requires min, max, digits; optional interval)\n" +
 		"- **panel**: `create` (requires text; optional width/height/multiline/bgColor), `setText` (requires text), `setProperty` (optional width/height/multiline/bgColor)\n" +
 		"- **toggle**: `create` (requires value), `setValue` (requires value)\n" +
 		"- **swatch**: `create` (requires color), `setColor` (requires color)\n" +
@@ -460,103 +460,220 @@ export const ghEditWidgetTool = defineTool({
 		"- **valueList**: `create` (requires items[]; optional selectedIndex), `setSelected` (requires selectedIndex)",
 	parameters: Type.Object({
 		items: Type.Array(
-			Type.Object({
-				widgetType: WidgetType,
-				action: Type.Union([
-					Type.Literal("create"),
-					Type.Literal("setValue"),
-					Type.Literal("setColor"),
-					Type.Literal("setText"),
-					Type.Literal("setSelected"),
-					Type.Literal("setProperty"),
-					Type.Literal("setRange"),
+			Type.Union([
+				Type.Intersect([
+					Type.Object({
+						widgetType: Type.Literal("slider"),
+						action: Type.Literal("create"),
+						x: Type.Number({ description: "X position on canvas" }),
+						y: Type.Number({ description: "Y position on canvas" }),
+						nickName: Type.Optional(Type.String({ description: "Widget nickname (defaults to type-specific default)" })),
+					}),
+					SliderCreateFields,
 				]),
-				targetId: Type.Optional(
-					Type.String({ description: "Widget instance GUID (from gh_get_canvas) — required for all actions except create" })
-				),
-				x: Type.Optional(
-					Type.Number({ description: "X position on canvas — required for create" })
-				),
-				y: Type.Optional(
-					Type.Number({ description: "Y position on canvas — required for create" })
-				),
-				nickName: Type.Optional(
-					Type.String({ description: "Widget nickname — optional for create (defaults to type-specific default)" })
-				),
-				slider: Type.Optional(SliderCreateFields),
-				sliderValue: Type.Optional(SliderSetFields),
-				sliderRange: Type.Optional(SliderRangeFields),
-				panel: Type.Optional(PanelCreateFields),
-				panelProp: Type.Optional(PanelPropertyFields),
-				panelText: Type.Optional(PanelTextFields),
-				toggle: Type.Optional(ToggleFields),
-				swatch: Type.Optional(SwatchFields),
-				scribble: Type.Optional(ScribbleCreateFields),
-				scribbleText: Type.Optional(ScribbleTextFields),
-				valueList: Type.Optional(ValueListCreateFields),
-				valueListSelect: Type.Optional(ValueListSelectFields),
-			})
+				Type.Intersect([
+					Type.Object({
+						widgetType: Type.Literal("slider"),
+						action: Type.Literal("setValue"),
+						targetId: Type.String({ description: "Widget instance GUID (from gh_get_canvas)" }),
+					}),
+					SliderSetFields,
+				]),
+				Type.Intersect([
+					Type.Object({
+						widgetType: Type.Literal("slider"),
+						action: Type.Literal("setRange"),
+						targetId: Type.String({ description: "Widget instance GUID (from gh_get_canvas)" }),
+					}),
+					SliderRangeFields,
+				]),
+				Type.Intersect([
+					Type.Object({
+						widgetType: Type.Literal("panel"),
+						action: Type.Literal("create"),
+						x: Type.Number({ description: "X position on canvas" }),
+						y: Type.Number({ description: "Y position on canvas" }),
+						nickName: Type.Optional(Type.String({ description: "Widget nickname (defaults to type-specific default)" })),
+					}),
+					PanelCreateFields,
+				]),
+				Type.Intersect([
+					Type.Object({
+						widgetType: Type.Literal("panel"),
+						action: Type.Literal("setText"),
+						targetId: Type.String({ description: "Widget instance GUID (from gh_get_canvas)" }),
+					}),
+					PanelTextFields,
+				]),
+				Type.Intersect([
+					Type.Object({
+						widgetType: Type.Literal("panel"),
+						action: Type.Literal("setProperty"),
+						targetId: Type.String({ description: "Widget instance GUID (from gh_get_canvas)" }),
+					}),
+					PanelPropertyFields,
+				]),
+				Type.Intersect([
+					Type.Object({
+						widgetType: Type.Literal("toggle"),
+						action: Type.Literal("create"),
+						x: Type.Number({ description: "X position on canvas" }),
+						y: Type.Number({ description: "Y position on canvas" }),
+						nickName: Type.Optional(Type.String({ description: "Widget nickname (defaults to type-specific default)" })),
+					}),
+					ToggleFields,
+				]),
+				Type.Intersect([
+					Type.Object({
+						widgetType: Type.Literal("toggle"),
+						action: Type.Literal("setValue"),
+						targetId: Type.String({ description: "Widget instance GUID (from gh_get_canvas)" }),
+					}),
+					ToggleFields,
+				]),
+				Type.Intersect([
+					Type.Object({
+						widgetType: Type.Literal("swatch"),
+						action: Type.Literal("create"),
+						x: Type.Number({ description: "X position on canvas" }),
+						y: Type.Number({ description: "Y position on canvas" }),
+						nickName: Type.Optional(Type.String({ description: "Widget nickname (defaults to type-specific default)" })),
+					}),
+					SwatchFields,
+				]),
+				Type.Intersect([
+					Type.Object({
+						widgetType: Type.Literal("swatch"),
+						action: Type.Literal("setColor"),
+						targetId: Type.String({ description: "Widget instance GUID (from gh_get_canvas)" }),
+					}),
+					SwatchFields,
+				]),
+				Type.Intersect([
+					Type.Object({
+						widgetType: Type.Literal("scribble"),
+						action: Type.Literal("create"),
+						x: Type.Number({ description: "X position on canvas" }),
+						y: Type.Number({ description: "Y position on canvas" }),
+						nickName: Type.Optional(Type.String({ description: "Widget nickname (defaults to type-specific default)" })),
+					}),
+					ScribbleCreateFields,
+				]),
+				Type.Intersect([
+					Type.Object({
+						widgetType: Type.Literal("scribble"),
+						action: Type.Literal("setText"),
+						targetId: Type.String({ description: "Widget instance GUID (from gh_get_canvas)" }),
+					}),
+					ScribbleTextFields,
+				]),
+				Type.Intersect([
+					Type.Object({
+						widgetType: Type.Literal("valueList"),
+						action: Type.Literal("create"),
+						x: Type.Number({ description: "X position on canvas" }),
+						y: Type.Number({ description: "Y position on canvas" }),
+						nickName: Type.Optional(Type.String({ description: "Widget nickname (defaults to type-specific default)" })),
+					}),
+					ValueListCreateFields,
+				]),
+				Type.Intersect([
+					Type.Object({
+						widgetType: Type.Literal("valueList"),
+						action: Type.Literal("setSelected"),
+						targetId: Type.String({ description: "Widget instance GUID (from gh_get_canvas)" }),
+					}),
+					ValueListSelectFields,
+				]),
+			])
 		),
 	}),
 	execute: createExecute(
 		(item) => {
-			const pos = { x: item.x!, y: item.y! };
 			switch (item.widgetType) {
 				case "slider":
 					switch (item.action) {
-						case "create":
-							return { action: "createSlider" as CommandAction, params: { position: pos, nickName: item.nickName, ...item.slider! } };
-						case "setValue":
-							return { action: "setSliderValue" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId!), ...item.sliderValue! } };
-						case "setRange":
-							return { action: "editSliderRange" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId!), ...item.sliderRange! } };
+						case "create": {
+							const { widgetType, action, x, y, nickName, ...fields } = item;
+							return { action: "createSlider" as CommandAction, params: { position: { x, y }, nickName, ...fields } };
+						}
+						case "setValue": {
+							const { widgetType, action, targetId, ...fields } = item;
+							return { action: "setSliderValue" as CommandAction, params: { targetId: resolveInstanceGuid(targetId), ...fields } };
+						}
+						case "setRange": {
+							const { widgetType, action, targetId, ...fields } = item;
+							return { action: "editSliderRange" as CommandAction, params: { targetId: resolveInstanceGuid(targetId), ...fields } };
+						}
 						default:
 							return null;
 					}
 				case "panel":
 					switch (item.action) {
-						case "create":
-							return { action: "createPanel" as CommandAction, params: { position: pos, nickName: item.nickName, ...item.panel! } };
-						case "setProperty":
-							return { action: "setPanelParams" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId!), ...item.panelProp! } };
-						case "setText":
-							return { action: "setPanelText" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId!), ...item.panelText! } };
+						case "create": {
+							const { widgetType, action, x, y, nickName, ...fields } = item;
+							return { action: "createPanel" as CommandAction, params: { position: { x, y }, nickName, ...fields } };
+						}
+						case "setText": {
+							const { widgetType, action, targetId, ...fields } = item;
+							return { action: "setPanelText" as CommandAction, params: { targetId: resolveInstanceGuid(targetId), ...fields } };
+						}
+						case "setProperty": {
+							const { widgetType, action, targetId, ...fields } = item;
+							return { action: "setPanelParams" as CommandAction, params: { targetId: resolveInstanceGuid(targetId), ...fields } };
+						}
 						default:
 							return null;
 					}
 				case "toggle":
 					switch (item.action) {
-						case "create":
-							return { action: "createToggle" as CommandAction, params: { position: pos, nickName: item.nickName, ...item.toggle! } };
-						case "setValue":
-							return { action: "setToggleValue" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId!), ...item.toggle! } };
+						case "create": {
+							const { widgetType, action, x, y, nickName, ...fields } = item;
+							return { action: "createToggle" as CommandAction, params: { position: { x, y }, nickName, ...fields } };
+						}
+						case "setValue": {
+							const { widgetType, action, targetId, ...fields } = item;
+							return { action: "setToggleValue" as CommandAction, params: { targetId: resolveInstanceGuid(targetId), ...fields } };
+						}
 						default:
 							return null;
 					}
 				case "swatch":
 					switch (item.action) {
-						case "create":
-							return { action: "createSwatch" as CommandAction, params: { position: pos, nickName: item.nickName, ...item.swatch! } };
-						case "setColor":
-							return { action: "setSwatchColor" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId!), ...item.swatch! } };
+						case "create": {
+							const { widgetType, action, x, y, nickName, ...fields } = item;
+							return { action: "createSwatch" as CommandAction, params: { position: { x, y }, nickName, ...fields } };
+						}
+						case "setColor": {
+							const { widgetType, action, targetId, ...fields } = item;
+							return { action: "setSwatchColor" as CommandAction, params: { targetId: resolveInstanceGuid(targetId), ...fields } };
+						}
 						default:
 							return null;
 					}
 				case "scribble":
 					switch (item.action) {
-						case "create":
-							return { action: "createScribble" as CommandAction, params: { position: pos, nickName: item.nickName, ...item.scribble! } };
-						case "setText":
-							return { action: "setScribbleText" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId!), ...item.scribbleText! } };
+						case "create": {
+							const { widgetType, action, x, y, nickName, ...fields } = item;
+							return { action: "createScribble" as CommandAction, params: { position: { x, y }, nickName, ...fields } };
+						}
+						case "setText": {
+							const { widgetType, action, targetId, ...fields } = item;
+							return { action: "setScribbleText" as CommandAction, params: { targetId: resolveInstanceGuid(targetId), ...fields } };
+						}
 						default:
 							return null;
 					}
 				case "valueList":
 					switch (item.action) {
-						case "create":
-							return { action: "createValueList" as CommandAction, params: { position: pos, nickName: item.nickName, ...item.valueList! } };
-						case "setSelected":
-							return { action: "setValueListSelected" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId!), ...item.valueListSelect! } };
+						case "create": {
+							const { widgetType, action, x, y, nickName, ...fields } = item;
+							return { action: "createValueList" as CommandAction, params: { position: { x, y }, nickName, ...fields } };
+						}
+						case "setSelected": {
+							const { widgetType, action, targetId, ...fields } = item;
+							return { action: "setValueListSelected" as CommandAction, params: { targetId: resolveInstanceGuid(targetId), ...fields } };
+						}
 						default:
 							return null;
 					}
@@ -565,7 +682,7 @@ export const ghEditWidgetTool = defineTool({
 			}
 		},
 		formatDefaultResult,
-		(item) => `${item.action} ${item.widgetType} on ${item.targetId ?? "new"}...`,
+		(item) => `${item.action} ${item.widgetType} on ${"targetId" in item ? item.targetId : "new"}...`,
 	),
 });
 
@@ -576,50 +693,47 @@ export const ghEditScriptTool = defineTool({
 		"Perform script node operations on the Grasshopper canvas: create a new C# or Python script node with source code and I/O parameters, or set source code on an existing script. The language is chosen at creation time and cannot be changed afterward. For port management (add/remove inputs/outputs, change access type), use gh_edit_components. Accepts an array of operation items for batch processing.",
 	parameters: Type.Object({
 		items: Type.Array(
-			Type.Object({
-				action: Type.Union([
-					Type.Literal("create"),
-					Type.Literal("setCode"),
-					Type.Literal("getCode"),
-				]),
-				targetId: Type.Optional(
-					Type.String({ description: "Script component ID (from gh_get_canvas) — required for setCode and getCode" })
-				),
-				x: Type.Optional(
-					Type.Number({ description: "X position on canvas — required for create" })
-				),
-				y: Type.Optional(
-					Type.Number({ description: "Y position on canvas — required for create" })
-				),
-				language: Type.Optional(
-					Type.Union([
+			Type.Union([
+				Type.Object({
+					action: Type.Literal("create"),
+					x: Type.Number({ description: "X position on canvas" }),
+					y: Type.Number({ description: "Y position on canvas" }),
+					language: Type.Union([
 						Type.Literal("python"),
 						Type.Literal("csharp"),
-					])
-				),
-				code: Type.Optional(
-					Type.String({ description: "Script source code — required for create and setCode" })
-				),
-				nickName: Type.Optional(
-					Type.String({ description: "Script nickname — optional for create (defaults to language name)" })
-				),
-				inputs: Type.Optional(
-					Type.Array(Type.Object({
-						name: Type.String({ description: "Input parameter name" }),
-					}), { description: "Input parameters to register at creation time — optional for create" })
-				),
-				outputs: Type.Optional(
-					Type.Array(Type.Object({
-						name: Type.String({ description: "Output parameter name" }),
-					}), { description: "Output parameters to register at creation time — optional for create" })
-				),
-			})
+					], { description: "Script language — chosen at creation time and cannot be changed afterward" }),
+					code: Type.String({ description: "Script source code" }),
+					nickName: Type.Optional(
+						Type.String({ description: "Script nickname (defaults to language name)" })
+					),
+					inputs: Type.Optional(
+						Type.Array(Type.Object({
+							name: Type.String({ description: "Input parameter name" }),
+						}), { description: "Input parameters to register at creation time" })
+					),
+					outputs: Type.Optional(
+						Type.Array(Type.Object({
+							name: Type.String({ description: "Output parameter name" }),
+						}), { description: "Output parameters to register at creation time" })
+					),
+				}),
+				Type.Object({
+					action: Type.Literal("setCode"),
+					targetId: Type.String({ description: "Script component ID (from gh_get_canvas)" }),
+					code: Type.String({ description: "Script source code" }),
+				}),
+				Type.Object({
+					action: Type.Literal("getCode"),
+					targetId: Type.String({ description: "Script component ID (from gh_get_canvas)" }),
+				}),
+			])
 		),
 	}),
 	execute: createHybridExecute(
 		"getCode",
 		async (item) => {
-			const response = await withRequester((req) => fetchScriptCode(req, resolveInstanceGuid(item.targetId!)));
+			if (item.action !== "getCode") return "";
+			const response = await withRequester((req) => fetchScriptCode(req, resolveInstanceGuid(item.targetId)));
 			const formatted = formatScriptCodeResponse(response);
 			return formatted.content[0].text;
 		},
@@ -629,21 +743,21 @@ export const ghEditScriptTool = defineTool({
 					return {
 						action: "createScriptNode" as CommandAction,
 						params: {
-							position: { x: item.x!, y: item.y! },
-							language: item.language ?? "csharp",
-							code: item.code ?? "",
+							position: { x: item.x, y: item.y },
+							language: item.language,
+							code: item.code,
 							nickName: item.nickName,
 							inputs: item.inputs,
 							outputs: item.outputs,
 						},
 					};
 				case "setCode":
-					return { action: "setScriptCode" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId!), code: item.code! } };
+					return { action: "setScriptCode" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), code: item.code } };
 				default:
 					return null;
 			}
 		},
 		formatDefaultResult,
-		(item) => `${item.action} on ${item.targetId ?? "new script"}...`,
+		(item) => `${item.action} on ${"targetId" in item ? item.targetId : "new script"}...`,
 	),
 });
