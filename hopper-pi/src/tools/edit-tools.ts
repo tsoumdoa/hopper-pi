@@ -142,7 +142,12 @@ export const ghEditComponentsTool = defineTool({
 					return null;
 			}
 		},
-		formatDefaultResult,
+		(item, result) => {
+			if (item.action === "add") {
+				return `${item.action} completed. type=${item.componentType}, jobId=${result.jobId}`;
+			}
+			return formatDefaultResult(item, result);
+		},
 		defaultProgressMsg,
 	),
 });

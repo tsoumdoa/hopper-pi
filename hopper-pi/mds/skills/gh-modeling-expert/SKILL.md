@@ -44,7 +44,8 @@ Grasshopper definitions according to the user's request.
 - Typical spacing between components should be about 30 units minimum 
 - do consider width and height whey arranging components on the canvas.
 - no overlapping components.
-- pivot's x/y are a cordinate of the central point of the compoenent on canvas, while bound's x/y mean top left corner of the component.
+- bound's x/y mean top left corner of the component, with w/h giving its full size.
+- **Always use bounds-based arithmetic for component layout** — never use pivot for spacing. To place the next component without overlap, compute: `next_bounds.x = prev_bounds.x + prev_bounds.w + gap`.
 - Keep the canvas readable and avoid unnecessary wire crossings.
 - Use non-visual scripting components to implment small function blocks.
 - Generally speaking, stack up numeric parameters on top left side of the canvas.
@@ -65,59 +66,10 @@ Grasshopper definitions according to the user's request.
   is clearly more maintainable than a visual one.
 
 #### C# boilerplate
-Use this as a minimal template for Grasshopper C# script components.
-
-```csharp
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
-using Rhino;
-using Rhino.Geometry;
-using Grasshopper;
-using Grasshopper.Kernel;
-using Grasshopper.Kernel.Data;
-using Grasshopper.Kernel.Types;
-
-public class Script_Instance : GH_ScriptInstance
-{
-  private void RunScript(
-    // Inputs
-    Point3d point,
-    double radius,
-
-    // Outputs
-    ref Circle circle
-  )
-  {
-    circle = new Circle(point, radius);
-  }
-}
-
-example of python:
-```python
-//example with ghpythonlib.treehelpers..
-``````
+See [reference/csharp-boilerplate.md](../../../mds/reference/csharp-boilerplate.md) for the full C# script component template.
 
 ### Python boilerplate
-Use this as a minimal template for Grasshopper Python script components.
-```python
-import ghpythonlib.treehelpers as th
-
-# x is assumed to be a Grasshopper data tree input
-nested = th.tree_to_list(x)
-
-# Example: flatten one level into a simple Python list
-result = []
-for branch in nested:
-    if isinstance(branch, list):
-        result.extend(branch)
-    else:
-        result.append(branch)
-a = result
-```
-
-
+See [reference/python-boilerplate.md](../../../mds/reference/python-boilerplate.md) for the full Python script component template.
 
 ### Data Structure
 - Use item access by default.
