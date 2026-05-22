@@ -10,6 +10,7 @@ import {
 	fetchCanvasErrors,
 	formatCanvasErrorsResponse,
 } from "./query-handlers.js";
+import { checkCanvasOverlaps, formatOverlapResult } from "./canvas-checks.js";
 
 export const ghGetCanvasTool = defineTool({
 	name: "gh_get_canvas",
@@ -65,8 +66,15 @@ export const ghGetCanvasErrorsTool = defineTool({
 	parameters: Type.Object({}),
 
 	async execute(_toolCallId, _params, _signal, onUpdate) {
-		onUpdate?.({ content: [{ type: "text", text: "Fetching canvas errors from backend..." }], details: {} });
-		const response = await withRequester<GetCanvasErrorsResponse>(fetchCanvasErrors);
-		return formatCanvasErrorsResponse(response);
+		onUpdate?.({ content: [{ type: "text", text: "Fetching canvas errors and overlap data..." }], details: {} });
+		const [errorsResponse, canvasResponse] = await withRequester(async (req) => {
+			const [errors, canvas] = await Promise.all([
+				fetchCanvasErrors(req),
+				fetchCurrentCanvas(req),
+			]);
+			return [errors, canvas] as [GetCanvasErrorsResponse, GetCurrentCanvasResponse];
+		});
+		const overlapResult = checkCanvasOverlaps(canvasResponse.xml);
+		return formatCanvasErrorsResponse(errorsResponse, overlapResult);
 	},
 });

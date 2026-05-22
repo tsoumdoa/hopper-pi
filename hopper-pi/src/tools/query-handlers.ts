@@ -7,6 +7,8 @@ import {
 	toShortInstanceGuid,
 	toShortTypeGuid,
 } from "../services/guid-shortener.js";
+import { formatOverlapResult } from "./canvas-checks.js";
+import type { CanvasOverlapResult } from "./canvas-checks.js";
 
 const CACHE_TTL_MS = 60_000;
 
@@ -245,31 +247,38 @@ export function formatComponentsMultiQuery(response: ListAllComponentsResponse, 
 	};
 }
 
-export function formatCanvasErrorsResponse(response: GetCanvasErrorsResponse) {
+export function formatCanvasErrorsResponse(response: GetCanvasErrorsResponse, overlapResult?: CanvasOverlapResult) {
 	const errors = response.errors;
 	const errorCount = errors.length;
 
+	const lines: string[] = [];
+
 	if (errorCount === 0) {
-		return {
-			content: [{ type: "text" as const, text: `Canvas "${response.docName}": no errors or warnings.` }],
-			details: { docName: response.docName, errorCount: 0, errors: [] },
-		};
+		lines.push(`Canvas "${response.docName}": no errors or warnings.`);
+	} else {
+		lines.push(
+			`Canvas "${response.docName}": ${errorCount} error(s)/warning(s):`,
+			"",
+		);
+
+		for (const err of errors) {
+			const levelIcon = err.level === "error" ? "❌" : err.level === "warning" ? "⚠️" : "ℹ️";
+			lines.push(`${levelIcon} [${err.level}] ${err.componentNickName} (${err.componentId})`);
+			lines.push(`   ${err.text}`);
+			lines.push("");
+		}
 	}
 
-	const lines: string[] = [
-		`Canvas "${response.docName}": ${errorCount} error(s)/warning(s):`,
-		"",
-	];
-
-	for (const err of errors) {
-		const levelIcon = err.level === "error" ? "❌" : err.level === "warning" ? "⚠️" : "ℹ️";
-		lines.push(`${levelIcon} [${err.level}] ${err.componentNickName} (${err.componentId})`);
-		lines.push(`   ${err.text}`);
-		lines.push("");
+	if (overlapResult) {
+		if (lines.length > 0 && !lines[lines.length - 1].match(/^\s*$/)) lines.push("");
+		const overlapLines = formatOverlapResult(overlapResult);
+		lines.push(`--- Overlap Check ---`);
+		lines.push(overlapLines);
 	}
 
+	const text = lines.join("\n");
 	return {
-		content: [{ type: "text" as const, text: lines.join("\n") }],
-		details: { docName: response.docName, errorCount, errors },
+		content: [{ type: "text" as const, text }],
+		details: { docName: response.docName, errorCount, errors, overlaps: overlapResult ?? null },
 	};
 }

@@ -92,7 +92,7 @@ Also remember:
 
 Tips:
 - point and vector can be donated as {0,0,0} on panel
-- domain can be donated as -5 to 5 on panel
+- domain can be defined using panel as <start> to <end_num> e.g.: '-5 to 5' or '0 to 1'.
 - D in IsoTrim requires outout from Divide Domain2 (surface can be represented
   as domain)
 - Graph mapper work only with normalized value (0-1), also need to ask your to
@@ -100,11 +100,12 @@ Tips:
 - Color/ material can be donated as rgba string (0-255) '255,105,180' or '255,105,180 (152)'
 
 ### Final Step
+- Deleteunused components.
 - Ensure there is no error.
 - Ensure all components have a clear purpose and are placed in a logical order.
   while input params like sliders, panels, toggles should be organized on the left hand side of the canvas.
-- Clean up unused components that are no longer needed.
 - Ensure the canvas is clean and readable following the layout system.
+- Ensure there is no overlapping component.
 - Hide intermediate components that are no longer needed.
 - Group all the functions together and name them accordingly.
 - No need to use material to set material for preview, color swatch is enough.
