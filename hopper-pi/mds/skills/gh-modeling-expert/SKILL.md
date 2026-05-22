@@ -33,27 +33,29 @@ Grasshopper definitions according to the user's request.
    - Check data flow, parameter access, type conversion, and expected outputs.
    - Fix errors and simplify the definition where possible.
 
-## Grasshopper Basics
+## GRASSHOPPER CONVENTIONS — NON-NEGOTIABLE 
 
 ### Visual Scripting Conventions
-- Organize logic from left to right.
-- wires should never run from right to left.
-- Group related components by function.
-- Small groups may also be stacked vertically when that improves readability.
-- Recursive wire loops not allowed.
-- Typical spacing between components should be about 30 units minimum 
+- Organize logic from left to right and go down as needed, no wire running from right to left.
+- Recursive logic not allowed.
+- Group related components by function, it should have clear inputs and outputs.
+- Do not group a compoenent that is a port of the other groups, nested groups
+  allowed only if all compoentns are in the same group.
+- Let the canvas breathe vertically but keep it tight horizontally
+- aim ~100–120px between component centers horizontally and ~50–70px vertically
+- Place large components (Graph Mapper, Panel, etc.) near their primary consumer, not their producer                │
 - do consider width and height whey arranging components on the canvas.
 - no overlapping components.
 - bound's x/y mean top left corner of the component, with w/h giving its full size.
-- **Always use bounds-based arithmetic for component layout** — never use pivot for spacing. To place the next component without overlap, compute: `next_bounds.x = prev_bounds.x + prev_bounds.w + gap`.
+- **Always use bounds-based arithmetic for component layout** — never use pivot for spacing. To place the next component without overlap, compute: `next_bounds.x = prev_bounds.x + prev_bounds.w + gap`. Each placement must be informed by the previous component's actual rendered bounds.
 - Keep the canvas readable and avoid unnecessary wire crossings.
 - Use non-visual scripting components to implment small function blocks.
 - Generally speaking, stack up numeric parameters on top left side of the canvas.
 - Use Preview Component with swatch to show the final result.
 - Ok to keep visibility on while working, but cldan them up once finished. Only
   preview compoenents should be visible to show the final result.
-- color swatch for preview componet should be right next to the component on the canvas.
-- default width and height to input value on panel should be w34 x h20 - adjust
+- colour swatch for preview component should be placed on the **left** side of the preview component directly, to be vertically aligned to the input param M.
+- default width and height to input value on panel should be w34 x h28 - adjust
   width accordingly depending on the contents.
 - use single line panel for single input parameters.
 - use multi-line panel list of items.
@@ -102,3 +104,13 @@ Tips:
 - domain can be donated as -5 to 5 on panel
 - D in IsoTrim requires outout from Divide Domain2 (surface can be represented
   as domain)
+- Graph mapper work only with normalized value (0-1), also need to ask your to
+  set the mapper manually.
+
+### Final Step
+- Ensure there is no error.
+- Ensure all components have a clear purpose and are placed in a logical order.
+  while input params like sliders, panels, toggles should be organized on the left hand side of the canvas.
+- Ensure the canvas is clean and readable, no overlapping components or groups.
+- Clean up unused components that are no longer needed.
+- Hide intermediate components that are no longer needed.
