@@ -161,42 +161,95 @@ export const ghEditParamTool = defineTool({
 		"Manage input/output ports on Grasshopper components that support variable parameters (e.g. script components): add or remove input/output parameters, change access type (item/list/tree), change data mapping (flatten/graft/simplify/reverse), or list current parameter names with their access and mapping state. For addInput, you can optionally specify a paramType (e.g. Param_Number, Param_String, Param_Point, Param_Boolean, etc.) to control the parameter type. Accepts an array of operation items for batch processing.",
 	parameters: Type.Object({
 		items: Type.Array(
-			Type.Object({
-				action: Type.Union([
-					Type.Literal("addInput"),
-					Type.Literal("removeInput"),
-					Type.Literal("addOutput"),
-					Type.Literal("removeOutput"),
-					Type.Literal("editAccessType"),
-					Type.Literal("listParams"),
-					Type.Literal("editDataMapping"),
-				]),
-				targetId: Type.String({ description: "Component instance GUID (from gh_get_canvas) — required for all actions" }),
-				name: Type.Optional(
-					Type.String({ description: "Parameter name — required for addInput, removeInput, addOutput, removeOutput, editAccessType, editDataMapping" })
-				),
-				paramType: Type.Optional(ParamTypeUnion),
-				access: Type.Optional(
-					Type.Union([
+			Type.Union([
+				Type.Object({
+					action: Type.Literal("listParams"),
+					targetId: Type.String({ description: "Component instance GUID (from gh_get_canvas)" }),
+				}),
+				Type.Object({
+					action: Type.Literal("removeInput"),
+					targetId: Type.String({ description: "Component instance GUID (from gh_get_canvas)" }),
+					name: Type.String({ description: "Parameter name to remove" }),
+				}),
+				Type.Object({
+					action: Type.Literal("removeOutput"),
+					targetId: Type.String({ description: "Component instance GUID (from gh_get_canvas)" }),
+					name: Type.String({ description: "Parameter name to remove" }),
+				}),
+				Type.Object({
+					action: Type.Literal("addInput"),
+					targetId: Type.String({ description: "Component instance GUID (from gh_get_canvas)" }),
+					name: Type.String({ description: "Parameter name to add" }),
+					paramType: Type.Optional(ParamTypeUnion),
+					access: Type.Optional(
+						Type.Union([
+							Type.Literal("item"),
+							Type.Literal("list"),
+							Type.Literal("tree"),
+						], { description: "Access type for the new input (default: item)" })
+					),
+					dataMapping: Type.Optional(
+						Type.Union([
+							Type.Literal("none"),
+							Type.Literal("flatten"),
+							Type.Literal("graft"),
+						], { description: "Data mapping mode for the new input" })
+					),
+					simplify: Type.Optional(
+						Type.Boolean({ description: "Simplify data paths for the new input" })
+					),
+					reverse: Type.Optional(
+						Type.Boolean({ description: "Reverse item order for the new input" })
+					),
+				}),
+				Type.Object({
+					action: Type.Literal("addOutput"),
+					targetId: Type.String({ description: "Component instance GUID (from gh_get_canvas)" }),
+					name: Type.String({ description: "Parameter name to add" }),
+					paramType: Type.Optional(ParamTypeUnion),
+					dataMapping: Type.Optional(
+						Type.Union([
+							Type.Literal("none"),
+							Type.Literal("flatten"),
+							Type.Literal("graft"),
+						], { description: "Data mapping mode for the new output" })
+					),
+					simplify: Type.Optional(
+						Type.Boolean({ description: "Simplify data paths for the new output" })
+					),
+					reverse: Type.Optional(
+						Type.Boolean({ description: "Reverse item order for the new output" })
+					),
+				}),
+				Type.Object({
+					action: Type.Literal("editAccessType"),
+					targetId: Type.String({ description: "Component instance GUID (from gh_get_canvas)" }),
+					name: Type.String({ description: "Parameter name" }),
+					access: Type.Union([
 						Type.Literal("item"),
 						Type.Literal("list"),
 						Type.Literal("tree"),
-					], { description: "Access type — required for editAccessType (Python only)" })
-				),
-				dataMapping: Type.Optional(
-					Type.Union([
-						Type.Literal("none"),
-						Type.Literal("flatten"),
-						Type.Literal("graft"),
-					], { description: "Data mapping mode — optional for editDataMapping" })
-				),
-				simplify: Type.Optional(
-					Type.Boolean({ description: "Simplify data paths — optional for editDataMapping" })
-				),
-				reverse: Type.Optional(
-					Type.Boolean({ description: "Reverse item order — optional for editDataMapping" })
-				),
-			})
+					], { description: "Access type to set" }),
+				}),
+				Type.Object({
+					action: Type.Literal("editDataMapping"),
+					targetId: Type.String({ description: "Component instance GUID (from gh_get_canvas)" }),
+					name: Type.String({ description: "Parameter name" }),
+					dataMapping: Type.Optional(
+						Type.Union([
+							Type.Literal("none"),
+							Type.Literal("flatten"),
+							Type.Literal("graft"),
+						], { description: "Data mapping mode to set" })
+					),
+					simplify: Type.Optional(
+						Type.Boolean({ description: "Simplify data paths" })
+					),
+					reverse: Type.Optional(
+						Type.Boolean({ description: "Reverse item order" })
+					),
+				}),
+			])
 		),
 	}),
 	execute: createHybridExecute(
@@ -209,21 +262,21 @@ export const ghEditParamTool = defineTool({
 		(item) => {
 			switch (item.action) {
 				case "addInput":
-					return { action: "addScriptInput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name!, paramType: item.paramType } };
+					return { action: "addScriptInput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name, paramType: item.paramType, access: item.access, dataMapping: item.dataMapping, simplify: item.simplify, reverse: item.reverse } };
 				case "removeInput":
-					return { action: "removeScriptInput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name! } };
+					return { action: "removeScriptInput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name } };
 				case "addOutput":
-					return { action: "addScriptOutput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name! } };
+					return { action: "addScriptOutput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name, dataMapping: item.dataMapping, simplify: item.simplify, reverse: item.reverse } };
 				case "removeOutput":
-					return { action: "removeScriptOutput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name! } };
+					return { action: "removeScriptOutput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name } };
 				case "editAccessType":
-					return { action: "editScriptAccess" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name!, access: item.access! } };
+					return { action: "editScriptAccess" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name, access: item.access } };
 				case "editDataMapping":
 					return {
 						action: "editDataMapping" as CommandAction,
 						params: {
 							targetId: resolveInstanceGuid(item.targetId),
-							name: item.name!,
+							name: item.name,
 							dataMapping: item.dataMapping,
 							simplify: item.simplify,
 							reverse: item.reverse,
@@ -234,7 +287,7 @@ export const ghEditParamTool = defineTool({
 			}
 		},
 		formatDefaultResult,
-		(item) => `${item.action} on ${item.targetId} ${item.name ? `'${item.name}'` : ""}...`,
+		(item) => `${item.action} on ${item.targetId} ${'name' in item ? `'${item.name}'` : ""}...`,
 	),
 });
 
@@ -366,14 +419,6 @@ export const ghEditGroupTool = defineTool({
 	),
 });
 
-const WidgetType = Type.Union([
-	Type.Literal("slider"),
-	Type.Literal("panel"),
-	Type.Literal("toggle"),
-	Type.Literal("swatch"),
-	Type.Literal("scribble"),
-	Type.Literal("valueList"),
-], { description: "Type of widget to create or modify" });
 
 const SliderCreateFields = Type.Object({
 	min: Type.Number({ description: "Minimum value" }),

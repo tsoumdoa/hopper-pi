@@ -351,6 +351,18 @@ namespace rhino_zmq_poc
     {
         [JsonPropertyName("name")]
         public string Name { get; set; }
+
+        [JsonPropertyName("access")]
+        public string Access { get; set; }
+
+        [JsonPropertyName("dataMapping")]
+        public string DataMapping { get; set; }
+
+        [JsonPropertyName("simplify")]
+        public bool? Simplify { get; set; }
+
+        [JsonPropertyName("reverse")]
+        public bool? Reverse { get; set; }
     }
 
     public class CreateScriptNodeParams
@@ -396,6 +408,18 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("name")]
         public string Name { get; set; }
+
+        [JsonPropertyName("access")]
+        public string Access { get; set; }
+
+        [JsonPropertyName("dataMapping")]
+        public string DataMapping { get; set; }
+
+        [JsonPropertyName("simplify")]
+        public bool? Simplify { get; set; }
+
+        [JsonPropertyName("reverse")]
+        public bool? Reverse { get; set; }
     }
 
     public class RemoveScriptInputParams
@@ -414,6 +438,15 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("name")]
         public string Name { get; set; }
+
+        [JsonPropertyName("dataMapping")]
+        public string DataMapping { get; set; }
+
+        [JsonPropertyName("simplify")]
+        public bool? Simplify { get; set; }
+
+        [JsonPropertyName("reverse")]
+        public bool? Reverse { get; set; }
     }
 
     public class RemoveScriptOutputParams

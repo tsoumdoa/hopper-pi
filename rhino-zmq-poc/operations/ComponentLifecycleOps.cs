@@ -77,7 +77,7 @@ namespace rhino_zmq_poc
             return $"moveComponent: moved ({param.TargetId}) to ({param.Position.X}, {param.Position.Y})";
         }
 
-        public static void AddScriptInputParam(GH_Component comp, string name, IGH_Param param = null)
+        public static void AddScriptInputParam(GH_Component comp, string name, IGH_Param param = null, string access = null, string dataMapping = null, bool? simplify = null, bool? reverse = null)
         {
             if (comp is IGH_VariableParameterComponent vpc)
             {
@@ -88,6 +88,18 @@ namespace rhino_zmq_poc
                     p.Name = name;
                     p.NickName = name;
                     p.Access = GH_ParamAccess.item;
+
+                    if (!string.IsNullOrEmpty(access))
+                    {
+                        switch (access.ToLowerInvariant())
+                        {
+                            case "list": p.Access = GH_ParamAccess.list; break;
+                            case "tree": p.Access = GH_ParamAccess.tree; break;
+                        }
+                    }
+
+                    ApplyDataMapping(p, dataMapping, simplify, reverse);
+
                     comp.Params.RegisterInputParam(p);
                     vpc.VariableParameterMaintenance();
                     comp.Params.OnParametersChanged();
@@ -112,7 +124,7 @@ namespace rhino_zmq_poc
             comp.ExpireSolution(true);
         }
 
-        public static void AddScriptOutputParam(GH_Component comp, string name)
+        public static void AddScriptOutputParam(GH_Component comp, string name, string dataMapping = null, bool? simplify = null, bool? reverse = null)
         {
             if (comp is IGH_VariableParameterComponent vpc)
             {
@@ -123,6 +135,9 @@ namespace rhino_zmq_poc
                     p.Name = name;
                     p.NickName = name;
                     p.Access = GH_ParamAccess.item;
+
+                    ApplyDataMapping(p, dataMapping, simplify, reverse);
+
                     comp.Params.RegisterOutputParam(p);
                     vpc.VariableParameterMaintenance();
                     comp.Params.OnParametersChanged();
@@ -257,6 +272,23 @@ namespace rhino_zmq_poc
             {
                 return $"editDataMapping CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
             }
+        }
+
+        private static void ApplyDataMapping(IGH_Param p, string dataMapping, bool? simplify, bool? reverse)
+        {
+            if (!string.IsNullOrEmpty(dataMapping))
+            {
+                switch (dataMapping.ToLowerInvariant())
+                {
+                    case "none": p.DataMapping = GH_DataMapping.None; break;
+                    case "flatten": p.DataMapping = GH_DataMapping.Flatten; break;
+                    case "graft": p.DataMapping = GH_DataMapping.Graft; break;
+                }
+            }
+            if (simplify.HasValue)
+                p.Simplify = simplify.Value;
+            if (reverse.HasValue)
+                p.Reverse = reverse.Value;
         }
     }
 }

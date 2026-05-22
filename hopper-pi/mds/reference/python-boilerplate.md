@@ -26,3 +26,9 @@ for branch in nested:
         result.append(branch)
 
 a = result
+
+## Creating python script component
+**you must follow the following steps**
+1. Create a new python script component in Grasshopper using the tool gh_edit_components.
+2. Set input and output parameters with correct variable names, data types, and access types using the tool gh_edit_param.
+3. Set the code to the comoponent using the tool gh_edit_script.

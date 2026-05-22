@@ -17,4 +17,4 @@ disable previwe for those elements other than preview.
 generate interesting mathematical shape using c# node
 generate interesting mathematical shape using python node
 
-design angulated facade system using gh.
+design angulated facade system using c#

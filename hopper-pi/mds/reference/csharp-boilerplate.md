@@ -13,16 +13,19 @@ Assume code targets a Grasshopper C# script component inside Rhino, not a standa
 - Outputs are `ref` or `out` parameters.
 - Use RhinoCommon types directly when known.
 - Prefer concrete types like `Point3d`, `Curve`, `Brep`, `Mesh`, `Plane`, `Vector3d`.
-- Avoid `object` unless the input is intentionally generic.
-- Do not create `Main()`, namespaces, project files, or NuGet setup unless requested.
+- Avoid `object` unless the input is intentionally generic, and it does not work
+  on value like double or int or string - you need to type them correctly.
 - Add helper methods below `RunScript(...)` only when helpful.
 - Prefer `List<T>` for list inputs and outputs.
 - Use `DataTree<T>` only when the task requires tree data.
 - Keep code minimal, compilable, and suitable for repeated Grasshopper recomputation.
 
-## Preferred template
+## Mandatory Code Structure 
+**You need to pass the whole code to gh_edit_script function**
 
 ```csharp
+// you may add or remove declarations here
+// most commonly used ones shown below
 using System;
 using System.Collections;
 using System.Collections.Generic;

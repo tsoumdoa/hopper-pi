@@ -53,13 +53,13 @@ namespace rhino_zmq_poc
                     if (param.Inputs != null && param.Inputs.Count > 0)
                     {
                         foreach (var input in param.Inputs)
-                            ComponentLifecycleOps.AddScriptInputParam(comp, input.Name);
+                            ComponentLifecycleOps.AddScriptInputParam(comp, input.Name, access: input.Access, dataMapping: input.DataMapping, simplify: input.Simplify, reverse: input.Reverse);
                     }
 
                     if (param.Outputs != null && param.Outputs.Count > 0)
                     {
                         foreach (var output in param.Outputs)
-                            ComponentLifecycleOps.AddScriptOutputParam(comp, output.Name);
+                            ComponentLifecycleOps.AddScriptOutputParam(comp, output.Name, dataMapping: output.DataMapping, simplify: output.Simplify, reverse: output.Reverse);
                     }
                 }
 
@@ -136,7 +136,7 @@ namespace rhino_zmq_poc
                 if (obj == null) return $"addScriptInput error: object not found '{param.TargetId}'";
                 var comp = obj as GH_Component;
                 if (comp == null) return $"addScriptInput error: '{param.TargetId}' is not a GH_Component";
-                ComponentLifecycleOps.AddScriptInputParam(comp, param.Name);
+                ComponentLifecycleOps.AddScriptInputParam(comp, param.Name, access: param.Access, dataMapping: param.DataMapping, simplify: param.Simplify, reverse: param.Reverse);
                 comp.ExpireSolution(true);
                 return $"addScriptInput: added input '{param.Name}' on ({param.TargetId})";
             }
@@ -177,7 +177,7 @@ namespace rhino_zmq_poc
                 if (obj == null) return $"addScriptOutput error: object not found '{param.TargetId}'";
                 var comp = obj as GH_Component;
                 if (comp == null) return $"addScriptOutput error: '{param.TargetId}' is not a GH_Component";
-                ComponentLifecycleOps.AddScriptOutputParam(comp, param.Name);
+                ComponentLifecycleOps.AddScriptOutputParam(comp, param.Name, dataMapping: param.DataMapping, simplify: param.Simplify, reverse: param.Reverse);
                 comp.ExpireSolution(true);
                 return $"addScriptOutput: added output '{param.Name}' on ({param.TargetId})";
             }
