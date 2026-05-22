@@ -364,375 +364,206 @@ export const ghEditGroupTool = defineTool({
 	),
 });
 
-export const ghEditSliderTool = defineTool({
-	name: "gh_edit_slider",
-	label: "Edit Slider",
+const WidgetType = Type.Union([
+	Type.Literal("slider"),
+	Type.Literal("panel"),
+	Type.Literal("toggle"),
+	Type.Literal("swatch"),
+	Type.Literal("scribble"),
+	Type.Literal("valueList"),
+], { description: "Type of widget to create or modify" });
+
+const SliderCreateFields = Type.Object({
+	min: Type.Number({ description: "Minimum value" }),
+	max: Type.Number({ description: "Maximum value" }),
+	value: Type.Number({ description: "Initial/current value" }),
+	digits: Type.Number({ description: "Decimal digits" }),
+	interval: Type.Number({ description: "Step interval" }),
+});
+
+const SliderSetFields = Type.Object({
+	value: Type.Number({ description: "Slider value to set" }),
+});
+
+const SliderRangeFields = Type.Object({
+	min: Type.Number({ description: "New minimum value" }),
+	max: Type.Number({ description: "New maximum value" }),
+	digits: Type.Number({ description: "New decimal digits" }),
+	interval: Type.Number({ description: "New step interval" }),
+});
+
+const PanelCreateFields = Type.Object({
+	text: Type.String({ description: "Panel text content" }),
+	width: Type.Optional(Type.Number({ description: "Fixed width in pixels" })),
+	height: Type.Optional(Type.Number({ description: "Fixed height in pixels" })),
+	multiline: Type.Optional(Type.Boolean({ description: "Enable multiline mode" })),
+	bgColor: Type.Optional(Type.String({ description: "Background color as rgba string" })),
+});
+
+const PanelPropertyFields = Type.Object({
+	width: Type.Optional(Type.Number({ description: "Fixed width in pixels" })),
+	height: Type.Optional(Type.Number({ description: "Fixed height in pixels" })),
+	multiline: Type.Optional(Type.Boolean({ description: "Enable multiline mode" })),
+	bgColor: Type.Optional(Type.String({ description: "Background color as rgba string" })),
+});
+
+const PanelTextFields = Type.Object({
+	text: Type.String({ description: "Panel text content to set" }),
+});
+
+const ToggleFields = Type.Object({
+	value: Type.Boolean({ description: "Boolean value" }),
+});
+
+const SwatchFields = Type.Object({
+	color: Type.String({ description: "Color as rgba string e.g. 'rgba(255,0,0,255)'" }),
+});
+
+const ScribbleCreateFields = Type.Object({
+	text: Type.String({ description: "Scribble text content" }),
+	size: Type.Optional(Type.Number({ description: "Font size in points (defaults to 10)" })),
+});
+
+const ScribbleTextFields = Type.Object({
+	text: Type.String({ description: "Scribble text content to set" }),
+});
+
+const ValueListItemFields = Type.Object({
+	name: Type.String({ description: "Display name for the list item" }),
+	itemValue: Type.String({ description: "Value associated with this item" }),
+});
+
+const ValueListCreateFields = Type.Object({
+	items: Type.Array(ValueListItemFields),
+	selectedIndex: Type.Optional(Type.Number({ description: "0-based index of the initially selected item" })),
+});
+
+const ValueListSelectFields = Type.Object({
+	selectedIndex: Type.Number({ description: "0-based index to select" }),
+});
+
+export const ghEditWidgetTool = defineTool({
+	name: "gh_edit_widget",
+	label: "Edit Widget",
 	description:
-		"Perform slider operations on the Grasshopper canvas: create a new Number Slider with full configuration, edit the range/digits of an existing slider, or set the current value. Accepts an array of operation items for batch processing.",
+		"Unified widget tool for creating and modifying Grasshopper UI widgets: Number Sliders, Panels, Boolean Toggles, Colour Swatches, Scribbles (text annotations), and Value Lists. " +
+		"Replaces the individual gh_edit_slider, gh_edit_panel, gh_edit_toggle, gh_edit_swatch, gh_edit_scribble, and gh_edit_value_list tools. " +
+		"Use widgetType to specify which kind of widget, and action for the operation. Accepts an array of operation items for batch processing.\n\n" +
+		"**Actions per widget type:**\n" +
+		"- **slider**: `create` (requires min, max, value, digits, interval), `setValue` (requires value), `setRange` (requires min, max, digits, interval)\n" +
+		"- **panel**: `create` (requires text; optional width/height/multiline/bgColor), `setText` (requires text), `setProperty` (optional width/height/multiline/bgColor)\n" +
+		"- **toggle**: `create` (requires value), `setValue` (requires value)\n" +
+		"- **swatch**: `create` (requires color), `setColor` (requires color)\n" +
+		"- **scribble**: `create` (requires text; optional size), `setText` (requires text)\n" +
+		"- **valueList**: `create` (requires items[]; optional selectedIndex), `setSelected` (requires selectedIndex)",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Object({
+				widgetType: WidgetType,
 				action: Type.Union([
-					Type.Literal("createSlider"),
-					Type.Literal("editRange"),
+					Type.Literal("create"),
 					Type.Literal("setValue"),
-				]),
-				targetId: Type.Optional(
-					Type.String({ description: "Slider component ID (from gh_get_canvas) — required for editRange and setValue" })
-				),
-				x: Type.Optional(
-					Type.Number({ description: "X position on canvas — required for createSlider" })
-				),
-				y: Type.Optional(
-					Type.Number({ description: "Y position on canvas — required for createSlider" })
-				),
-				nickName: Type.Optional(
-					Type.String({ description: "Slider nickname — optional for createSlider (defaults to 'Number Slider')" })
-				),
-				min: Type.Optional(
-					Type.Number({ description: "Minimum value — required for createSlider and editRange" })
-				),
-				max: Type.Optional(
-					Type.Number({ description: "Maximum value — required for createSlider and editRange" })
-				),
-				value: Type.Optional(
-					Type.Number({ description: "Slider value — required for createSlider and setValue" })
-				),
-				digits: Type.Optional(
-					Type.Number({ description: "Decimal digits — required for createSlider and editRange" })
-				),
-				interval: Type.Optional(
-					Type.Number({ description: "Step interval — required for createSlider and editRange" })
-				),
-			})
-		),
-	}),
-	execute: createExecute(
-		(item) => {
-			switch (item.action) {
-				case "createSlider":
-					return {
-						action: "createSlider",
-						params: {
-							position: { x: item.x!, y: item.y! },
-							nickName: item.nickName,
-							min: item.min!,
-							max: item.max!,
-							value: item.value!,
-							digits: item.digits!,
-							interval: item.interval!,
-						},
-					};
-				case "editRange":
-					return {
-						action: "editSliderRange",
-						params: {
-							targetId: resolveInstanceGuid(item.targetId!),
-							min: item.min!,
-							max: item.max!,
-							digits: item.digits!,
-							interval: item.interval!,
-						},
-					};
-				case "setValue":
-					return { action: "setSliderValue", params: { targetId: resolveInstanceGuid(item.targetId!), value: item.value! } };
-				default:
-					return null;
-			}
-		},
-		formatDefaultResult,
-		(item) => `${item.action} on ${item.targetId ?? "new slider"}...`,
-	),
-});
-
-export const ghEditPanelTool = defineTool({
-	name: "gh_edit_panel",
-	label: "Edit Panel",
-	description:
-		"Perform panel operations on the Grasshopper canvas: create a new Panel with initial text and visual properties, edit visual properties of an existing panel (width, height, multiline mode, background color), or set the text content. Accepts an array of operation items for batch processing.",
-	parameters: Type.Object({
-		items: Type.Array(
-			Type.Object({
-				action: Type.Union([
-					Type.Literal("createPanel"),
-					Type.Literal("setParam"),
+					Type.Literal("setColor"),
 					Type.Literal("setText"),
+					Type.Literal("setSelected"),
+					Type.Literal("setProperty"),
+					Type.Literal("setRange"),
 				]),
 				targetId: Type.Optional(
-					Type.String({ description: "Panel component ID (from gh_get_canvas) — required for setParam and setText" })
+					Type.String({ description: "Widget instance GUID (from gh_get_canvas) — required for all actions except create" })
 				),
 				x: Type.Optional(
-					Type.Number({ description: "X position on canvas — required for createPanel" })
+					Type.Number({ description: "X position on canvas — required for create" })
 				),
 				y: Type.Optional(
-					Type.Number({ description: "Y position on canvas — required for createPanel" })
-				),
-				text: Type.Optional(
-					Type.String({ description: "Panel text content — required for createPanel and setText" })
+					Type.Number({ description: "Y position on canvas — required for create" })
 				),
 				nickName: Type.Optional(
-					Type.String({ description: "Panel nickname — optional for createPanel (defaults to 'Panel')" })
+					Type.String({ description: "Widget nickname — optional for create (defaults to type-specific default)" })
 				),
-				width: Type.Optional(
-					Type.Number({ description: "Panel fixed width in pixels — overrides auto-size; use with createPanel or setParam" })
-				),
-				height: Type.Optional(
-					Type.Number({ description: "Panel fixed height in pixels — overrides auto-size; use with createPanel or setParam" })
-				),
-				multiline: Type.Optional(
-					Type.Boolean({ description: "Enable multiline text mode — use with createPanel or setParam" })
-				),
-				bgColor: Type.Optional(
-					Type.String({ description: "Background color as rgba string e.g. 'rgba(255,255,255,255)' — use with createPanel or setParam" })
-				),
+				slider: Type.Optional(SliderCreateFields),
+				sliderValue: Type.Optional(SliderSetFields),
+				sliderRange: Type.Optional(SliderRangeFields),
+				panel: Type.Optional(PanelCreateFields),
+				panelProp: Type.Optional(PanelPropertyFields),
+				panelText: Type.Optional(PanelTextFields),
+				toggle: Type.Optional(ToggleFields),
+				swatch: Type.Optional(SwatchFields),
+				scribble: Type.Optional(ScribbleCreateFields),
+				scribbleText: Type.Optional(ScribbleTextFields),
+				valueList: Type.Optional(ValueListCreateFields),
+				valueListSelect: Type.Optional(ValueListSelectFields),
 			})
 		),
 	}),
 	execute: createExecute(
 		(item) => {
-			switch (item.action) {
-				case "createPanel":
-					return {
-						action: "createPanel",
-						params: {
-							position: { x: item.x!, y: item.y! },
-							nickName: item.nickName,
-							text: item.text!,
-							width: item.width,
-							height: item.height,
-							multiline: item.multiline,
-							bgColor: item.bgColor,
-						},
-					};
-				case "setParam":
-					return {
-						action: "setPanelParams",
-						params: {
-							targetId: resolveInstanceGuid(item.targetId!),
-							width: item.width,
-							height: item.height,
-							multiline: item.multiline,
-							bgColor: item.bgColor,
-						},
-					};
-				case "setText":
-					return { action: "setPanelText", params: { targetId: resolveInstanceGuid(item.targetId!), text: item.text! } };
+			const pos = { x: item.x!, y: item.y! };
+			switch (item.widgetType) {
+				case "slider":
+					switch (item.action) {
+						case "create":
+							return { action: "createSlider" as CommandAction, params: { position: pos, nickName: item.nickName, ...item.slider! } };
+						case "setValue":
+							return { action: "setSliderValue" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId!), ...item.sliderValue! } };
+						case "setRange":
+							return { action: "editSliderRange" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId!), ...item.sliderRange! } };
+						default:
+							return null;
+					}
+				case "panel":
+					switch (item.action) {
+						case "create":
+							return { action: "createPanel" as CommandAction, params: { position: pos, nickName: item.nickName, ...item.panel! } };
+						case "setProperty":
+							return { action: "setPanelParams" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId!), ...item.panelProp! } };
+						case "setText":
+							return { action: "setPanelText" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId!), ...item.panelText! } };
+						default:
+							return null;
+					}
+				case "toggle":
+					switch (item.action) {
+						case "create":
+							return { action: "createToggle" as CommandAction, params: { position: pos, nickName: item.nickName, ...item.toggle! } };
+						case "setValue":
+							return { action: "setToggleValue" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId!), ...item.toggle! } };
+						default:
+							return null;
+					}
+				case "swatch":
+					switch (item.action) {
+						case "create":
+							return { action: "createSwatch" as CommandAction, params: { position: pos, nickName: item.nickName, ...item.swatch! } };
+						case "setColor":
+							return { action: "setSwatchColor" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId!), ...item.swatch! } };
+						default:
+							return null;
+					}
+				case "scribble":
+					switch (item.action) {
+						case "create":
+							return { action: "createScribble" as CommandAction, params: { position: pos, nickName: item.nickName, ...item.scribble! } };
+						case "setText":
+							return { action: "setScribbleText" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId!), ...item.scribbleText! } };
+						default:
+							return null;
+					}
+				case "valueList":
+					switch (item.action) {
+						case "create":
+							return { action: "createValueList" as CommandAction, params: { position: pos, nickName: item.nickName, ...item.valueList! } };
+						case "setSelected":
+							return { action: "setValueListSelected" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId!), ...item.valueListSelect! } };
+						default:
+							return null;
+					}
 				default:
 					return null;
 			}
 		},
 		formatDefaultResult,
-		(item) => `${item.action} on ${item.targetId ?? "new panel"}...`,
-	),
-});
-
-export const ghEditToggleTool = defineTool({
-	name: "gh_edit_toggle",
-	label: "Edit Toggle",
-	description:
-		"Perform toggle (boolean) operations on the Grasshopper canvas: create a new Boolean Toggle with initial value, or set the value of an existing toggle. Accepts an array of operation items for batch processing.",
-	parameters: Type.Object({
-		items: Type.Array(
-			Type.Object({
-				action: Type.Union([
-					Type.Literal("createToggle"),
-					Type.Literal("setToggleValue"),
-				]),
-				targetId: Type.Optional(
-					Type.String({ description: "Toggle component ID (from gh_get_canvas) — required for setToggleValue" })
-				),
-				x: Type.Optional(
-					Type.Number({ description: "X position on canvas — required for createToggle" })
-				),
-				y: Type.Optional(
-					Type.Number({ description: "Y position on canvas — required for createToggle" })
-				),
-				nickName: Type.Optional(
-					Type.String({ description: "Toggle nickname — optional for createToggle (defaults to 'Toggle')" })
-				),
-				value: Type.Optional(
-					Type.Boolean({ description: "Boolean value — required for createToggle and setToggleValue" })
-				),
-			})
-		),
-	}),
-	execute: createExecute(
-		(item) => {
-			switch (item.action) {
-				case "createToggle":
-					return {
-						action: "createToggle",
-						params: { position: { x: item.x!, y: item.y! }, nickName: item.nickName, value: item.value! },
-					};
-				case "setToggleValue":
-					return { action: "setToggleValue", params: { targetId: resolveInstanceGuid(item.targetId!), value: item.value! } };
-				default:
-					return null;
-			}
-		},
-		formatDefaultResult,
-		(item) => `${item.action} on ${item.targetId ?? "new toggle"}...`,
-	),
-});
-
-export const ghEditSwatchTool = defineTool({
-	name: "gh_edit_swatch",
-	label: "Edit Swatch",
-	description:
-		"Perform colour swatch operations on the Grasshopper canvas: create a new Colour Swatch with an rgba color, or change the color of an existing swatch. Accepts an array of operation items for batch processing.",
-	parameters: Type.Object({
-		items: Type.Array(
-			Type.Object({
-				action: Type.Union([
-					Type.Literal("createSwatch"),
-					Type.Literal("setSwatchColor"),
-				]),
-				targetId: Type.Optional(
-					Type.String({ description: "Swatch component ID (from gh_get_canvas) — required for setSwatchColor" })
-				),
-				x: Type.Optional(
-					Type.Number({ description: "X position on canvas — required for createSwatch" })
-				),
-				y: Type.Optional(
-					Type.Number({ description: "Y position on canvas — required for createSwatch" })
-				),
-				nickName: Type.Optional(
-					Type.String({ description: "Swatch nickname — optional for createSwatch (defaults to 'Swatch')" })
-				),
-				color: Type.Optional(
-					Type.String({ description: "Color as rgba string e.g. 'rgba(255,0,0,255)' — required for createSwatch and setSwatchColor" })
-				),
-			})
-		),
-	}),
-	execute: createExecute(
-		(item) => {
-			switch (item.action) {
-				case "createSwatch":
-					return {
-						action: "createSwatch",
-						params: { position: { x: item.x!, y: item.y! }, nickName: item.nickName, color: item.color! },
-					};
-				case "setSwatchColor":
-					return { action: "setSwatchColor", params: { targetId: resolveInstanceGuid(item.targetId!), color: item.color! } };
-				default:
-					return null;
-			}
-		},
-		formatDefaultResult,
-		(item) => `${item.action} on ${item.targetId ?? "new swatch"}...`,
-	),
-});
-
-export const ghEditScribbleTool = defineTool({
-	name: "gh_edit_scribble",
-	label: "Edit Scribble",
-	description:
-		"Perform scribble (text annotation) operations on the Grasshopper canvas: create a new Scribble with text, or set the text of an existing scribble. Accepts an array of operation items for batch processing.",
-	parameters: Type.Object({
-		items: Type.Array(
-			Type.Object({
-				action: Type.Union([
-					Type.Literal("createScribble"),
-					Type.Literal("setScribbleText"),
-				]),
-				targetId: Type.Optional(
-					Type.String({ description: "Scribble component ID (from gh_get_canvas) — required for setScribbleText" })
-				),
-				x: Type.Optional(
-					Type.Number({ description: "X position on canvas — required for createScribble" })
-				),
-				y: Type.Optional(
-					Type.Number({ description: "Y position on canvas — required for createScribble" })
-				),
-				text: Type.Optional(
-					Type.String({ description: "Scribble text content — required for createScribble and setScribbleText" })
-				),
-				nickName: Type.Optional(
-					Type.String({ description: "Scribble nickname — optional for createScribble (defaults to 'Scribble')" })
-				),
-				size: Type.Optional(
-					Type.Number({ description: "Font size in points — optional for createScribble (defaults to 10)" })
-				),
-			})
-		),
-	}),
-	execute: createExecute(
-		(item) => {
-			switch (item.action) {
-				case "createScribble":
-					return {
-						action: "createScribble",
-						params: { position: { x: item.x!, y: item.y! }, nickName: item.nickName, text: item.text!, size: item.size },
-					};
-				case "setScribbleText":
-					return { action: "setScribbleText", params: { targetId: resolveInstanceGuid(item.targetId!), text: item.text! } };
-				default:
-					return null;
-			}
-		},
-		formatDefaultResult,
-		(item) => `${item.action} on ${item.targetId ?? "new scribble"}...`,
-	),
-});
-
-export const ghEditValueListTool = defineTool({
-	name: "gh_edit_value_list",
-	label: "Edit Value List",
-	description:
-		"Perform value list operations on the Grasshopper canvas: create a new Value List with items (name/value pairs) and optional selected index, or change the selected item of an existing value list. Accepts an array of operation items for batch processing.",
-	parameters: Type.Object({
-		items: Type.Array(
-			Type.Object({
-				action: Type.Union([
-					Type.Literal("createValueList"),
-					Type.Literal("setValueListSelected"),
-				]),
-				targetId: Type.Optional(
-					Type.String({ description: "Value List component ID (from gh_get_canvas) — required for setValueListSelected" })
-				),
-				x: Type.Optional(
-					Type.Number({ description: "X position on canvas — required for createValueList" })
-				),
-				y: Type.Optional(
-					Type.Number({ description: "Y position on canvas — required for createValueList" })
-				),
-				nickName: Type.Optional(
-					Type.String({ description: "Value List nickname — optional for createValueList (defaults to 'Value List')" })
-				),
-				items: Type.Optional(
-					Type.Array(Type.Object({
-						name: Type.String({ description: "Display name for the list item" }),
-						value: Type.String({ description: "Value associated with this item" }),
-					}))
-				),
-				selectedIndex: Type.Optional(
-					Type.Number({ description: "0-based index of the initially selected item — optional for createValueList" })
-				),
-			})
-		),
-	}),
-	execute: createExecute(
-		(item) => {
-			switch (item.action) {
-				case "createValueList":
-					return {
-						action: "createValueList",
-						params: {
-							position: { x: item.x!, y: item.y! },
-							nickName: item.nickName,
-							items: item.items,
-							selectedIndex: item.selectedIndex,
-						},
-					};
-				case "setValueListSelected":
-					return { action: "setValueListSelected", params: { targetId: resolveInstanceGuid(item.targetId!), selectedIndex: item.selectedIndex! } };
-				default:
-					return null;
-			}
-		},
-		formatDefaultResult,
-		(item) => `${item.action} on ${item.targetId ?? "new value list"}...`,
+		(item) => `${item.action} ${item.widgetType} on ${item.targetId ?? "new"}...`,
 	),
 });
 

@@ -193,35 +193,49 @@ function pickSummary(c: GhComponentInfo) {
 	};
 }
 
-export function formatComponentsMultiQuery(response: ListAllComponentsResponse, queries?: string[]) {
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
+
+function formatComponentLine(c: GhComponentInfo) {
+	const shortTypeGuid = toShortTypeGuid(c.typeGuid);
+	return `  ${c.name}  [${shortTypeGuid}]  (${c.category}/${c.subcategory}) -- ${c.description}`;
+}
+
+function paginate<T>(items: T[], limit?: number, offset?: number): { slice: T[]; hasMore: boolean; totalMatched: number } {
+	const effectiveLimit = Math.min(limit ?? DEFAULT_LIMIT, MAX_LIMIT);
+	const effectiveOffset = Math.max(offset ?? 0, 0);
+	const slice = items.slice(effectiveOffset, effectiveOffset + effectiveLimit);
+	return { slice, hasMore: effectiveOffset + slice.length < items.length, totalMatched: items.length };
+}
+
+export function formatComponentsMultiQuery(response: ListAllComponentsResponse, queries?: string[], limit?: number, offset?: number) {
 	const all = response.components;
 
 	if (!queries || queries.length === 0) {
-		const lines = all.map((c) => {
-			const shortTypeGuid = toShortTypeGuid(c.typeGuid);
-			return `  ${c.name}  [${shortTypeGuid}]  (${c.category}/${c.subcategory}) -- ${c.description}`;
-		});
+		const { slice, hasMore, totalMatched } = paginate(all, limit, offset);
+		const lines = slice.map(formatComponentLine);
+		const footer = hasMore ? `\n  ... ${totalMatched - (offset ?? 0) - lines.length} more (call with offset=${(offset ?? 0) + lines.length})` : "";
 		return {
-			content: [{ type: "text" as const, text: `All components (${all.length}):\n${lines.join("\n")}` }],
-			details: { results: [], totalAvailable: all.length },
+			content: [{ type: "text" as const, text: `All components (${totalMatched}, showing ${lines.length}):${footer}\n${lines.join("\n")}` }],
+			details: { results: [], totalAvailable: all.length, hasMore },
 		};
 	}
 
 	const sections: string[] = [];
-	const results: Array<{ queryKeyword: string; result: Array<Record<string, string>> }> = [];
+	const results: Array<{ queryKeyword: string; result: Array<Record<string, string>>; hasMore: boolean; totalMatched: number }> = [];
 
 	for (const q of queries) {
 		const matched = all.filter((c) => matchComponent(c, q));
-		results.push({ queryKeyword: q, result: matched.map((c) => pickSummary(c)) });
+		const { slice, hasMore, totalMatched } = paginate(matched, limit, offset);
+		results.push({ queryKeyword: q, result: slice.map((c) => pickSummary(c)), hasMore, totalMatched });
 
 		if (matched.length === 0) {
 			sections.push(`"${q}" — no matches`);
 		} else {
-			const lines = matched.map((c) => {
-				const shortTypeGuid = toShortTypeGuid(c.typeGuid);
-				return `  ${c.name}  [${shortTypeGuid}]  (${c.category}/${c.subcategory}) -- ${c.description}`;
-			});
-			sections.push(`"${q}" (${matched.length} matches):\n${lines.join("\n")}`);
+			const lines = slice.map(formatComponentLine);
+			const showRange = `showing ${(offset ?? 0) + 1}-${(offset ?? 0) + lines.length}`;
+			const footer = hasMore ? `\n  ... ${totalMatched - (offset ?? 0) - lines.length} more (call with offset=${(offset ?? 0) + lines.length})` : "";
+			sections.push(`"${q}" (${totalMatched} matches, ${showRange}):${footer}\n${lines.join("\n")}`);
 		}
 	}
 
