@@ -14,3 +14,5 @@ add preview par elements to reflect the material (e.g. glass => blue, steel=> gr
 disable previwe for those elements other than preview.
 
 generate interesting mathematical shape using c# node
+
+generate interesting mathematical shape using python node

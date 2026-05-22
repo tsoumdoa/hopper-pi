@@ -36,6 +36,7 @@ Grasshopper definitions according to the user's request.
 ## GRASSHOPPER CONVENTIONS — NON-NEGOTIABLE 
 
 ### Visual Scripting Conventions
+- Do not touch components placed in negative space on the canvas.
 - Organize logic from left to right and go down as needed, no wire running from right to left.
 - Recursive logic not allowed.
 - Group related components by function, it should have clear inputs and outputs.
@@ -54,9 +55,9 @@ Grasshopper definitions according to the user's request.
 - Use Preview Component with swatch to show the final result.
 - Ok to keep visibility on while working, but cldan them up once finished. Only
   preview compoenents should be visible to show the final result.
-- colour swatch for preview component should be placed on the **left** side of the preview component directly, to be vertically aligned to the input param M.
+- colour swatch for preview component should be placed on the **left** side of the preview component directly, to be vertically aligned to the input param M with enough horizontal space.
 - default width and height to input value on panel should be w34 x h28 - adjust
-  width accordingly depending on the contents.
+  them accordingly depending on the contents.
 - use single line panel for single input parameters.
 - use multi-line panel list of items.
 
@@ -67,11 +68,9 @@ Grasshopper definitions according to the user's request.
 - Keep scripted components focused and small unless a larger scripted solution
   is clearly more maintainable than a visual one.
 
-#### C# boilerplate
-See [reference/csharp-boilerplate.md](../../../mds/reference/csharp-boilerplate.md) for the full C# script component template.
-
-### Python boilerplate
-See [reference/python-boilerplate.md](../../../mds/reference/python-boilerplate.md) for the full Python script component template.
+### Progressive reference
+- For c# node coding, see [reference/csharp-boilerplate.md](../../../mds/reference/csharp-boilerplate.md).
+- For python node coding, see [reference/python-boilerplate.md](../../../mds/reference/python-boilerplate.md).
 
 ### Data Structure
 - Use item access by default.
