@@ -18,3 +18,5 @@ generate interesting mathematical shape using c# node
 generate interesting mathematical shape using python node
 
 design angulated facade system using c#
+
+make c# script that adds two number togather
