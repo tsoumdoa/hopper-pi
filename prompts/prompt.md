@@ -8,11 +8,11 @@ attractor point to vary panel height,  be creative!
 get canvas
 
 please add circle and get area
+please add circle and get area, plz preview cirle as surface with pink color
 
 model gherkin tower in lodon, plz do research to make it as realistic as possible. plz do
 add preview par elements to reflect the material (e.g. glass => blue, steel=> gray) and
 disable previwe for those elements other than preview.
 
 generate interesting mathematical shape using c# node
-
 generate interesting mathematical shape using python node

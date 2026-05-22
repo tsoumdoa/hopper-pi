@@ -39,27 +39,17 @@ Grasshopper definitions according to the user's request.
 - Do not touch components placed in negative space on the canvas.
 - Organize logic from left to right and go down as needed, no wire running from right to left.
 - Recursive logic not allowed.
-- Group related components by function, it should have clear inputs and outputs.
-- Do not group a compoenent that is a port of the other groups, nested groups
-  allowed only if all compoentns are in the same group.
-- Let the canvas breathe vertically but keep it tight horizontally
-- aim ~100–120px between component centers horizontally and ~50–70px vertically
-- Place large components (Graph Mapper, Panel, etc.) near their primary consumer, not their producer                │
-- do consider width and height whey arranging components on the canvas.
-- no overlapping components.
-- bound's x/y mean top left corner of the component, with w/h giving its full size.
-- **Always use bounds-based arithmetic for component layout** — never use pivot for spacing. To place the next component without overlap, compute: `next_bounds.x = prev_bounds.x + prev_bounds.w + gap`. Each placement must be informed by the previous component's actual rendered bounds.
-- Keep the canvas readable and avoid unnecessary wire crossings.
-- Use non-visual scripting components to implment small function blocks.
+- Refer to canvas layout system for placement rules.
+- Use non-visual scripting components to implement small function blocks.
 - Generally speaking, stack up numeric parameters on top left side of the canvas.
 - Use Preview Component with swatch to show the final result.
-- Ok to keep visibility on while working, but cldan them up once finished. Only
-  preview compoenents should be visible to show the final result.
-- colour swatch for preview component should be placed on the **left** side of the preview component directly, to be vertically aligned to the input param M with enough horizontal space.
+- Ok to keep visibility on while working, but clean them up once finished. Only
+  preview components should be visible to show the final result.
 - default width and height to input value on panel should be w34 x h28 - adjust
   them accordingly depending on the contents.
 - use single line panel for single input parameters.
 - use multi-line panel list of items.
+- Set visibility to hidden by default except for Preview components.
 
 
 ### Non-Visual Scripting Conventions
@@ -71,6 +61,7 @@ Grasshopper definitions according to the user's request.
 ### Progressive reference
 - For c# node coding, see [reference/csharp-boilerplate.md](../../../mds/reference/csharp-boilerplate.md).
 - For python node coding, see [reference/python-boilerplate.md](../../../mds/reference/python-boilerplate.md).
+- For canvas layout system, see [reference/layout-system.md](../../../mds/reference/layout-system.md).
 
 ### Data Structure
 - Use item access by default.
@@ -92,6 +83,7 @@ parameter components. These patterns can also act as lightweight type checks.
 - rectangle <-> 2D domain
 - planar surface <-> 2D domain
 - vector <-> line
+- color <-> material 
 
 Also remember:
 - a line is defined by two points
@@ -105,11 +97,14 @@ Tips:
   as domain)
 - Graph mapper work only with normalized value (0-1), also need to ask your to
   set the mapper manually.
+- Color/ material can be donated as rgba string (0-255) '255,105,180' or '255,105,180 (152)'
 
 ### Final Step
 - Ensure there is no error.
 - Ensure all components have a clear purpose and are placed in a logical order.
   while input params like sliders, panels, toggles should be organized on the left hand side of the canvas.
-- Ensure the canvas is clean and readable, no overlapping components or groups.
 - Clean up unused components that are no longer needed.
+- Ensure the canvas is clean and readable following the layout system.
 - Hide intermediate components that are no longer needed.
+- Group all the functions together and name them accordingly.
+- No need to use material to set material for preview, color swatch is enough.

@@ -100,7 +100,9 @@ export const ghEditComponentsTool = defineTool({
 				locked: Type.Optional(
 					Type.Boolean({ description: "true to lock, false to unlock — required for set_locked" })
 				),
-				hidden: Type.Boolean({ description: "set hidden by default except for Preview functions" }),
+				hidden: Type.Optional(
+					Type.Boolean({ description: "set hidden by default except for Preview functions" })
+				),
 			})
 		),
 	}),
