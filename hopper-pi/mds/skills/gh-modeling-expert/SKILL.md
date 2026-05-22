@@ -41,15 +41,17 @@ Grasshopper definitions according to the user's request.
 - Group related components by function.
 - Small groups may also be stacked vertically when that improves readability.
 - Recursive wire loops not allowed.
-- Typical spacing between components should be about 30 units minimum (do take
-  the width and height into account to calculate the spacing).
-- keep in mind that pivot's x/y are a cordinate of the central point of the compoenent on canvas), while bound's x/y mean top left corner of the component.
+- Typical spacing between components should be about 30 units minimum 
+- do consider width and height whey arranging components on the canvas.
+- no overlapping components.
+- pivot's x/y are a cordinate of the central point of the compoenent on canvas, while bound's x/y mean top left corner of the component.
 - Keep the canvas readable and avoid unnecessary wire crossings.
 - Use non-visual scripting components to implment small function blocks.
 - Generally speaking, stack up numeric parameters on top left side of the canvas.
 - Use Preview Component with swatch to show the final result.
 - Ok to keep visibility on while working, but cldan them up once finished. Only
   preview compoenents should be visible to show the final result.
+- color swatch for preview componet should be right next to the component on the canvas.
 - default width and height to input value on panel should be w34 x h20 - adjust
   width accordingly depending on the contents.
 - use single line panel for single input parameters.

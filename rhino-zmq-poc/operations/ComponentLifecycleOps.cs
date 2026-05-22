@@ -71,6 +71,8 @@ namespace rhino_zmq_poc
                 (float)param.Position.X,
                 (float)param.Position.Y);
 
+            obj.Attributes?.ExpireLayout();
+            obj.OnDisplayExpired(true);
 
             return $"moveComponent: moved ({param.TargetId}) to ({param.Position.X}, {param.Position.Y})";
         }
