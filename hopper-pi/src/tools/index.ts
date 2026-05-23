@@ -11,7 +11,7 @@ import {
 	ghEditGroupTool,
 	ghEditWidgetTool,
 	ghEditScriptTool,
-} from "./edit-tools.js";
+} from "./edit-tools/index.js";
 
 /** All tool definitions in registration order (query tools first, then edit tools) */
 export const ALL_TOOLS = [
