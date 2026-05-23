@@ -41,7 +41,9 @@ namespace rhino_zmq_poc
                     if (param.Inputs != null && param.Inputs.Count > 0)
                     {
                         foreach (var input in param.Inputs)
+                        {
                             ComponentLifecycleOps.AddScriptInputParam(comp, input.Name, access: input.Access, dataMapping: input.DataMapping, simplify: input.Simplify, reverse: input.Reverse);
+                        }
                     }
 
                     if (param.Outputs != null && param.Outputs.Count > 0)

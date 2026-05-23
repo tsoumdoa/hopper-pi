@@ -5,7 +5,6 @@ export { ghEditGroupTool } from "./gh-edit-group.js";
 export { ghEditWidgetTool } from "./gh-edit-widget.js";
 export { ghEditScriptTool } from "./gh-edit-script.js";
 export {
-	ParamTypeUnion,
 	DataMappingType,
 	SliderCreateFields,
 	SliderSetFields,

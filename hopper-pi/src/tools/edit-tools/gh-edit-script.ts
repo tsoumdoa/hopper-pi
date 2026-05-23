@@ -4,6 +4,7 @@ import { createHybridExecute, formatDefaultResult } from "../edit-handlers.js";
 import { withRequester } from "../../infra/request-helpers.js";
 import { fetchScriptCode, formatScriptCodeResponse } from "../query-handlers.js";
 import { resolveInstanceGuid } from "../../services/guid-shortener.js";
+import { AccessType, DataMappingType } from "./shared-types.js";
 import type { CommandAction } from "../../types/commands.js";
 
 export const ghEditScriptTool = defineTool({
@@ -29,6 +30,14 @@ export const ghEditScriptTool = defineTool({
 					inputs: Type.Optional(
 						Type.Array(Type.Object({
 							name: Type.String({ description: "Input parameter name" }),
+							access: Type.Optional(AccessType),
+							dataMapping: Type.Optional(DataMappingType),
+							simplify: Type.Optional(
+								Type.Boolean({ description: "Simplify data paths for the input" })
+							),
+							reverse: Type.Optional(
+								Type.Boolean({ description: "Reverse item order for the input" })
+							),
 						}), { description: "Input parameters to register at creation time" })
 					),
 					outputs: Type.Optional(

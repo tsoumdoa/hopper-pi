@@ -3,7 +3,7 @@ import { defineTool } from "@earendil-works/pi-coding-agent";
 import { createHybridExecute, formatDefaultResult } from "../edit-handlers.js";
 import { withRequester } from "../../infra/request-helpers.js";
 import { fetchScriptParams, formatScriptParamsResponse } from "../query-handlers.js";
-import { ParamTypeUnion, DataMappingType, AccessType } from "./shared-types.js";
+import { DataMappingType, AccessType } from "./shared-types.js";
 import { resolveInstanceGuid } from "../../services/guid-shortener.js";
 
 import type { CommandAction } from "../../types/commands.js";
@@ -12,7 +12,7 @@ export const ghEditParamTool = defineTool({
 	name: "gh_edit_param",
 	label: "Edit Params",
 	description:
-		"Manage input/output ports on Grasshopper components that support variable parameters (e.g. script components): add or remove input/output parameters, change access type (item/list/tree), change data mapping (flatten/graft/simplify/reverse), or list current parameter names with their access and mapping state. For addInput, you can optionally specify a paramType (e.g. Param_Number, Param_String, Param_Point, Param_Boolean, etc.) to control the parameter type. Accepts an array of operation items for batch processing.",
+		"Manage input/output ports on Grasshopper components that support variable parameters (e.g. script components): add or remove input/output parameters, change access type (item/list/tree), change data mapping (flatten/graft/simplify/reverse), or list current parameter names with their access and mapping state. Accepts an array of operation items for batch processing.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([
@@ -34,7 +34,6 @@ export const ghEditParamTool = defineTool({
 					action: Type.Literal("addInput"),
 					targetId: Type.String({ description: "Component instance GUID (from gh_get_canvas)" }),
 					name: Type.String({ description: "Parameter name to add" }),
-					paramType: ParamTypeUnion,
 					access: Type.Optional(AccessType),
 					dataMapping: Type.Optional(DataMappingType),
 					simplify: Type.Optional(
@@ -87,7 +86,7 @@ export const ghEditParamTool = defineTool({
 		(item) => {
 			switch (item.action) {
 				case "addInput":
-					return { action: "addScriptInput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name, paramType: item.paramType, access: item.access, dataMapping: item.dataMapping, simplify: item.simplify, reverse: item.reverse } };
+					return { action: "addScriptInput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name, access: item.access, dataMapping: item.dataMapping, simplify: item.simplify, reverse: item.reverse } };
 				case "removeInput":
 					return { action: "removeScriptInput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name } };
 				case "addOutput":

@@ -52,3 +52,9 @@ public class Script_Instance : GH_ScriptInstance
   }
 }
 ```
+
+## Creating C# script component
+**you must follow the following steps**
+1. Use `gh_edit_script` with action `"create"` to create a C# script node. Specify `language: "csharp"`, the code, and inputs/outputs. Each input should include a name.
+2. If you need to modify inputs/outputs after creation, use `gh_edit_param` to add/remove/edit parameters.
+3. To update the code, use `gh_edit_script` with action `"setCode"`.

@@ -1,12 +1,5 @@
 import { Type } from "@earendil-works/pi-ai";
 
-export const ParamTypeUnion = Type.Union([
-	Type.Literal("object"),
-	Type.Literal("double"),
-	Type.Literal("int"),
-	Type.Literal("string"),
-], { description: "Use object for general rhino objects, double for numbers, int for integers, string for strings" });
-
 export const DataMappingType = Type.Union([
 	Type.Literal("none"),
 	Type.Literal("flatten"),

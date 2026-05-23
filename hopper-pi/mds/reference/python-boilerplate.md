@@ -29,6 +29,6 @@ a = result
 
 ## Creating python script component
 **you must follow the following steps**
-1. Create a new python script component in Grasshopper using the tool gh_edit_components.
-2. Set input and output parameters with correct variable names, data types, and access types using the tool gh_edit_param.
-3. Set the code to the comoponent using the tool gh_edit_script.
+1. Use `gh_edit_script` with action `"create"` to create a Python script node. Specify `language: "python"`, the code, and inputs/outputs.
+2. If you need to modify inputs/outputs after creation, use `gh_edit_param` to add/remove/edit parameters.
+3. To update the code, use `gh_edit_script` with action `"setCode"`.
