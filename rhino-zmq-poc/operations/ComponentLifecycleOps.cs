@@ -162,6 +162,33 @@ namespace rhino_zmq_poc
             comp.ExpireSolution(true);
         }
 
+        public static void ClearAllParams(GH_Component comp)
+        {
+            if (comp == null) return;
+
+            while (comp.Params.Input.Count > 0)
+            {
+                int index = 0;
+                if (comp is IGH_VariableParameterComponent vpc && vpc.CanRemoveParameter(GH_ParameterSide.Input, index))
+                {
+                    vpc.DestroyParameter(GH_ParameterSide.Input, index);
+                }
+                comp.Params.UnregisterInputParameter(comp.Params.Input[index], true);
+            }
+
+            while (comp.Params.Output.Count > 0)
+            {
+                int index = 0;
+                if (comp is IGH_VariableParameterComponent vpc && vpc.CanRemoveParameter(GH_ParameterSide.Output, index))
+                {
+                    vpc.DestroyParameter(GH_ParameterSide.Output, index);
+                }
+                comp.Params.UnregisterOutputParameter(comp.Params.Output[index], true);
+            }
+
+            comp.Params.OnParametersChanged();
+        }
+
         public static string EditScriptAccessType(GH_Document doc, EditScriptAccessParams param)
         {
             try

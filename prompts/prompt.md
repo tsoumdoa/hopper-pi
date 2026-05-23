@@ -19,4 +19,4 @@ generate interesting mathematical shape using python node
 
 design angulated facade system using c#
 
-make c# script that adds two number togather
+make c# script that adds two number togather in gh canvas

@@ -33,6 +33,24 @@ namespace rhino_zmq_poc
                     (float)param.Position.X,
                     (float)param.Position.Y);
 
+                var comp = obj as GH_Component;
+                if (comp != null)
+                {
+                    ComponentLifecycleOps.ClearAllParams(comp);
+
+                    if (param.Inputs != null && param.Inputs.Count > 0)
+                    {
+                        foreach (var input in param.Inputs)
+                            ComponentLifecycleOps.AddScriptInputParam(comp, input.Name, access: input.Access, dataMapping: input.DataMapping, simplify: input.Simplify, reverse: input.Reverse);
+                    }
+
+                    if (param.Outputs != null && param.Outputs.Count > 0)
+                    {
+                        foreach (var output in param.Outputs)
+                            ComponentLifecycleOps.AddScriptOutputParam(comp, output.Name, dataMapping: output.DataMapping, simplify: output.Simplify, reverse: output.Reverse);
+                    }
+                }
+                obj.ExpireSolution(true);
                 if (!string.IsNullOrWhiteSpace(param.Code))
                 {
                     reflector.SetSource(obj, param.Code);
@@ -45,22 +63,6 @@ namespace rhino_zmq_poc
                 else
                 {
                     obj.NickName = param.Language == "python" ? "Py3" : "C#";
-                }
-
-                var comp = obj as GH_Component;
-                if (comp != null)
-                {
-                    if (param.Inputs != null && param.Inputs.Count > 0)
-                    {
-                        foreach (var input in param.Inputs)
-                            ComponentLifecycleOps.AddScriptInputParam(comp, input.Name, access: input.Access, dataMapping: input.DataMapping, simplify: input.Simplify, reverse: input.Reverse);
-                    }
-
-                    if (param.Outputs != null && param.Outputs.Count > 0)
-                    {
-                        foreach (var output in param.Outputs)
-                            ComponentLifecycleOps.AddScriptOutputParam(comp, output.Name, dataMapping: output.DataMapping, simplify: output.Simplify, reverse: output.Reverse);
-                    }
                 }
 
                 obj.ExpireSolution(true);
