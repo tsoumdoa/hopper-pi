@@ -48,7 +48,6 @@ export const ghEditParamTool = defineTool({
 					action: Type.Literal("addOutput"),
 					targetId: Type.String({ description: "Component instance GUID (from gh_get_canvas)" }),
 					name: Type.String({ description: "Parameter name to add" }),
-					paramType: ParamTypeUnion,
 					dataMapping: Type.Optional(DataMappingType),
 					simplify: Type.Optional(
 						Type.Boolean({ description: "Simplify data paths for the new output" })
