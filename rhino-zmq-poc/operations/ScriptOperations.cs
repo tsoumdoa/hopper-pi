@@ -35,7 +35,7 @@ namespace rhino_zmq_poc
 
                 if (!string.IsNullOrWhiteSpace(param.Code))
                 {
-                    reflector.SetSourceCode(obj, param.Code);
+                    reflector.SetSource(obj, param.Code);
                 }
 
                 if (!string.IsNullOrWhiteSpace(param.NickName))
@@ -88,7 +88,7 @@ namespace rhino_zmq_poc
                     return $"setScriptCode error: object not found '{param.TargetId}'";
 
                 var reflector = GhScriptReflector.Get();
-                reflector.SetSourceCode(obj, param.Code);
+                reflector.SetSource(obj, param.Code);
 
                 obj.ExpireSolution(true);
 

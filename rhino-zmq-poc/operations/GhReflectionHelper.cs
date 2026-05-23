@@ -67,10 +67,10 @@ namespace rhino_zmq_poc
             return ScriptGuids.TryGetValue(key, out var guid) ? guid : Guid.Empty;
         }
 
-        public void SetSourceCode(object scriptComponent, string code)
+        public void SetSource(object scriptComponent, string code)
         {
-            if (_iScriptCompType != null && _iScriptCompType.IsInstanceOfType(scriptComponent))
-                _scriptTextProp?.SetValue(scriptComponent, code);
+            var method = scriptComponent.GetType().GetMethod("SetSource", BindingFlags.Public | BindingFlags.Instance);
+            method?.Invoke(scriptComponent, new object[] { code });
         }
 
         public string GetSourceCode(object scriptComponent)
