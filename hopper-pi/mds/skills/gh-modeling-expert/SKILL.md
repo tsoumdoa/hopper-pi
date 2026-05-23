@@ -40,6 +40,17 @@ Grasshopper definitions according to the user's request.
 - Organize logic from left to right and go down as needed, no wire running from right to left.
 - Recursive logic not allowed.
 - Refer to canvas layout system for placement rules.
+- Read the canvas after every placement or move — react to actual bounds,
+  not theoretical ones. Place → read → adjust, don't pre-compute in a vacuum.
+- Only add components that serve a real purpose. If a swatch into preview's M
+  input works, skip Create Material — don't add nodes by default just because
+  a pattern exists.
+- Use actual right-edge values from the canvas to compute zone gaps, not
+  worst-case component widths. A 59px-wide processing node does not need the
+  same gap as a 183px slider.
+- Place the preview cluster at the visual center of the canvas (vertically
+  aligned with the main parameter group), not pushed to the bottom or far right.
+  The output should be prominent and easy to read.
 - Use non-visual scripting components to implement small function blocks.
 - Generally speaking, stack up numeric parameters on top left side of the canvas.
 - Use Preview Component with swatch to show the final result.
