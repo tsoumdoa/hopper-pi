@@ -8,33 +8,6 @@ namespace rhino_zmq_poc
 {
     public static class GroupOperations
     {
-        private static Color ParseRgba(string rgba, Color fallback)
-        {
-            if (string.IsNullOrEmpty(rgba)) return fallback;
-            var parts = rgba.Replace("rgba(", "").Replace(")", "").Split(',');
-            if (parts.Length != 4) return fallback;
-            if (int.TryParse(parts[0].Trim(), out int r) &&
-                int.TryParse(parts[1].Trim(), out int g) &&
-                int.TryParse(parts[2].Trim(), out int b) &&
-                int.TryParse(parts[3].Trim(), out int a))
-            {
-                return Color.FromArgb(a, r, g, b);
-            }
-            return fallback;
-        }
-
-        private static GH_GroupBorder ParseBorder(string borderStr, GH_GroupBorder fallback)
-        {
-            if (string.IsNullOrEmpty(borderStr)) return fallback;
-            return borderStr.ToLowerInvariant() switch
-            {
-                "box" => GH_GroupBorder.Box,
-                "blob" => GH_GroupBorder.Blob,
-                "rectangle" => GH_GroupBorder.Rectangles,
-                _ => fallback
-            };
-        }
-
         public static string AddGroup(GH_Document doc, AddGroupParams param)
         {
             if (doc == null)
@@ -42,9 +15,9 @@ namespace rhino_zmq_poc
 
             var group = new GH_Group();
             group.NickName = param.GroupName;
-            group.Colour = ParseRgba(param.Color, Color.FromArgb(150, 255, 255, 255));
+            group.Colour = Utilities.ParseRgbaColor(param.Color, Color.FromArgb(150, 255, 255, 255));
             if (!string.IsNullOrEmpty(param.Border))
-                group.Border = ParseBorder(param.Border, group.Border);
+                group.Border = Utilities.ParseGroupBorder(param.Border, group.Border);
 
             int addedCount = 0;
             foreach (var idStr in param.ComponentIds)
@@ -132,7 +105,7 @@ namespace rhino_zmq_poc
             if (group == null)
                 return $"changeGroupColor error: group '{param.GroupName}' not found";
 
-            group.Colour = ParseRgba(param.Color, Color.FromArgb(150, 255, 255, 255));
+            group.Colour = Utilities.ParseRgbaColor(param.Color, Color.FromArgb(150, 255, 255, 255));
             return $"changeGroupColor: set color of group '{param.GroupName}' to '{param.Color}'";
         }
 
@@ -159,11 +132,11 @@ namespace rhino_zmq_poc
             if (group == null)
                 return $"changeGroupStyle error: group '{param.GroupName}' not found";
 
-            group.Colour = ParseRgba(param.Color, group.Colour);
+            group.Colour = Utilities.ParseRgbaColor(param.Color, group.Colour);
             if (!string.IsNullOrEmpty(param.Name))
                 group.NickName = param.Name;
             if (!string.IsNullOrEmpty(param.Border))
-                group.Border = ParseBorder(param.Border, group.Border);
+                group.Border = Utilities.ParseGroupBorder(param.Border, group.Border);
 
             return $"changeGroupStyle: updated style of group '{param.GroupName}'";
         }

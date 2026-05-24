@@ -1,6 +1,5 @@
 using System;
 using GH_IO.Serialization;
-using Grasshopper;
 using Grasshopper.Kernel;
 
 namespace rhino_zmq_poc
@@ -14,24 +13,29 @@ namespace rhino_zmq_poc
             _publish = publish;
         }
 
-        public string Publish(GH_Document doc)
+        public static string SerializeToXml(GH_Document doc)
         {
             if (doc == null) return null;
-
-            var archive = new GH_IO.Serialization.GH_Archive();
+            var archive = new GH_Archive();
             try
             {
                 archive.AppendObject(doc, "Definition");
             }
-            catch (System.InvalidOperationException)
+            catch (InvalidOperationException)
             {
                 return null;
             }
-            catch (System.ArgumentOutOfRangeException)
+            catch (ArgumentOutOfRangeException)
             {
                 return null;
             }
-            string xml = archive.Serialize_Xml();
+            return archive.Serialize_Xml();
+        }
+
+        public string Publish(GH_Document doc)
+        {
+            string xml = SerializeToXml(doc);
+            if (xml == null) return null;
             _publish?.Invoke(doc.FilePath ?? "Untitled.gh", xml);
             return xml;
         }

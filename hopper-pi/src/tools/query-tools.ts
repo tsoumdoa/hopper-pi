@@ -10,15 +10,15 @@ import {
 	fetchCanvasErrors,
 	formatCanvasErrorsResponse,
 } from "./query-handlers.js";
-import { checkCanvasOverlaps, formatOverlapResult } from "./canvas-checks.js";
+import { checkCanvasOverlaps } from "./canvas-checks.js";
 
 export const ghGetCanvasTool = defineTool({
 	name: "gh_get_canvas",
 	label: "Get Canvas",
 	description:
-		"Fetch the live Grasshopper canvas from Rhino/Grasshopper backend. " +
-		"Returns every component with short instance GUID aliases and every port GUID alias (mapped internally to full GUIDs). " +
-		"You MUST call this before any gh_connect_wire or gh_disconnect_wire — copy the 4 GUID aliases directly from the output.",
+		"Fetches the live Grasshopper canvas from the Grasshopper backend." +
+		"Returns all components and wires in the current canvas," +
+		"including short aliases for component instance GUIDs and port GUIDs.",
 	parameters: Type.Object({}),
 
 	async execute(_toolCallId, _params, _signal, onUpdate, _ctx) {

@@ -2,10 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
-using GH_IO.Serialization;
 using Grasshopper;
 using Grasshopper.Kernel;
-using Rhino;
 
 namespace rhino_zmq_poc
 {
@@ -61,10 +59,7 @@ namespace rhino_zmq_poc
 
                         string libLocation = "";
                         try { libLocation = lib.Assembly.Location; }
-                        catch (Exception ex)
-                        {
-                            RhinoApp.WriteLine($"[ListAllComponents] Failed to get assembly location: {ex.Message}");
-                        }
+                        catch { }
 
                         if (!string.IsNullOrEmpty(libLocation) &&
                             string.Equals(libLocation, proxy.Location,
@@ -105,29 +100,14 @@ namespace rhino_zmq_poc
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
-            string xml = null;
-            string docName = "Untitled";
-
-            if (doc != null)
-            {
-                docName = doc.FilePath ?? "Untitled";
-                try
-                {
-                    var archive = new GH_Archive();
-                    archive.AppendObject(doc, "Definition");
-                    xml = archive.Serialize_Xml();
-                }
-                catch (Exception ex)
-                {
-                    RhinoApp.WriteLine($"[REP] getCurrentCanvas serialize error: {ex.Message}");
-                }
-            }
+            string docName = doc?.FilePath ?? "Untitled";
+            string xml = XmlPublisher.SerializeToXml(doc) ?? "";
 
             var canvasResponse = new GetCurrentCanvasResponse
             {
                 Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 DocName = docName,
-                Xml = xml ?? ""
+                Xml = xml
             };
 
             return JsonSerializer.Serialize(canvasResponse);
@@ -172,27 +152,11 @@ namespace rhino_zmq_poc
                 if (comp == null)
                     return JsonSerializer.Serialize(new { error = $"'{targetId}' is not a GH_Component" });
 
-                string AccessStr(GH_ParamAccess a) => a switch
-                {
-                    GH_ParamAccess.item => "item",
-                    GH_ParamAccess.list => "list",
-                    GH_ParamAccess.tree => "tree",
-                    _ => a.ToString()
-                };
-
-                string MappingStr(GH_DataMapping m) => m switch
-                {
-                    GH_DataMapping.None => "none",
-                    GH_DataMapping.Flatten => "flatten",
-                    GH_DataMapping.Graft => "graft",
-                    _ => m.ToString()
-                };
-
                 var inputs = comp.Params.Input.Select(p => new ScriptParamInfo
                 {
                     Name = p.Name,
-                    Access = AccessStr(p.Access),
-                    DataMapping = MappingStr(p.DataMapping),
+                    Access = Utilities.AccessStr(p.Access),
+                    DataMapping = Utilities.MappingStr(p.DataMapping),
                     Simplify = p.Simplify,
                     Reverse = p.Reverse
                 }).ToList();
@@ -200,8 +164,8 @@ namespace rhino_zmq_poc
                 var outputs = comp.Params.Output.Select(p => new ScriptParamInfo
                 {
                     Name = p.Name,
-                    Access = AccessStr(p.Access),
-                    DataMapping = MappingStr(p.DataMapping),
+                    Access = Utilities.AccessStr(p.Access),
+                    DataMapping = Utilities.MappingStr(p.DataMapping),
                     Simplify = p.Simplify,
                     Reverse = p.Reverse
                 }).ToList();

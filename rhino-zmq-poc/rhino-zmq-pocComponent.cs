@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.Linq;
 using Grasshopper;
 using Grasshopper.Kernel;
@@ -110,14 +111,9 @@ namespace rhino_zmq_poc
 
         public override GH_Exposure Exposure => GH_Exposure.primary;
 
-        protected override System.Drawing.Bitmap Icon => null;
+        protected override Bitmap Icon => null;
 
         public override Guid ComponentGuid => new Guid("e07753b1-fdec-417a-b57a-83a95204a8dd");
-
-        public override void AddedToDocument(GH_Document doc)
-        {
-            base.AddedToDocument(doc);
-        }
 
         public override void RemovedFromDocument(GH_Document doc)
         {

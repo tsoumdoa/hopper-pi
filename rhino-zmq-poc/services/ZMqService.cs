@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using Grasshopper.Kernel;
 using NetMQ;
 using NetMQ.Sockets;
-using Rhino;
 
 namespace rhino_zmq_poc
 {
@@ -26,7 +25,6 @@ namespace rhino_zmq_poc
         private readonly GH_Document _doc;
         private readonly UiRequestDispatcher _requestDispatcher = new UiRequestDispatcher();
         private readonly ConcurrentQueue<(string topic, string json)> _publishQueue = new ConcurrentQueue<(string, string)>();
-        private readonly object _uiLock = new object();
 
         public event Action<GhJobStatus> OnJobStatus;
         public event Action<string> OnDebugLog;
@@ -166,7 +164,7 @@ namespace rhino_zmq_poc
                 var type = doc.RootElement.GetProperty("type").GetString();
 
                 if (_requestDispatcher.TryDispatch(type, _doc, doc.RootElement, out var response))
-                    return RunOnUiThread(() => response);
+                    return Utilities.RunOnUiThread(() => response);
 
                 return JsonSerializer.Serialize(new { error = $"Unknown request type: {type}" });
             }
@@ -175,30 +173,6 @@ namespace rhino_zmq_poc
                 DebugLog($"[REP] HandleRequest error: {ex.Message}");
                 return JsonSerializer.Serialize(new { error = ex.Message });
             }
-        }
-
-        private string RunOnUiThread(Func<string> func)
-        {
-            var tcs = new TaskCompletionSource<string>();
-            lock (_uiLock)
-            {
-                RhinoApp.Idle += OnIdle;
-
-                void OnIdle(object s, EventArgs a)
-                {
-                    RhinoApp.Idle -= OnIdle;
-                    try
-                    {
-                        tcs.SetResult(func());
-                    }
-                    catch (Exception ex)
-                    {
-                        tcs.SetException(ex);
-                    }
-                }
-            }
-
-            return tcs.Task.GetAwaiter().GetResult();
         }
 
         private void DrainPublishQueue()

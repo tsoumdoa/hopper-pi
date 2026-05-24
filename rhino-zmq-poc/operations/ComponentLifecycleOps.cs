@@ -231,25 +231,10 @@ namespace rhino_zmq_poc
                 var comp = obj as GH_Component;
                 if (comp == null) return $"listScriptParams error: '{param.TargetId}' is not a GH_Component";
 
-                string AccessStr(GH_ParamAccess a) => a switch
-                {
-                    GH_ParamAccess.item => "item",
-                    GH_ParamAccess.list => "list",
-                    GH_ParamAccess.tree => "tree",
-                    _ => a.ToString()
-                };
-                string MappingStr(GH_DataMapping m) => m switch
-                {
-                    GH_DataMapping.None => "none",
-                    GH_DataMapping.Flatten => "flatten",
-                    GH_DataMapping.Graft => "graft",
-                    _ => m.ToString()
-                };
-
                 var inputInfo = comp.Params.Input.Select(p =>
-                    $"{p.Name}({AccessStr(p.Access)},{MappingStr(p.DataMapping)},{p.Simplify.ToString().ToLower()},{p.Reverse.ToString().ToLower()})").ToArray();
+                    $"{p.Name}({Utilities.AccessStr(p.Access)},{Utilities.MappingStr(p.DataMapping)},{p.Simplify.ToString().ToLower()},{p.Reverse.ToString().ToLower()})").ToArray();
                 var outputInfo = comp.Params.Output.Select(p =>
-                    $"{p.Name}({AccessStr(p.Access)},{MappingStr(p.DataMapping)},{p.Simplify.ToString().ToLower()},{p.Reverse.ToString().ToLower()})").ToArray();
+                    $"{p.Name}({Utilities.AccessStr(p.Access)},{Utilities.MappingStr(p.DataMapping)},{p.Simplify.ToString().ToLower()},{p.Reverse.ToString().ToLower()})").ToArray();
 
                 return $"inputs: [{string.Join(", ", inputInfo)}] outputs: [{string.Join(", ", outputInfo)}]";
             }

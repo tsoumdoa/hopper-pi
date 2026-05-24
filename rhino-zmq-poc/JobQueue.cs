@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Rhino;
 
 namespace rhino_zmq_poc
 {
@@ -30,11 +29,10 @@ namespace rhino_zmq_poc
 
     public class JobQueue : IDisposable
     {
-        private readonly System.Collections.Generic.Queue<Job> _jobs = new System.Collections.Generic.Queue<Job>();
+        private readonly Queue<Job> _jobs = new Queue<Job>();
         private readonly object _lock = new object();
         private readonly ManualResetEventSlim _jobAvailable = new ManualResetEventSlim(false);
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
-        private readonly object _uiLock = new object();
         private Task _processingTask;
 
         public event Action<GhJobStatus> OnStatusChanged;
@@ -71,7 +69,7 @@ namespace rhino_zmq_poc
                 }
 
                 if (batch.Count > 0)
-                    RunOnUiThread(() => ExecuteBatch(batch));
+                    Utilities.RunOnUiThread(() => ExecuteBatch(batch));
             }
         }
 
@@ -98,31 +96,6 @@ namespace rhino_zmq_poc
                 job.CompletedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 EmitStatus(job);
             }
-        }
-
-        private void RunOnUiThread(Action action)
-        {
-            var tcs = new TaskCompletionSource<bool>();
-            lock (_uiLock)
-            {
-                RhinoApp.Idle += OnIdle;
-
-                void OnIdle(object s, EventArgs a)
-                {
-                    RhinoApp.Idle -= OnIdle;
-                    try
-                    {
-                        action();
-                        tcs.SetResult(true);
-                    }
-                    catch (Exception ex)
-                    {
-                        tcs.SetException(ex);
-                    }
-                }
-            }
-
-            tcs.Task.GetAwaiter().GetResult();
         }
 
         private void EmitStatus(Job job)
