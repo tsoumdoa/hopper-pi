@@ -1,3 +1,3 @@
 export const EXCLUDED_TYPE_GUIDS: string[] = [
-	"4a170d03-1869-4f2a-838f-a9a4ad36546b",
+	"e07753b1-fdec-417a-b57a-83a95204a8dd", // GHZMQ Plugin
 ];

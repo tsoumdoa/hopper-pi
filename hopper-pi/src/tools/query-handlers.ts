@@ -106,14 +106,27 @@ export function formatScriptCodeResponse(response: GetScriptCodeResponse) {
 
 export function formatCanvasResponse(response: GetCurrentCanvasResponse) {
 	const parsed = buildGhJson(response.xml);
+
+	const excludedIds = new Set(
+		Object.entries(parsed.components)
+			.filter(([, c]) => EXCLUDED_TYPE_GUIDS.includes(c.typeGuid))
+			.map(([id]) => id),
+	);
+	const filteredComponents = Object.fromEntries(
+		Object.entries(parsed.components).filter(([id]) => !excludedIds.has(id)),
+	);
+	const filteredWires = parsed.wires.filter(
+		(w) => !excludedIds.has(w.from) && !excludedIds.has(w.to),
+	);
+
 	const shortComponents = Object.fromEntries(
-		Object.entries(parsed.components).map(([id, component]) => [
+		Object.entries(filteredComponents).map(([id, component]) => [
 			id,
 			shortenComponentGuids(component),
 		])
 	);
-	const compCount = Object.keys(parsed.components).length;
-	const wireCount = parsed.wires.length;
+	const compCount = Object.keys(filteredComponents).length;
+	const wireCount = filteredWires.length;
 
 	const lines: string[] = [
 		`Canvas: ${response.docName} (${compCount} components, ${wireCount} wires)`,
@@ -160,7 +173,7 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse) {
 
 	if (wireCount > 0) {
 		lines.push("=== WIRES ===");
-		for (const w of parsed.wires) {
+		for (const w of filteredWires) {
 			lines.push(`  ${w.from} -> ${w.to}`);
 		}
 	}
@@ -172,7 +185,7 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse) {
 			componentCount: compCount,
 			wireCount: wireCount,
 			components: shortComponents,
-			wires: parsed.wires,
+			wires: filteredWires,
 		},
 	};
 }
