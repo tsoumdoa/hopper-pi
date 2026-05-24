@@ -6,6 +6,13 @@ export type Wire = {
 	targetPortGuid?: string;
 };
 
+export type SubGraph = {
+	id: string;
+	components: string[];
+	internalWires: Wire[];
+	externalWires: Wire[];
+};
+
 export type WireStyle = "normal" | "faint" | "hidden";
 
 export type DataMapping =
@@ -117,6 +124,7 @@ export type ParsedGrasshopper = {
 	version: string;
 	components: Record<string, Component>;
 	wires: Wire[];
+	subGraphs?: SubGraph[];
 	metadata?: {
 		pluginVersion?: string;
 		documentId?: string;

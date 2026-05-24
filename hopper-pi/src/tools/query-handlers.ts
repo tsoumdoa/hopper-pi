@@ -1,7 +1,7 @@
 import { Requester } from "../infra/requester.js";
 import { withRequester } from "../infra/request-helpers.js";
 import type { ListAllComponentsResponse, GetCurrentCanvasResponse, GetCanvasErrorsResponse, GhComponentInfo, ListScriptParamsResponse, GetScriptCodeResponse } from "../types/messages.js";
-import type { Component } from "../types/gh.js";
+import type { Component, SubGraph, Wire } from "../types/gh.js";
 import { buildGhJson } from "../services/parser.js";
 import {
 	toShortInstanceGuid,
@@ -104,7 +104,253 @@ export function formatScriptCodeResponse(response: GetScriptCodeResponse) {
 	};
 }
 
-export function formatCanvasResponse(response: GetCurrentCanvasResponse) {
+function filterSubGraphs(subGraphs: SubGraph[], excludedIds: Set<string>): SubGraph[] {
+	const result: SubGraph[] = [];
+	for (const sg of subGraphs) {
+		const filteredComponents = sg.components.filter(id => !excludedIds.has(id));
+		if (filteredComponents.length === 0) continue;
+		const componentSet = new Set(filteredComponents);
+		const internalWires = sg.internalWires.filter(w => {
+			const fromId = w.from.split(".")[0];
+			const toId = w.to.split(".")[0];
+			return componentSet.has(fromId) && componentSet.has(toId);
+		});
+		const externalWires = sg.externalWires.filter(w => {
+			const fromId = w.from.split(".")[0];
+			const toId = w.to.split(".")[0];
+			return componentSet.has(fromId) || componentSet.has(toId);
+		});
+		result.push({
+			id: sg.id,
+			components: filteredComponents,
+			internalWires,
+			externalWires,
+		});
+	}
+	return result;
+}
+
+type CanvasFilters = {
+	subgraph?: string;
+	component?: string;
+	type?: string;
+};
+
+function matchesCanvasComponent(c: Component, filters: CanvasFilters): boolean {
+	if (filters.component) {
+		const q = filters.component.toLowerCase();
+		if (!c.id.toLowerCase().includes(q) && !c.nickName.toLowerCase().includes(q)) return false;
+	}
+	if (filters.type) {
+		const q = filters.type.toLowerCase();
+		if (!c.type.toLowerCase().includes(q)) return false;
+	}
+	return true;
+}
+
+function formatComponentDetail(id: string, c: Component): string[] {
+	const lines: string[] = [];
+	lines.push(`[${id}] ${c.nickName} (${c.type})`);
+	lines.push(`  COMPONENT_GUID=${c.instanceGuid}`);
+
+	if (Object.keys(c.outputs).length > 0) {
+		lines.push("  OUTPUTS:");
+		for (const [_key, p] of Object.entries(c.outputs)) {
+			const desc = p.description ? ` - ${p.description}` : "";
+			lines.push(`    ${p.nick} (PORT_GUID=${p.instanceGuid})${desc}`);
+		}
+	}
+
+	if (Object.keys(c.inputs).length > 0) {
+		lines.push("  INPUTS:");
+		for (const [_key, p] of Object.entries(c.inputs)) {
+			const desc = p.description ? ` - ${p.description}` : "";
+			lines.push(`    ${p.nick} (PORT_GUID=${p.instanceGuid})${desc}`);
+		}
+	}
+
+	if (c.value) {
+		const v = c.value;
+		if (v.type === "slider") lines.push(`  slider: min=${v.min} max=${v.max} current=${v.current}`);
+		else if (v.type === "panel") lines.push(`  panel: "${v.text}"`);
+		else if (v.type === "number") lines.push(`  number: current=${v.current}`);
+		else lines.push(`  value: ${v.type}`);
+	}
+	if (c.state?.locked) lines.push("  locked");
+	if (c.state?.hidden) lines.push("  hidden");
+	if (c.visuals?.pivot) {
+		lines.push(`  pivot: (${c.visuals.pivot.x}, ${c.visuals.pivot.y})`);
+	}
+	if (c.visuals?.bounds) {
+		lines.push(`  bounds: x=${c.visuals.bounds.x} y=${c.visuals.bounds.y} w=${c.visuals.bounds.width} h=${c.visuals.bounds.height}`);
+	}
+	lines.push("");
+	return lines;
+}
+
+function formatCanvasIndex(
+	docName: string,
+	compCount: number,
+	wireCount: number,
+	subGraphCount: number,
+	subGraphs: SubGraph[],
+	components: Record<string, Component>,
+): { content: Array<{ type: "text"; text: string }>; details: Record<string, unknown> } {
+	const lines: string[] = [
+		`Canvas: ${docName} (${compCount} components, ${wireCount} wires, ${subGraphCount} sub-graphs)`,
+		"",
+		"Sub-graph index:",
+	];
+
+	for (const sg of subGraphs) {
+		const typeCounts = new Map<string, number>();
+		for (const compId of sg.components) {
+			const c = components[compId];
+			if (c) {
+				typeCounts.set(c.type, (typeCounts.get(c.type) ?? 0) + 1);
+			}
+		}
+		const typeSummary = Array.from(typeCounts.entries())
+			.sort((a, b) => b[1] - a[1])
+			.map(([type, count]) => `${type}(${count})`)
+			.join(", ");
+
+		lines.push(`  ${sg.id}  — ${sg.components.length} components, ${sg.internalWires.length} internal wires, ${sg.externalWires.length} external`);
+		if (typeSummary) {
+			lines.push(`    types: ${typeSummary}`);
+		}
+	}
+
+	lines.push("");
+	lines.push("Use subgraph, component, or type params to inspect a specific sub-graph or component.");
+
+	return {
+		content: [{ type: "text" as const, text: lines.join("\n") }],
+		details: {
+			docName,
+			componentCount: compCount,
+			wireCount,
+			subGraphCount,
+			subGraphs,
+		},
+	};
+}
+
+function formatCanvasDetail(
+	docName: string,
+	compCount: number,
+	wireCount: number,
+	subGraphCount: number,
+	subGraphs: SubGraph[],
+	shortComponents: Record<string, Component>,
+	filters: CanvasFilters,
+	filteredWires: Wire[],
+): { content: Array<{ type: "text"; text: string }>; details: Record<string, unknown> } {
+	const lines: string[] = [
+		`Canvas: ${docName} (${compCount} components, ${wireCount} wires, ${subGraphCount} sub-graphs)`,
+		"",
+	];
+
+	const filterDesc: string[] = [];
+	if (filters.subgraph) filterDesc.push(`subgraph=${filters.subgraph}`);
+	if (filters.component) filterDesc.push(`component=${filters.component}`);
+	if (filters.type) filterDesc.push(`type=${filters.type}`);
+	lines.push(`Filter: ${filterDesc.join(", ")}`);
+	lines.push("");
+
+	for (const sg of subGraphs) {
+		if (filters.subgraph && sg.id !== filters.subgraph) {
+			lines.push(`  ${sg.id} — (${sg.components.length} components, skipped)`);
+			continue;
+		}
+
+		const matchedCompIds: string[] = [];
+		for (const compId of sg.components) {
+			const c = shortComponents[compId];
+			if (!c) continue;
+			if (matchesCanvasComponent(c, filters)) {
+				matchedCompIds.push(compId);
+			}
+		}
+
+		const hasComponentFilter = !!(filters.component || filters.type);
+
+		lines.push(`--- Sub-graph: ${sg.id} (${sg.components.length} components, ${sg.internalWires.length} internal wires, ${sg.externalWires.length} external) ---`);
+		lines.push("");
+
+		if (hasComponentFilter && matchedCompIds.length === 0) {
+			lines.push("  (no matching components)");
+			lines.push("");
+			continue;
+		}
+
+		const matchedSet = new Set(matchedCompIds);
+
+		for (const compId of matchedCompIds) {
+			const c = shortComponents[compId];
+			if (!c) continue;
+			lines.push(...formatComponentDetail(compId, c));
+		}
+
+		if (hasComponentFilter) {
+			const relevantInternalWires = sg.internalWires.filter(w => {
+				const fromId = w.from.split(".")[0];
+				const toId = w.to.split(".")[0];
+				return matchedSet.has(fromId) || matchedSet.has(toId);
+			});
+			const relevantExternalWires = sg.externalWires.filter(w => {
+				const fromId = w.from.split(".")[0];
+				const toId = w.to.split(".")[0];
+				return matchedSet.has(fromId) || matchedSet.has(toId);
+			});
+
+			if (relevantInternalWires.length > 0) {
+				lines.push("--- internal wires (matching) ---");
+				for (const w of relevantInternalWires) {
+					lines.push(`  ${w.from} -> ${w.to}`);
+				}
+			}
+			if (relevantExternalWires.length > 0) {
+				if (relevantInternalWires.length > 0) lines.push("");
+				lines.push("--- external wires (matching) ---");
+				for (const w of relevantExternalWires) {
+					lines.push(`  ${w.from} -> ${w.to}`);
+				}
+			}
+		} else {
+			if (sg.internalWires.length > 0) {
+				lines.push("--- internal wires ---");
+				for (const w of sg.internalWires) {
+					lines.push(`  ${w.from} -> ${w.to}`);
+				}
+			}
+			if (sg.externalWires.length > 0) {
+				if (sg.internalWires.length > 0) lines.push("");
+				lines.push("--- external wires ---");
+				for (const w of sg.externalWires) {
+					lines.push(`  ${w.from} -> ${w.to}`);
+				}
+			}
+		}
+
+		lines.push("");
+	}
+
+	return {
+		content: [{ type: "text" as const, text: lines.join("\n") }],
+		details: {
+			docName,
+			componentCount: compCount,
+			wireCount,
+			subGraphCount,
+			components: shortComponents,
+			wires: filteredWires,
+			subGraphs,
+		},
+	};
+}
+
+export function formatCanvasResponse(response: GetCurrentCanvasResponse, filters?: CanvasFilters) {
 	const parsed = buildGhJson(response.xml);
 
 	const excludedIds = new Set(
@@ -116,8 +362,14 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse) {
 		Object.entries(parsed.components).filter(([id]) => !excludedIds.has(id)),
 	);
 	const filteredWires = parsed.wires.filter(
-		(w) => !excludedIds.has(w.from) && !excludedIds.has(w.to),
+		(w) => {
+			const fromId = w.from.split(".")[0];
+			const toId = w.to.split(".")[0];
+			return !excludedIds.has(fromId) && !excludedIds.has(toId);
+		},
 	);
+
+	const filteredSubGraphs = filterSubGraphs(parsed.subGraphs ?? [], excludedIds);
 
 	const shortComponents = Object.fromEntries(
 		Object.entries(filteredComponents).map(([id, component]) => [
@@ -127,67 +379,29 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse) {
 	);
 	const compCount = Object.keys(filteredComponents).length;
 	const wireCount = filteredWires.length;
+	const subGraphCount = filteredSubGraphs.length;
 
-	const lines: string[] = [
-		`Canvas: ${response.docName} (${compCount} components, ${wireCount} wires)`,
-		"",
-	];
-
-	for (const [id, c] of Object.entries(shortComponents)) {
-		lines.push(`[${id}] ${c.nickName} (${c.type})`);
-		lines.push(`  COMPONENT_GUID=${c.instanceGuid}`);
-
-		if (Object.keys(c.outputs).length > 0) {
-			lines.push("  OUTPUTS:");
-			for (const [_key, p] of Object.entries(c.outputs)) {
-				const desc = p.description ? ` - ${p.description}` : "";
-				lines.push(`    ${p.nick} (PORT_GUID=${p.instanceGuid})${desc}`);
-			}
-		}
-
-		if (Object.keys(c.inputs).length > 0) {
-			lines.push("  INPUTS:");
-			for (const [_key, p] of Object.entries(c.inputs)) {
-				const desc = p.description ? ` - ${p.description}` : "";
-				lines.push(`    ${p.nick} (PORT_GUID=${p.instanceGuid})${desc}`);
-			}
-		}
-
-		if (c.value) {
-			const v = c.value;
-			if (v.type === "slider") lines.push(`  slider: min=${v.min} max=${v.max} current=${v.current}`);
-			else if (v.type === "panel") lines.push(`  panel: "${v.text}"`);
-			else if (v.type === "number") lines.push(`  number: current=${v.current}`);
-			else lines.push(`  value: ${v.type}`);
-		}
-		if (c.state?.locked) lines.push("  locked");
-		if (c.state?.hidden) lines.push("  hidden");
-		if (c.visuals?.pivot) {
-			lines.push(`  pivot: (${c.visuals.pivot.x}, ${c.visuals.pivot.y})`);
-		}
-		if (c.visuals?.bounds) {
-			lines.push(`  bounds: x=${c.visuals.bounds.x} y=${c.visuals.bounds.y} w=${c.visuals.bounds.width} h=${c.visuals.bounds.height}`);
-		}
-		lines.push("");
+	if (!filters) {
+		return formatCanvasIndex(
+			response.docName,
+			compCount,
+			wireCount,
+			subGraphCount,
+			filteredSubGraphs,
+			shortComponents,
+		);
 	}
 
-	if (wireCount > 0) {
-		lines.push("=== WIRES ===");
-		for (const w of filteredWires) {
-			lines.push(`  ${w.from} -> ${w.to}`);
-		}
-	}
-
-	return {
-		content: [{ type: "text" as const, text: lines.join("\n") }],
-		details: {
-			docName: response.docName,
-			componentCount: compCount,
-			wireCount: wireCount,
-			components: shortComponents,
-			wires: filteredWires,
-		},
-	};
+	return formatCanvasDetail(
+		response.docName,
+		compCount,
+		wireCount,
+		subGraphCount,
+		filteredSubGraphs,
+		shortComponents,
+		filters,
+		filteredWires,
+	);
 }
 
 function matchComponent(c: GhComponentInfo, f: string) {

@@ -1,4 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
+import { computeSubGraphs } from "./subgraph.js";
 import type {
 	ParsedGrasshopper,
 	Component,
@@ -786,5 +787,7 @@ export function buildGhJson(
 	});
 
 	const parsed = parser.parse(xmlContent) as ParsedXml;
-	return parseGrasshopper(parsed);
+	const result = parseGrasshopper(parsed);
+	result.subGraphs = computeSubGraphs(result);
+	return result;
 }

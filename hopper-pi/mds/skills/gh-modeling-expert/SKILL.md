@@ -87,6 +87,28 @@ Grasshopper definitions according to the user's request.
 - Be intentional with access types and tree operations to avoid accidental data
   mismatches.
 
+### Canvas Navigation — Sub-graphs & Filtering
+- The canvas is automatically partitioned into **sub-graphs** — clusters of
+  components connected by wires. Components with no wires form singleton
+  sub-graphs.
+- Each sub-graph tracks **internal wires** (both endpoints inside the cluster)
+  and **external wires** (crossing to another cluster).
+- **Always call `gh_get_canvas()` with no params first** to get a compact
+  index showing sub-graph IDs, component counts, and type summaries.
+  Do not skip this step — it saves tokens and orients you on the canvas
+  structure.
+- Use filter params to drill into specific sub-graphs or components:
+  - `subgraph` — show only one sub-graph (e.g. `"subgraph_0"`)
+  - `component` — case-insensitive substring match on component ID or nickName
+  - `type` — case-insensitive substring match on component type (e.g. `"Slider"`)
+- Filters combine with AND logic. Examples:
+  - `gh_get_canvas({type: "Slider"})` — all Slider components
+  - `gh_get_canvas({subgraph: "subgraph_0"})` — full detail for subgraph_0
+  - `gh_get_canvas({component: "Circle", subgraph: "subgraph_1"})` — Circle
+    components within subgraph_1 only
+- When making edits, re-call `gh_get_canvas()` after changes to refresh the
+  sub-graph structure (wiring changes can merge or split sub-graphs).
+
 ### Data Casting
 In Grasshopper, some data types can be cast safely by using appropriate
 parameter components. These patterns can also act as lightweight type checks.
