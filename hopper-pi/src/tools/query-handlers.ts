@@ -9,6 +9,7 @@ import {
 } from "../services/guid-shortener.js";
 import { formatOverlapResult } from "./canvas-checks.js";
 import type { CanvasOverlapResult } from "./canvas-checks.js";
+import { EXCLUDED_TYPE_GUIDS } from "./constants.js";
 
 const CACHE_TTL_MS = 60_000;
 
@@ -211,7 +212,7 @@ function paginate<T>(items: T[], limit?: number, offset?: number): { slice: T[];
 }
 
 export function formatComponentsMultiQuery(response: ListAllComponentsResponse, queries?: string[], limit?: number, offset?: number) {
-	const all = response.components;
+	const all = response.components.filter((c) => !EXCLUDED_TYPE_GUIDS.includes(c.typeGuid));
 
 	if (!queries || queries.length === 0) {
 		const { slice, hasMore, totalMatched } = paginate(all, limit, offset);
