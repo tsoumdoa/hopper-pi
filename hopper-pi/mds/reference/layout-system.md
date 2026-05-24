@@ -15,6 +15,43 @@ full rendered size.
 - Do ajust size of panel according to content length.
 
 
+## Placement Protocol (mandatory)
+
+Placement is the most error-prone part of canvas construction. Follow this
+protocol **every time** you place components in a new zone:
+
+### 1. Read before placing
+Before placing any component in a new zone, you **must** have fresh canvas
+state showing the actual bounds of all components in the preceding zone.
+Never compute zone gaps from assumed or theoretical sizes.
+
+### 2. State the math explicitly
+Before every placement, write out the reasoning:
+- Which existing component's bounds you are deriving from
+- What gap value you are applying (H_GAP or H_GAP_TIGHT)
+- The resulting x and y values
+
+Example:
+```
+Zone 1 right edge:  max(20+182) = 202 (Fold Depth slider)
+Zone 2 x:           202 + 50 = 252
+Input slider center: (20 + 200) / 2 = 110
+Script pivot y:     110  (vertically centered on feeding group)
+```
+
+If you cannot point to a specific bounds value from the last canvas read,
+you are not ready to place.
+
+### 3. One zone per step
+Place all components in one zone → read the canvas → verify no overlaps
+→ **then** compute and place the next zone. Never place components across
+multiple horizontal zones in a single step.
+
+### 4. Read after placing
+After placing a zone, read the canvas immediately to confirm actual bounds
+match your intent. Adjust before proceeding.
+
+
 ## Horizontal Zones (left-to-right flow)
 
 Divide the canvas into logical zones. Each zone's start-x is derived from the
@@ -109,3 +146,17 @@ before placing neighbors:
 
 When placing next to a tall component (script, material), use vertical
 centering so the visual weight balances.
+
+**Vertical centering calculation for adjacent zones:**
+When a tall component (e.g. script, ~118px) is placed next to a stack of
+short components (e.g. sliders, ~20px each), compute the vertical center
+of the feeding group explicitly:
+
+```
+group_top    = min(component.y for component in feeding_group)
+group_bottom = max(component.y + component.h for component in feeding_group)
+center_y     = (group_top + group_bottom) / 2
+pivot_y      = center_y
+```
+
+Do not top-align with the first slider. Use the midpoint of the group.

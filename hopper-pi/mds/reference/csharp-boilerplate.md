@@ -8,13 +8,10 @@ Assume code targets a Grasshopper C# script component inside Rhino, not a standa
 
 ## Rules
 
-- Put main logic in `RunScript(...)`.
-- Inputs are normal parameters.
-- Outputs are `ref` or `out` parameters.
-- Use RhinoCommon types directly when known.
-- All types of param become objects in Grasshopper c# components, you have to
-  explicitly cast them to the expected type.
-- Add helper methods below `RunScript(...)` only when helpful.
+- All inputs arrive as `object` — cast them to the expected type inside RunScript.
+- All outputs are `ref object` — assign your result directly to the output variable.
+- The agent's primary job is naming input/output params correctly. The rest is boilerplate.
+- Add helper methods below `RunScript(...)` only when needed.
 - Prefer `List<T>` for list inputs and outputs.
 - Use `DataTree<T>` only when the task requires tree data.
 - Keep code minimal, compilable, and suitable for repeated Grasshopper recomputation.
@@ -23,8 +20,7 @@ Assume code targets a Grasshopper C# script component inside Rhino, not a standa
 **You need to pass the whole code to gh_edit_script function**
 
 ```csharp
-// you may add or remove declarations here
-// most commonly used ones shown below
+// add or remove declarations as needed
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -36,19 +32,16 @@ using Grasshopper.Kernel;
 using Grasshopper.Kernel.Data;
 using Grasshopper.Kernel.Types;
 
-
 public class Script_Instance : GH_ScriptInstance
 {
   private void RunScript(
-    object center,
-    object radius,
-    ref object circle
+    object x,    // one object param per input
+    ref object a // one ref object param per output
   )
   {
-    Point3d c = (Point3d)center;
-    double r = Convert.ToDouble(radius);
-
-    circle = new Circle(c, r);
+    // Cast inputs to expected types
+    // Do work
+    // Assign to output params
   }
 }
 ```
