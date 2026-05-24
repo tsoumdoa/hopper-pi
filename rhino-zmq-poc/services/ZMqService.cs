@@ -78,7 +78,7 @@ namespace rhino_zmq_poc
                 try
                 {
                     string message;
-                    if (!_pullSocket.TryReceiveFrameString(TimeSpan.FromSeconds(1), out message))
+                    if (!_pullSocket.TryReceiveFrameString(TimeSpan.FromMilliseconds(300), out message))
                     {
                         DrainPublishQueue();
                         continue;
@@ -141,7 +141,11 @@ namespace rhino_zmq_poc
             {
                 try
                 {
-                    string message = _repSocket.ReceiveFrameString();
+                    string message;
+                    if (!_repSocket.TryReceiveFrameString(TimeSpan.FromMilliseconds(300), out message))
+                    {
+                        continue;
+                    }
                     DebugLog($"[REP] Received: {message}");
 
                     var response = HandleRequest(message);
@@ -220,8 +224,8 @@ namespace rhino_zmq_poc
         public void Dispose()
         {
             _cts.Cancel();
-            _commandTask?.Wait(TimeSpan.FromSeconds(2));
-            _repTask?.Wait(TimeSpan.FromSeconds(2));
+            _commandTask?.Wait(TimeSpan.FromMilliseconds(500));
+            _repTask?.Wait(TimeSpan.FromMilliseconds(500));
             _pubSocket?.Dispose();
             _pullSocket?.Dispose();
             _repSocket?.Dispose();

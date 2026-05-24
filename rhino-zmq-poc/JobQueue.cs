@@ -115,7 +115,7 @@ namespace rhino_zmq_poc
         {
             _cts.Cancel();
             _jobAvailable.Set();
-            _processingTask?.Wait(TimeSpan.FromSeconds(2));
+            _processingTask?.Wait(TimeSpan.FromMilliseconds(500));
             _cts.Dispose();
             _jobAvailable.Dispose();
         }
