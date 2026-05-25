@@ -123,6 +123,10 @@ the process requires.
 - For canvas layout system, see [reference/layout-system.md](../../../mds/reference/layout-system.md).
   Load the **full** layout-system.md only for Tier 3 tasks. For Tier 1–2 the
   Component Size Table below is usually sufficient.
+- For canvas sub-graphs, filtering, and read discipline, see
+  [reference/canvas-navigation.md](../../../mds/reference/canvas-navigation.md).
+- For type casting and input construction, see
+  [reference/data-type-guide.md](../../../mds/reference/data-type-guide.md).
 
 ### Sizing Heuristic (quick reference)
 - Standard gaps: `H_GAP = 50px` between zones, `H_GAP_TIGHT = 30px` between
@@ -131,37 +135,8 @@ the process requires.
 - Sliders/toggles/panels/swatches are short (~20px tall).
 - Scripts, Create Material, Boundary Surfaces, Rectangle are tall (68–140px tall).
 - When mixing tall and short components vertically, center-align on the group midpoint.
-- For exact per-type sizes, load [layout-system.md](../../../mds/reference/layout-system.md).
-
-**Pivot vs. bounds — avoid negative-space overflow:**
-The `x`, `y` values you pass to `gh_edit_components` are **pivot** positions,
-not top-left corners. For tall components (Rectangle, Scripts, Create Material,
-Boundary Surfaces), the rendered bounds can extend 40–70 px above and to the
-left of the pivot. If you place a tall component at `y=20`, its bounds may
-start at `y=-20` — leaking into negative space.
-
-Rules:
-- Use a **minimum safe pivot y of 45** for the first row of components.
-- For tall components specifically, use `y ≥ 65` or read actual bounds after
-  placement to verify all bounds stay ≥ 0.
-- After placing components (especially tall ones), always check the canvas read
-  for bounds extending below 0 — and shift down if needed.
-- The same applies horizontally: a component pivot at `x=20` may produce bounds
-  at `x=-5`. Use `x ≥ 25` as a minimum safe value.
-
-**Worked example — 5-component flow with preview (Slider → Circle → Boundary → Area + Preview cluster):**
-```
-Slider:    x=25,  y=45,  w≈100  →  right edge = 125
-Circle:    x = 125 + 50 = 175,  w≈56  →  right edge = 231
-Boundary:  x = 231 + 50 = 281,  w≈55  →  right edge = 336
-Area:      x = 336 + 50 = 386,  w≈57  →  right edge = 443
-
-Preview cluster (output zone, one V_GAP below Area's vertical center):
-  Swatch:   x = 443 + 30 = 473,  y = Area.pivot_y + V_GAP
-  Preview:  x = 473 + 86 + 30 = 589,  same y   (swatch w≈86 + H_GAP_TIGHT)
-```
-Rule: **right-edge of previous + gap = x of next.** Always compute, never guess.
-Preview always goes in the output zone — right of the last flow component.
+- For exact per-type sizes, pivot/bounds rules, and worked examples, load
+  [layout-system.md](../../../mds/reference/layout-system.md).
 
 ### Data Structure
 - Use item access by default.
@@ -172,63 +147,8 @@ Preview always goes in the output zone — right of the last flow component.
 - Flatten data trees only when required for list-level or item-level operations.
 - Be intentional with access types and tree operations to avoid accidental data
   mismatches.
-
-### Canvas Navigation — Sub-graphs & Filtering
-- The canvas is automatically partitioned into **sub-graphs** — clusters of
-  components connected by wires. Components with no wires form singleton
-  sub-graphs.
-- Each sub-graph tracks **internal wires** (both endpoints inside the cluster)
-  and **external wires** (crossing to another cluster).
-- **Always call `gh_get_canvas()` with no params first** to get a compact
-  index showing sub-graph IDs, component counts, and type summaries.
-  Do not skip this step — it orients you on the canvas structure.
-- Use filter params to drill into specific sub-graphs or components:
-  - `subgraph` — show only one sub-graph (e.g. `"subgraph_0"`)
-  - `component` — case-insensitive substring match on component ID or nickName
-  - `type` — case-insensitive substring match on component type (e.g. `"Slider"`)
-- Filters combine with AND logic. Examples:
-  - `gh_get_canvas({type: "Slider"})` — all Slider components
-  - `gh_get_canvas({subgraph: "subgraph_0"})` — full detail for subgraph_0
-  - `gh_get_canvas({component: "Circle", subgraph: "subgraph_1"})` — Circle
-    components within subgraph_1 only
-- When making edits, re-call `gh_get_canvas()` to refresh the sub-graph
-  structure (wiring changes can merge or split sub-graphs).
-
-### Canvas Read Discipline
-- Every `gh_get_canvas()` call costs a round trip. Budget your reads:
-  - Tier 1: 2–3 reads (initial state, after wiring, final check)
-  - Tier 2: 3–5 reads (initial + one per stage + final)
-  - Tier 3: one read per zone placed (as per Placement Protocol)
-- Never read the canvas twice in a row without an edit in between.
-- Use a single unfiltered `gh_get_canvas()` instead of multiple filtered calls
-  when you need the full picture. Filter only to isolate a specific component
-  for wiring.
-
-### Data Casting
-In Grasshopper, some data types can be cast safely by using appropriate
-parameter components. These patterns can also act as lightweight type checks.
-
-- line <-> polyline
-- point <-> plane
-- closed polyline <-> surface
-- rectangle <-> 2D domain
-- planar surface <-> 2D domain
-- vector <-> line
-- color <-> material 
-
-Also remember:
-- a line is defined by two points
-- a plane is typically defined from an origin and orientation, not simply as
-  three arbitrary points
-
-Tips:
-- point and vector can be donated as {0,0,0} on panel
-- domain can be defined using panel as <start> to <end_num> e.g.: '-5 to 5' or '0 to 1'.
-- D in IsoTrim requires outout from Divide Domain2 (surface can be represented
-  as domain)
-- Graph mapper work only with normalized value (0-1), also need to ask your to
-  set the mapper manually.
-- Color/ material can be donated as rgba string (0-255) '255,105,180' or '255,105,180 (152)'
+- For type casting pairs and input construction tips, load
+  [data-type-guide.md](../../../mds/reference/data-type-guide.md).
 
 ### Final Step
 - Deleteunused components.

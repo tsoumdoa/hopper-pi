@@ -165,3 +165,34 @@ pivot_y      = center_y
 ```
 
 Do not top-align with the first slider. Use the midpoint of the group.
+
+## Pivot vs. Bounds — Avoid Negative-Space Overflow
+
+The `x`, `y` values you pass to `gh_edit_components` are **pivot** positions,
+not top-left corners. For tall components (Rectangle, Scripts, Create Material,
+Boundary Surfaces), the rendered bounds can extend 40–70 px above and to the
+left of the pivot. If you place a tall component at `y=20`, its bounds may
+start at `y=-20` — leaking into negative space.
+
+Rules:
+- Use a **minimum safe pivot y of 45** for the first row of components.
+- For tall components specifically, use `y ≥ 65` or read actual bounds after
+  placement to verify all bounds stay ≥ 0.
+- After placing components (especially tall ones), always check the canvas read
+  for bounds extending below 0 — and shift down if needed.
+- The same applies horizontally: a component pivot at `x=20` may produce bounds
+  at `x=-5`. Use `x ≥ 25` as a minimum safe value.
+
+**Worked example — 5-component flow with preview (Slider → Circle → Boundary → Area + Preview cluster):**
+```
+Slider:    x=25,  y=45,  w≈100  →  right edge = 125
+Circle:    x = 125 + 50 = 175,  w≈56  →  right edge = 231
+Boundary:  x = 231 + 50 = 281,  w≈55  →  right edge = 336
+Area:      x = 336 + 50 = 386,  w≈57  →  right edge = 443
+
+Preview cluster (output zone, one V_GAP below Area's vertical center):
+  Swatch:   x = 443 + 30 = 473,  y = Area.pivot_y + V_GAP
+  Preview:  x = 473 + 86 + 30 = 589,  same y   (swatch w≈86 + H_GAP_TIGHT)
+```
+Rule: **right-edge of previous + gap = x of next.** Always compute, never guess.
+Preview always goes in the output zone — right of the last flow component.
