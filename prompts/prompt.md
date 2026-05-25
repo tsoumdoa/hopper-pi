@@ -10,6 +10,8 @@ get canvas
 please add circle and get area
 please add circle and get area, plz preview cirle as surface with pink color
 
+please add rectangle and get area with preview in orange
+
 model gherkin tower in lodon, plz do research to make it as realistic as possible. plz do
 add preview par elements to reflect the material (e.g. glass => blue, steel=> gray) and
 disable previwe for those elements other than preview.

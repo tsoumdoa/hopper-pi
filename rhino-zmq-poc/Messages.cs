@@ -21,6 +21,9 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("position")]
         public Position Position { get; set; }
+
+        [JsonPropertyName("preview")]
+        public bool Preview { get; set; } = false;
     }
 
     public class DeleteComponentParams

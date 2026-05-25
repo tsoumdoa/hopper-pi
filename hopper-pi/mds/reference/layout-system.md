@@ -1,5 +1,10 @@
 # Layout System — Bounds-Based Placement
 
+> **When to use this file:** Load this file only for **Tier 3 (complex)**
+> definitions (25+ components, multiple data paths, scripts), or when
+> placement goes wrong and you need to debug layout issues. For Tier 1–2
+> tasks, the Component Size Table in SKILL.md is usually sufficient.
+
 All layout decisions must use **bounds**, never pivot. Every component reports
 `bounds: x y w h` where `(x,y)` is the top-left corner and `(w,h)` is the
 full rendered size.
@@ -15,10 +20,10 @@ full rendered size.
 - Do ajust size of panel according to content length.
 
 
-## Placement Protocol (mandatory)
+## Placement Protocol (Tier 3 — mandatory for complex definitions)
 
 Placement is the most error-prone part of canvas construction. Follow this
-protocol **every time** you place components in a new zone:
+protocol for **Tier 3** definitions, or when layout correctness is critical:
 
 ### 1. Read before placing
 Before placing any component in a new zone, you **must** have fresh canvas
@@ -62,7 +67,7 @@ zone2_x = max(member.x + member.w for member in zone1) + H_GAP
 zone3_x = max(member.x + member.w for member in zone2) + H_GAP
 ```
 
-Standard gaps:
+Standard gaps (authoritative values live in SKILL.md):
 - `H_GAP = 50` px between zones (parameters → processing → output)
 - `H_GAP_TIGHT = 30` px between tightly coupled components (e.g. swatch → material)
 

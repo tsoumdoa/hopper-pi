@@ -88,7 +88,7 @@ These publish commands to port 5556 and return immediately with a jobId for each
 
 | Tool | Key actions | What it does |
 |------|------------|--------------|
-| `gh_edit_components` | `add`, `delete`, `move`, `rename`, `set_locked`, `set_hidden` | Unified component operations. Use `gh_get_canvas` for instance GUIDs (existing components), `gh_list_components` for type GUIDs (adding new). |
+| `gh_edit_components` | `add`, `delete`, `move`, `rename`, `set_locked`, `set_hidden` | Unified component operations. Components are added with preview disabled by default (`preview: false`); set `preview: true` to enable viewport preview. Use `gh_get_canvas` for instance GUIDs, `gh_list_components` for type GUIDs. |
 | `gh_edit_param` | `listParams`, `addInput`, `removeInput`, `addOutput`, `removeOutput`, `editAccessType`, `editDataMapping` | Manage input/output ports on script components. List current params, add/remove ports, change access type (item/list/tree), set data mapping (flatten/graft) and simplify/reverse flags. |
 | `gh_edit_wire` | `connect`, `disconnect` | Connect or disconnect wires between component ports. Requires COMPONENT_GUID and PORT_GUID values from `gh_get_canvas` output. |
 | `gh_edit_group` | `add`, `remove`, `delete`, `changeColor`, `rename`, `changeStyle` | Group operations. Supports color (rgba), border style (Box/Blob/Rectangles), and batch operations. |

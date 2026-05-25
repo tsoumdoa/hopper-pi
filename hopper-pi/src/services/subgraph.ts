@@ -55,6 +55,8 @@ export function computeSubGraphs(parsed: ParsedGrasshopper): SubGraph[] {
 
 	clusters.sort((a, b) => b.length - a.length);
 
+	if (clusters.length === 1 || clusters.length === componentIds.size) return [];
+
 	const subGraphs: SubGraph[] = clusters.map((cluster, index) => {
 		const clusterSet = new Set(cluster);
 

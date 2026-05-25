@@ -199,30 +199,47 @@ function formatCanvasIndex(
 	const lines: string[] = [
 		`Canvas: ${docName} (${compCount} components, ${wireCount} wires, ${subGraphCount} sub-graphs)`,
 		"",
-		"Sub-graph index:",
 	];
 
-	for (const sg of subGraphs) {
+	if (subGraphCount === 0) {
 		const typeCounts = new Map<string, number>();
-		for (const compId of sg.components) {
-			const c = components[compId];
-			if (c) {
-				typeCounts.set(c.type, (typeCounts.get(c.type) ?? 0) + 1);
-			}
+		for (const c of Object.values(components)) {
+			typeCounts.set(c.type, (typeCounts.get(c.type) ?? 0) + 1);
 		}
 		const typeSummary = Array.from(typeCounts.entries())
 			.sort((a, b) => b[1] - a[1])
 			.map(([type, count]) => `${type}(${count})`)
 			.join(", ");
 
-		lines.push(`  ${sg.id}  — ${sg.components.length} components, ${sg.internalWires.length} internal wires, ${sg.externalWires.length} external`);
 		if (typeSummary) {
-			lines.push(`    types: ${typeSummary}`);
+			lines.push(`Component types: ${typeSummary}`);
 		}
-	}
+		lines.push("");
+		lines.push("Use component or type params to inspect specific components.");
+	} else {
+		lines.push("Sub-graph index:");
+		for (const sg of subGraphs) {
+			const typeCounts = new Map<string, number>();
+			for (const compId of sg.components) {
+				const c = components[compId];
+				if (c) {
+					typeCounts.set(c.type, (typeCounts.get(c.type) ?? 0) + 1);
+				}
+			}
+			const typeSummary = Array.from(typeCounts.entries())
+				.sort((a, b) => b[1] - a[1])
+				.map(([type, count]) => `${type}(${count})`)
+				.join(", ");
 
-	lines.push("");
-	lines.push("Use subgraph, component, or type params to inspect a specific sub-graph or component.");
+			lines.push(`  ${sg.id}  — ${sg.components.length} components, ${sg.internalWires.length} internal wires, ${sg.externalWires.length} external`);
+			if (typeSummary) {
+				lines.push(`    types: ${typeSummary}`);
+			}
+		}
+
+		lines.push("");
+		lines.push("Use subgraph, component, or type params to inspect a specific sub-graph or component.");
+	}
 
 	return {
 		content: [{ type: "text" as const, text: lines.join("\n") }],
@@ -255,36 +272,18 @@ function formatCanvasDetail(
 	if (filters.subgraph) filterDesc.push(`subgraph=${filters.subgraph}`);
 	if (filters.component) filterDesc.push(`component=${filters.component}`);
 	if (filters.type) filterDesc.push(`type=${filters.type}`);
-	lines.push(`Filter: ${filterDesc.join(", ")}`);
-	lines.push("");
+	if (filterDesc.length > 0) {
+		lines.push(`Filter: ${filterDesc.join(", ")}`);
+		lines.push("");
+	}
 
-	for (const sg of subGraphs) {
-		if (filters.subgraph && sg.id !== filters.subgraph) {
-			lines.push(`  ${sg.id} — (${sg.components.length} components, skipped)`);
-			continue;
-		}
-
+	if (subGraphs.length === 0) {
 		const matchedCompIds: string[] = [];
-		for (const compId of sg.components) {
-			const c = shortComponents[compId];
-			if (!c) continue;
+		for (const [id, c] of Object.entries(shortComponents)) {
 			if (matchesCanvasComponent(c, filters)) {
-				matchedCompIds.push(compId);
+				matchedCompIds.push(id);
 			}
 		}
-
-		const hasComponentFilter = !!(filters.component || filters.type);
-
-		lines.push(`--- Sub-graph: ${sg.id} (${sg.components.length} components, ${sg.internalWires.length} internal wires, ${sg.externalWires.length} external) ---`);
-		lines.push("");
-
-		if (hasComponentFilter && matchedCompIds.length === 0) {
-			lines.push("  (no matching components)");
-			lines.push("");
-			continue;
-		}
-
-		const matchedSet = new Set(matchedCompIds);
 
 		for (const compId of matchedCompIds) {
 			const c = shortComponents[compId];
@@ -292,48 +291,98 @@ function formatCanvasDetail(
 			lines.push(...formatComponentDetail(compId, c));
 		}
 
-		if (hasComponentFilter) {
-			const relevantInternalWires = sg.internalWires.filter(w => {
+		if (filteredWires.length > 0) {
+			const matchedSet = new Set(matchedCompIds);
+			const relevantWires = filteredWires.filter(w => {
 				const fromId = w.from.split(".")[0];
 				const toId = w.to.split(".")[0];
 				return matchedSet.has(fromId) || matchedSet.has(toId);
 			});
-			const relevantExternalWires = sg.externalWires.filter(w => {
-				const fromId = w.from.split(".")[0];
-				const toId = w.to.split(".")[0];
-				return matchedSet.has(fromId) || matchedSet.has(toId);
-			});
-
-			if (relevantInternalWires.length > 0) {
-				lines.push("--- internal wires (matching) ---");
-				for (const w of relevantInternalWires) {
-					lines.push(`  ${w.from} -> ${w.to}`);
-				}
-			}
-			if (relevantExternalWires.length > 0) {
-				if (relevantInternalWires.length > 0) lines.push("");
-				lines.push("--- external wires (matching) ---");
-				for (const w of relevantExternalWires) {
-					lines.push(`  ${w.from} -> ${w.to}`);
-				}
-			}
-		} else {
-			if (sg.internalWires.length > 0) {
-				lines.push("--- internal wires ---");
-				for (const w of sg.internalWires) {
-					lines.push(`  ${w.from} -> ${w.to}`);
-				}
-			}
-			if (sg.externalWires.length > 0) {
-				if (sg.internalWires.length > 0) lines.push("");
-				lines.push("--- external wires ---");
-				for (const w of sg.externalWires) {
+			if (relevantWires.length > 0) {
+				lines.push("--- wires ---");
+				for (const w of relevantWires) {
 					lines.push(`  ${w.from} -> ${w.to}`);
 				}
 			}
 		}
+	} else {
+		for (const sg of subGraphs) {
+			if (filters.subgraph && sg.id !== filters.subgraph) {
+				lines.push(`  ${sg.id} — (${sg.components.length} components, skipped)`);
+				continue;
+			}
 
-		lines.push("");
+			const matchedCompIds: string[] = [];
+			for (const compId of sg.components) {
+				const c = shortComponents[compId];
+				if (!c) continue;
+				if (matchesCanvasComponent(c, filters)) {
+					matchedCompIds.push(compId);
+				}
+			}
+
+			const hasComponentFilter = !!(filters.component || filters.type);
+
+			lines.push(`--- Sub-graph: ${sg.id} (${sg.components.length} components, ${sg.internalWires.length} internal wires, ${sg.externalWires.length} external) ---`);
+			lines.push("");
+
+			if (hasComponentFilter && matchedCompIds.length === 0) {
+				lines.push("  (no matching components)");
+				lines.push("");
+				continue;
+			}
+
+			const matchedSet = new Set(matchedCompIds);
+
+			for (const compId of matchedCompIds) {
+				const c = shortComponents[compId];
+				if (!c) continue;
+				lines.push(...formatComponentDetail(compId, c));
+			}
+
+			if (hasComponentFilter) {
+				const relevantInternalWires = sg.internalWires.filter(w => {
+					const fromId = w.from.split(".")[0];
+					const toId = w.to.split(".")[0];
+					return matchedSet.has(fromId) || matchedSet.has(toId);
+				});
+				const relevantExternalWires = sg.externalWires.filter(w => {
+					const fromId = w.from.split(".")[0];
+					const toId = w.to.split(".")[0];
+					return matchedSet.has(fromId) || matchedSet.has(toId);
+				});
+
+				if (relevantInternalWires.length > 0) {
+					lines.push("--- internal wires (matching) ---");
+					for (const w of relevantInternalWires) {
+						lines.push(`  ${w.from} -> ${w.to}`);
+					}
+				}
+				if (relevantExternalWires.length > 0) {
+					if (relevantInternalWires.length > 0) lines.push("");
+					lines.push("--- external wires (matching) ---");
+					for (const w of relevantExternalWires) {
+						lines.push(`  ${w.from} -> ${w.to}`);
+					}
+				}
+			} else {
+				if (sg.internalWires.length > 0) {
+					lines.push("--- internal wires ---");
+					for (const w of sg.internalWires) {
+						lines.push(`  ${w.from} -> ${w.to}`);
+					}
+				}
+				if (sg.externalWires.length > 0) {
+					if (sg.internalWires.length > 0) lines.push("");
+					lines.push("--- external wires ---");
+					for (const w of sg.externalWires) {
+						lines.push(`  ${w.from} -> ${w.to}`);
+					}
+				}
+			}
+
+			lines.push("");
+		}
 	}
 
 	return {

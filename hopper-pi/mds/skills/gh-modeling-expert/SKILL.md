@@ -9,29 +9,57 @@ description: Builds, modifies, and validates Grasshopper definitions using clear
 You are a Grasshopper expert. Your role is to build, modify, review, or validate
 Grasshopper definitions according to the user's request.
 
-## Core Principles
-1. Build incrementally
-   - Implement the definition in small, testable steps rather than making large
-     changes at once.
-   - Add only the components needed for the current piece of logic, get them
-     onto the canvas, wire them up, and confirm they work before moving on.
-   - Establish base geometry and core data flow first, then extend the
-     definition piece by piece.
-   - Avoid trying to solve the entire problem in one pass.
+## Complexity Tiers
 
-2. Prefer small, reviewable changes
-   - Keep each round of edits narrow in scope so the user can easily inspect,
-     understand, and correct the result.
-   - Avoid batching multiple major structural changes into a single step.
-   - Maintain steady visible progress, but do so in a way that preserves
-     clarity, debuggability, and control.
-   - When a solution has multiple parts, complete and verify one part before
-     starting the next.
+Before building, assess the task into one of three tiers. This determines
+how much ceremony (reads, zone-by-zone placement, incremental verification)
+the process requires.
+
+**Tier 1 — Simple (≤ 10 components, linear flow)**
+- Batch all component creation into one or two calls.
+- Batch all wiring into one call.
+- Use the Component Size Table below for estimated placement.
+- Read canvas once after creating, once after wiring, once final.
+- One group + cleanup pass at the end.
+
+**Tier 2 — Moderate (10–25 components, branching logic)**
+- Build in 2–3 logical stages (e.g., base geometry → processing → output).
+- Batch components within each stage.
+- One canvas read per stage.
+- Cleanup and grouping after all stages.
+
+**Tier 3 — Complex (25+ components, multiple data paths, scripts)**
+- Follow the full Placement Protocol — one zone per step, read between zones.
+- Build incrementally, verify each stage.
+- Load [layout-system.md](../../../mds/reference/layout-system.md) for detailed rules.
+
+## Core Principles
+
+1. Match rigor to complexity
+   - Tier 1: batch creation and wiring, verify once at the end.
+   - Tier 2: batch within stages, verify per stage.
+   - Tier 3: build incrementally — place one zone, verify, then proceed.
+   - When in doubt, round up a tier. Never round down just to go faster.
+
+2. Prefer right-sized changes
+   - Tier 1: place everything, wire everything, then inspect.
+   - Tier 2–3: keep each round of edits narrow enough to inspect, understand,
+     and correct.
+   - Maintain visible progress while preserving clarity and control.
 
 3. Debug and verify
    - After building or modifying the definition, review the logic carefully.
    - Check data flow, parameter access, type conversion, and expected outputs.
    - Fix errors and simplify the definition where possible.
+
+4. Keep it tight
+   - Components should be as close as the gap rules allow. The total canvas
+     footprint should be minimized.
+   - Wide empty stretches between components mean wires run too far and the
+     definition is harder to scan. If you're placing something at x=740 in a
+     6-component definition, you've over-spaced.
+   - Compute each component's x from the **right edge of the previous
+     component + gap** — never guess or use generous round numbers.
 
 ## GRASSHOPPER CONVENTIONS — NON-NEGOTIABLE 
 
@@ -40,30 +68,47 @@ Grasshopper definitions according to the user's request.
 - Organize logic from left to right and go down as needed, no wire running from right to left.
 - Recursive logic not allowed.
 - Refer to canvas layout system for placement rules.
-- Follow the **Placement Protocol** in the layout reference — read bounds
-  before placing, state the math, one zone per step, read after placing.
-  Do not skip this protocol. It is the single most common source of layout bugs.
+- For Tier 3 tasks, follow the **Placement Protocol** in the layout reference —
+  read bounds before placing, state the math, one zone per step, read after placing.
+- For Tier 1–2 tasks, use the Component Size Table below for estimated placement
+  and batch components. Verify with a single canvas read after placement.
 - Only add components that serve a real purpose. If a swatch into preview's M
   input works, skip Create Material — don't add nodes by default just because
   a pattern exists.
-- Use actual right-edge values from the canvas to compute zone gaps, not
-  worst-case component widths. A 59px-wide processing node does not need the
-  same gap as a 183px slider.
+- For Tier 3: use actual right-edge values from the canvas to compute zone gaps.
+  For Tier 1–2: estimate from the Component Size Table and batch.
 - When placing a tall component next to a stack of short ones, compute the
   vertical center of the feeding group. Do not top-align with the first slider.
-- Place the preview cluster at the visual center of the canvas (vertically
-  aligned with the main parameter group), not pushed to the bottom or far right.
-  The output should be prominent and easy to read.
+- Place the preview cluster in the **output zone** — to the right of the
+  last component in the data flow (rightmost processing or output component).
+  The preview should be the rightmost element. Position it one `V_GAP` below
+  the last component's vertical center, with the swatch at the same y.
+  Keep the preview cluster close to its data source with standard gaps — don't
+  add excessive whitespace, but don't crowd it back into the processing zone.
 - Use non-visual scripting components to implement small function blocks.
 - Generally speaking, stack up numeric parameters on top left side of the canvas.
-- Use Preview Component with swatch to show the final result.
+- Use Preview Component with swatch to show the final result. Place the
+  swatch adjacent to the preview component (same row), not far below it.
+- **Lightweight preview cluster** (when skipping Create Material):
+  ```
+  [...last output] ────→ [Colour Swatch] ──→ [Custom Preview]
+                           (H_GAP_TIGHT)
+  ```
+  The preview cluster sits in the **output zone** (right of the last processing
+  or output component). Swatch is to the left of Custom Preview, both at the
+  same vertical position, with `H_GAP_TIGHT` (30px) between them. The
+  geometry wire runs from the last processing component directly into
+  Custom Preview's `G` input, while the swatch feeds into `M`.
 - Ok to keep visibility on while working, but clean them up once finished. Only
   preview components should be visible to show the final result.
-- default width and height to input value on panel should be w34 x h28 - adjust
+- default width and height to input value on panel should be w100 x h52 - adjust
   them accordingly depending on the contents.
 - use single line panel for single input parameters.
 - use multi-line panel list of items.
-- Set visibility to hidden by default except for Preview components.
+- Components are added with preview disabled by default (`preview: false`). Only
+  set `preview: true` explicitly for Custom Preview components in the output zone.
+  No need to manually call `set_hidden` on intermediate components — they are
+  already hidden from the viewport.
 
 
 ### Non-Visual Scripting Conventions
@@ -76,6 +121,47 @@ Grasshopper definitions according to the user's request.
 - For c# node coding, see [reference/csharp-boilerplate.md](../../../mds/reference/csharp-boilerplate.md).
 - For python node coding, see [reference/python-boilerplate.md](../../../mds/reference/python-boilerplate.md).
 - For canvas layout system, see [reference/layout-system.md](../../../mds/reference/layout-system.md).
+  Load the **full** layout-system.md only for Tier 3 tasks. For Tier 1–2 the
+  Component Size Table below is usually sufficient.
+
+### Sizing Heuristic (quick reference)
+- Standard gaps: `H_GAP = 50px` between zones, `H_GAP_TIGHT = 30px` between
+  tightly coupled components (e.g. swatch → preview). `V_GAP = 40px` between
+  stacked components.
+- Sliders/toggles/panels/swatches are short (~20px tall).
+- Scripts, Create Material, Boundary Surfaces, Rectangle are tall (68–140px tall).
+- When mixing tall and short components vertically, center-align on the group midpoint.
+- For exact per-type sizes, load [layout-system.md](../../../mds/reference/layout-system.md).
+
+**Pivot vs. bounds — avoid negative-space overflow:**
+The `x`, `y` values you pass to `gh_edit_components` are **pivot** positions,
+not top-left corners. For tall components (Rectangle, Scripts, Create Material,
+Boundary Surfaces), the rendered bounds can extend 40–70 px above and to the
+left of the pivot. If you place a tall component at `y=20`, its bounds may
+start at `y=-20` — leaking into negative space.
+
+Rules:
+- Use a **minimum safe pivot y of 45** for the first row of components.
+- For tall components specifically, use `y ≥ 65` or read actual bounds after
+  placement to verify all bounds stay ≥ 0.
+- After placing components (especially tall ones), always check the canvas read
+  for bounds extending below 0 — and shift down if needed.
+- The same applies horizontally: a component pivot at `x=20` may produce bounds
+  at `x=-5`. Use `x ≥ 25` as a minimum safe value.
+
+**Worked example — 5-component flow with preview (Slider → Circle → Boundary → Area + Preview cluster):**
+```
+Slider:    x=25,  y=45,  w≈100  →  right edge = 125
+Circle:    x = 125 + 50 = 175,  w≈56  →  right edge = 231
+Boundary:  x = 231 + 50 = 281,  w≈55  →  right edge = 336
+Area:      x = 336 + 50 = 386,  w≈57  →  right edge = 443
+
+Preview cluster (output zone, one V_GAP below Area's vertical center):
+  Swatch:   x = 443 + 30 = 473,  y = Area.pivot_y + V_GAP
+  Preview:  x = 473 + 86 + 30 = 589,  same y   (swatch w≈86 + H_GAP_TIGHT)
+```
+Rule: **right-edge of previous + gap = x of next.** Always compute, never guess.
+Preview always goes in the output zone — right of the last flow component.
 
 ### Data Structure
 - Use item access by default.
@@ -95,8 +181,7 @@ Grasshopper definitions according to the user's request.
   and **external wires** (crossing to another cluster).
 - **Always call `gh_get_canvas()` with no params first** to get a compact
   index showing sub-graph IDs, component counts, and type summaries.
-  Do not skip this step — it saves tokens and orients you on the canvas
-  structure.
+  Do not skip this step — it orients you on the canvas structure.
 - Use filter params to drill into specific sub-graphs or components:
   - `subgraph` — show only one sub-graph (e.g. `"subgraph_0"`)
   - `component` — case-insensitive substring match on component ID or nickName
@@ -106,8 +191,18 @@ Grasshopper definitions according to the user's request.
   - `gh_get_canvas({subgraph: "subgraph_0"})` — full detail for subgraph_0
   - `gh_get_canvas({component: "Circle", subgraph: "subgraph_1"})` — Circle
     components within subgraph_1 only
-- When making edits, re-call `gh_get_canvas()` after changes to refresh the
-  sub-graph structure (wiring changes can merge or split sub-graphs).
+- When making edits, re-call `gh_get_canvas()` to refresh the sub-graph
+  structure (wiring changes can merge or split sub-graphs).
+
+### Canvas Read Discipline
+- Every `gh_get_canvas()` call costs a round trip. Budget your reads:
+  - Tier 1: 2–3 reads (initial state, after wiring, final check)
+  - Tier 2: 3–5 reads (initial + one per stage + final)
+  - Tier 3: one read per zone placed (as per Placement Protocol)
+- Never read the canvas twice in a row without an edit in between.
+- Use a single unfiltered `gh_get_canvas()` instead of multiple filtered calls
+  when you need the full picture. Filter only to isolate a specific component
+  for wiring.
 
 ### Data Casting
 In Grasshopper, some data types can be cast safely by using appropriate

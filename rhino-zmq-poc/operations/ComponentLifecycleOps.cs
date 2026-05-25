@@ -30,7 +30,14 @@ namespace rhino_zmq_poc
                     (float)param.Position.X,
                     (float)param.Position.Y);
 
-                return $"addComponent: added ({obj.InstanceGuid}) at ({param.Position.X}, {param.Position.Y})";
+                if (!param.Preview)
+                {
+                    var hiddenProp = obj.GetType().GetProperty("Hidden");
+                    if (hiddenProp != null)
+                        hiddenProp.SetValue(obj, true);
+                }
+
+                return $"addComponent: added ({obj.InstanceGuid}) at ({param.Position.X}, {param.Position.Y}) preview={param.Preview}";
             }
             catch (Exception ex)
             {

@@ -35,6 +35,9 @@ export const ghEditComponentsTool = defineTool({
 				nickName: Type.Optional(
 					Type.String({ description: "Nickname — optional for add, required for rename" })
 				),
+				preview: Type.Optional(
+					Type.Boolean({ description: "Show geometry preview in Rhino viewport. Default is false — only set to true for Preview components." })
+				),
 				locked: Type.Optional(
 					Type.Boolean({ description: "true to lock, false to unlock — required for set_locked" })
 				),
@@ -54,6 +57,7 @@ export const ghEditComponentsTool = defineTool({
 							typeGuid: resolveTypeGuid(item.componentType!),
 							position: { x: item.x!, y: item.y! },
 							nickName: item.nickName,
+							preview: item.preview ?? false,
 						},
 					};
 				case "delete":

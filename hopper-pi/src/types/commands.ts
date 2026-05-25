@@ -26,6 +26,7 @@ export type ActionDef = {
 export type AddComponentParams = {
 	typeGuid: string;
 	position: Position;
+	preview?: boolean;
 };
 
 export type DeleteComponentParams = {
