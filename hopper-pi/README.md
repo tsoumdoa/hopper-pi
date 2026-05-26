@@ -78,7 +78,7 @@ These send a request to port 5557 and wait for a response.
 
 | Tool | Parameters | What it does |
 |------|-----------|--------------|
-| `gh_get_canvas` | _(none)_ | Fetches the full Grasshopper canvas as structured text. Returns short GUID aliases for component instance GUIDs and port GUIDs. Always call this first before editing. |
+| `gh_get_canvas` | _(none)_ | MANDATORY: place ALL components before calling. Call once after all are placed to get GUIDs for wiring and verify the build. Do NOT call before placement or between zones. |
 | `gh_list_components` | `queries[]` (string array), `limit?`, `offset?` | Searches registered Grasshopper component types by keyword. Returns name, short typeGuid, category, subcategory, description. Supports batch queries and pagination (`hasMore`, `totalMatched`). |
 | `gh_get_canvas_errors` | _(none)_ | Retrieves all runtime errors, warnings, and messages from the canvas. Also runs an overlap detection check to find visually overlapping components and groups. |
 
@@ -101,9 +101,9 @@ These publish commands to port 5556 and return immediately with a jobId for each
 ## How the Agent Uses It — Typical Workflow
 
 ```
-You:   Look at my Grasshopper canvas and tell me what's on it
+You:   Connect the slider to the circle radius, then set it to 42
 
-Agent: [calls gh_get_canvas]
+Agent: [calls gh_get_canvas]  ← only because it needs GUIDs for wiring
        I see 3 components:
          - Circle (COMPONENT_GUID=abc123) at pivot (10, 20)
            OUTPUTS: Circle (PORT_GUID=xyz789)
@@ -113,11 +113,9 @@ Agent: [calls gh_get_canvas]
          - Panel (COMPONENT_GUID=ghi789)
            panel: "hello"
 
-You:   Connect the slider to the circle radius, then set it to 42
-
-Agent: [calls gh_edit_wire(items: [{ action: "connect", fromComponent: "def456",
-                                     fromPort: "<output-port-guid>",
-                                     toComponent: "abc123", toPort: "<input-port-guid>" }])]
+       [calls gh_edit_wire(items: [{ action: "connect", fromComponent: "def456",
+                                    fromPort: "<output-port-guid>",
+                                    toComponent: "abc123", toPort: "<input-port-guid>" }])]
        [calls gh_mutate_widget(items: [{ widgetType: "slider", action: "setValue",
                                         targetId: "def456", value: 42 }])]
        Done. The slider is now connected to the Circle radius and set to 42.
@@ -137,7 +135,7 @@ Agent: [calls gh_edit_components(items: [{ action: "delete", targetId: "abc123" 
 ```
 
 Key points:
-- **`gh_get_canvas` populates the GUID shortener** — component and port GUIDs are returned as short base62 aliases, and edit tools automatically resolve them back to full GUIDs before sending commands
+- **`gh_get_canvas` populates the GUID shortener** — component and port GUIDs are returned as short base62 aliases, and edit tools automatically resolve them back to full GUIDs before sending commands. But only call after all components are placed — one call per build cycle.
 - **GUID resolution is hash-based** — the shortener uses SHA-256 + base62 encoding, so aliases are deterministic and collision-resistant
 - **Canvas errors include overlap detection** — `gh_get_canvas_errors` reports both runtime errors/warnings and any components that visually overlap on the canvas
 

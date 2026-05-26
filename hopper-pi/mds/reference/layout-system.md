@@ -25,10 +25,10 @@ full rendered size.
 Placement is the most error-prone part of canvas construction. Follow this
 protocol for **Tier 3** definitions, or when layout correctness is critical:
 
-### 1. Read before placing
-Before placing any component in a new zone, you **must** have fresh canvas
-state showing the actual bounds of all components in the preceding zone.
-Never compute zone gaps from assumed or theoretical sizes.
+### 1. Build first, read only when necessary
+For a fresh build: compute zone gaps from your math and the Component Size
+Table. Do not read the canvas between zones. Only read when placing adjacent
+to existing components you didn't place yourself and need their actual bounds.
 
 ### 2. State the math explicitly
 Before every placement, write out the reasoning:
@@ -44,17 +44,16 @@ Input slider center: (20 + 200) / 2 = 110
 Script pivot y:     110  (vertically centered on feeding group)
 ```
 
-If you cannot point to a specific bounds value from the last canvas read,
-you are not ready to place.
+
 
 ### 3. One zone per step
-Place all components in one zone → read the canvas → verify no overlaps
-→ **then** compute and place the next zone. Never place components across
-multiple horizontal zones in a single step.
+Place all components in one zone → verify no overlaps mentally or via
+`gh_get_canvas_errors` → **then** compute and place the next zone. Never
+place components across multiple horizontal zones in a single step.
 
-### 4. Read after placing
-After placing a zone, read the canvas immediately to confirm actual bounds
-match your intent. Adjust before proceeding.
+### 4. After all zones: read once for GUIDs
+After ALL zones are placed, call `gh_get_canvas` once to get GUIDs for wiring.
+Do NOT read between zones.
 
 
 ## Horizontal Zones (left-to-right flow)
@@ -133,8 +132,9 @@ Placement rules for the preview cluster:
 
 ## Component Size Awareness
 
-Different component types have very different sizes. Always read actual bounds
-before placing neighbors:
+Different component types have very different sizes. Use the Component Size
+Table for placement estimates. Only read actual bounds when placing adjacent
+to existing components you didn't place yourself:
 
 | Component type | Typical size | Notes |
 |---|---|---|
@@ -178,8 +178,9 @@ Rules:
 - Use a **minimum safe pivot y of 45** for the first row of components.
 - For tall components specifically, use `y ≥ 65` or read actual bounds after
   placement to verify all bounds stay ≥ 0.
-- After placing components (especially tall ones), always check the canvas read
-  for bounds extending below 0 — and shift down if needed.
+- After placing components (especially tall ones), check for bounds extending
+  below 0 if you suspect overflow. Use `gh_get_canvas_errors` to detect
+  overlaps rather than reading the full canvas.
 - The same applies horizontally: a component pivot at `x=20` may produce bounds
   at `x=-5`. Use `x ≥ 25` as a minimum safe value.
 

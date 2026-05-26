@@ -13,10 +13,6 @@ sub-graphs.
 Each sub-graph tracks **internal wires** (both endpoints inside the cluster)
 and **external wires** (crossing to another cluster).
 
-**Always call `gh_get_canvas()` with no params first** to get a compact
-index showing sub-graph IDs, component counts, and type summaries.
-Do not skip this step — it orients you on the canvas structure.
-
 ## Filter Parameters
 
 Use filter params to drill into specific sub-graphs or components:
@@ -32,19 +28,46 @@ Filters combine with AND logic. Examples:
 - `gh_get_canvas({component: "Circle", subgraph: "subgraph_1"})` — Circle
   components within subgraph_1 only
 
-When making edits, re-call `gh_get_canvas()` to refresh the sub-graph
-structure (wiring changes can merge or split sub-graphs).
+## Canvas Read Discipline — HARD RULES
 
-## Canvas Read Discipline
+### MANDATORY: Place first, read once
 
-Every `gh_get_canvas()` call costs a round trip. Budget your reads:
+`gh_get_canvas` is **expensive** and must be treated as a scarce resource.
+The workflow is:
 
-- Tier 1: 2–3 reads (initial state, after wiring, final check)
-- Tier 2: 3–5 reads (initial + one per stage + final)
-- Tier 3: one read per zone placed (as per Placement Protocol)
+> **Place ALL components → `gh_get_canvas` once → wire everything → done**
 
-Never read the canvas twice in a row without an edit in between.
+**You MUST add all components needed for the function you are building BEFORE
+calling `gh_get_canvas`.** Do not call it before all components are on the
+canvas. The only purpose of `gh_get_canvas` is to get component and port
+GUIDs so you can wire things up and verify the build succeeded.
 
-Use a single unfiltered `gh_get_canvas()` instead of multiple filtered calls
-when you need the full picture. Filter only to isolate a specific component
-for wiring.
+### When `gh_get_canvas` is allowed
+
+1. **After all components are placed** — to get GUIDs for wiring. This is
+   the primary and expected use. Call once, get every GUID you need, then
+   batch all wiring.
+2. **Debugging errors** — something went wrong after wiring and you need
+   to inspect the current state. Prefer `gh_get_canvas_errors` for
+   error/warning info first.
+
+### When `gh_get_canvas` is NOT allowed
+
+- **Before all components are placed.** You know what you're building —
+  place it all first.
+- **To "orient yourself" on the canvas.** You don't need an orientation
+  call. Start placing components.
+- **To verify components you just placed.** You placed them — you already
+  know their positions.
+- **Between zones during placement.** Place all zones, then read once.
+- **Twice in a row without an edit in between.**
+
+### Read budget: 1 read per build cycle
+
+Every build cycle gets **one** `gh_get_canvas` call — after all components
+are placed, before wiring. Additional reads are only allowed when debugging
+errors that cannot be diagnosed with `gh_get_canvas_errors` alone.
+
+When you do call `gh_get_canvas`, use a single unfiltered call instead of
+multiple filtered calls. Filter only to isolate a specific component when you
+need a single GUID and already know the component name.

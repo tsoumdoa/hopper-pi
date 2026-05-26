@@ -12,47 +12,64 @@ Grasshopper definitions according to the user's request.
 ## Complexity Tiers
 
 Before building, assess the task into one of three tiers. This determines
-how much ceremony (reads, zone-by-zone placement, incremental verification)
-the process requires.
+how much batching and zone-by-zone placement the process requires.
 
 **Tier 1 — Simple (≤ 10 components, linear flow)**
 - Batch all component creation into one or two calls.
-- Batch all wiring into one call.
+- **Do NOT call `gh_get_canvas` until ALL components are placed.**
+- Once all components are on canvas, call `gh_get_canvas` once to get GUIDs,
+  then batch all wiring in one call.
 - Use the Component Size Table below for estimated placement.
-- Read canvas once after creating, once after wiring, once final.
 - One group + cleanup pass at the end.
 
 **Tier 2 — Moderate (10–25 components, branching logic)**
 - Build in 2–3 logical stages (e.g., base geometry → processing → output).
 - Batch components within each stage.
-- One canvas read per stage.
+- **Do NOT call `gh_get_canvas` until ALL components across all stages are
+  placed.** Call once to get GUIDs, then batch all wiring.
 - Cleanup and grouping after all stages.
 
 **Tier 3 — Complex (25+ components, multiple data paths, scripts)**
-- Follow the full Placement Protocol — one zone per step, read between zones.
-- Build incrementally, verify each stage.
+- Follow the full Placement Protocol — one zone per step.
+- Build incrementally, placing all zones before reading.
+- **Do NOT call `gh_get_canvas` until ALL zones and components are placed.**
+  Call once to get GUIDs for wiring and verify the build. Only re-read if
+  errors need debugging after wiring.
 - Load [layout-system.md](../../../mds/reference/layout-system.md) for detailed rules.
 
 ## Core Principles
 
 1. Match rigor to complexity
-   - Tier 1: batch creation and wiring, verify once at the end.
-   - Tier 2: batch within stages, verify per stage.
-   - Tier 3: build incrementally — place one zone, verify, then proceed.
+   - Tier 1: place everything, read once for GUIDs, wire everything.
+   - Tier 2: place all stages, read once for GUIDs, wire everything.
+   - Tier 3: place all zones, read once for GUIDs, wire everything.
    - When in doubt, round up a tier. Never round down just to go faster.
 
-2. Prefer right-sized changes
-   - Tier 1: place everything, wire everything, then inspect.
-   - Tier 2–3: keep each round of edits narrow enough to inspect, understand,
-     and correct.
+2. Place first, read once, wire, done
+   - **MANDATORY: add ALL components needed for the function you are building
+     BEFORE calling `gh_get_canvas`.** Do not call it before all components
+     are on the canvas.
+   - The only purpose of `gh_get_canvas` is to get component and port GUIDs
+     so you can wire things up and verify the build succeeded.
+   - The workflow is always: **place everything → `gh_get_canvas` once →
+     wire everything → cleanup**. Never deviate from this sequence.
+   - Calling `gh_get_canvas` before all components are placed is a bug.
+     You already know what you placed and where — reading to verify is
+     wasteful and slow.
+   - The only exception: debugging errors after wiring. If something is
+     wrong, read to diagnose, fix, then continue.
+
+3. Prefer right-sized changes
+   - Keep each batch of edits focused — place a logical group, then wire it
+     before moving to the next group.
    - Maintain visible progress while preserving clarity and control.
 
-3. Debug and verify
+4. Debug and verify
    - After building or modifying the definition, review the logic carefully.
    - Check data flow, parameter access, type conversion, and expected outputs.
    - Fix errors and simplify the definition where possible.
 
-4. Keep it tight
+5. Keep it tight
    - Components should be as close as the gap rules allow. The total canvas
      footprint should be minimized.
    - Wide empty stretches between components mean wires run too far and the
@@ -69,14 +86,15 @@ the process requires.
 - Recursive logic not allowed.
 - Refer to canvas layout system for placement rules.
 - For Tier 3 tasks, follow the **Placement Protocol** in the layout reference —
-  read bounds before placing, state the math, one zone per step, read after placing.
+  state the math, one zone per step. Place ALL zones before calling
+  `gh_get_canvas`. Do not read between zones.
 - For Tier 1–2 tasks, use the Component Size Table below for estimated placement
-  and batch components. Verify with a single canvas read after placement.
+  and batch components. Place everything, then call `gh_get_canvas` once for GUIDs.
 - Only add components that serve a real purpose. If a swatch into preview's M
   input works, skip Create Material — don't add nodes by default just because
   a pattern exists.
-- For Tier 3: use actual right-edge values from the canvas to compute zone gaps.
-  For Tier 1–2: estimate from the Component Size Table and batch.
+- For Tier 3: compute zone gaps from the Component Size Table and your
+  placement math. For Tier 1–2: same — estimate from the table and batch.
 - When placing a tall component next to a stack of short ones, compute the
   vertical center of the feeding group. Do not top-align with the first slider.
 - Place the preview cluster in the **output zone** — to the right of the
