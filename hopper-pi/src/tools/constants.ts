@@ -4,7 +4,7 @@ export const EXCLUDED_TYPE_GUIDS: string[] = [
 
 export const VANILLA_CATEGORIES: ReadonlySet<string> = new Set([
 	"Params",
-	"Math",
+	"Maths",
 	"Sets",
 	"Vector",
 	"Curve",
@@ -20,7 +20,7 @@ export const BLACKLISTED_SUBCATEGORIES: ReadonlyArray<{
 	category: string;
 	subcategory: string;
 }> = [
-	{ category: "Math", subcategory: "Script" },
-	{ category: "params", subcategory: "input" },
-	{ category: "params", subcategory: "Util" },
+	{ category: "Maths", subcategory: "Script" },
+	{ category: "Params", subcategory: "Input" },
+	{ category: "Params", subcategory: "Util" },
 ];

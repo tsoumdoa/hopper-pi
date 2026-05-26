@@ -30,6 +30,9 @@ Create a parametric canopy in Grasshopper using an elliptical base of 18m by 10m
 
 2. Responsive facade system
 Create a parametric facade in Grasshopper for a building elevation measuring 24m by 15m. Divide it into modular panels, then use attractor points to vary panel depth, rotation, or perforation size across the surface. Be creative with how the facade responds to the attractors.
+use rectangular section for frame
+use brep
+separate base geometry creation and exturusion/ piping
 
 3. Parametric walkway shelter
 Create a parametric walkway shelter in Grasshopper along a path 30m long and 4m wide. Generate ribs, panels, or arches along the path, and use attractor points or curves to vary the height, spacing, or thickness of the structural elements. Make the shelter visually expressive.
