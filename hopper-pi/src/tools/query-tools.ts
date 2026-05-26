@@ -17,24 +17,17 @@ export const ghGetCanvasTool = defineTool({
 	label: "Get Canvas",
 	description:
 		"Fetches the live Grasshopper canvas. With no params, returns a sub-graph index summary. " +
-		"Use 'subgraph' to inspect a specific sub-graph, 'component' to grep by name/id, " +
-		"'type' to filter by component type. Filters combine with AND logic.",
+		"Use 'subgraph' to inspect a specific sub-graph.",
 	parameters: Type.Object({
 		subgraph: Type.Optional(
 			Type.String({ description: "Show only this sub-graph (e.g. \"subgraph_0\")" })
-		),
-		component: Type.Optional(
-			Type.String({ description: "Case-insensitive substring match on component ID or nickName" })
-		),
-		type: Type.Optional(
-			Type.String({ description: "Case-insensitive substring match on component type (e.g. \"Circle\")" })
 		),
 	}),
 
 	async execute(_toolCallId, params, _signal, onUpdate, _ctx) {
 		onUpdate?.({ content: [{ type: "text", text: "Fetching current canvas from backend..." }], details: {} });
 		const response = await withRequester<GetCurrentCanvasResponse>(fetchCurrentCanvas);
-		const hasFilters = !!(params.subgraph || params.component || params.type);
+		const hasFilters = !!params.subgraph;
 		return formatCanvasResponse(response, hasFilters ? params : undefined);
 	},
 });

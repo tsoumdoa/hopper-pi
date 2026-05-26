@@ -138,19 +138,9 @@ function expandExcludedIds(
 
 type CanvasFilters = {
 	subgraph?: string;
-	component?: string;
-	type?: string;
 };
 
-function matchesCanvasComponent(c: Component, filters: CanvasFilters): boolean {
-	if (filters.component) {
-		const q = filters.component.toLowerCase();
-		if (!c.id.toLowerCase().includes(q) && !c.nickName.toLowerCase().includes(q)) return false;
-	}
-	if (filters.type) {
-		const q = filters.type.toLowerCase();
-		if (!c.type.toLowerCase().includes(q)) return false;
-	}
+function matchesCanvasComponent(_c: Component, _filters: CanvasFilters): boolean {
 	return true;
 }
 
@@ -276,39 +266,20 @@ function formatCanvasDetail(
 
 	const filterDesc: string[] = [];
 	if (filters.subgraph) filterDesc.push(`subgraph=${filters.subgraph}`);
-	if (filters.component) filterDesc.push(`component=${filters.component}`);
-	if (filters.type) filterDesc.push(`type=${filters.type}`);
 	if (filterDesc.length > 0) {
 		lines.push(`Filter: ${filterDesc.join(", ")}`);
 		lines.push("");
 	}
 
 	if (subGraphs.length === 0) {
-		const matchedCompIds: string[] = [];
-		for (const [id, c] of Object.entries(shortComponents)) {
-			if (matchesCanvasComponent(c, filters)) {
-				matchedCompIds.push(id);
-			}
-		}
-
-		for (const compId of matchedCompIds) {
-			const c = shortComponents[compId];
-			if (!c) continue;
+		for (const [compId, c] of Object.entries(shortComponents)) {
 			lines.push(...formatComponentDetail(compId, c));
 		}
 
 		if (filteredWires.length > 0) {
-			const matchedSet = new Set(matchedCompIds);
-			const relevantWires = filteredWires.filter(w => {
-				const fromId = w.from.split(".")[0];
-				const toId = w.to.split(".")[0];
-				return matchedSet.has(fromId) || matchedSet.has(toId);
-			});
-			if (relevantWires.length > 0) {
-				lines.push("--- wires ---");
-				for (const w of relevantWires) {
-					lines.push(`  ${w.from} -> ${w.to}`);
-				}
+			lines.push("--- wires ---");
+			for (const w of filteredWires) {
+				lines.push(`  ${w.from} -> ${w.to}`);
 			}
 		}
 	} else {
@@ -318,72 +289,20 @@ function formatCanvasDetail(
 				continue;
 			}
 
-			const matchedCompIds: string[] = [];
-			for (const compId of sg.components) {
-				const c = shortComponents[compId];
-				if (!c) continue;
-				if (matchesCanvasComponent(c, filters)) {
-					matchedCompIds.push(compId);
-				}
-			}
-
-			const hasComponentFilter = !!(filters.component || filters.type);
-
 			lines.push(`--- Sub-graph: ${sg.id} (${sg.components.length} components, ${sg.internalWires.length} internal wires, ${sg.externalWires.length} external) ---`);
 			lines.push("");
 
-			if (hasComponentFilter && matchedCompIds.length === 0) {
-				lines.push("  (no matching components)");
-				lines.push("");
-				continue;
+			if (sg.internalWires.length > 0) {
+				lines.push("--- internal wires ---");
+				for (const w of sg.internalWires) {
+					lines.push(`  ${w.from} -> ${w.to}`);
+				}
 			}
-
-			const matchedSet = new Set(matchedCompIds);
-
-			for (const compId of matchedCompIds) {
-				const c = shortComponents[compId];
-				if (!c) continue;
-				lines.push(...formatComponentDetail(compId, c));
-			}
-
-			if (hasComponentFilter) {
-				const relevantInternalWires = sg.internalWires.filter(w => {
-					const fromId = w.from.split(".")[0];
-					const toId = w.to.split(".")[0];
-					return matchedSet.has(fromId) || matchedSet.has(toId);
-				});
-				const relevantExternalWires = sg.externalWires.filter(w => {
-					const fromId = w.from.split(".")[0];
-					const toId = w.to.split(".")[0];
-					return matchedSet.has(fromId) || matchedSet.has(toId);
-				});
-
-				if (relevantInternalWires.length > 0) {
-					lines.push("--- internal wires (matching) ---");
-					for (const w of relevantInternalWires) {
-						lines.push(`  ${w.from} -> ${w.to}`);
-					}
-				}
-				if (relevantExternalWires.length > 0) {
-					if (relevantInternalWires.length > 0) lines.push("");
-					lines.push("--- external wires (matching) ---");
-					for (const w of relevantExternalWires) {
-						lines.push(`  ${w.from} -> ${w.to}`);
-					}
-				}
-			} else {
-				if (sg.internalWires.length > 0) {
-					lines.push("--- internal wires ---");
-					for (const w of sg.internalWires) {
-						lines.push(`  ${w.from} -> ${w.to}`);
-					}
-				}
-				if (sg.externalWires.length > 0) {
-					if (sg.internalWires.length > 0) lines.push("");
-					lines.push("--- external wires ---");
-					for (const w of sg.externalWires) {
-						lines.push(`  ${w.from} -> ${w.to}`);
-					}
+			if (sg.externalWires.length > 0) {
+				if (sg.internalWires.length > 0) lines.push("");
+				lines.push("--- external wires ---");
+				for (const w of sg.externalWires) {
+					lines.push(`  ${w.from} -> ${w.to}`);
 				}
 			}
 

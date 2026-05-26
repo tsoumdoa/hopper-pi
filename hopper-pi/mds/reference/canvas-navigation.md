@@ -18,15 +18,10 @@ and **external wires** (crossing to another cluster).
 Use filter params to drill into specific sub-graphs or components:
 
 - `subgraph` — show only one sub-graph (e.g. `"subgraph_0"`)
-- `component` — case-insensitive substring match on component ID or nickName
-- `type` — case-insensitive substring match on component type (e.g. `"Slider"`)
 
-Filters combine with AND logic. Examples:
+Examples:
 
-- `gh_get_canvas({type: "Slider"})` — all Slider components
 - `gh_get_canvas({subgraph: "subgraph_0"})` — full detail for subgraph_0
-- `gh_get_canvas({component: "Circle", subgraph: "subgraph_1"})` — Circle
-  components within subgraph_1 only
 
 ## Canvas Read Discipline — HARD RULES
 
