@@ -79,7 +79,7 @@ These send a request to port 5557 and wait for a response.
 | Tool | Parameters | What it does |
 |------|-----------|--------------|
 | `gh_get_canvas` | _(none)_ | MANDATORY: place ALL components before calling. Call once after all are placed to get GUIDs for wiring and verify the build. Do NOT call before placement or between zones. |
-| `gh_list_components` | `queries[]` (string array), `limit?`, `offset?` | Searches registered Grasshopper component types by keyword. Returns name, short typeGuid, category, subcategory, description. Supports batch queries and pagination (`hasMore`, `totalMatched`). |
+| `gh_list_components` | `queries[]` (string array), `vanillaOnly?` (bool, default true), `limit?`, `offset?` | Searches registered Grasshopper component types by keyword. Returns results grouped by category/subcategory with sequential numbers (e.g. #1, #2) for use in `gh_edit_components`. Default (`vanillaOnly=true`) returns only vanilla GH components; set `vanillaOnly=false` for plugins only. Supports batch queries and pagination (`hasMore`, `totalMatched`). |
 | `gh_get_canvas_errors` | _(none)_ | Retrieves all runtime errors, warnings, and messages from the canvas. Also runs an overlap detection check to find visually overlapping components and groups. |
 
 ### Edit Tools (PUSH/fire-and-forget pattern)
@@ -88,7 +88,7 @@ These publish commands to port 5556 and return immediately with a jobId for each
 
 | Tool | Key actions | What it does |
 |------|------------|--------------|
-| `gh_edit_components` | `add`, `delete`, `move`, `rename`, `set_locked`, `set_hidden` | Unified component operations. Components are added with preview disabled by default (`preview: false`); set `preview: true` to enable viewport preview. Use `gh_get_canvas` for instance GUIDs, `gh_list_components` for type GUIDs. |
+| `gh_edit_components` | `add`, `delete`, `move`, `rename`, `set_locked`, `set_hidden` | Unified component operations. Components are added with preview disabled by default (`preview: false`); set `preview: true` to enable viewport preview. Use `gh_get_canvas` for instance GUIDs, `gh_list_components` for component numbers (e.g. `#3`). |
 | `gh_edit_param` | `listParams`, `addInput`, `removeInput`, `addOutput`, `removeOutput`, `editAccessType`, `editDataMapping` | Manage input/output ports on script components. List current params, add/remove ports, change access type (item/list/tree), set data mapping (flatten/graft) and simplify/reverse flags. |
 | `gh_edit_wire` | `connect`, `disconnect` | Connect or disconnect wires between component ports. Requires COMPONENT_GUID and PORT_GUID values from `gh_get_canvas` output. |
 | `gh_edit_group` | `add`, `remove`, `delete`, `changeColor`, `rename`, `changeStyle` | Group operations. Supports color (rgba), border style (Box/Blob/Rectangles), and batch operations. |
@@ -136,7 +136,8 @@ Agent: [calls gh_edit_components(items: [{ action: "delete", targetId: "abc123" 
 
 Key points:
 - **`gh_get_canvas` populates the GUID shortener** — component and port GUIDs are returned as short base62 aliases, and edit tools automatically resolve them back to full GUIDs before sending commands. But only call after all components are placed — one call per build cycle.
-- **GUID resolution is hash-based** — the shortener uses SHA-256 + base62 encoding, so aliases are deterministic and collision-resistant
+- **`gh_list_components` assigns sequential numbers** — each component gets a `#N` number per call, which can be used as `componentType` in `gh_edit_components`. The registry also supports vanilla-only filtering by category.
+- **GUID resolution is layered** — component numbers resolve first via `component-registry`, then fall back to hash-based short GUID resolution via `guid-shortener` (SHA-256 + base62).
 - **Canvas errors include overlap detection** — `gh_get_canvas_errors` reports both runtime errors/warnings and any components that visually overlap on the canvas
 
 ---
@@ -170,9 +171,10 @@ hopper-pi/src/
 │
 ├── services/
 │   ├── parser.ts            Grasshopper XML archive → ParsedGrasshopper JSON
-│   └── guid-shortener.ts    SHA-256 + base62 GUID shortening/resolution
-│                              toShortInstanceGuid(), toShortTypeGuid(),
-│                              resolveInstanceGuid(), resolveTypeGuid()
+│   ├── guid-shortener.ts    SHA-256 + base62 GUID shortening/resolution
+│   │                              toShortInstanceGuid(), toShortTypeGuid(),
+│   │                              resolveInstanceGuid(), resolveTypeGuid()
+│   └── component-registry.ts Per-call sequential number → typeGuid mapping
 │
 ├── tools/                    Pi tool definitions + shared logic
 │   ├── index.ts             ALL_TOOLS array (9 tools) + re-exports
@@ -181,7 +183,7 @@ hopper-pi/src/
 │   ├── edit-handlers.ts     createExecute() / createHybridExecute() factories,
 │   │                            submitCommand(), buildJobRequest()
 │   ├── canvas-checks.ts     Component/group overlap detection
-│   ├── constants.ts         Excluded type GUIDs
+│   ├── constants.ts         Excluded type GUIDs, vanilla categories, blacklisted subcategories
 │   └── edit-tools/          Individual edit tool definitions
 │       ├── index.ts         Re-exports all 6 edit tools
 │       ├── shared-types.ts  Reusable TypeBox schemas (SliderCreateFields, etc.)
@@ -256,7 +258,7 @@ These are declared in `package.json` under the `"pi"` config:
 
 ### Edit flow (e.g., `gh_edit_components`)
 1. Tool receives an `items` array of operation objects
-2. For each item, the tool-specific mapper converts it to a `{ action, params }` pair, resolving short GUIDs back to full GUIDs via `resolveInstanceGuid()` / `resolveTypeGuid()`
+2. For each item, the tool-specific mapper converts it to a `{ action, params }` pair. For `add`, component numbers (e.g. `#3`) are resolved to full typeGuids via `component-registry`, then instance/type short GUIDs are resolved via `resolveInstanceGuid()` / `resolveTypeGuid()`
 3. `buildJobRequest()` wraps each command with a unique `jobId` (nanoid)
 4. `submitCommand()` gets the cached `Publisher`, connects to `tcp://localhost:5556`, sends the JSON command
 5. Returns jobId immediately (fire-and-forget — no ACK wait)

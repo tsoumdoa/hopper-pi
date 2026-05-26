@@ -11,7 +11,7 @@ import {
 import { registerComponents } from "../services/component-registry.js";
 import { formatOverlapResult } from "./canvas-checks.js";
 import type { CanvasOverlapResult } from "./canvas-checks.js";
-import { EXCLUDED_TYPE_GUIDS } from "./constants.js";
+import { EXCLUDED_TYPE_GUIDS, VANILLA_CATEGORIES, BLACKLISTED_SUBCATEGORIES } from "./constants.js";
 
 const CACHE_TTL_MS = 60_000;
 
@@ -429,8 +429,8 @@ function matchComponent(c: GhComponentInfo, f: string) {
 	);
 }
 
-const DEFAULT_LIMIT = 10;
-const MAX_LIMIT = 100;
+const DEFAULT_LIMIT = 5;
+const MAX_LIMIT = 20;
 
 type NumberedComponent = GhComponentInfo & { num: number };
 
@@ -498,8 +498,20 @@ function pickNumberedSummary(c: NumberedComponent) {
 	};
 }
 
-export function formatComponentsMultiQuery(response: ListAllComponentsResponse, queries?: string[], limit?: number, offset?: number) {
-	const all = response.components.filter((c) => !EXCLUDED_TYPE_GUIDS.includes(c.typeGuid));
+function isBlacklisted(c: GhComponentInfo): boolean {
+	return BLACKLISTED_SUBCATEGORIES.some(
+		(e) => e.category === c.category && e.subcategory === c.subcategory,
+	);
+}
+
+export function formatComponentsMultiQuery(response: ListAllComponentsResponse, queries?: string[], limit?: number, offset?: number, vanillaOnly: boolean = true) {
+	const all = response.components
+		.filter((c) => !EXCLUDED_TYPE_GUIDS.includes(c.typeGuid))
+		.filter((c) => !isBlacklisted(c))
+		.filter((c) => vanillaOnly
+			? VANILLA_CATEGORIES.has(c.category)
+			: !VANILLA_CATEGORIES.has(c.category),
+		);
 	const numbered = assignNumbers(all);
 
 	if (!queries || queries.length === 0) {

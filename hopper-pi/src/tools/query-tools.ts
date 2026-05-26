@@ -39,6 +39,8 @@ export const ghListComponentsTool = defineTool({
 		"Search available Grasshopper component types by query keywords. " +
 		"Returns results grouped by category and subcategory, each with a sequential number (e.g. #1, #2). " +
 		"Use these numbers as componentType in gh_edit_components to add components. " +
+		"By default returns only vanilla Grasshopper components (no plugins). " +
+		"Set vanillaOnly to false to search plugin components only. " +
 		"Pass an array of search strings to batch multiple lookups in one call. " +
 		"Results are paginated — use limit (default 10) and offset (default 0) to control the window. " +
 		"The response includes hasMore and totalMatched so you can paginate through large result sets.",
@@ -48,6 +50,9 @@ export const ghListComponentsTool = defineTool({
 				description:
 					"Search query — filters component names, categories, or descriptions (case-insensitive partial match). Pass multiple to batch.",
 			})),
+		vanillaOnly: Type.Optional(
+			Type.Boolean({ description: "true (default) = vanilla GH only. false = plugins only." })
+		),
 		limit: Type.Optional(
 			Type.Number({ description: "Max results per query (default 10, max 100)" })
 		),
@@ -59,7 +64,7 @@ export const ghListComponentsTool = defineTool({
 	async execute(_toolCallId, params, _signal, onUpdate, _ctx) {
 		onUpdate?.({ content: [{ type: "text", text: "Fetching component registry..." }], details: {} });
 		const response = await getCachedOrFetchComponents();
-		return formatComponentsMultiQuery(response, params.queries, params.limit, params.offset);
+		return formatComponentsMultiQuery(response, params.queries, params.limit, params.offset, params.vanillaOnly ?? true);
 	},
 });
 
