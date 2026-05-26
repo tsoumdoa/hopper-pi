@@ -1,14 +1,13 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { createExecute, formatDefaultResult } from "../edit-handlers.js";
+import { createExecute } from "../edit-handlers.js";
 import { resolveInstanceGuid } from "../../services/guid-shortener.js";
-import type { CommandAction } from "../../types/commands.js";
 
 export const ghEditGroupTool = defineTool({
 	name: "gh_edit_group",
 	label: "Edit Group",
 	description:
-		"Perform group operations on Grasshopper canvas: add, remove from, delete, change color, rename, or change style (color/name/border). Accepts an array of operation items for batch processing. The 'border' field (Box/Blob/Rectangles) only applies to 'add' and 'changeStyle' operations.",
+		"add, remove, delete, recolor, rename, or restyle groups.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Object({
@@ -24,13 +23,13 @@ export const ghEditGroupTool = defineTool({
 					Type.String({ description: "Comma-separated component IDs (for add/remove)" })
 				),
 				groupName: Type.Optional(
-					Type.String({ description: "Name of the target group" })
+					Type.String({ description: "Target group name" })
 				),
 				color: Type.Optional(
-					Type.String({ description: "Group color as rgba string (default rgba(255,255,255,150)) - alpha should always be 150 unless instructed otherwise. Used by add, changeColor, changeStyle" })
+					Type.String({ description: "RGBA color string (default rgba(255,255,255,150))" })
 				),
 				name: Type.Optional(
-					Type.String({ description: "Name for the group (for add/rename) or new title (for changeStyle)" })
+					Type.String({ description: "Group name or title" })
 				),
 				border: Type.Optional(
 					Type.Union([

@@ -12,58 +12,58 @@ export const ghEditParamTool = defineTool({
 	name: "gh_edit_param",
 	label: "Edit Params",
 	description:
-		"Manage input/output ports on Grasshopper components that support variable parameters (e.g. script components): add or remove input/output parameters, change access type (item/list/tree), change data mapping (flatten/graft/simplify/reverse), or list current parameter names with their access and mapping state. Accepts an array of operation items for batch processing.",
+		"manage I/O ports on variable-parameter components: add/remove inputs/outputs, change access type or data mapping, list params.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([
 				Type.Object({
 					action: Type.Literal("listParams"),
-					targetId: Type.String({ description: "Component instance GUID (from gh_get_canvas)" }),
+					targetId: Type.String({ description: "Component GUID" }),
 				}),
 				Type.Object({
 					action: Type.Literal("removeInput"),
-					targetId: Type.String({ description: "Component instance GUID (from gh_get_canvas)" }),
-					name: Type.String({ description: "Parameter name to remove" }),
+					targetId: Type.String({ description: "Component GUID" }),
+					name: Type.String({ description: "Parameter name" }),
 				}),
 				Type.Object({
 					action: Type.Literal("removeOutput"),
-					targetId: Type.String({ description: "Component instance GUID (from gh_get_canvas)" }),
-					name: Type.String({ description: "Parameter name to remove" }),
+					targetId: Type.String({ description: "Component GUID" }),
+					name: Type.String({ description: "Parameter name" }),
 				}),
 				Type.Object({
 					action: Type.Literal("addInput"),
-					targetId: Type.String({ description: "Component instance GUID (from gh_get_canvas)" }),
+					targetId: Type.String({ description: "Component GUID" }),
 					name: Type.String({ description: "Parameter name to add" }),
 					access: Type.Optional(AccessType),
 					dataMapping: Type.Optional(DataMappingType),
 					simplify: Type.Optional(
-						Type.Boolean({ description: "Simplify data paths for the new input" })
+						Type.Boolean({ description: "Simplify data paths" })
 					),
 					reverse: Type.Optional(
-						Type.Boolean({ description: "Reverse item order for the new input" })
+						Type.Boolean({ description: "Reverse item order" })
 					),
 				}),
 				Type.Object({
 					action: Type.Literal("addOutput"),
-					targetId: Type.String({ description: "Component instance GUID (from gh_get_canvas)" }),
+					targetId: Type.String({ description: "Component GUID" }),
 					name: Type.String({ description: "Parameter name to add" }),
 					dataMapping: Type.Optional(DataMappingType),
 					simplify: Type.Optional(
-						Type.Boolean({ description: "Simplify data paths for the new output" })
+						Type.Boolean({ description: "Simplify data paths" })
 					),
 					reverse: Type.Optional(
-						Type.Boolean({ description: "Reverse item order for the new output" })
+						Type.Boolean({ description: "Reverse item order" })
 					),
 				}),
 				Type.Object({
 					action: Type.Literal("editAccessType"),
-					targetId: Type.String({ description: "Component instance GUID (from gh_get_canvas)" }),
+					targetId: Type.String({ description: "Component GUID" }),
 					name: Type.String({ description: "Parameter name" }),
 					access: AccessType,
 				}),
 				Type.Object({
 					action: Type.Literal("editDataMapping"),
-					targetId: Type.String({ description: "Component instance GUID (from gh_get_canvas)" }),
+					targetId: Type.String({ description: "Component GUID" }),
 					name: Type.String({ description: "Parameter name" }),
 					dataMapping: Type.Optional(DataMappingType),
 					simplify: Type.Optional(

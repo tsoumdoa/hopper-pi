@@ -21,8 +21,7 @@ export const ghCreateWidgetTool = defineTool({
 	name: "gh_create_widget",
 	label: "Create Widget",
 	description:
-		"Create Grasshopper UI widgets (slider, panel, toggle, swatch, scribble, valueList) at a canvas position. " +
-		"Each widget type has its own required fields. Accepts an array for batch creation.",
+		"create UI widgets (slider, panel, toggle, swatch, scribble, valueList) at a canvas position.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([

@@ -9,7 +9,7 @@ export const ghEditComponentsTool = defineTool({
 	name: "gh_edit_components",
 	label: "Edit Components",
 	description:
-		"Perform component operations on the Grasshopper canvas: add, delete, move, rename, set_locked, or set_hidden. Use gh_get_canvas first to get instance GUIDs for existing components. Use gh_list_components to find component numbers for adding new components. Accepts an array of operation items for batch processing.",
+		"add, delete, move, rename, lock, or hide components.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Object({
@@ -22,28 +22,28 @@ export const ghEditComponentsTool = defineTool({
 					Type.Literal("set_hidden"),
 				]),
 				targetId: Type.Optional(
-					Type.String({ description: "Component instance GUID (from gh_get_canvas) — required for delete/move/rename/set_locked/set_hidden" })
+					Type.String({ description: "Component GUID" })
 				),
 				componentType: Type.Optional(
-					Type.String({ description: "Component number (e.g. #3 or 3 from gh_list_components) or type GUID — required for add" })
+					Type.String({ description: "Component number or type GUID (for add)" })
 				),
 				x: Type.Optional(
-					Type.Number({ description: "X position on canvas — required for add/move - must be greater than 20" })
+					Type.Number({ description: "Canvas X (must be > 20)" })
 				),
 				y: Type.Optional(
-					Type.Number({ description: "Y position on canvas — required for add/move - must be greater than 20" })
+					Type.Number({ description: "Canvas Y (must be > 20)" })
 				),
 				nickName: Type.Optional(
-					Type.String({ description: "Nickname — optional for add, required for rename" })
+					Type.String({ description: "Display nickname" })
 				),
 				preview: Type.Optional(
-					Type.Boolean({ description: "Show geometry preview in Rhino viewport. Default is false — only set to true for Preview components." })
+					Type.Boolean({ description: "Show geometry preview (default false)" })
 				),
 				locked: Type.Optional(
-					Type.Boolean({ description: "true to lock, false to unlock — required for set_locked" })
+					Type.Boolean({ description: "Lock state" })
 				),
 				hidden: Type.Optional(
-					Type.Boolean({ description: "set hidden by default except for Preview functions" })
+					Type.Boolean({ description: "Visibility state" })
 				),
 			})
 		),

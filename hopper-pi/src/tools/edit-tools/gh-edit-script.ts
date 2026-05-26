@@ -11,21 +11,21 @@ export const ghEditScriptTool = defineTool({
 	name: "gh_edit_script",
 	label: "Edit Script",
 	description:
-		"Perform script node operations on the Grasshopper canvas: create a new C# or Python script node with source code and I/O parameters, or set source code on an existing script. The language is chosen at creation time and cannot be changed afterward. For port management (add/remove inputs/outputs, change access type), use gh_edit_components. Accepts an array of operation items for batch processing.",
+		"create C#/Python script nodes with source code and I/O, or set code on existing scripts. Use gh_edit_param for port management.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([
 				Type.Object({
 					action: Type.Literal("create"),
-					x: Type.Number({ description: "X position on canvas" }),
-					y: Type.Number({ description: "Y position on canvas" }),
+					x: Type.Number({ description: "Canvas X" }),
+					y: Type.Number({ description: "Canvas Y" }),
 					language: Type.Union([
 						Type.Literal("python"),
 						Type.Literal("csharp"),
-					], { description: "Script language — chosen at creation time and cannot be changed afterward" }),
+					], { description: "Script language (immutable after creation)" }),
 					code: Type.String({ description: "Script source code" }),
 					nickName: Type.Optional(
-						Type.String({ description: "Script nickname (defaults to language name)" })
+						Type.String({ description: "Script nickname" })
 					),
 					inputs: Type.Optional(
 						Type.Array(Type.Object({
@@ -33,27 +33,27 @@ export const ghEditScriptTool = defineTool({
 							access: Type.Optional(AccessType),
 							dataMapping: Type.Optional(DataMappingType),
 							simplify: Type.Optional(
-								Type.Boolean({ description: "Simplify data paths for the input" })
+								Type.Boolean({ description: "Simplify data paths" })
 							),
 							reverse: Type.Optional(
-								Type.Boolean({ description: "Reverse item order for the input" })
+								Type.Boolean({ description: "Reverse item order" })
 							),
-						}), { description: "Input parameters to register at creation time" })
+						}), { description: "Input parameters" })
 					),
 					outputs: Type.Optional(
 						Type.Array(Type.Object({
 							name: Type.String({ description: "Output parameter name" }),
-						}), { description: "Output parameters to register at creation time" })
+						}), { description: "Output parameters" })
 					),
 				}),
 				Type.Object({
 					action: Type.Literal("setCode"),
-					targetId: Type.String({ description: "Script component ID (from gh_get_canvas)" }),
+					targetId: Type.String({ description: "Script component GUID" }),
 					code: Type.String({ description: "Script source code" }),
 				}),
 				Type.Object({
 					action: Type.Literal("getCode"),
-					targetId: Type.String({ description: "Script component ID (from gh_get_canvas)" }),
+					targetId: Type.String({ description: "Script component GUID" }),
 				}),
 			])
 		),

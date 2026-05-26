@@ -15,15 +15,14 @@ import {
 import type { CommandAction } from "../../types/commands.js";
 
 const MutateBase = Type.Object({
-	targetId: Type.String({ description: "Widget GUID from gh_get_canvas" }),
+	targetId: Type.String({ description: "Widget GUID" }),
 });
 
 export const ghMutateWidgetTool = defineTool({
 	name: "gh_mutate_widget",
 	label: "Mutate Widget",
 	description:
-		"Modify existing Grasshopper widgets by targetId: set slider values/ranges, panel text/properties, toggle values, " +
-		"swatch colors, scribble text, or value-list selection. Accepts an array for batch updates.",
+		"modify widgets: set slider value/range, panel text/props, toggle, swatch color, scribble text, or value-list selection.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([

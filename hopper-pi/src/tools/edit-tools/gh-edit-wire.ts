@@ -8,7 +8,7 @@ export const ghEditWireTool = defineTool({
 	name: "gh_edit_wire",
 	label: "Edit Wire",
 	description:
-		"Connect or disconnect wires between component ports using 4 GUID aliases copied from gh_get_canvas: source COMPONENT_GUID, source output PORT_GUID, target COMPONENT_GUID, target input PORT_GUID. Full GUIDs also work. Do not use names, nicknames, [id] values, or port labels. Accepts an array of wire definitions for batch processing.",
+		"connect or disconnect wires between component ports by GUID.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Object({
@@ -17,16 +17,16 @@ export const ghEditWireTool = defineTool({
 					Type.Literal("disconnect"),
 				]),
 				fromComponent: Type.String({
-					description: "Copy the COMPONENT_GUID= value from the SOURCE component's header row in gh_get_canvas output.",
+					description: "Source component GUID",
 				}),
 				fromPort: Type.String({
-					description: "Copy the PORT_GUID= value from the SOURCE component's OUTPUTS section in gh_get_canvas output.",
+					description: "Source output port GUID",
 				}),
 				toComponent: Type.String({
-					description: "Copy the COMPONENT_GUID= value from the TARGET component's header row in gh_get_canvas output.",
+					description: "Target component GUID",
 				}),
 				toPort: Type.String({
-					description: "Copy the PORT_GUID= value from the TARGET component's INPUTS section in gh_get_canvas output.",
+					description: "Target input port GUID",
 				}),
 			})
 		),
