@@ -37,7 +37,8 @@ export const ghListComponentsTool = defineTool({
 	label: "List Components",
 	description:
 		"Search available Grasshopper component types by query keywords. " +
-		"Returns name, typeGuid, category, subcategory, and description for each match. " +
+		"Returns results grouped by category and subcategory, each with a sequential number (e.g. #1, #2). " +
+		"Use these numbers as componentType in gh_edit_components to add components. " +
 		"Pass an array of search strings to batch multiple lookups in one call. " +
 		"Results are paginated — use limit (default 10) and offset (default 0) to control the window. " +
 		"The response includes hasMore and totalMatched so you can paginate through large result sets.",
