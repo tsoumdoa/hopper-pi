@@ -9,7 +9,8 @@ import {
 	ghEditParamTool,
 	ghEditWireTool,
 	ghEditGroupTool,
-	ghEditWidgetTool,
+	ghCreateWidgetTool,
+	ghMutateWidgetTool,
 	ghEditScriptTool,
 } from "./edit-tools/index.js";
 
@@ -24,7 +25,8 @@ export const ALL_TOOLS = [
 	ghEditParamTool,
 	ghEditWireTool,
 	ghEditGroupTool,
-	ghEditWidgetTool,
+	ghCreateWidgetTool,
+	ghMutateWidgetTool,
 	ghEditScriptTool,
 ] as const;
 
@@ -37,6 +39,7 @@ export {
 	ghEditParamTool,
 	ghEditWireTool,
 	ghEditGroupTool,
-	ghEditWidgetTool,
+	ghCreateWidgetTool,
+	ghMutateWidgetTool,
 	ghEditScriptTool,
 };

@@ -92,7 +92,8 @@ These publish commands to port 5556 and return immediately with a jobId for each
 | `gh_edit_param` | `listParams`, `addInput`, `removeInput`, `addOutput`, `removeOutput`, `editAccessType`, `editDataMapping` | Manage input/output ports on script components. List current params, add/remove ports, change access type (item/list/tree), set data mapping (flatten/graft) and simplify/reverse flags. |
 | `gh_edit_wire` | `connect`, `disconnect` | Connect or disconnect wires between component ports. Requires COMPONENT_GUID and PORT_GUID values from `gh_get_canvas` output. |
 | `gh_edit_group` | `add`, `remove`, `delete`, `changeColor`, `rename`, `changeStyle` | Group operations. Supports color (rgba), border style (Box/Blob/Rectangles), and batch operations. |
-| `gh_edit_widget` | Slider: `create`, `setValue`, `setRange`; Panel: `create`, `setText`, `setProperty`; Toggle: `create`, `setValue`; Swatch: `create`, `setColor`; Scribble: `create`, `setText`; ValueList: `create`, `setSelected` | Unified widget tool for creating and modifying UI widgets. Each widget type has its own create/mutate actions with type-specific fields. |
+| `gh_create_widget` | slider, panel, toggle, swatch, scribble, valueList | Create Grasshopper UI widgets at a canvas position. Each type has its own required fields. |
+| `gh_mutate_widget` | slider: `setValue`, `setRange`; panel: `setText`, `setProperty`; toggle: `setValue`; swatch: `setColor`; scribble: `setText`; valueList: `setSelected` | Modify existing widgets by targetId. |
 | `gh_edit_script` | `create`, `setCode`, `getCode` | Script node operations. Create C# or Python script nodes with source code and I/O parameters. Get or set source code on existing scripts. Language is set at creation and cannot be changed. |
 
 ---
@@ -117,8 +118,8 @@ You:   Connect the slider to the circle radius, then set it to 42
 Agent: [calls gh_edit_wire(items: [{ action: "connect", fromComponent: "def456",
                                      fromPort: "<output-port-guid>",
                                      toComponent: "abc123", toPort: "<input-port-guid>" }])]
-       [calls gh_edit_widget(items: [{ widgetType: "slider", action: "setValue",
-                                      targetId: "def456", value: 42 }])]
+       [calls gh_mutate_widget(items: [{ widgetType: "slider", action: "setValue",
+                                        targetId: "def456", value: 42 }])]
        Done. The slider is now connected to the Circle radius and set to 42.
 ```
 
