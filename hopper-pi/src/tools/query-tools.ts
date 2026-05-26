@@ -46,7 +46,7 @@ export const ghListComponentsTool = defineTool({
 		"Search available Grasshopper component types by query keywords. " +
 		"Returns name, typeGuid, category, subcategory, and description for each match. " +
 		"Pass an array of search strings to batch multiple lookups in one call. " +
-		"Results are paginated — use limit (default 20) and offset (default 0) to control the window. " +
+		"Results are paginated — use limit (default 10) and offset (default 0) to control the window. " +
 		"The response includes hasMore and totalMatched so you can paginate through large result sets.",
 	parameters: Type.Object({
 		queries:
@@ -55,7 +55,7 @@ export const ghListComponentsTool = defineTool({
 					"Search query — filters component names, categories, or descriptions (case-insensitive partial match). Pass multiple to batch.",
 			})),
 		limit: Type.Optional(
-			Type.Number({ description: "Max results per query (default 20, max 100)" })
+			Type.Number({ description: "Max results per query (default 10, max 100)" })
 		),
 		offset: Type.Optional(
 			Type.Number({ description: "Starting index for pagination (default 0)" })

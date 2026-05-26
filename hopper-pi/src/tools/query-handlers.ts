@@ -472,12 +472,13 @@ function pickSummary(c: GhComponentInfo) {
 	};
 }
 
-const DEFAULT_LIMIT = 20;
+const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
 
 function formatComponentLine(c: GhComponentInfo) {
 	const shortTypeGuid = toShortTypeGuid(c.typeGuid);
-	return `  ${c.name}  [${shortTypeGuid}]  (${c.category}/${c.subcategory}) -- ${c.description}`;
+	const desc = c.description.length > 60 ? c.description.slice(0, 57) + "..." : c.description;
+	return `  ${c.name}  [${shortTypeGuid}]  (${c.category}/${c.subcategory}) -- ${desc}`;
 }
 
 function paginate<T>(items: T[], limit?: number, offset?: number): { slice: T[]; hasMore: boolean; totalMatched: number } {
