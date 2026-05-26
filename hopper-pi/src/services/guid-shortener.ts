@@ -90,7 +90,6 @@ function resolveGuid(value: string, kind: GuidKind): string {
 	const store = stores[kind];
 	const byShort = store.shortToFull.get(value);
 	if (byShort) {
-		console.log(`[guid-resolve] shortId="${value}" resolvedGuid="${byShort}" kind=${kind}`);
 		return byShort;
 	}
 
@@ -98,14 +97,11 @@ function resolveGuid(value: string, kind: GuidKind): string {
 		const normalized = normalizeGuid(value);
 		const knownFull = store.normalizedToFull.get(normalized);
 		if (knownFull) {
-			console.log(`[guid-resolve] shortId="${value}" resolvedGuid="${knownFull}" kind=${kind}`);
 			return knownFull;
 		}
-		console.log(`[guid-resolve] shortId="${value}" resolvedGuid="${value}" kind=${kind} (passthrough full guid, not in store)`);
 		return value;
 	}
 
-	console.log(`[guid-resolve] shortId="${value}" resolvedGuid=UNRESOLVED kind=${kind}`);
 	return value;
 }
 

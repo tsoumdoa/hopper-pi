@@ -213,28 +213,55 @@ function formatCanvasIndex(
 		lines.push("");
 		lines.push("Use component or type params to inspect specific components.");
 	} else {
-		lines.push("Sub-graph index:");
+		const realSubGraphs: SubGraph[] = [];
+		const isolated: SubGraph[] = [];
 		for (const sg of subGraphs) {
-			const typeCounts = new Map<string, number>();
-			for (const compId of sg.components) {
-				const c = components[compId];
-				if (c) {
-					typeCounts.set(c.type, (typeCounts.get(c.type) ?? 0) + 1);
-				}
-			}
-			const typeSummary = Array.from(typeCounts.entries())
-				.sort((a, b) => b[1] - a[1])
-				.map(([type, count]) => `${type}(${count})`)
-				.join(", ");
-
-			lines.push(`  ${sg.id}  — ${sg.components.length} components, ${sg.internalWires.length} internal wires, ${sg.externalWires.length} external`);
-			if (typeSummary) {
-				lines.push(`    types: ${typeSummary}`);
+			if (sg.components.length === 1 && sg.internalWires.length === 0 && sg.externalWires.length === 0) {
+				isolated.push(sg);
+			} else {
+				realSubGraphs.push(sg);
 			}
 		}
 
-		lines.push("");
-		lines.push("Use subgraph, component, or type params to inspect a specific sub-graph or component.");
+		if (realSubGraphs.length > 0) {
+			lines.push("Sub-graph index:");
+			for (const sg of realSubGraphs) {
+				const typeCounts = new Map<string, number>();
+				for (const compId of sg.components) {
+					const c = components[compId];
+					if (c) {
+						typeCounts.set(c.type, (typeCounts.get(c.type) ?? 0) + 1);
+					}
+				}
+				const typeSummary = Array.from(typeCounts.entries())
+					.sort((a, b) => b[1] - a[1])
+					.map(([type, count]) => `${type}(${count})`)
+					.join(", ");
+
+				lines.push(`  ${sg.id}  — ${sg.components.length} components, ${sg.internalWires.length} internal wires, ${sg.externalWires.length} external`);
+				if (typeSummary) {
+					lines.push(`    types: ${typeSummary}`);
+				}
+			}
+			lines.push("");
+		}
+
+		if (isolated.length > 0) {
+			lines.push("Isolated:");
+			for (const sg of isolated) {
+				const compId = sg.components[0];
+				const c = components[compId];
+				if (c) {
+					lines.push(...formatComponentDetail(compId, c));
+				}
+			}
+		}
+
+		if (realSubGraphs.length > 0) {
+			lines.push("Use subgraph, component, or type params to inspect a specific sub-graph or component.");
+		} else {
+			lines.push("Use component or type params to inspect specific components.");
+		}
 	}
 
 	return {
@@ -357,6 +384,18 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse, filters
 	const subGraphCount = filteredSubGraphs.length;
 
 	if (!filters) {
+		if (subGraphCount === 0) {
+			return formatCanvasDetail(
+				response.docName,
+				compCount,
+				wireCount,
+				subGraphCount,
+				filteredSubGraphs,
+				shortComponents,
+				{},
+				filteredWires,
+			);
+		}
 		return formatCanvasIndex(
 			response.docName,
 			compCount,

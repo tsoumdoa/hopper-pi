@@ -50,7 +50,7 @@ type MappedAction = { action: CommandAction; params: unknown };
 
 export function createExecute<P>(
 	mapParams: (item: P) => MappedAction | null,
-	formatMessage: (item: P, result: SubmitResult) => string,
+	_formatMessage: (item: P, result: SubmitResult) => string,
 	progressMsg?: (item: P) => string,
 ) {
 	return async (
@@ -63,14 +63,10 @@ export function createExecute<P>(
 			? (onUpdate as ProgressFn)
 			: undefined;
 
-		const results: string[] = [];
-		const jobIds: string[] = [];
-
 		for (const p of params.items) {
 			const mapped = mapParams(p);
 
 			if (!mapped) {
-				results.push(`Unknown action`);
 				continue;
 			}
 
@@ -81,14 +77,12 @@ export function createExecute<P>(
 				});
 			}
 
-			const result = await submitCommand(mapped.action, mapped.params);
-			results.push(formatMessage(p, result));
-			jobIds.push(result.jobId);
+			await submitCommand(mapped.action, mapped.params);
 		}
 
 		return {
-			content: [{ type: "text" as const, text: results.join("\n") }],
-			details: { jobIds },
+			content: [{ type: "text" as const, text: "OK" }],
+			details: {},
 		};
 	};
 }
@@ -118,7 +112,6 @@ export function createHybridExecute<P>(
 		const mutationItems = params.items.filter((item) => (item as { action: string }).action !== queryAction);
 
 		const results: string[] = [];
-		const allJobIds: string[] = [];
 
 		for (const item of queryItems) {
 			if (progressFn) {
@@ -136,15 +129,11 @@ export function createHybridExecute<P>(
 			if (jobResults.content.length > 0 && "text" in jobResults.content[0]) {
 				results.push((jobResults.content[0] as TextContent).text);
 			}
-			const jobDetails = jobResults.details as { jobIds?: string[] };
-			if (jobDetails?.jobIds) {
-				allJobIds.push(...jobDetails.jobIds);
-			}
 		}
 
 		return {
 			content: [{ type: "text" as const, text: results.join("\n") }],
-			details: { jobIds: allJobIds },
+			details: {},
 		};
 	};
 }
