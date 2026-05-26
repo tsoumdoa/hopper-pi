@@ -3,6 +3,7 @@ import { withRequester } from "../infra/request-helpers.js";
 import type { ListAllComponentsResponse, GetCurrentCanvasResponse, GetCanvasErrorsResponse, GhComponentInfo, ListScriptParamsResponse, GetScriptCodeResponse } from "../types/messages.js";
 import type { Component, SubGraph, Wire } from "../types/gh.js";
 import { buildGhJson } from "../services/parser.js";
+import { computeSubGraphs } from "../services/subgraph.js";
 import {
 	toShortInstanceGuid,
 	toShortTypeGuid,
@@ -104,30 +105,35 @@ export function formatScriptCodeResponse(response: GetScriptCodeResponse) {
 	};
 }
 
-function filterSubGraphs(subGraphs: SubGraph[], excludedIds: Set<string>): SubGraph[] {
-	const result: SubGraph[] = [];
-	for (const sg of subGraphs) {
-		const filteredComponents = sg.components.filter(id => !excludedIds.has(id));
-		if (filteredComponents.length === 0) continue;
-		const componentSet = new Set(filteredComponents);
-		const internalWires = sg.internalWires.filter(w => {
-			const fromId = w.from.split(".")[0];
-			const toId = w.to.split(".")[0];
-			return componentSet.has(fromId) && componentSet.has(toId);
-		});
-		const externalWires = sg.externalWires.filter(w => {
-			const fromId = w.from.split(".")[0];
-			const toId = w.to.split(".")[0];
-			return componentSet.has(fromId) || componentSet.has(toId);
-		});
-		result.push({
-			id: sg.id,
-			components: filteredComponents,
-			internalWires,
-			externalWires,
-		});
+function expandExcludedIds(
+	components: Record<string, Component>,
+	wires: Wire[],
+	initialExcluded: Set<string>,
+): Set<string> {
+	const adjacency = new Map<string, Set<string>>();
+	for (const wire of wires) {
+		const fromId = wire.from.split(".")[0];
+		const toId = wire.to.split(".")[0];
+		if (!adjacency.has(fromId)) adjacency.set(fromId, new Set());
+		if (!adjacency.has(toId)) adjacency.set(toId, new Set());
+		adjacency.get(fromId)!.add(toId);
+		adjacency.get(toId)!.add(fromId);
 	}
-	return result;
+
+	const excluded = new Set(initialExcluded);
+	let changed = true;
+	while (changed) {
+		changed = false;
+		for (const [id, neighbors] of adjacency) {
+			if (excluded.has(id)) continue;
+			const hasNonExcludedNeighbor = [...neighbors].some((n) => !excluded.has(n));
+			if (!hasNonExcludedNeighbor) {
+				excluded.add(id);
+				changed = true;
+			}
+		}
+	}
+	return excluded;
 }
 
 type CanvasFilters = {
@@ -402,11 +408,12 @@ function formatCanvasDetail(
 export function formatCanvasResponse(response: GetCurrentCanvasResponse, filters?: CanvasFilters) {
 	const parsed = buildGhJson(response.xml);
 
-	const excludedIds = new Set(
+	const initiallyExcluded = new Set(
 		Object.entries(parsed.components)
 			.filter(([, c]) => EXCLUDED_TYPE_GUIDS.includes(c.typeGuid))
 			.map(([id]) => id),
 	);
+	const excludedIds = expandExcludedIds(parsed.components, parsed.wires, initiallyExcluded);
 	const filteredComponents = Object.fromEntries(
 		Object.entries(parsed.components).filter(([id]) => !excludedIds.has(id)),
 	);
@@ -418,7 +425,7 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse, filters
 		},
 	);
 
-	const filteredSubGraphs = filterSubGraphs(parsed.subGraphs ?? [], excludedIds);
+	const filteredSubGraphs = computeSubGraphs({ version: "", components: filteredComponents, wires: filteredWires });
 
 	const shortComponents = Object.fromEntries(
 		Object.entries(filteredComponents).map(([id, component]) => [
