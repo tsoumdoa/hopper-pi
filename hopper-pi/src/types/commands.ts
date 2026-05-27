@@ -297,7 +297,6 @@ export type CommandAction =
 	| "removeScriptInput"
 	| "addScriptOutput"
 	| "removeScriptOutput"
-	| "editScriptAccess"
 	| "listScriptParams"
 	| "editParamProps";
 

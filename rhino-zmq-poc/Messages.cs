@@ -461,18 +461,6 @@ namespace rhino_zmq_poc
         public string Name { get; set; }
     }
 
-    public class EditScriptAccessParams
-    {
-        [JsonPropertyName("targetId")]
-        public string TargetId { get; set; }
-
-        [JsonPropertyName("name")]
-        public string Name { get; set; }
-
-        [JsonPropertyName("access")]
-        public string Access { get; set; }
-    }
-
     public class ListScriptParamsParams
     {
         [JsonPropertyName("targetId")]
@@ -522,6 +510,9 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("name")]
         public string Name { get; set; }
+
+        [JsonPropertyName("access")]
+        public string Access { get; set; }
 
         [JsonPropertyName("dataMapping")]
         public string DataMapping { get; set; }

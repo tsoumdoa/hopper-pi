@@ -196,33 +196,56 @@ namespace rhino_zmq_poc
             comp.Params.OnParametersChanged();
         }
 
-        public static string EditScriptAccessType(GH_Document doc, EditScriptAccessParams param)
+        public static string EditParamProps(GH_Document doc, EditParamPropsParams param)
         {
             try
             {
-                if (doc == null) return "editScriptAccess error: document is null";
+                if (doc == null) return "editParamProps error: document is null";
                 if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                    return $"editScriptAccess error: invalid targetId '{param.TargetId}'";
+                    return $"editParamProps error: invalid targetId '{param.TargetId}'";
                 var obj = doc.FindObject(targetGuid, false);
-                if (obj == null) return $"editScriptAccess error: object not found '{param.TargetId}'";
+                if (obj == null) return $"editParamProps error: object not found '{param.TargetId}'";
                 var comp = obj as GH_Component;
-                if (comp == null) return $"editScriptAccess error: '{param.TargetId}' is not a GH_Component";
-                var target = comp.Params.Input.FirstOrDefault(x =>
-                    string.Equals(x.Name, param.Name, StringComparison.OrdinalIgnoreCase));
-                if (target == null) return $"editScriptAccess error: input '{param.Name}' not found";
-                switch (param.Access.ToLowerInvariant())
+                if (comp == null) return $"editParamProps error: '{param.TargetId}' is not a GH_Component";
+
+                var target = comp.Params.Input.Cast<IGH_Param>().Concat(comp.Params.Output.Cast<IGH_Param>())
+                    .FirstOrDefault(x => string.Equals(x.Name, param.Name, StringComparison.OrdinalIgnoreCase));
+                if (target == null) return $"editParamProps error: param '{param.Name}' not found on inputs or outputs";
+
+                if (param.Access != null)
                 {
-                    case "item": target.Access = GH_ParamAccess.item; break;
-                    case "list": target.Access = GH_ParamAccess.list; break;
-                    case "tree": target.Access = GH_ParamAccess.tree; break;
-                    default: return $"editScriptAccess error: unknown access type '{param.Access}' (supported: item, list, tree)";
+                    switch (param.Access.ToLowerInvariant())
+                    {
+                        case "item": target.Access = GH_ParamAccess.item; break;
+                        case "list": target.Access = GH_ParamAccess.list; break;
+                        case "tree": target.Access = GH_ParamAccess.tree; break;
+                        default: return $"editParamProps error: unknown access type '{param.Access}' (supported: item, list, tree)";
+                    }
                 }
+
+                if (param.DataMapping != null)
+                {
+                    switch (param.DataMapping.ToLowerInvariant())
+                    {
+                        case "none": target.DataMapping = GH_DataMapping.None; break;
+                        case "flatten": target.DataMapping = GH_DataMapping.Flatten; break;
+                        case "graft": target.DataMapping = GH_DataMapping.Graft; break;
+                        default: return $"editParamProps error: unknown dataMapping '{param.DataMapping}' (supported: none, flatten, graft)";
+                    }
+                }
+
+                if (param.Simplify.HasValue)
+                    target.Simplify = param.Simplify.Value;
+
+                if (param.Reverse.HasValue)
+                    target.Reverse = param.Reverse.Value;
+
                 comp.ExpireSolution(true);
-                return $"editScriptAccess: set input '{param.Name}' access to {param.Access} on ({param.TargetId})";
+                return $"editParamProps: updated param '{param.Name}' on ({param.TargetId})";
             }
             catch (Exception ex)
             {
-                return $"editScriptAccess CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"editParamProps CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
             }
         }
 
@@ -248,48 +271,6 @@ namespace rhino_zmq_poc
             catch (Exception ex)
             {
                 return $"listScriptParams CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
-            }
-        }
-
-        public static string EditParamProps(GH_Document doc, EditParamPropsParams param)
-        {
-            try
-            {
-                if (doc == null) return "editParamProps error: document is null";
-                if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                    return $"editParamProps error: invalid targetId '{param.TargetId}'";
-                var obj = doc.FindObject(targetGuid, false);
-                if (obj == null) return $"editParamProps error: object not found '{param.TargetId}'";
-                var comp = obj as GH_Component;
-                if (comp == null) return $"editParamProps error: '{param.TargetId}' is not a GH_Component";
-
-                var target = comp.Params.Input.Cast<IGH_Param>().Concat(comp.Params.Output.Cast<IGH_Param>())
-                    .FirstOrDefault(x => string.Equals(x.Name, param.Name, StringComparison.OrdinalIgnoreCase));
-                if (target == null) return $"editParamProps error: param '{param.Name}' not found on inputs or outputs";
-
-                if (param.DataMapping != null)
-                {
-                    switch (param.DataMapping.ToLowerInvariant())
-                    {
-                        case "none": target.DataMapping = GH_DataMapping.None; break;
-                        case "flatten": target.DataMapping = GH_DataMapping.Flatten; break;
-                        case "graft": target.DataMapping = GH_DataMapping.Graft; break;
-                        default: return $"editParamProps error: unknown dataMapping '{param.DataMapping}' (supported: none, flatten, graft)";
-                    }
-                }
-
-                if (param.Simplify.HasValue)
-                    target.Simplify = param.Simplify.Value;
-
-                if (param.Reverse.HasValue)
-                    target.Reverse = param.Reverse.Value;
-
-                comp.ExpireSolution(true);
-                return $"editParamProps: updated param '{param.Name}' on ({param.TargetId})";
-            }
-            catch (Exception ex)
-            {
-                return $"editParamProps CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
             }
         }
 
