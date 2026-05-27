@@ -241,6 +241,9 @@ namespace rhino_zmq_poc
                 if (param.Reverse.HasValue)
                     target.Reverse = param.Reverse.Value;
 
+                comp.Params.OnParametersChanged();
+                comp.Attributes?.ExpireLayout();
+                comp.OnDisplayExpired(true);
                 comp.ExpireSolution(true);
                 return $"editParamProps: updated param '{param.Name}' on ({param.TargetId})";
             }

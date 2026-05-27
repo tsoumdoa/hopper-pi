@@ -16,18 +16,18 @@ import {
 
 /** All tool definitions in registration order (query tools first, then edit tools) */
 export const ALL_TOOLS = [
-	// ── Query tools ──
-	ghGetCanvasTool,
-	ghListComponentsTool,
-	ghGetCanvasErrorsTool,
 	// ── Edit tools ──
+	ghCreateWidgetTool,
+	ghMutateWidgetTool,
 	ghEditComponentsTool,
 	ghEditParamTool,
 	ghEditWireTool,
 	ghEditGroupTool,
-	ghCreateWidgetTool,
-	ghMutateWidgetTool,
 	ghEditScriptTool,
+	// ── Query tools ──
+	ghGetCanvasTool,
+	ghListComponentsTool,
+	ghGetCanvasErrorsTool,
 ] as const;
 
 // Re-export for convenience
