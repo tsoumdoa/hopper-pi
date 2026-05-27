@@ -13,9 +13,7 @@ import { formatOverlapResult } from "./canvas-checks.js";
 import type { CanvasOverlapResult } from "./canvas-checks.js";
 import { EXCLUDED_TYPE_GUIDS, VANILLA_CATEGORIES, BLACKLISTED_SUBCATEGORIES } from "./constants.js";
 
-const CACHE_TTL_MS = 60_000;
-
-let _cache: { data: ListAllComponentsResponse; fetchedAt: number } | null = null;
+let _components: ListAllComponentsResponse | null = null;
 
 function shortenComponentGuids(component: Component): Component {
 	const shortInputs: Component["inputs"] = {};
@@ -44,11 +42,9 @@ function shortenComponentGuids(component: Component): Component {
 }
 
 export async function getCachedOrFetchComponents(): Promise<ListAllComponentsResponse> {
-	if (_cache && Date.now() - _cache.fetchedAt < CACHE_TTL_MS) {
-		return _cache.data;
-	}
+	if (_components) return _components;
 	const data = await withRequester(fetchAllComponents);
-	_cache = { data, fetchedAt: Date.now() };
+	_components = data;
 	return data;
 }
 
