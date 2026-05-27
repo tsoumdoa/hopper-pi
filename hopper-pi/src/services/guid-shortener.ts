@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 const BASE62_ALPHABET =
 	"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-const DEFAULT_SHORT_LENGTH = 10;
+const DEFAULT_SHORT_LENGTH = 4;
 const MAX_SHORT_LENGTH = 22;
 
 type GuidKind = "type" | "instance";

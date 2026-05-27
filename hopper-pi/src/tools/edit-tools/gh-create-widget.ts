@@ -21,7 +21,7 @@ export const ghCreateWidgetTool = defineTool({
 	name: "gh_create_widget",
 	label: "Create Widget",
 	description:
-		"create UI widgets (slider, panel, toggle, swatch, scribble, valueList) at a canvas position.",
+		"create UI widgets (number slider, panel, toggle, swatch, scribble, valueList) at a canvas position.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([

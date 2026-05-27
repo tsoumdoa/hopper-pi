@@ -8,7 +8,6 @@ import {
 	toShortInstanceGuid,
 	toShortTypeGuid,
 } from "../services/guid-shortener.js";
-import { registerComponents } from "../services/component-registry.js";
 import { formatOverlapResult } from "./canvas-checks.js";
 import type { CanvasOverlapResult } from "./canvas-checks.js";
 import { EXCLUDED_TYPE_GUIDS, VANILLA_CATEGORIES, BLACKLISTED_SUBCATEGORIES } from "./constants.js";
@@ -428,8 +427,6 @@ function matchComponent(c: GhComponentInfo, f: string) {
 const DEFAULT_LIMIT = 5;
 const MAX_LIMIT = 20;
 
-type NumberedComponent = GhComponentInfo & { num: number };
-
 function paginate<T>(items: T[], limit?: number, offset?: number): { slice: T[]; hasMore: boolean; totalMatched: number } {
 	const effectiveLimit = Math.min(limit ?? DEFAULT_LIMIT, MAX_LIMIT);
 	const effectiveOffset = Math.max(offset ?? 0, 0);
@@ -445,14 +442,12 @@ function sortByCategoryThenName(a: GhComponentInfo, b: GhComponentInfo): number 
 	return a.name.localeCompare(b.name);
 }
 
-function assignNumbers(components: GhComponentInfo[]): NumberedComponent[] {
-	const sorted = [...components].sort(sortByCategoryThenName);
-	registerComponents(sorted.map((c, i) => ({ num: i + 1, typeGuid: c.typeGuid })));
-	return sorted.map((c, i) => ({ ...c, num: i + 1 }));
+function sortedComponents(components: GhComponentInfo[]): GhComponentInfo[] {
+	return [...components].sort(sortByCategoryThenName);
 }
 
-function groupByCategory(components: NumberedComponent[]): Map<string, Map<string, NumberedComponent[]>> {
-	const groups = new Map<string, Map<string, NumberedComponent[]>>();
+function groupByCategory(components: GhComponentInfo[]): Map<string, Map<string, GhComponentInfo[]>> {
+	const groups = new Map<string, Map<string, GhComponentInfo[]>>();
 	for (const c of components) {
 		let subMap = groups.get(c.category);
 		if (!subMap) {
@@ -469,7 +464,7 @@ function groupByCategory(components: NumberedComponent[]): Map<string, Map<strin
 	return groups;
 }
 
-function formatGroupedLines(components: NumberedComponent[]): string {
+function formatGroupedLines(components: GhComponentInfo[]): string {
 	const groups = groupByCategory(components);
 	const parts: string[] = [];
 	for (const [category, subMap] of groups) {
@@ -478,16 +473,16 @@ function formatGroupedLines(components: NumberedComponent[]): string {
 			parts.push(`  === ${subcategory} ===`);
 			for (const c of items) {
 				const desc = c.description.length > 60 ? c.description.slice(0, 57) + "..." : c.description;
-				parts.push(`    #${c.num}  ${c.name}  --  ${desc}`);
+				parts.push(`    ${c.name} [${toShortTypeGuid(c.typeGuid)}]  --  ${desc}`);
 			}
 		}
 	}
 	return parts.join("\n");
 }
 
-function pickNumberedSummary(c: NumberedComponent) {
+function pickComponentSummary(c: GhComponentInfo) {
 	return {
-		num: `#${c.num}`,
+		typeGuid: toShortTypeGuid(c.typeGuid),
 		name: c.name,
 		category: c.category,
 		subcategory: c.subcategory,
@@ -509,10 +504,10 @@ export function formatComponentsMultiQuery(response: ListAllComponentsResponse, 
 			if (searchFrom === "plugin") return !VANILLA_CATEGORIES.has(c.category);
 			return VANILLA_CATEGORIES.has(c.category) && c.category !== "Params";
 		});
-	const numbered = assignNumbers(all);
+	const sorted = sortedComponents(all);
 
 	if (!queries || queries.length === 0) {
-		const { slice, hasMore, totalMatched } = paginate(numbered, limit, offset);
+		const { slice, hasMore, totalMatched } = paginate(sorted, limit, offset);
 		const body = formatGroupedLines(slice);
 		const footer = hasMore ? `\n  ... ${totalMatched - (offset ?? 0) - slice.length} more (call with offset=${(offset ?? 0) + slice.length})` : "";
 		return {
@@ -525,9 +520,9 @@ export function formatComponentsMultiQuery(response: ListAllComponentsResponse, 
 	const results: Array<{ queryKeyword: string; result: Array<Record<string, unknown>>; hasMore: boolean; totalMatched: number }> = [];
 
 	for (const q of queries) {
-		const matched = numbered.filter((c) => matchComponent(c, q));
+		const matched = sorted.filter((c) => matchComponent(c, q));
 		const { slice, hasMore, totalMatched } = paginate(matched, limit, offset);
-		results.push({ queryKeyword: q, result: slice.map(pickNumberedSummary), hasMore, totalMatched });
+		results.push({ queryKeyword: q, result: slice.map(pickComponentSummary), hasMore, totalMatched });
 
 		if (matched.length === 0) {
 			sections.push(`"${q}" — no matches`);

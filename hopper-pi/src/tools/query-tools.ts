@@ -47,9 +47,10 @@ export const ghListComponentsTool = defineTool({
   name: "gh_list_components",
   label: "List Components",
   description:
-    "Search Grasshopper components by keyword. Returns grouped results with numbers (e.g. #1) to use as componentType in gh_edit_components. " +
+    "Search Grasshopper components by keyword. Returns grouped results with typeGuids to use as componentType in gh_edit_components. " +
     "Defaults to vanilla components excluding Params. Use searchFrom: 'plugin' or 'params' for other sources. " +
-    "Supports multiple queries and pagination via limit/offset; response includes hasMore and totalMatched.",
+    "Supports multiple queries and pagination via limit/offset; response includes hasMore and totalMatched. " +
+    "Components exposed via the create widget should be called directly without using this tool to query.",
   parameters: Type.Object({
     queries: Type.Array(
       Type.String({

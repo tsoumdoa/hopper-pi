@@ -2,7 +2,6 @@ import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { createExecute, formatDefaultResult, defaultProgressMsg } from "../edit-handlers.js";
 import { resolveInstanceGuid, resolveTypeGuid } from "../../services/guid-shortener.js";
-import { resolveComponentNumber } from "../../services/component-registry.js";
 import type { CommandAction } from "../../types/commands.js";
 
 export const ghEditComponentsTool = defineTool({
@@ -25,7 +24,7 @@ export const ghEditComponentsTool = defineTool({
 					Type.String({ description: "Component GUID" })
 				),
 				componentType: Type.Optional(
-					Type.String({ description: "Component number or type GUID (for add)" })
+					Type.String({ description: "Type GUID for add action (from gh_list_components)" })
 				),
 				x: Type.Optional(
 					Type.Number({ description: "Canvas X (must be > 20)" })
@@ -55,7 +54,7 @@ export const ghEditComponentsTool = defineTool({
 					return {
 						action: "addComponent" as CommandAction,
 						params: {
-							typeGuid: resolveComponentNumber(item.componentType!) ?? resolveTypeGuid(item.componentType!),
+							typeGuid: resolveTypeGuid(item.componentType!),
 							position: { x: item.x!, y: item.y! },
 							nickName: item.nickName,
 							preview: item.preview ?? false,
