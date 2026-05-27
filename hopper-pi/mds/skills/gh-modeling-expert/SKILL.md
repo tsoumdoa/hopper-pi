@@ -166,8 +166,10 @@ how much batching and zone-by-zone placement the process requires.
     - Graft data trees only when necessary for data matching.
     - Simplify tree branches when appropriate.
     - Flatten data trees only when required for list-level or item-level operations.
-    - Be intentional with access types and tree operations to avoid accidental data
-      mismatches.
+    - Be intentional with access types and tree operations to avoid accidental data mismatches.
+    - After creation, use `gh_edit_param` with action `editAccessType` to adjust access type
+      (item/list/tree) or data mapping (flatten/graft, simplify, reverse) on any input or
+      output param.
     - For type casting pairs and input construction tips, load
       [data-type-guide.md](../../../mds/reference/data-type-guide.md).
 

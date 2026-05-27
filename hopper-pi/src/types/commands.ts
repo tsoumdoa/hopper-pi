@@ -253,7 +253,7 @@ export type ListScriptParamsParams = {
 	targetId: string;
 };
 
-export type EditDataMappingParams = {
+export type EditParamPropsParams = {
 	targetId: string;
 	name: string;
 	dataMapping?: "none" | "flatten" | "graft";
@@ -299,7 +299,7 @@ export type CommandAction =
 	| "removeScriptOutput"
 	| "editScriptAccess"
 	| "listScriptParams"
-	| "editDataMapping";
+	| "editParamProps";
 
 export type CommandParams =
 	| AddComponentParams
@@ -338,7 +338,7 @@ export type CommandParams =
 	| RemoveScriptOutputParams
 	| EditScriptAccessParams
 	| ListScriptParamsParams
-	| EditDataMappingParams;
+	| EditParamPropsParams;
 
 export type Command = {
 	action: CommandAction;

@@ -59,13 +59,7 @@ export const ghEditParamTool = defineTool({
 					action: Type.Literal("editAccessType"),
 					targetId: Type.String({ description: "Component GUID" }),
 					name: Type.String({ description: "Parameter name" }),
-					access: AccessType,
-				}),
-				//TODO: 
-				Type.Object({
-					action: Type.Literal("editDataMapping"),
-					targetId: Type.String({ description: "Component GUID" }),
-					name: Type.String({ description: "Parameter name" }),
+					access: Type.Optional(AccessType),
 					dataMapping: Type.Optional(DataMappingType),
 					simplify: Type.Optional(
 						Type.Boolean({ description: "Simplify data paths" })
@@ -94,19 +88,16 @@ export const ghEditParamTool = defineTool({
 					return { action: "addScriptOutput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name, dataMapping: item.dataMapping, simplify: item.simplify, reverse: item.reverse } };
 				case "removeOutput":
 					return { action: "removeScriptOutput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name } };
-				case "editAccessType":
-					return { action: "editScriptAccess" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name, access: item.access } };
-				case "editDataMapping":
-					return {
-						action: "editDataMapping" as CommandAction,
-						params: {
-							targetId: resolveInstanceGuid(item.targetId),
-							name: item.name,
-							dataMapping: item.dataMapping,
-							simplify: item.simplify,
-							reverse: item.reverse,
-						},
-					};
+				case "editAccessType": {
+					const commands: { action: CommandAction; params: unknown }[] = [];
+					if (item.access) {
+						commands.push({ action: "editScriptAccess" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name, access: item.access } });
+					}
+					if (item.dataMapping !== undefined || item.simplify !== undefined || item.reverse !== undefined) {
+						commands.push({ action: "editParamProps" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name, dataMapping: item.dataMapping, simplify: item.simplify, reverse: item.reverse } });
+					}
+					return commands.length > 0 ? commands : null;
+				}
 				default:
 					return null;
 			}

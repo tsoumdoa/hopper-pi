@@ -515,7 +515,7 @@ namespace rhino_zmq_poc
         public string Code { get; set; }
     }
 
-    public class EditDataMappingParams
+    public class EditParamPropsParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }

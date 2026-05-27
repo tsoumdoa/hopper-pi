@@ -59,7 +59,7 @@ namespace rhino_zmq_poc
                 "removeScriptOutput" => ExecuteRemoveScriptOutput(doc, command.Params),
                 "editScriptAccess" => ExecuteEditScriptAccess(doc, command.Params),
                 "listScriptParams" => ExecuteListScriptParams(doc, command.Params),
-                "editDataMapping" => ExecuteEditDataMapping(doc, command.Params),
+                "editParamProps" => ExecuteEditParamProps(doc, command.Params),
                 _ => $"Unknown action: {command.Action}"
             };
 
@@ -326,11 +326,11 @@ namespace rhino_zmq_poc
             return ComponentLifecycleOps.ListScriptParams(doc, param);
         }
 
-        private string ExecuteEditDataMapping(GH_Document doc, JsonElement p)
+        private string ExecuteEditParamProps(GH_Document doc, JsonElement p)
         {
-            var param = p.Deserialize<EditDataMappingParams>();
-            if (param == null) return "editDataMapping: invalid params";
-            return ComponentLifecycleOps.EditDataMapping(doc, param);
+            var param = p.Deserialize<EditParamPropsParams>();
+            if (param == null) return "editParamProps: invalid params";
+            return ComponentLifecycleOps.EditParamProps(doc, param);
         }
     }
 }

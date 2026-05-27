@@ -48,8 +48,13 @@ type ProgressFn = (msg: { content: TextContent[]; details: unknown }) => void;
 
 type MappedAction = { action: CommandAction; params: unknown };
 
+function normalizeMapped(mapped: MappedAction | MappedAction[] | null): MappedAction[] {
+	if (mapped == null) return [];
+	return Array.isArray(mapped) ? mapped : [mapped];
+}
+
 export function createExecute<P>(
-	mapParams: (item: P) => MappedAction | null,
+	mapParams: (item: P) => MappedAction | MappedAction[] | null,
 	_formatMessage: (item: P, result: SubmitResult) => string,
 	progressMsg?: (item: P) => string,
 ) {
@@ -64,20 +69,22 @@ export function createExecute<P>(
 			: undefined;
 
 		for (const p of params.items) {
-			const mapped = mapParams(p);
+			const actions = normalizeMapped(mapParams(p));
 
-			if (!mapped) {
+			if (actions.length === 0) {
 				continue;
 			}
 
-			if (progressFn) {
-				progressFn({
-					content: [{ type: "text" as const, text: progressMsg?.(p) ?? `Executing ${mapped.action}...` }],
-					details: {},
-				});
-			}
+			for (const mapped of actions) {
+				if (progressFn) {
+					progressFn({
+						content: [{ type: "text" as const, text: progressMsg?.(p) ?? `Executing ${mapped.action}...` }],
+						details: {},
+					});
+				}
 
-			await submitCommand(mapped.action, mapped.params);
+				await submitCommand(mapped.action, mapped.params);
+			}
 		}
 
 		return {
@@ -92,7 +99,7 @@ export type QueryHandler<T> = (item: T) => Promise<string>;
 export function createHybridExecute<P>(
 	queryAction: string,
 	queryHandler: QueryHandler<P>,
-	mapMutation: (item: P) => MappedAction | null,
+	mapMutation: (item: P) => MappedAction | MappedAction[] | null,
 	formatMessage?: (item: P, result: SubmitResult) => string,
 	progressMsg?: (item: P) => string,
 ) {
