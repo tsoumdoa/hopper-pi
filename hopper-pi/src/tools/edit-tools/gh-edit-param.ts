@@ -61,6 +61,7 @@ export const ghEditParamTool = defineTool({
 					name: Type.String({ description: "Parameter name" }),
 					access: AccessType,
 				}),
+				//TODO: 
 				Type.Object({
 					action: Type.Literal("editDataMapping"),
 					targetId: Type.String({ description: "Component GUID" }),
