@@ -504,14 +504,15 @@ function isBlacklisted(c: GhComponentInfo): boolean {
 	);
 }
 
-export function formatComponentsMultiQuery(response: ListAllComponentsResponse, queries?: string[], limit?: number, offset?: number, vanillaOnly: boolean = true) {
+export function formatComponentsMultiQuery(response: ListAllComponentsResponse, queries?: string[], limit?: number, offset?: number, searchFrom: string = "vanilla") {
 	const all = response.components
 		.filter((c) => !EXCLUDED_TYPE_GUIDS.includes(c.typeGuid))
 		.filter((c) => !isBlacklisted(c))
-		.filter((c) => vanillaOnly
-			? VANILLA_CATEGORIES.has(c.category)
-			: !VANILLA_CATEGORIES.has(c.category),
-		);
+		.filter((c) => {
+			if (searchFrom === "params") return c.category === "Params";
+			if (searchFrom === "plugin") return !VANILLA_CATEGORIES.has(c.category);
+			return VANILLA_CATEGORIES.has(c.category) && c.category !== "Params";
+		});
 	const numbered = assignNumbers(all);
 
 	if (!queries || queries.length === 0) {

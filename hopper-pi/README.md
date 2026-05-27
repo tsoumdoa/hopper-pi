@@ -79,7 +79,7 @@ These send a request to port 5557 and wait for a response.
 | Tool | Parameters | What it does |
 |------|-----------|--------------|
 | `gh_get_canvas` | _(none)_ | MANDATORY: place ALL components before calling. Call once after all are placed to get GUIDs for wiring and verify the build. Do NOT call before placement or between zones. |
-| `gh_list_components` | `queries[]` (string array), `vanillaOnly?` (bool, default true), `limit?`, `offset?` | Searches registered Grasshopper component types by keyword. Returns results grouped by category/subcategory with sequential numbers (e.g. #1, #2) for use in `gh_edit_components`. Default (`vanillaOnly=true`) returns only vanilla GH components; set `vanillaOnly=false` for plugins only. Supports batch queries and pagination (`hasMore`, `totalMatched`). |
+| `gh_list_components` | `queries[]` (string array), `searchFrom?` (`"vanilla"` \| `"plugin"` \| `"params"`, default `"vanilla"`), `limit?`, `offset?` | Searches registered Grasshopper component types by keyword. Returns results grouped by category/subcategory with sequential numbers (e.g. #1, #2) for use in `gh_edit_components`. `searchFrom` controls the source: `"vanilla"` (default) = built-in GH excluding Params; `"plugin"` = plugin components only; `"params"` = Params category only. Supports batch queries and pagination (`hasMore`, `totalMatched`). |
 | `gh_get_canvas_errors` | _(none)_ | Retrieves all runtime errors, warnings, and messages from the canvas. Also runs an overlap detection check to find visually overlapping components and groups. |
 
 ### Edit Tools (PUSH/fire-and-forget pattern)
@@ -136,7 +136,7 @@ Agent: [calls gh_edit_components(items: [{ action: "delete", targetId: "abc123" 
 
 Key points:
 - **`gh_get_canvas` populates the GUID shortener** — component and port GUIDs are returned as short base62 aliases, and edit tools automatically resolve them back to full GUIDs before sending commands. But only call after all components are placed — one call per build cycle.
-- **`gh_list_components` assigns sequential numbers** — each component gets a `#N` number per call, which can be used as `componentType` in `gh_edit_components`. The registry also supports vanilla-only filtering by category.
+- **`gh_list_components` assigns sequential numbers** — each component gets a `#N` number per call, which can be used as `componentType` in `gh_edit_components`. Use `searchFrom` to filter by source: `"vanilla"`, `"plugin"`, or `"params"`.
 - **GUID resolution is layered** — component numbers resolve first via `component-registry`, then fall back to hash-based short GUID resolution via `guid-shortener` (SHA-256 + base62).
 - **Canvas errors include overlap detection** — `gh_get_canvas_errors` reports both runtime errors/warnings and any components that visually overlap on the canvas
 
