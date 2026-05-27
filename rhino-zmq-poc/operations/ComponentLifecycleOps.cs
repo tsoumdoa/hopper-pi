@@ -209,7 +209,8 @@ namespace rhino_zmq_poc
                 if (comp == null) return $"editParamProps error: '{param.TargetId}' is not a GH_Component";
 
                 var target = comp.Params.Input.Cast<IGH_Param>().Concat(comp.Params.Output.Cast<IGH_Param>())
-                    .FirstOrDefault(x => string.Equals(x.Name, param.Name, StringComparison.OrdinalIgnoreCase));
+                    .FirstOrDefault(x => string.Equals(x.Name, param.Name, StringComparison.OrdinalIgnoreCase)
+                                        || string.Equals(x.NickName, param.Name, StringComparison.OrdinalIgnoreCase));
                 if (target == null) return $"editParamProps error: param '{param.Name}' not found on inputs or outputs";
 
                 if (param.Access != null)

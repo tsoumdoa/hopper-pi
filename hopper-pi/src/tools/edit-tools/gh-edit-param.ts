@@ -23,17 +23,17 @@ export const ghEditParamTool = defineTool({
 				Type.Object({
 					action: Type.Literal("removeInput"),
 					targetId: Type.String({ description: "Component GUID" }),
-					name: Type.String({ description: "Parameter full name (not nickname)" }),
+					name: Type.String({ description: "Parameter name" }),
 				}),
 				Type.Object({
 					action: Type.Literal("removeOutput"),
 					targetId: Type.String({ description: "Component GUID" }),
-					name: Type.String({ description: "Parameter full name (not nickname)" }),
+					name: Type.String({ description: "Parameter name" }),
 				}),
 				Type.Object({
 					action: Type.Literal("addInput"),
 					targetId: Type.String({ description: "Component GUID" }),
-					name: Type.String({ description: "Parameter full name to add (not nickname)" }),
+					name: Type.String({ description: "Parameter name" }),
 					access: Type.Optional(AccessType),
 					dataMapping: Type.Optional(DataMappingType),
 					simplify: Type.Optional(
@@ -46,7 +46,7 @@ export const ghEditParamTool = defineTool({
 				Type.Object({
 					action: Type.Literal("addOutput"),
 					targetId: Type.String({ description: "Component GUID" }),
-					name: Type.String({ description: "Parameter full name to add (not nickname)" }),
+					name: Type.String({ description: "Parameter name" }),
 					dataMapping: Type.Optional(DataMappingType),
 					simplify: Type.Optional(
 						Type.Boolean({ description: "Simplify data paths" })
@@ -58,7 +58,7 @@ export const ghEditParamTool = defineTool({
 				Type.Object({
 					action: Type.Literal("editAccessType"),
 					targetId: Type.String({ description: "Component GUID" }),
-					name: Type.String({ description: "Parameter full name (not nickname)" }),
+					name: Type.String({ description: "Parameter name" }),
 					access: Type.Optional(AccessType),
 					dataMapping: Type.Optional(DataMappingType),
 					simplify: Type.Optional(
