@@ -99,12 +99,13 @@ namespace rhino_zmq_poc
             _cmdExecutor = new CommandExecutor(msg => AppendLog($"[{DateTime.Now:HH:mm:ss}] {msg}\n"));
 
             _zmqDebugLogHandler = msg => AppendLog($"[{DateTime.Now:HH:mm:ss}] {msg}\n");
-            _zmqJobStatusHandler = status => AppendLog($"[{DateTime.Now:HH:mm:ss}] Job {status.JobId}: {status.State}\n");
-            _zmqJobReceivedHandler = info =>
+            _zmqJobStatusHandler = status =>
             {
-                _lastJobReceived = info;
-                ScheduleExpire();
+                AppendLog($"[{DateTime.Now:HH:mm:ss}] Job {status.JobId}: {status.State}\n");
+                if (status.State is "completed" or "failed" or "cancelled")
+                    ScheduleExpire();
             };
+            _zmqJobReceivedHandler = info => _lastJobReceived = info;
 
             _zmqService.OnDebugLog += _zmqDebugLogHandler;
             _zmqService.OnJobStatus += _zmqJobStatusHandler;
