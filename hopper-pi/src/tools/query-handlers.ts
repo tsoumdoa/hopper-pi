@@ -430,18 +430,28 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse, filters
 	);
 }
 
-function matchComponent(c: GhComponentInfo, f: string) {
-	const lower = f.toLowerCase();
-	return (
-		c.name.toLowerCase().includes(lower) ||
-		c.category.toLowerCase().includes(lower) ||
-		c.subcategory.toLowerCase().includes(lower) ||
-		c.description.toLowerCase().includes(lower)
-	);
+function scoreComponent(c: GhComponentInfo, f: string): number {
+	const query = f.trim().toLowerCase();
+	if (!query) return 0;
+
+	const name = c.name.toLowerCase();
+	const category = c.category.toLowerCase();
+	const subcategory = c.subcategory.toLowerCase();
+	const description = c.description.toLowerCase();
+
+	if (name === query) return 100;
+	if (name.startsWith(query)) return 90;
+	if (name.includes(query)) return 80;
+	if (subcategory === query) return 70;
+	if (subcategory.includes(query)) return 60;
+	if (category === query) return 50;
+	if (category.includes(query)) return 40;
+	if (description.includes(query)) return 20;
+	return 0;
 }
 
-const DEFAULT_LIMIT = 5;
-const MAX_LIMIT = 20;
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 50;
 
 function paginate<T>(items: T[], limit?: number, offset?: number): { slice: T[]; hasMore: boolean; totalMatched: number } {
 	const effectiveLimit = Math.min(limit ?? DEFAULT_LIMIT, MAX_LIMIT);
@@ -496,6 +506,17 @@ function formatGroupedLines(components: GhComponentInfo[]): string {
 	return parts.join("\n");
 }
 
+function formatBestCandidateLines(components: GhComponentInfo[]): string {
+	const candidates = components.slice(0, 5);
+	if (candidates.length === 0) return "";
+	return candidates
+		.map((c) => {
+			const desc = c.description.length > 70 ? c.description.slice(0, 67) + "..." : c.description;
+			return `  ${c.name} [${toShortTypeGuid(c.typeGuid)}] - ${c.category}/${c.subcategory} -- ${desc}`;
+		})
+		.join("\n");
+}
+
 function pickComponentSummary(c: GhComponentInfo) {
 	return {
 		typeGuid: toShortTypeGuid(c.typeGuid),
@@ -536,7 +557,15 @@ export function formatComponentsMultiQuery(response: ListAllComponentsResponse, 
 	const results: Array<{ queryKeyword: string; result: Array<Record<string, unknown>>; hasMore: boolean; totalMatched: number }> = [];
 
 	for (const q of queries) {
-		const matched = sorted.filter((c) => matchComponent(c, q));
+		const matched = sorted
+			.map((component) => ({ component, score: scoreComponent(component, q) }))
+			.filter(({ score }) => score > 0)
+			.sort((a, b) => {
+				const scoreCmp = b.score - a.score;
+				if (scoreCmp !== 0) return scoreCmp;
+				return sortByCategoryThenName(a.component, b.component);
+			})
+			.map(({ component }) => component);
 		const { slice, hasMore, totalMatched } = paginate(matched, limit, offset);
 		results.push({ queryKeyword: q, result: slice.map(pickComponentSummary), hasMore, totalMatched });
 
@@ -544,9 +573,11 @@ export function formatComponentsMultiQuery(response: ListAllComponentsResponse, 
 			sections.push(`"${q}" — no matches`);
 		} else {
 			const body = formatGroupedLines(slice);
+			const bestCandidates = formatBestCandidateLines(slice);
+			const candidatesBlock = bestCandidates ? `\nBest candidates:\n${bestCandidates}\n\nGrouped results:\n` : "\n";
 			const showRange = `showing ${(offset ?? 0) + 1}-${(offset ?? 0) + slice.length}`;
 			const footer = hasMore ? `\n  ... ${totalMatched - (offset ?? 0) - slice.length} more (call with offset=${(offset ?? 0) + slice.length})` : "";
-			sections.push(`"${q}" (${totalMatched} matches, ${showRange}):${footer}\n${body}`);
+			sections.push(`"${q}" (${totalMatched} matches, ${showRange}):${footer}${candidatesBlock}${body}`);
 		}
 	}
 

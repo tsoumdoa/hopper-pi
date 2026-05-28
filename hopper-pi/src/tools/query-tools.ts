@@ -47,14 +47,15 @@ export const ghListComponentsTool = defineTool({
 	name: "gh_list_components",
 	label: "List Components",
 	description:
-		"Search Grasshopper components by keyword. Returns grouped results with typeGuids to use as componentType in gh_edit_components. " +
+		"Search Grasshopper components by keyword. Returns ranked best candidates and grouped results with typeGuids to use as componentType in gh_edit_components. " +
 		"Defaults to vanilla components excluding Params. Use searchFrom: 'plugin' or 'params' for other sources. " +
+		"Batch likely component names/synonyms in one call instead of making repeated single-query calls. Only paginate if the needed component is not in the best candidates. " +
 		"Supports multiple queries and pagination via limit/offset; response includes hasMore and totalMatched. ",
 	parameters: Type.Object({
 		queries: Type.Array(
 			Type.String({
 				description:
-					"Search terms for names, categories, or descriptions. Supports batching.",
+					"Search terms for names, categories, or descriptions. Batch likely names and synonyms together.",
 			}),
 		),
 		searchFrom:
