@@ -8,8 +8,8 @@ Assume code targets a Grasshopper C# script component inside Rhino, not a standa
 
 ## Rules
 
-- All inputs arrive as `object` — cast them to the expected type inside RunScript.
-- All outputs are `ref object` — assign your result directly to the output variable.
+- Inputs can be typed directly (e.g. `double x`, `List<Point3d> curves`) or `object` with a cast inside RunScript.
+- Outputs are `ref` parameters (e.g. `ref double a`, `ref object a`) — assign your result directly to the output variable.
 - The agent's primary job is naming input/output params correctly. The rest is boilerplate.
 - Add helper methods below `RunScript(...)` only when needed.
 - Prefer `List<T>` for list inputs and outputs.
@@ -35,11 +35,11 @@ using Grasshopper.Kernel.Types;
 public class Script_Instance : GH_ScriptInstance
 {
   private void RunScript(
-    object x,    // one object param per input
-    ref object a // one ref object param per output
+    double x,       // one param per input (typed or object)
+    ref double a    // one ref param per output (typed or ref object)
   )
   {
-    // Cast inputs to expected types
+    // If an input is object, cast it to the expected type
     // Do work
     // Assign to output params
   }
