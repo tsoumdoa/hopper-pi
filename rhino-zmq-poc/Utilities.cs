@@ -60,19 +60,23 @@ namespace rhino_zmq_poc
             _ => m.ToString()
         };
 
-        public static void RunOnUiThread(Action action)
+        private static readonly TimeSpan DefaultUiTimeout = TimeSpan.FromSeconds(30);
+
+        public static void RunOnUiThread(Action action, TimeSpan? timeout = null)
         {
-            RunOnUiThread<bool>(() => { action(); return true; });
+            RunOnUiThread<bool>(() => { action(); return true; }, timeout);
         }
 
-        public static T RunOnUiThread<T>(Func<T> func)
+        public static T RunOnUiThread<T>(Func<T> func, TimeSpan? timeout = null)
         {
+            var wait = timeout ?? DefaultUiTimeout;
             var tcs = new TaskCompletionSource<T>();
             EventHandler handler = null;
-            var timeout = TimeSpan.FromSeconds(5);
+            var idleFired = false;
 
             handler = (s, a) =>
             {
+                idleFired = true;
                 RhinoApp.Idle -= handler;
                 try
                 {
@@ -88,7 +92,7 @@ namespace rhino_zmq_poc
 
             try
             {
-                tcs.Task.Wait(timeout);
+                tcs.Task.Wait(wait);
             }
             catch (AggregateException)
             {
@@ -100,7 +104,8 @@ namespace rhino_zmq_poc
                 return tcs.Task.Result;
 
             RhinoApp.Idle -= handler;
-            throw new TimeoutException("RunOnUiThread timed out waiting for RhinoApp.Idle");
+            var phase = idleFired ? "executing on UI thread" : "waiting for RhinoApp.Idle";
+            throw new TimeoutException($"RunOnUiThread timed out ({wait.TotalSeconds}s) while {phase}");
         }
     }
 }

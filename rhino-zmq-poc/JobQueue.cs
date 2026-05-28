@@ -69,7 +69,30 @@ namespace rhino_zmq_poc
                 }
 
                 if (batch.Count > 0)
-                    Utilities.RunOnUiThread(() => ExecuteBatch(batch));
+                {
+                    try
+                    {
+                        Utilities.RunOnUiThread(() => ExecuteBatch(batch));
+                    }
+                    catch (Exception ex)
+                    {
+                        FailBatch(batch, ex.Message);
+                    }
+                }
+            }
+        }
+
+        private void FailBatch(List<Job> batch, string error)
+        {
+            foreach (var job in batch)
+            {
+                if (job.State == JobState.Completed)
+                    continue;
+
+                job.State = JobState.Failed;
+                job.Error = error;
+                job.CompletedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                EmitStatus(job);
             }
         }
 
