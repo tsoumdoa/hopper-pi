@@ -25,6 +25,7 @@ namespace rhino_zmq_poc
         private readonly GH_Document _doc;
         private readonly UiRequestDispatcher _requestDispatcher = new UiRequestDispatcher();
         private readonly ConcurrentQueue<(string topic, string json)> _publishQueue = new ConcurrentQueue<(string, string)>();
+        private readonly Action<GhJobStatus> _jobStatusHandler;
 
         public event Action<GhJobStatus> OnJobStatus;
         public event Action<string> OnDebugLog;
@@ -39,11 +40,12 @@ namespace rhino_zmq_poc
             _requestDispatcher.Register("getCanvasErrors", new GetCanvasErrorsHandler());
             _requestDispatcher.Register("listScriptParams", new ListScriptParamsHandler());
             _requestDispatcher.Register("getScriptCode", new GetScriptCodeHandler());
-            _jobQueue.OnStatusChanged += status =>
+            _jobStatusHandler = status =>
             {
                 OnJobStatus?.Invoke(status);
                 EnqueuePublish("gh.job.status", JsonSerializer.Serialize(status));
             };
+            _jobQueue.OnStatusChanged += _jobStatusHandler;
         }
 
         public void Start()
@@ -230,6 +232,8 @@ namespace rhino_zmq_poc
             _pullSocket?.Dispose();
             _repSocket?.Dispose();
             _cts.Dispose();
+            if (_jobStatusHandler != null)
+                _jobQueue.OnStatusChanged -= _jobStatusHandler;
             DebugLog("[ZMQ] Disposed");
         }
     }

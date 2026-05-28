@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Grasshopper;
 using Grasshopper.Kernel;
 using Rhino;
@@ -8,6 +9,7 @@ namespace rhino_zmq_poc
     public class DocumentMonitor : IDisposable
     {
         private GH_Document _subscribedDoc;
+        private int _disposed;
 
         public event Action<GH_Document> OnSolutionEnd;
 
@@ -25,14 +27,18 @@ namespace rhino_zmq_poc
 
         private void OnSolutionEndHandler(object sender, EventArgs e)
         {
+            if (_disposed != 0) return;
             var doc = sender as GH_Document;
-            RhinoApp.Idle += IdlePublish;
+            EventHandler idleHandler = null;
 
-            void IdlePublish(object s, EventArgs a)
+            idleHandler = (s, a) =>
             {
-                RhinoApp.Idle -= IdlePublish;
-                OnSolutionEnd?.Invoke(doc);
-            }
+                RhinoApp.Idle -= idleHandler;
+                if (_disposed == 0)
+                    OnSolutionEnd?.Invoke(doc);
+            };
+
+            RhinoApp.Idle += idleHandler;
         }
 
         public void Unsubscribe()
@@ -46,6 +52,7 @@ namespace rhino_zmq_poc
 
         public void Dispose()
         {
+            Interlocked.Exchange(ref _disposed, 1);
             Unsubscribe();
         }
     }
