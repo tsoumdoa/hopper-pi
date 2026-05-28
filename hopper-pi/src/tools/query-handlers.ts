@@ -12,6 +12,22 @@ import { formatOverlapResult } from "./canvas-checks.js";
 import type { CanvasOverlapResult } from "./canvas-checks.js";
 import { EXCLUDED_TYPE_GUIDS, VANILLA_CATEGORIES, BLACKLISTED_SUBCATEGORIES } from "./constants.js";
 
+const WIDGET_KEYWORDS: ReadonlyMap<string, string> = new Map([
+	["number slider", "slider"],
+	["slider", "slider"],
+	["panel", "panel"],
+	["toggle", "toggle"],
+	["swatch", "swatch"],
+	["scribble", "scribble"],
+	["valuelist", "valueList"],
+	["value list", "valueList"],
+]);
+
+const PARAMS_KEYWORDS: ReadonlySet<string> = new Set([
+	"curve", "mesh", "brep", "point", "geometry", "vector",
+	"plane", "data", "number", "text",
+]);
+
 let _components: ListAllComponentsResponse | null = null;
 
 function shortenComponentGuids(component: Component): Component {
@@ -534,8 +550,37 @@ export function formatComponentsMultiQuery(response: ListAllComponentsResponse, 
 		}
 	}
 
+	const hints: string[] = [];
+
+	const matchedWidgets = new Set<string>();
+	for (const q of queries) {
+		const ql = q.toLowerCase();
+		for (const [keyword, widgetType] of WIDGET_KEYWORDS) {
+			if (ql.includes(keyword)) matchedWidgets.add(widgetType);
+		}
+	}
+	if (matchedWidgets.size > 0) {
+		const types = [...matchedWidgets].join(", ");
+		hints.push(
+			`Search hint: ${types} are UI widgets, not standard Grasshopper components. Do not use a componentType from this search to create them. Use gh_create_widget instead, with widgetType set to one of: slider, panel, toggle, swatch, scribble, valueList.`,
+		);
+	}
+
+	if (searchFrom === "vanilla") {
+		const ql = queries.map((q) => q.toLowerCase());
+		const matchedParams = [...PARAMS_KEYWORDS].filter((k) => ql.some((q) => q.includes(k)));
+		if (matchedParams.length > 0) {
+			hints.push(
+				`Search hint: this search is currently limited to vanilla components, which excludes Params. Queries mention likely parameter types (${matchedParams.join(", ")}). If you need a standalone parameter component, call gh_list_components again with searchFrom: "params" and the same queries.`,
+			);
+		}
+	}
+
+	const mainText = `Components search (${queries.length} queries, ${all.length} available):\n\n${sections.join("\n\n")}`;
+	const hintText = hints.length > 0 ? `\n\n${hints.join("\n")}` : "";
+
 	return {
-		content: [{ type: "text" as const, text: `Components search (${queries.length} queries, ${all.length} available):\n\n${sections.join("\n\n")}` }],
+		content: [{ type: "text" as const, text: mainText + hintText }],
 		details: { results, totalAvailable: all.length },
 	};
 }
