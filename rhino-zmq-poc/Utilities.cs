@@ -68,11 +68,12 @@ namespace rhino_zmq_poc
         public static T RunOnUiThread<T>(Func<T> func)
         {
             var tcs = new TaskCompletionSource<T>();
-            RhinoApp.Idle += OnIdle;
+            EventHandler handler = null;
+            var timeout = TimeSpan.FromSeconds(5);
 
-            void OnIdle(object s, EventArgs a)
+            handler = (s, a) =>
             {
-                RhinoApp.Idle -= OnIdle;
+                RhinoApp.Idle -= handler;
                 try
                 {
                     tcs.SetResult(func());
@@ -81,9 +82,25 @@ namespace rhino_zmq_poc
                 {
                     tcs.SetException(ex);
                 }
+            };
+
+            RhinoApp.Idle += handler;
+
+            try
+            {
+                tcs.Task.Wait(timeout);
+            }
+            catch (AggregateException)
+            {
+                RhinoApp.Idle -= handler;
+                throw;
             }
 
-            return tcs.Task.GetAwaiter().GetResult();
+            if (tcs.Task.IsCompleted)
+                return tcs.Task.Result;
+
+            RhinoApp.Idle -= handler;
+            throw new TimeoutException("RunOnUiThread timed out waiting for RhinoApp.Idle");
         }
     }
 }

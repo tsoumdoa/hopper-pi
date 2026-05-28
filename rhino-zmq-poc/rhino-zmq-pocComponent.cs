@@ -15,11 +15,17 @@ namespace rhino_zmq_poc
         private XmlPublisher _xmlPublisher;
         private CommandExecutor _cmdExecutor;
 
+        private const int MaxLogLength = 8000;
         private string _debugLog = "";
         private string _lastJobReceived = "";
         private string _lastXmlSent = "";
         private bool _publishEnabled = true;
         private readonly object _logLock = new object();
+
+        private Action<string> _zmqDebugLogHandler;
+        private Action<GhJobStatus> _zmqJobStatusHandler;
+        private Action<string> _zmqJobReceivedHandler;
+        private Action<GH_Document> _docMonitorSolutionEndHandler;
 
         private static readonly object _instanceLock = new object();
         private static rhino_zmq_pocComponent _activeInstance;
@@ -92,22 +98,27 @@ namespace rhino_zmq_poc
             _xmlPublisher = new XmlPublisher(_zmqService.PublishXmlEvent);
             _cmdExecutor = new CommandExecutor(msg => AppendLog($"[{DateTime.Now:HH:mm:ss}] {msg}\n"));
 
-            _zmqService.OnDebugLog += msg => AppendLog($"[{DateTime.Now:HH:mm:ss}] {msg}\n");
-            _zmqService.OnJobStatus += status => AppendLog($"[{DateTime.Now:HH:mm:ss}] Job {status.JobId}: {status.State}\n");
-            _zmqService.OnJobReceived += info =>
+            _zmqDebugLogHandler = msg => AppendLog($"[{DateTime.Now:HH:mm:ss}] {msg}\n");
+            _zmqJobStatusHandler = status => AppendLog($"[{DateTime.Now:HH:mm:ss}] Job {status.JobId}: {status.State}\n");
+            _zmqJobReceivedHandler = info =>
             {
                 _lastJobReceived = info;
                 ScheduleExpire();
             };
 
+            _zmqService.OnDebugLog += _zmqDebugLogHandler;
+            _zmqService.OnJobStatus += _zmqJobStatusHandler;
+            _zmqService.OnJobReceived += _zmqJobReceivedHandler;
+
             _docMonitor = new DocumentMonitor();
-            _docMonitor.OnSolutionEnd += doc =>
+            _docMonitorSolutionEndHandler = doc =>
             {
                 if (!_publishEnabled) return;
                 _lastXmlSent = _xmlPublisher.Publish(doc);
                 if (_lastXmlSent != null)
                     AppendLog($"[{DateTime.Now:HH:mm:ss}] Sending XML: {_lastXmlSent.Length} chars, topic=gh.event.xml\n");
             };
+            _docMonitor.OnSolutionEnd += _docMonitorSolutionEndHandler;
 
             _zmqService.Start();
             _jobQueue.Start();
@@ -122,7 +133,12 @@ namespace rhino_zmq_poc
 
         private void AppendLog(string msg)
         {
-            lock (_logLock) { _debugLog += msg; }
+            lock (_logLock)
+            {
+                _debugLog += msg;
+                if (_debugLog.Length > MaxLogLength)
+                    _debugLog = _debugLog.Substring(_debugLog.Length - MaxLogLength);
+            }
         }
 
         private void OnIdleExpire(object sender, EventArgs e)
@@ -175,13 +191,34 @@ namespace rhino_zmq_poc
 
         private void Cleanup()
         {
-            _zmqService?.Dispose();
+            if (_zmqService != null)
+            {
+                if (_zmqDebugLogHandler != null) _zmqService.OnDebugLog -= _zmqDebugLogHandler;
+                if (_zmqJobStatusHandler != null) _zmqService.OnJobStatus -= _zmqJobStatusHandler;
+                if (_zmqJobReceivedHandler != null) _zmqService.OnJobReceived -= _zmqJobReceivedHandler;
+                _zmqService.Dispose();
+            }
+            if (_docMonitor != null)
+            {
+                if (_docMonitorSolutionEndHandler != null)
+                    _docMonitor.OnSolutionEnd -= _docMonitorSolutionEndHandler;
+                _docMonitor.Dispose();
+            }
             _jobQueue?.Dispose();
-            _docMonitor?.Dispose();
-            _isOwner = false;
+
             _zmqService = null;
             _jobQueue = null;
             _docMonitor = null;
+            _xmlPublisher = null;
+            _cmdExecutor = null;
+            _zmqDebugLogHandler = null;
+            _zmqJobStatusHandler = null;
+            _zmqJobReceivedHandler = null;
+            _docMonitorSolutionEndHandler = null;
+            _isOwner = false;
+
+            if (RhinoZmqPlugin.Instance.Component == this)
+                RhinoZmqPlugin.Instance.Component = null;
         }
 
         private void TryPromoteNewInstance(GH_Document doc)
