@@ -33,6 +33,10 @@ namespace rhino_zmq_poc
                     (float)param.Position.X,
                     (float)param.Position.Y);
 
+                var hiddenProp = obj.GetType().GetProperty("Hidden");
+                if (hiddenProp != null)
+                    hiddenProp.SetValue(obj, true);
+
                 var comp = obj as GH_Component;
                 if (comp != null)
                 {
