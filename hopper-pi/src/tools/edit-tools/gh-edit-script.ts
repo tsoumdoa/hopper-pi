@@ -9,7 +9,7 @@ import {
 	looksLikeGrasshopperCsharpScript,
 	validateCsharpScript,
 } from "../../services/csharp-script-validator.js";
-import { AccessType, DataMappingType } from "./shared-types.js";
+import { AccessType, DataMappingType, TypeHintType } from "./shared-types.js";
 import type { CommandAction } from "../../types/commands.js";
 
 type GhEditScriptItem =
@@ -67,6 +67,7 @@ export const ghEditScriptTool = defineTool({
 					inputs: Type.Optional(
 						Type.Array(Type.Object({
 							name: Type.String({ description: "Input parameter name" }),
+							typeHint: Type.Optional(TypeHintType),
 							access: Type.Optional(AccessType),
 							dataMapping: Type.Optional(DataMappingType),
 							simplify: Type.Optional(
@@ -80,6 +81,7 @@ export const ghEditScriptTool = defineTool({
 					outputs: Type.Optional(
 						Type.Array(Type.Object({
 							name: Type.String({ description: "Output parameter name" }),
+							typeHint: Type.Optional(TypeHintType),
 						}), { description: "Output parameters" })
 					),
 				}),

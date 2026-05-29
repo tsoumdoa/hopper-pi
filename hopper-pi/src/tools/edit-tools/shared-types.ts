@@ -13,6 +13,12 @@ export const AccessType = Type.Union([
 	Type.Literal("tree"),
 ], { description: "Access type (default: item)" });
 
+export const TypeHintType = Type.Union([
+	Type.Literal("object"),
+	Type.Literal("double"),
+	Type.Literal("string"),
+], { description: "Script param type hint (default: object). Use double for numbers, string for text." });
+
 export const SliderCreateFields = Type.Object({
 	min: Type.Number(),
 	max: Type.Number(),

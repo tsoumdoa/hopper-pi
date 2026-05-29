@@ -29,6 +29,6 @@ a = result
 
 ## Creating python script component
 **you must follow the following steps**
-1. Use `gh_edit_script` with action `"create"` to create a Python script node. Specify `language: "python"`, the code, and inputs/outputs.
+1. Use `gh_edit_script` with action `"create"` to create a Python script node. Specify `language: "python"`, the code, and inputs/outputs. Each input may include `typeHint` (`object` default, `double` for numbers, `string` for text).
 2. If you need to modify inputs/outputs after creation, use `gh_edit_param` to add/remove/edit parameters.
 3. To update the code, use `gh_edit_script` with action `"setCode"`.

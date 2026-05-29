@@ -46,14 +46,14 @@ namespace rhino_zmq_poc
                     {
                         foreach (var input in param.Inputs)
                         {
-                            ComponentLifecycleOps.AddScriptInputParam(comp, input.Name, access: input.Access, dataMapping: input.DataMapping, simplify: input.Simplify, reverse: input.Reverse);
+                            ComponentLifecycleOps.AddScriptInputParam(comp, input.Name, access: input.Access, dataMapping: input.DataMapping, simplify: input.Simplify, reverse: input.Reverse, typeHint: input.TypeHint);
                         }
                     }
 
                     if (param.Outputs != null && param.Outputs.Count > 0)
                     {
                         foreach (var output in param.Outputs)
-                            ComponentLifecycleOps.AddScriptOutputParam(comp, output.Name, dataMapping: output.DataMapping, simplify: output.Simplify, reverse: output.Reverse);
+                            ComponentLifecycleOps.AddScriptOutputParam(comp, output.Name, dataMapping: output.DataMapping, simplify: output.Simplify, reverse: output.Reverse, typeHint: output.TypeHint);
                     }
                 }
                 obj.ExpireSolution(true);
@@ -144,7 +144,7 @@ namespace rhino_zmq_poc
                 if (obj == null) return $"addScriptInput error: object not found '{param.TargetId}'";
                 var comp = obj as GH_Component;
                 if (comp == null) return $"addScriptInput error: '{param.TargetId}' is not a GH_Component";
-                ComponentLifecycleOps.AddScriptInputParam(comp, param.Name, access: param.Access, dataMapping: param.DataMapping, simplify: param.Simplify, reverse: param.Reverse);
+                ComponentLifecycleOps.AddScriptInputParam(comp, param.Name, access: param.Access, dataMapping: param.DataMapping, simplify: param.Simplify, reverse: param.Reverse, typeHint: param.TypeHint);
                 comp.ExpireSolution(true);
                 return $"addScriptInput: added input '{param.Name}' on ({param.TargetId})";
             }
@@ -185,7 +185,7 @@ namespace rhino_zmq_poc
                 if (obj == null) return $"addScriptOutput error: object not found '{param.TargetId}'";
                 var comp = obj as GH_Component;
                 if (comp == null) return $"addScriptOutput error: '{param.TargetId}' is not a GH_Component";
-                ComponentLifecycleOps.AddScriptOutputParam(comp, param.Name, dataMapping: param.DataMapping, simplify: param.Simplify, reverse: param.Reverse);
+                ComponentLifecycleOps.AddScriptOutputParam(comp, param.Name, dataMapping: param.DataMapping, simplify: param.Simplify, reverse: param.Reverse, typeHint: param.TypeHint);
                 comp.ExpireSolution(true);
                 return $"addScriptOutput: added output '{param.Name}' on ({param.TargetId})";
             }

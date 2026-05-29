@@ -3,7 +3,7 @@ import { defineTool } from "@earendil-works/pi-coding-agent";
 import { createHybridExecute, formatDefaultResult } from "../edit-handlers.js";
 import { withRequester } from "../../infra/request-helpers.js";
 import { fetchScriptParams, formatScriptParamsResponse } from "../query-handlers.js";
-import { DataMappingType, AccessType } from "./shared-types.js";
+import { DataMappingType, AccessType, TypeHintType } from "./shared-types.js";
 import { resolveInstanceGuid } from "../../services/guid-shortener.js";
 
 import type { CommandAction } from "../../types/commands.js";
@@ -34,6 +34,7 @@ export const ghEditParamTool = defineTool({
 					action: Type.Literal("addInput"),
 					targetId: Type.String({ description: "Component GUID" }),
 					name: Type.String({ description: "Parameter name" }),
+					typeHint: Type.Optional(TypeHintType),
 					access: Type.Optional(AccessType),
 					dataMapping: Type.Optional(DataMappingType),
 					simplify: Type.Optional(
@@ -47,6 +48,7 @@ export const ghEditParamTool = defineTool({
 					action: Type.Literal("addOutput"),
 					targetId: Type.String({ description: "Component GUID" }),
 					name: Type.String({ description: "Parameter name" }),
+					typeHint: Type.Optional(TypeHintType),
 					dataMapping: Type.Optional(DataMappingType),
 					simplify: Type.Optional(
 						Type.Boolean({ description: "Simplify data paths" })
@@ -81,11 +83,11 @@ export const ghEditParamTool = defineTool({
 		(item) => {
 			switch (item.action) {
 				case "addInput":
-					return { action: "addScriptInput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name, access: item.access, dataMapping: item.dataMapping, simplify: item.simplify, reverse: item.reverse } };
+					return { action: "addScriptInput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name, typeHint: item.typeHint, access: item.access, dataMapping: item.dataMapping, simplify: item.simplify, reverse: item.reverse } };
 				case "removeInput":
 					return { action: "removeScriptInput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name } };
 				case "addOutput":
-					return { action: "addScriptOutput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name, dataMapping: item.dataMapping, simplify: item.simplify, reverse: item.reverse } };
+					return { action: "addScriptOutput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name, typeHint: item.typeHint, dataMapping: item.dataMapping, simplify: item.simplify, reverse: item.reverse } };
 				case "removeOutput":
 					return { action: "removeScriptOutput" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), name: item.name } };
 				case "editAccessType":
