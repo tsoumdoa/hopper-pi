@@ -22,14 +22,16 @@ import {
 	cancelAgentTransaction,
 	commitAgentTransaction,
 } from "./services/agent-transaction.js";
+import { probeBackend } from "./infra/backend-status.js";
 import { registerBackendStatusUI } from "./ui/backend-status.js";
 import { ALL_TOOLS } from "./tools/index.js";
+import { withBackendGuard } from "./tools/with-backend-guard.js";
 
 export default function hopperPiExtension(pi: ExtensionAPI) {
 	// ── Register all Grasshopper canvas tools ───────────────────────
 
 	for (const tool of ALL_TOOLS) {
-		pi.registerTool(tool);
+		pi.registerTool(withBackendGuard(tool));
 	}
 
 	registerBackendStatusUI(pi);
@@ -37,6 +39,7 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 	// ── Lifecycle: notify on load ──────────────────────────────────
 
 	pi.on("session_start", async (_event, ctx) => {
+		void probeBackend();
 		ctx.ui.notify(
 			"\u{1F998} Hopper Pi: Grasshopper canvas tools loaded (14 tools)",
 			"info"
@@ -49,7 +52,7 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 		try {
 			await beginAgentTransaction();
 		} catch (err) {
-			console.error("[hopper-pi] Failed to begin agent transaction:", err);
+			// console.error("[hopper-pi] Failed to begin agent transaction:", err);
 		}
 	});
 
@@ -61,7 +64,7 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 		try {
 			await commitAgentTransaction();
 		} catch (err) {
-			console.error("[hopper-pi] Failed to commit agent transaction:", err);
+			// console.error("[hopper-pi] Failed to commit agent transaction:", err);
 		}
 	});
 

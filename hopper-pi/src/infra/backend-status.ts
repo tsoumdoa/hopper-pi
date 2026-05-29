@@ -1,13 +1,22 @@
 import type { GetCanvasErrorsResponse } from "../types/messages.js";
-import { REQ_ENDPOINT } from "./connection.js";
-import { withRequester } from "./request-helpers.js";
+import {
+	type BackendStatus,
+	setCachedBackendStatus,
+} from "./backend-status-cache.js";
+import { Requester } from "./requester.js";
 
 const PROBE_TIMEOUT_MS = 3_000;
 
-export type BackendStatus = {
-	online: boolean;
-	error?: string;
-};
+export type { BackendStatus } from "./backend-status-cache.js";
+export {
+	BackendOfflineError,
+	backendOfflineMessage,
+	backendOfflineToolResult,
+	formatBackendEndpoint,
+	getCachedBackendStatus,
+	isBackendKnownOffline,
+	setCachedBackendStatus,
+} from "./backend-status-cache.js";
 
 async function probeRequester(
 	requester: import("./requester.js").Requester
@@ -20,11 +29,24 @@ async function probeRequester(
 	}
 }
 
+async function withProbeRequester(
+	fn: (requester: Requester) => Promise<void>
+): Promise<void> {
+	const requester = new Requester();
+	try {
+		await requester.connect();
+		await fn(requester);
+	} finally {
+		await requester.close();
+	}
+}
+
 /** Lightweight REQ/REP probe to see if the Rhino ZMQ backend is reachable. */
 export async function probeBackend(): Promise<BackendStatus> {
+	let status: BackendStatus;
 	try {
 		await Promise.race([
-			withRequester(probeRequester),
+			withProbeRequester(probeRequester),
 			new Promise<never>((_, reject) => {
 				setTimeout(
 					() => reject(new Error(`timeout after ${PROBE_TIMEOUT_MS}ms`)),
@@ -32,13 +54,11 @@ export async function probeBackend(): Promise<BackendStatus> {
 				);
 			}),
 		]);
-		return { online: true };
+		status = { online: true };
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
-		return { online: false, error: message };
+		status = { online: false, error: message };
 	}
-}
-
-export function formatBackendEndpoint(): string {
-	return REQ_ENDPOINT.replace(/^tcp:\/\//, "");
+	setCachedBackendStatus(status);
+	return status;
 }
