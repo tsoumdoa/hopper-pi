@@ -14,13 +14,15 @@ namespace rhino_zmq_poc
         private const string PubEndpoint = "tcp://*:5555";
         private const string PullEndpoint = "tcp://*:5556";
         private const string RepEndpoint = "tcp://*:5557";
+        private const int StartMaxAttempts = 5;
 
         private PublisherSocket _pubSocket;
         private PullSocket _pullSocket;
         private ResponseSocket _repSocket;
-        private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+        private CancellationTokenSource _cts = new CancellationTokenSource();
         private Task _commandTask;
         private Task _repTask;
+        private int _stopped;
         private readonly JobQueue _jobQueue;
         private readonly GH_Document _doc;
         private readonly UiRequestDispatcher _requestDispatcher = new UiRequestDispatcher();
@@ -30,6 +32,8 @@ namespace rhino_zmq_poc
         public event Action<GhJobStatus> OnJobStatus;
         public event Action<string> OnDebugLog;
         public event Action<string> OnJobReceived;
+
+        public bool IsRunning { get; private set; }
 
         public ZMqService(JobQueue jobQueue, GH_Document doc)
         {
@@ -50,27 +54,66 @@ namespace rhino_zmq_poc
 
         public void Start()
         {
-            try
+            for (var attempt = 1; attempt <= StartMaxAttempts; attempt++)
             {
-                _pubSocket = new PublisherSocket();
-                _pubSocket.Bind(PubEndpoint);
-                DebugLog($"[PUB] Bound to {PubEndpoint}");
+                PublisherSocket pub = null;
+                PullSocket pull = null;
+                ResponseSocket rep = null;
 
-                _pullSocket = new PullSocket();
-                _pullSocket.Bind(PullEndpoint);
-                DebugLog($"[PULL] Bound to {PullEndpoint}");
+                try
+                {
+                    pub = BindSocket(new PublisherSocket(), PubEndpoint);
+                    pull = BindSocket(new PullSocket(), PullEndpoint);
+                    rep = BindSocket(new ResponseSocket(), RepEndpoint);
 
-                _repSocket = new ResponseSocket();
-                _repSocket.Bind(RepEndpoint);
-                DebugLog($"[REP] Bound to {RepEndpoint}");
+                    _pubSocket = pub;
+                    _pullSocket = pull;
+                    _repSocket = rep;
 
-                _commandTask = Task.Run(() => CommandLoop(_cts.Token));
-                _repTask = Task.Run(() => RepLoop(_cts.Token));
+                    var token = _cts.Token;
+                    _commandTask = Task.Run(() => CommandLoop(token));
+                    _repTask = Task.Run(() => RepLoop(token));
+                    IsRunning = true;
+                    DebugLog($"[ZMQ] Started on attempt {attempt}");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    IsRunning = false;
+                    ReleaseSocket(pub, PubEndpoint);
+                    ReleaseSocket(pull, PullEndpoint);
+                    ReleaseSocket(rep, RepEndpoint);
+                    _pubSocket = null;
+                    _pullSocket = null;
+                    _repSocket = null;
+
+                    if (attempt < StartMaxAttempts && IsAddressInUse(ex))
+                    {
+                        DebugLog($"[ZMQ] Start error (attempt {attempt}/{StartMaxAttempts}): {ex.Message}; retrying...");
+                        continue;
+                    }
+
+                    DebugLog($"[ZMQ] Start error: {ex.Message}");
+                    return;
+                }
             }
-            catch (Exception ex)
+        }
+
+        private static T BindSocket<T>(T socket, string endpoint) where T : NetMQSocket
+        {
+            socket.Options.Linger = TimeSpan.Zero;
+            socket.Bind(endpoint);
+            return socket;
+        }
+
+        private static bool IsAddressInUse(Exception ex)
+        {
+            for (var current = ex; current != null; current = current.InnerException)
             {
-                DebugLog($"[ZMQ] Start error: {ex.Message}");
+                if (current is AddressAlreadyInUseException)
+                    return true;
             }
+            return false;
         }
 
         private void CommandLoop(CancellationToken ct)
@@ -80,17 +123,20 @@ namespace rhino_zmq_poc
                 try
                 {
                     string message;
-                    if (!_pullSocket.TryReceiveFrameString(TimeSpan.FromMilliseconds(300), out message))
+                    if (_pullSocket == null ||
+                        !_pullSocket.TryReceiveFrameString(TimeSpan.FromMilliseconds(100), out message))
                     {
                         DrainPublishQueue();
                         continue;
                     }
 
                     DebugLog($"[PULL] Received: {message}");
-
                     ProcessCommand(message);
-
                     DrainPublishQueue();
+                }
+                catch (ObjectDisposedException) when (ct.IsCancellationRequested)
+                {
+                    break;
                 }
                 catch (Exception ex) when (!ct.IsCancellationRequested)
                 {
@@ -126,9 +172,7 @@ namespace rhino_zmq_poc
                 };
 
                 _jobQueue.Enqueue(job);
-
                 OnJobReceived?.Invoke($"{job.JobId}|{job.CommandId}|{job.Command.Action}");
-
                 DebugLog($"[PULL] Enqueued job {job.JobId} ({commandId})");
             }
             catch (Exception ex)
@@ -144,16 +188,28 @@ namespace rhino_zmq_poc
                 try
                 {
                     string message;
-                    if (!_repSocket.TryReceiveFrameString(TimeSpan.FromMilliseconds(300), out message))
+                    if (_repSocket == null ||
+                        !_repSocket.TryReceiveFrameString(TimeSpan.FromMilliseconds(100), out message))
                     {
                         continue;
                     }
+
                     DebugLog($"[REP] Received: {message}");
+
+                    if (ct.IsCancellationRequested)
+                        break;
 
                     var response = HandleRequest(message);
 
+                    if (ct.IsCancellationRequested || _repSocket == null)
+                        break;
+
                     _repSocket.SendFrame(response);
-                    DebugLog($"[REP] Sent response");
+                    DebugLog("[REP] Sent response");
+                }
+                catch (ObjectDisposedException) when (ct.IsCancellationRequested)
+                {
+                    break;
                 }
                 catch (Exception ex) when (!ct.IsCancellationRequested)
                 {
@@ -164,13 +220,21 @@ namespace rhino_zmq_poc
 
         private string HandleRequest(string message)
         {
+            if (_cts.IsCancellationRequested)
+                return JsonSerializer.Serialize(new { error = "Service shutting down" });
+
             try
             {
                 using var doc = JsonDocument.Parse(message);
                 var type = doc.RootElement.GetProperty("type").GetString();
 
                 if (_requestDispatcher.TryDispatch(type, _doc, doc.RootElement, out var response))
-                    return Utilities.RunOnUiThread(() => response);
+                {
+                    if (_cts.IsCancellationRequested)
+                        return JsonSerializer.Serialize(new { error = "Service shutting down" });
+
+                    return Utilities.RunOnUiThread(() => response, TimeSpan.FromSeconds(5));
+                }
 
                 return JsonSerializer.Serialize(new { error = $"Unknown request type: {type}" });
             }
@@ -187,6 +251,9 @@ namespace rhino_zmq_poc
             {
                 try
                 {
+                    if (_pubSocket == null)
+                        return;
+
                     _pubSocket.SendFrame(item.topic, true);
                     _pubSocket.SendFrame(item.json);
                     DebugLog($"[PUB] Published {item.topic}");
@@ -223,18 +290,78 @@ namespace rhino_zmq_poc
             OnDebugLog?.Invoke(msg);
         }
 
-        public void Dispose()
+        public void StopFast()
         {
+            if (Interlocked.Exchange(ref _stopped, 1) != 0)
+                return;
+
+            IsRunning = false;
             _cts.Cancel();
-            _commandTask?.Wait(TimeSpan.FromMilliseconds(500));
-            _repTask?.Wait(TimeSpan.FromMilliseconds(500));
-            _pubSocket?.Dispose();
-            _pullSocket?.Dispose();
-            _repSocket?.Dispose();
-            _cts.Dispose();
+
             if (_jobStatusHandler != null)
                 _jobQueue.OnStatusChanged -= _jobStatusHandler;
-            DebugLog("[ZMQ] Disposed");
+
+            ReleaseSocket(_pubSocket, PubEndpoint);
+            ReleaseSocket(_pullSocket, PullEndpoint);
+            ReleaseSocket(_repSocket, RepEndpoint);
+            _pubSocket = null;
+            _pullSocket = null;
+            _repSocket = null;
+
+            var commandTask = _commandTask;
+            var repTask = _repTask;
+            var cts = _cts;
+            _commandTask = null;
+            _repTask = null;
+            _cts = null;
+
+            _ = Task.Run(() => DrainBackgroundTasks(commandTask, repTask, cts));
+        }
+
+        private static void DrainBackgroundTasks(Task commandTask, Task repTask, CancellationTokenSource cts)
+        {
+            try
+            {
+                commandTask?.Wait(TimeSpan.FromSeconds(2));
+                repTask?.Wait(TimeSpan.FromSeconds(2));
+            }
+            catch
+            {
+                // Best effort while shutting down.
+            }
+            finally
+            {
+                try { cts?.Dispose(); } catch { }
+            }
+        }
+
+        public void Dispose()
+        {
+            StopFast();
+        }
+
+        private static void ReleaseSocket(NetMQSocket socket, string endpoint)
+        {
+            if (socket == null)
+                return;
+
+            try
+            {
+                socket.Unbind(endpoint);
+            }
+            catch
+            {
+                // Endpoint may already be unbound.
+            }
+
+            try
+            {
+                socket.Dispose();
+            }
+            catch
+            {
+                // Best effort during shutdown.
+            }
         }
     }
 }

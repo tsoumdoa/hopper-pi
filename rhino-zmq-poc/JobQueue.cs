@@ -58,7 +58,17 @@ namespace rhino_zmq_poc
         {
             while (!_cts.Token.IsCancellationRequested)
             {
-                _jobAvailable.Wait(_cts.Token);
+                try
+                {
+                    _jobAvailable.Wait(_cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+
+                if (_cts.Token.IsCancellationRequested)
+                    break;
 
                 var batch = new List<Job>();
                 lock (_lock)
@@ -68,16 +78,22 @@ namespace rhino_zmq_poc
                     _jobAvailable.Reset();
                 }
 
-                if (batch.Count > 0)
+                if (batch.Count == 0)
+                    continue;
+
+                if (_cts.Token.IsCancellationRequested)
                 {
-                    try
-                    {
-                        Utilities.RunOnUiThread(() => ExecuteBatch(batch));
-                    }
-                    catch (Exception ex)
-                    {
-                        FailBatch(batch, ex.Message);
-                    }
+                    FailBatch(batch, "Service shutting down");
+                    continue;
+                }
+
+                try
+                {
+                    Utilities.RunOnUiThread(() => ExecuteBatch(batch), TimeSpan.FromSeconds(5));
+                }
+                catch (Exception ex)
+                {
+                    FailBatch(batch, ex.Message);
                 }
             }
         }
@@ -134,13 +150,30 @@ namespace rhino_zmq_poc
             });
         }
 
-        public void Dispose()
+        public void StopFast()
         {
             _cts.Cancel();
             _jobAvailable.Set();
-            _processingTask?.Wait(TimeSpan.FromMilliseconds(500));
-            _cts.Dispose();
-            _jobAvailable.Dispose();
+        }
+
+        public void Dispose()
+        {
+            StopFast();
+
+            var processingTask = _processingTask;
+            _processingTask = null;
+
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    processingTask?.Wait(TimeSpan.FromSeconds(2));
+                }
+                catch
+                {
+                    // Best effort while shutting down.
+                }
+            });
         }
     }
 }
