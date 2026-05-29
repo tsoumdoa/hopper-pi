@@ -7,7 +7,7 @@ import {
 
 const STATUS_KEY = "hopper-backend";
 const WIDGET_KEY = "hopper-backend";
-const POLL_INTERVAL_MS = 5_000;
+const POLL_INTERVAL_MS = 3_000;
 
 function renderStatusLine(
 	theme: ExtensionContext["ui"]["theme"],
