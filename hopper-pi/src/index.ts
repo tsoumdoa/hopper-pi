@@ -17,6 +17,7 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { registerBackendStatusUI } from "./ui/backend-status.js";
 import { ALL_TOOLS } from "./tools/index.js";
 
 export default function hopperPiExtension(pi: ExtensionAPI) {
@@ -25,6 +26,8 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 	for (const tool of ALL_TOOLS) {
 		pi.registerTool(tool);
 	}
+
+	registerBackendStatusUI(pi);
 
 	// ── Lifecycle: notify on load ──────────────────────────────────
 
