@@ -331,6 +331,11 @@ function formatCanvasDetail(
 			lines.push(`--- Sub-graph: ${sg.id} (${sg.components.length} components, ${sg.internalWires.length} internal wires, ${sg.externalWires.length} external) ---`);
 			lines.push("");
 
+			for (const compId of sg.components) {
+				const c = shortComponents[compId];
+				if (c) lines.push(...formatComponentDetail(compId, c));
+			}
+
 			if (sg.internalWires.length > 0) {
 				lines.push("--- internal wires ---");
 				for (const w of sg.internalWires) {
