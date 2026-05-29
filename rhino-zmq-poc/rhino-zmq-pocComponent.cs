@@ -28,7 +28,9 @@ namespace rhino_zmq_poc
         private Action<GH_Document> _docMonitorSolutionEndHandler;
 
         private static readonly object _instanceLock = new object();
+        private static readonly object _zmqLifecycleLock = new object();
         private static rhino_zmq_pocComponent _activeInstance;
+        private static ZMqService _liveZmqService;
         private bool _isOwner;
 
         public rhino_zmq_pocComponent()
@@ -43,7 +45,7 @@ namespace rhino_zmq_poc
             base.AddedToDocument(doc);
             lock (_instanceLock)
             {
-                if (_activeInstance != null && _activeInstance != this)
+                if (BlocksOwnership(this))
                 {
                     AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
                         "Another GHZMQ instance is already active. This component is inactive.");
@@ -52,6 +54,7 @@ namespace rhino_zmq_poc
                 _activeInstance = this;
                 _isOwner = true;
             }
+            ExpireSolution(true);
         }
 
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
@@ -70,11 +73,25 @@ namespace rhino_zmq_poc
         {
             EnsureSingletonOwnership();
             if (!_isOwner) return;
-            if (_zmqService == null)
+            EnsureZmqRunning();
+            _docMonitor?.EnsureSubscription(OnPingDocument());
+        }
+
+        private static bool IsInstanceOnCanvas(rhino_zmq_pocComponent instance)
+        {
+            return instance != null && instance.OnPingDocument() != null;
+        }
+
+        private static bool BlocksOwnership(rhino_zmq_pocComponent candidate)
+        {
+            if (_activeInstance == null || _activeInstance == candidate)
+                return false;
+            if (!IsInstanceOnCanvas(_activeInstance))
             {
-                InitializeZmq();
+                _activeInstance = null;
+                return false;
             }
-            _docMonitor.EnsureSubscription(OnPingDocument());
+            return true;
         }
 
         private void EnsureSingletonOwnership()
@@ -83,14 +100,33 @@ namespace rhino_zmq_poc
 
             lock (_instanceLock)
             {
-                if (_activeInstance != null && _activeInstance != this)
+                if (BlocksOwnership(this))
                     return;
                 _activeInstance = this;
                 _isOwner = true;
             }
         }
 
-        private void InitializeZmq()
+        private void EnsureZmqRunning()
+        {
+            lock (_zmqLifecycleLock)
+            {
+                if (_zmqService?.IsRunning == true)
+                    return;
+
+                if (_liveZmqService != null && _liveZmqService != _zmqService)
+                {
+                    _liveZmqService.StopFast();
+                    _liveZmqService = null;
+                }
+
+                if (_zmqService != null || _jobQueue != null || _docMonitor != null)
+                    CleanupZmqResourcesCore();
+
+                InitializeZmqCore();
+            }
+        }
+        private void InitializeZmqCore()
         {
             lock (_logLock) { _debugLog = $"[{DateTime.Now:HH:mm:ss}] Initializing ZMQ...\n"; }
             _jobQueue = new JobQueue();
@@ -123,8 +159,16 @@ namespace rhino_zmq_poc
 
             _zmqService.Start();
             _jobQueue.Start();
-            RhinoZmqPlugin.Instance.Component = this;
-            AppendLog($"[{DateTime.Now:HH:mm:ss}] ZMQ started: PUB @ 5555, ROUTER @ 5556\n");
+            if (_zmqService.IsRunning)
+            {
+                _liveZmqService = _zmqService;
+                RhinoZmqPlugin.Instance.Component = this;
+                AppendLog($"[{DateTime.Now:HH:mm:ss}] ZMQ started: PUB @ 5555, PULL @ 5556, REP @ 5557\n");
+            }
+            else
+            {
+                AppendLog($"[{DateTime.Now:HH:mm:ss}] ZMQ failed to start; will retry on next solution\n");
+            }
         }
 
         private void ScheduleExpire()
@@ -177,27 +221,38 @@ namespace rhino_zmq_poc
 
         public override void RemovedFromDocument(GH_Document doc)
         {
-            if (_isOwner)
+            var wasOwner = _isOwner;
+            if (wasOwner)
+                CleanupZmqResources();
+
+            lock (_instanceLock)
             {
-                Cleanup();
-                lock (_instanceLock)
-                {
-                    if (_activeInstance == this)
-                        _activeInstance = null;
+                if (_activeInstance == this)
+                    _activeInstance = null;
+                if (wasOwner)
                     TryPromoteNewInstance(doc);
-                }
             }
+
+            _isOwner = false;
             base.RemovedFromDocument(doc);
         }
 
-        private void Cleanup()
+        private void CleanupZmqResources()
+        {
+            lock (_zmqLifecycleLock)
+            {
+                CleanupZmqResourcesCore();
+            }
+        }
+
+        private void CleanupZmqResourcesCore()
         {
             if (_zmqService != null)
             {
                 if (_zmqDebugLogHandler != null) _zmqService.OnDebugLog -= _zmqDebugLogHandler;
                 if (_zmqJobStatusHandler != null) _zmqService.OnJobStatus -= _zmqJobStatusHandler;
                 if (_zmqJobReceivedHandler != null) _zmqService.OnJobReceived -= _zmqJobReceivedHandler;
-                _zmqService.Dispose();
+                _zmqService.StopFast();
             }
             if (_docMonitor != null)
             {
@@ -205,7 +260,13 @@ namespace rhino_zmq_poc
                     _docMonitor.OnSolutionEnd -= _docMonitorSolutionEndHandler;
                 _docMonitor.Dispose();
             }
-            _jobQueue?.Dispose();
+            _jobQueue?.StopFast();
+
+            if (_liveZmqService == _zmqService)
+                _liveZmqService = null;
+
+            if (RhinoZmqPlugin.Instance.Component == this)
+                RhinoZmqPlugin.Instance.Component = null;
 
             _zmqService = null;
             _jobQueue = null;
@@ -216,10 +277,6 @@ namespace rhino_zmq_poc
             _zmqJobStatusHandler = null;
             _zmqJobReceivedHandler = null;
             _docMonitorSolutionEndHandler = null;
-            _isOwner = false;
-
-            if (RhinoZmqPlugin.Instance.Component == this)
-                RhinoZmqPlugin.Instance.Component = null;
         }
 
         private void TryPromoteNewInstance(GH_Document doc)
