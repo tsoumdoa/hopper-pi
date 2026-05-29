@@ -278,6 +278,10 @@ export type EditParamPropsParams = {
 	reverse?: boolean;
 };
 
+export type BeginAgentTransactionParams = {
+	name?: string;
+};
+
 export type CommandAction =
 	| "addComponent"
 	| "deleteComponent"
@@ -316,7 +320,10 @@ export type CommandAction =
 	| "addScriptOutput"
 	| "removeScriptOutput"
 	| "listScriptParams"
-	| "editParamProps";
+	| "editParamProps"
+	| "beginAgentTransaction"
+	| "commitAgentTransaction"
+	| "cancelAgentTransaction";
 
 export type CommandParams =
 	| AddComponentParams
@@ -356,7 +363,9 @@ export type CommandParams =
 	| RemoveScriptOutputParams
 	| EditScriptAccessParams
 	| ListScriptParamsParams
-	| EditParamPropsParams;
+	| EditParamPropsParams
+	| BeginAgentTransactionParams
+	| Record<string, never>;
 
 export type Command = {
 	action: CommandAction;

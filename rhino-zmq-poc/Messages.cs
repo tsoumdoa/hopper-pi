@@ -724,4 +724,10 @@ namespace rhino_zmq_poc
         [JsonPropertyName("errors")]
         public List<CanvasError> Errors { get; set; }
     }
+
+    public class BeginAgentTransactionParams
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; }
+    }
 }

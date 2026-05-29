@@ -60,6 +60,9 @@ namespace rhino_zmq_poc
                 "removeScriptOutput" => ExecuteRemoveScriptOutput(doc, command.Params),
                 "listScriptParams" => ExecuteListScriptParams(doc, command.Params),
                 "editParamProps" => ExecuteEditParamProps(doc, command.Params),
+                "beginAgentTransaction" => ExecuteBeginAgentTransaction(doc, command.Params),
+                "commitAgentTransaction" => ExecuteCommitAgentTransaction(doc, command.Params),
+                "cancelAgentTransaction" => ExecuteCancelAgentTransaction(doc, command.Params),
                 _ => $"Unknown action: {command.Action}"
             };
 
@@ -332,6 +335,18 @@ namespace rhino_zmq_poc
             if (param == null) return "editParamProps: invalid params";
             return ComponentLifecycleOps.EditParamProps(doc, param);
         }
+
+        private string ExecuteBeginAgentTransaction(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<BeginAgentTransactionParams>();
+            return AgentTransaction.Begin(doc, param?.Name);
+        }
+
+        private string ExecuteCommitAgentTransaction(GH_Document doc, JsonElement _)
+            => AgentTransaction.Commit(doc);
+
+        private string ExecuteCancelAgentTransaction(GH_Document doc, JsonElement _)
+            => AgentTransaction.Cancel(doc);
     }
 }
 

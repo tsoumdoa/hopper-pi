@@ -17,6 +17,11 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import {
+	beginAgentTransaction,
+	cancelAgentTransaction,
+	commitAgentTransaction,
+} from "./services/agent-transaction.js";
 import { registerBackendStatusUI } from "./ui/backend-status.js";
 import { ALL_TOOLS } from "./tools/index.js";
 
@@ -36,5 +41,35 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 			"\u{1F998} Hopper Pi: Grasshopper canvas tools loaded (14 tools)",
 			"info"
 		);
+	});
+
+	// ── Agent undo transaction (one GH undo/redo step per prompt) ───
+
+	pi.on("agent_start", async () => {
+		try {
+			await beginAgentTransaction();
+		} catch (err) {
+			console.error("[hopper-pi] Failed to begin agent transaction:", err);
+		}
+	});
+
+	pi.on("agent_end", async (event) => {
+		if ("willRetry" in event && event.willRetry) {
+			return;
+		}
+
+		try {
+			await commitAgentTransaction();
+		} catch (err) {
+			console.error("[hopper-pi] Failed to commit agent transaction:", err);
+		}
+	});
+
+	pi.on("session_shutdown", async () => {
+		try {
+			await cancelAgentTransaction();
+		} catch {
+			// Backend may already be disconnected during shutdown.
+		}
 	});
 }
