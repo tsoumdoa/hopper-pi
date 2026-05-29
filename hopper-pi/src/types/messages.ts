@@ -55,6 +55,7 @@ export type ScriptParamInfo = {
 	dataMapping: string;
 	simplify: boolean;
 	reverse: boolean;
+	typeHint: string;
 };
 
 export type ListScriptParamsResponse = {

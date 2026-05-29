@@ -84,7 +84,7 @@ namespace rhino_zmq_poc
             return $"moveComponent: moved ({param.TargetId}) to ({param.Position.X}, {param.Position.Y})";
         }
 
-        public static void AddScriptInputParam(GH_Component comp, string name, IGH_Param param = null, string access = null, string dataMapping = null, bool? simplify = null, bool? reverse = null)
+        public static void AddScriptInputParam(GH_Component comp, string name, IGH_Param param = null, string access = null, string dataMapping = null, bool? simplify = null, bool? reverse = null, string typeHint = null)
         {
             if (comp is IGH_VariableParameterComponent vpc)
             {
@@ -106,6 +106,7 @@ namespace rhino_zmq_poc
                     }
 
                     ApplyDataMapping(p, dataMapping, simplify, reverse);
+                    GhScriptReflector.ApplyTypeHint(p, typeHint);
 
                     comp.Params.RegisterInputParam(p);
                     vpc.VariableParameterMaintenance();
@@ -131,7 +132,7 @@ namespace rhino_zmq_poc
             comp.ExpireSolution(true);
         }
 
-        public static void AddScriptOutputParam(GH_Component comp, string name, string dataMapping = null, bool? simplify = null, bool? reverse = null)
+        public static void AddScriptOutputParam(GH_Component comp, string name, string dataMapping = null, bool? simplify = null, bool? reverse = null, string typeHint = null)
         {
             if (comp is IGH_VariableParameterComponent vpc)
             {
@@ -144,6 +145,7 @@ namespace rhino_zmq_poc
                     p.Access = GH_ParamAccess.item;
 
                     ApplyDataMapping(p, dataMapping, simplify, reverse);
+                    GhScriptReflector.ApplyTypeHint(p, typeHint);
 
                     comp.Params.RegisterOutputParam(p);
                     vpc.VariableParameterMaintenance();
@@ -266,9 +268,9 @@ namespace rhino_zmq_poc
                 if (comp == null) return $"listScriptParams error: '{param.TargetId}' is not a GH_Component";
 
                 var inputInfo = comp.Params.Input.Select(p =>
-                    $"{p.Name}({Utilities.AccessStr(p.Access)},{Utilities.MappingStr(p.DataMapping)},{p.Simplify.ToString().ToLower()},{p.Reverse.ToString().ToLower()})").ToArray();
+                    $"{p.Name}({Utilities.AccessStr(p.Access)},{Utilities.MappingStr(p.DataMapping)},{p.Simplify.ToString().ToLower()},{p.Reverse.ToString().ToLower()},{GhScriptReflector.GetTypeHintName(p)})").ToArray();
                 var outputInfo = comp.Params.Output.Select(p =>
-                    $"{p.Name}({Utilities.AccessStr(p.Access)},{Utilities.MappingStr(p.DataMapping)},{p.Simplify.ToString().ToLower()},{p.Reverse.ToString().ToLower()})").ToArray();
+                    $"{p.Name}({Utilities.AccessStr(p.Access)},{Utilities.MappingStr(p.DataMapping)},{p.Simplify.ToString().ToLower()},{p.Reverse.ToString().ToLower()},{GhScriptReflector.GetTypeHintName(p)})").ToArray();
 
                 return $"inputs: [{string.Join(", ", inputInfo)}] outputs: [{string.Join(", ", outputInfo)}]";
             }

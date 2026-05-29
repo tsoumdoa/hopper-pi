@@ -366,6 +366,9 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("reverse")]
         public bool? Reverse { get; set; }
+
+        [JsonPropertyName("typeHint")]
+        public string TypeHint { get; set; }
     }
 
     public class CreateScriptNodeParams
@@ -423,6 +426,9 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("reverse")]
         public bool? Reverse { get; set; }
+
+        [JsonPropertyName("typeHint")]
+        public string TypeHint { get; set; }
     }
 
     public class RemoveScriptInputParams
@@ -450,6 +456,9 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("reverse")]
         public bool? Reverse { get; set; }
+
+        [JsonPropertyName("typeHint")]
+        public string TypeHint { get; set; }
     }
 
     public class RemoveScriptOutputParams
@@ -491,6 +500,9 @@ namespace rhino_zmq_poc
         public bool Simplify { get; set; }
         [JsonPropertyName("reverse")]
         public bool Reverse { get; set; }
+
+        [JsonPropertyName("typeHint")]
+        public string TypeHint { get; set; }
     }
 
     public class GetScriptCodeResponse

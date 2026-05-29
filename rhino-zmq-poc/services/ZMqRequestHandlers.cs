@@ -158,7 +158,8 @@ namespace rhino_zmq_poc
                     Access = Utilities.AccessStr(p.Access),
                     DataMapping = Utilities.MappingStr(p.DataMapping),
                     Simplify = p.Simplify,
-                    Reverse = p.Reverse
+                    Reverse = p.Reverse,
+                    TypeHint = GhScriptReflector.GetTypeHintName(p)
                 }).ToList();
 
                 var outputs = comp.Params.Output.Select(p => new ScriptParamInfo
@@ -167,7 +168,8 @@ namespace rhino_zmq_poc
                     Access = Utilities.AccessStr(p.Access),
                     DataMapping = Utilities.MappingStr(p.DataMapping),
                     Simplify = p.Simplify,
-                    Reverse = p.Reverse
+                    Reverse = p.Reverse,
+                    TypeHint = GhScriptReflector.GetTypeHintName(p)
                 }).ToList();
 
                 var response = new ListScriptParamsResponse

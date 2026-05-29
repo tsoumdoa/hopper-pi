@@ -199,6 +199,7 @@ export type ScriptIOParam = {
 	dataMapping?: string;
 	simplify?: boolean;
 	reverse?: boolean;
+	typeHint?: "object" | "double" | "string";
 };
 
 export type CreateScriptNodeParams = {
@@ -226,6 +227,7 @@ export type AddScriptInputParams = {
 	dataMapping?: string;
 	simplify?: boolean;
 	reverse?: boolean;
+	typeHint?: "object" | "double" | "string";
 };
 
 export type RemoveScriptInputParams = {
@@ -236,6 +238,10 @@ export type RemoveScriptInputParams = {
 export type AddScriptOutputParams = {
 	targetId: string;
 	name: string;
+	dataMapping?: string;
+	simplify?: boolean;
+	reverse?: boolean;
+	typeHint?: "object" | "double" | "string";
 };
 
 export type RemoveScriptOutputParams = {

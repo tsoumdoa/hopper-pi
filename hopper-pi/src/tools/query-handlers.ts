@@ -93,14 +93,14 @@ export function formatScriptParamsResponse(response: ListScriptParamsResponse) {
 	if (response.inputs.length > 0) {
 		lines.push("INPUTS:");
 		for (const p of response.inputs) {
-			lines.push(`  ${p.name} [${p.access}, ${p.dataMapping}, simplify=${p.simplify}, reverse=${p.reverse}]`);
+			lines.push(`  ${p.name} [typeHint=${p.typeHint}, ${p.access}, ${p.dataMapping}, simplify=${p.simplify}, reverse=${p.reverse}]`);
 		}
 	}
 
 	if (response.outputs.length > 0) {
 		lines.push("OUTPUTS:");
 		for (const p of response.outputs) {
-			lines.push(`  ${p.name} [${p.access}, ${p.dataMapping}, simplify=${p.simplify}, reverse=${p.reverse}]`);
+			lines.push(`  ${p.name} [typeHint=${p.typeHint}, ${p.access}, ${p.dataMapping}, simplify=${p.simplify}, reverse=${p.reverse}]`);
 		}
 	}
 

@@ -52,5 +52,100 @@ namespace rhino_zmq_poc
                 return _scriptTextProp?.GetValue(scriptComponent) as string ?? "";
             return "";
         }
+
+        /// <summary>
+        /// Applies a script param type hint via p.TypeHints.Select(typeof(T)) when available.
+        /// Skips when typeHint is null/empty/object (Grasshopper default).
+        /// </summary>
+        public static void ApplyTypeHint(IGH_Param param, string typeHint)
+        {
+            if (param == null) return;
+
+            var normalized = NormalizeTypeHint(typeHint);
+            if (string.IsNullOrEmpty(normalized) || normalized == "object")
+                return;
+
+            var clrType = ResolveClrType(normalized);
+            if (clrType == null) return;
+
+            TryTypeHintsSelect(param, clrType);
+        }
+
+        public static string GetTypeHintName(IGH_Param param)
+        {
+            if (param == null) return "object";
+
+            var typeHints = param.GetType().GetProperty("TypeHints", BindingFlags.Public | BindingFlags.Instance)
+                ?.GetValue(param);
+            if (typeHints != null)
+            {
+                foreach (var propName in new[] { "SelectedType", "CurrentType", "Type" })
+                {
+                    var prop = typeHints.GetType().GetProperty(propName, BindingFlags.Public | BindingFlags.Instance);
+                    var value = prop?.GetValue(typeHints);
+                    if (value is Type t)
+                        return ClrTypeToHintName(t);
+                }
+            }
+
+            var legacyHint = param.GetType().GetProperty("TypeHint", BindingFlags.Public | BindingFlags.Instance)
+                ?.GetValue(param);
+            if (legacyHint != null)
+                return legacyHint.GetType().Name.Replace("GH_", "").Replace("Hint", "").Replace("_CS", "").ToLowerInvariant();
+
+            return "object";
+        }
+
+        private static string NormalizeTypeHint(string typeHint)
+        {
+            if (string.IsNullOrWhiteSpace(typeHint)) return "object";
+
+            return typeHint.Trim().ToLowerInvariant() switch
+            {
+                "number" => "double",
+                "text" => "string",
+                "float" => "double",
+                "str" => "string",
+                _ => typeHint.Trim().ToLowerInvariant()
+            };
+        }
+
+        private static Type ResolveClrType(string hint)
+        {
+            return hint switch
+            {
+                "object" => typeof(object),
+                "double" => typeof(double),
+                "string" => typeof(string),
+                "int" => typeof(int),
+                "integer" => typeof(int),
+                "bool" => typeof(bool),
+                "boolean" => typeof(bool),
+                _ => Type.GetType(hint, throwOnError: false, ignoreCase: true)
+            };
+        }
+
+        private static string ClrTypeToHintName(Type type)
+        {
+            if (type == null || type == typeof(object)) return "object";
+            if (type == typeof(double)) return "double";
+            if (type == typeof(string)) return "string";
+            if (type == typeof(int)) return "int";
+            if (type == typeof(bool)) return "bool";
+            return type.Name.ToLowerInvariant();
+        }
+
+        private static bool TryTypeHintsSelect(IGH_Param param, Type clrType)
+        {
+            var typeHints = param.GetType().GetProperty("TypeHints", BindingFlags.Public | BindingFlags.Instance)
+                ?.GetValue(param);
+            if (typeHints == null) return false;
+
+            var select = typeHints.GetType().GetMethod("Select", BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(Type) }, null);
+            if (select == null) return false;
+
+            select.Invoke(typeHints, new object[] { clrType });
+            return true;
+        }
     }
 }
