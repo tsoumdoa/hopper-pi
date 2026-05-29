@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Grasshopper;
 using Grasshopper.Kernel;
@@ -84,43 +85,32 @@ namespace rhino_zmq_poc
             return $"moveComponent: moved ({param.TargetId}) to ({param.Position.X}, {param.Position.Y})";
         }
 
-        public static void AddScriptInputParam(GH_Component comp, string name, IGH_Param param = null, string access = null, string dataMapping = null, bool? simplify = null, bool? reverse = null, string typeHint = null)
+        public static void AddScriptInputParam(GH_Component comp, string name, IGH_Param param = null, string access = null, string dataMapping = null, bool? simplify = null, bool? reverse = null, string typeHint = null, int? insertIndex = null)
         {
             if (comp is IGH_VariableParameterComponent vpc)
             {
-                int index = comp.Params.Input.Count;
+                int index = insertIndex ?? comp.Params.Input.Count;
                 if (vpc.CanInsertParameter(GH_ParameterSide.Input, index))
                 {
                     IGH_Param p = param ?? vpc.CreateParameter(GH_ParameterSide.Input, index);
                     p.Name = name;
                     p.NickName = name;
-                    p.Access = GH_ParamAccess.item;
+                    ApplyScriptParamProps(p, access, dataMapping, simplify, reverse, typeHint);
 
-                    if (!string.IsNullOrEmpty(access))
-                    {
-                        switch (access.ToLowerInvariant())
-                        {
-                            case "list": p.Access = GH_ParamAccess.list; break;
-                            case "tree": p.Access = GH_ParamAccess.tree; break;
-                        }
-                    }
-
-                    ApplyDataMapping(p, dataMapping, simplify, reverse);
-                    GhScriptReflector.ApplyTypeHint(p, typeHint);
-
-                    comp.Params.RegisterInputParam(p);
+                    comp.Params.RegisterInputParam(p, index);
                     vpc.VariableParameterMaintenance();
                     comp.Params.OnParametersChanged();
                 }
             }
         }
 
-        public static void RemoveScriptInputParam(GH_Component comp, string name)
+        public static void RemoveScriptInputParam(GH_Component comp, string name, bool recordUndo = true)
         {
             var target = comp.Params.Input.FirstOrDefault(x =>
                 string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
             if (target == null) return;
-            comp.RecordUndoEvent("Remove input");
+            if (recordUndo)
+                comp.RecordUndoEvent("Remove input");
             if (comp is IGH_VariableParameterComponent vpc)
             {
                 int index = comp.Params.Input.IndexOf(target);
@@ -132,34 +122,32 @@ namespace rhino_zmq_poc
             comp.ExpireSolution(true);
         }
 
-        public static void AddScriptOutputParam(GH_Component comp, string name, string dataMapping = null, bool? simplify = null, bool? reverse = null, string typeHint = null)
+        public static void AddScriptOutputParam(GH_Component comp, string name, string dataMapping = null, bool? simplify = null, bool? reverse = null, string typeHint = null, int? insertIndex = null)
         {
             if (comp is IGH_VariableParameterComponent vpc)
             {
-                int index = comp.Params.Output.Count;
+                int index = insertIndex ?? comp.Params.Output.Count;
                 if (vpc.CanInsertParameter(GH_ParameterSide.Output, index))
                 {
                     IGH_Param p = vpc.CreateParameter(GH_ParameterSide.Output, index);
                     p.Name = name;
                     p.NickName = name;
-                    p.Access = GH_ParamAccess.item;
+                    ApplyScriptParamProps(p, null, dataMapping, simplify, reverse, typeHint);
 
-                    ApplyDataMapping(p, dataMapping, simplify, reverse);
-                    GhScriptReflector.ApplyTypeHint(p, typeHint);
-
-                    comp.Params.RegisterOutputParam(p);
+                    comp.Params.RegisterOutputParam(p, index);
                     vpc.VariableParameterMaintenance();
                     comp.Params.OnParametersChanged();
                 }
             }
         }
 
-        public static void RemoveScriptOutputParam(GH_Component comp, string name)
+        public static void RemoveScriptOutputParam(GH_Component comp, string name, bool recordUndo = true)
         {
             var target = comp.Params.Output.FirstOrDefault(x =>
                 string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
             if (target == null) return;
-            comp.RecordUndoEvent("Remove output");
+            if (recordUndo)
+                comp.RecordUndoEvent("Remove output");
             if (comp is IGH_VariableParameterComponent vpc)
             {
                 int index = comp.Params.Output.IndexOf(target);
@@ -196,6 +184,212 @@ namespace rhino_zmq_poc
             }
 
             comp.Params.OnParametersChanged();
+        }
+
+        public static string SyncScriptParams(GH_Document doc, SyncScriptParamsParams param)
+        {
+            try
+            {
+                if (doc == null) return "syncScriptParams error: document is null";
+                if (!Guid.TryParse(param.TargetId, out var targetGuid))
+                    return $"syncScriptParams error: invalid targetId '{param.TargetId}'";
+                var obj = doc.FindObject(targetGuid, false);
+                if (obj == null) return $"syncScriptParams error: object not found '{param.TargetId}'";
+                var comp = obj as GH_Component;
+                if (comp == null) return $"syncScriptParams error: '{param.TargetId}' is not a GH_Component";
+                if (param.Inputs == null && param.Outputs == null)
+                    return "syncScriptParams error: at least one of inputs or outputs is required";
+
+                comp.RecordUndoEvent("Sync script params");
+                SyncScriptParams(comp, param.Inputs, param.Outputs);
+                comp.ExpireSolution(true);
+                return $"syncScriptParams: reconciled I/O on ({param.TargetId})";
+            }
+            catch (Exception ex)
+            {
+                return $"syncScriptParams CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+            }
+        }
+
+        public static void SyncScriptParams(GH_Component comp, List<ScriptIOParam> inputs, List<ScriptIOParam> outputs)
+        {
+            if (comp == null) return;
+            if (!(comp is IGH_VariableParameterComponent vpc)) return;
+
+            // null = leave this side unchanged; empty list = remove all ports on this side
+            if (inputs != null)
+                SyncScriptParamSide(comp, vpc, GH_ParameterSide.Input, inputs);
+            if (outputs != null)
+                SyncScriptParamSide(comp, vpc, GH_ParameterSide.Output, outputs);
+
+            vpc.VariableParameterMaintenance();
+            comp.Params.OnParametersChanged();
+        }
+
+        private static void SyncScriptParamSide(GH_Component comp, IGH_VariableParameterComponent vpc, GH_ParameterSide side, List<ScriptIOParam> desired)
+        {
+            if (desired == null) return;
+
+            var explicitRenamed = new HashSet<Guid>();
+            ApplyExplicitPreviousNameRenames(comp, side, desired, explicitRenamed);
+            ApplyIndexAlignedRenames(comp, side, desired, explicitRenamed);
+
+            var desiredNames = new HashSet<string>(
+                desired.Where(d => d != null && !string.IsNullOrWhiteSpace(d.Name)).Select(d => d.Name),
+                StringComparer.OrdinalIgnoreCase);
+
+            var collection = side == GH_ParameterSide.Input ? comp.Params.Input : comp.Params.Output;
+            var toRemove = collection
+                .Where(p => !desiredNames.Contains(p.Name))
+                .Select(p => p.Name)
+                .ToList();
+
+            foreach (var name in toRemove)
+            {
+                if (side == GH_ParameterSide.Input)
+                    RemoveScriptInputParam(comp, name, recordUndo: false);
+                else
+                    RemoveScriptOutputParam(comp, name, recordUndo: false);
+            }
+
+            for (int i = 0; i < desired.Count; i++)
+            {
+                var spec = desired[i];
+                if (string.IsNullOrWhiteSpace(spec?.Name)) continue;
+
+                var currentCollection = side == GH_ParameterSide.Input ? comp.Params.Input : comp.Params.Output;
+
+                IGH_Param atSlot = i < currentCollection.Count ? currentCollection[i] : null;
+                if (atSlot != null && ParamNameMatches(atSlot, spec.Name))
+                {
+                    ApplyScriptParamPropsFromSpec(atSlot, spec);
+                    continue;
+                }
+
+                var existing = currentCollection.FirstOrDefault(p => ParamNameMatches(p, spec.Name));
+                if (existing != null)
+                {
+                    MoveScriptParamToIndex(comp, side, existing, i);
+                    ApplyScriptParamPropsFromSpec(existing, spec);
+                }
+                else if (side == GH_ParameterSide.Input)
+                {
+                    AddScriptInputParam(comp, spec.Name, access: spec.Access, dataMapping: spec.DataMapping,
+                        simplify: spec.Simplify, reverse: spec.Reverse, typeHint: spec.TypeHint, insertIndex: i);
+                }
+                else
+                {
+                    AddScriptOutputParam(comp, spec.Name, dataMapping: spec.DataMapping,
+                        simplify: spec.Simplify, reverse: spec.Reverse, typeHint: spec.TypeHint, insertIndex: i);
+                }
+            }
+        }
+
+        private static void RenameScriptParam(IGH_Param param, string newName)
+        {
+            if (param == null || string.IsNullOrWhiteSpace(newName)) return;
+            param.Name = newName;
+            param.NickName = newName;
+        }
+
+        private static void ApplyExplicitPreviousNameRenames(
+            GH_Component comp,
+            GH_ParameterSide side,
+            List<ScriptIOParam> desired,
+            HashSet<Guid> renamed)
+        {
+            foreach (var spec in desired)
+            {
+                if (spec == null || string.IsNullOrWhiteSpace(spec.PreviousName) || string.IsNullOrWhiteSpace(spec.Name))
+                    continue;
+                if (string.Equals(spec.PreviousName, spec.Name, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var collection = side == GH_ParameterSide.Input ? comp.Params.Input : comp.Params.Output;
+                var param = collection.FirstOrDefault(p => ParamNameMatches(p, spec.PreviousName));
+                if (param == null) continue;
+
+                RenameScriptParam(param, spec.Name);
+                ApplyScriptParamPropsFromSpec(param, spec);
+                renamed.Add(param.InstanceGuid);
+            }
+        }
+
+        private static void ApplyIndexAlignedRenames(
+            GH_Component comp,
+            GH_ParameterSide side,
+            List<ScriptIOParam> desired,
+            HashSet<Guid> skip)
+        {
+            var collection = side == GH_ParameterSide.Input ? comp.Params.Input : comp.Params.Output;
+            var pending = new List<(IGH_Param Param, string NewName)>();
+
+            int slotCount = Math.Min(collection.Count, desired.Count);
+            for (int i = 0; i < slotCount; i++)
+            {
+                var spec = desired[i];
+                if (spec == null || string.IsNullOrWhiteSpace(spec.Name)) continue;
+                if (!string.IsNullOrWhiteSpace(spec.PreviousName)) continue;
+
+                var atSlot = collection[i];
+                if (skip.Contains(atSlot.InstanceGuid)) continue;
+                if (ParamNameMatches(atSlot, spec.Name)) continue;
+
+                pending.Add((atSlot, spec.Name));
+            }
+
+            var deferred = new List<(IGH_Param Param, string NewName)>();
+            foreach (var (param, newName) in pending)
+            {
+                collection = side == GH_ParameterSide.Input ? comp.Params.Input : comp.Params.Output;
+                bool nameTaken = collection.Any(p => p != param && ParamNameMatches(p, newName));
+                if (!nameTaken)
+                    RenameScriptParam(param, newName);
+                else
+                    deferred.Add((param, newName));
+            }
+
+            if (deferred.Count == 0) return;
+
+            int tmpIndex = 0;
+            var deferredGuids = new List<Guid>();
+            foreach (var (param, _) in deferred)
+            {
+                deferredGuids.Add(param.InstanceGuid);
+                RenameScriptParam(param, $"__hopper_tmp_{tmpIndex++}");
+            }
+
+            collection = side == GH_ParameterSide.Input ? comp.Params.Input : comp.Params.Output;
+            for (int i = 0; i < deferred.Count; i++)
+            {
+                var guid = deferredGuids[i];
+                var newName = deferred[i].NewName;
+                var param = collection.FirstOrDefault(p => p.InstanceGuid == guid);
+                if (param != null)
+                    RenameScriptParam(param, newName);
+            }
+        }
+
+        private static bool ParamNameMatches(IGH_Param param, string name) =>
+            string.Equals(param.Name, name, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(param.NickName, name, StringComparison.OrdinalIgnoreCase);
+
+        private static void MoveScriptParamToIndex(GH_Component comp, GH_ParameterSide side, IGH_Param param, int targetIndex)
+        {
+            var collection = side == GH_ParameterSide.Input ? comp.Params.Input : comp.Params.Output;
+            int currentIndex = collection.IndexOf(param);
+            if (currentIndex < 0 || currentIndex == targetIndex) return;
+
+            if (side == GH_ParameterSide.Input)
+            {
+                comp.Params.UnregisterInputParameter(param, false);
+                comp.Params.RegisterInputParam(param, targetIndex);
+            }
+            else
+            {
+                comp.Params.UnregisterOutputParameter(param, false);
+                comp.Params.RegisterOutputParam(param, targetIndex);
+            }
         }
 
         public static string EditParamProps(GH_Document doc, EditParamPropsParams param)
@@ -243,6 +437,9 @@ namespace rhino_zmq_poc
                 if (param.Reverse.HasValue)
                     target.Reverse = param.Reverse.Value;
 
+                if (param.TypeHint != null)
+                    GhScriptReflector.ApplyTypeHint(target, param.TypeHint);
+
                 comp.Params.OnParametersChanged();
                 comp.Attributes?.ExpireLayout();
                 comp.OnDisplayExpired(true);
@@ -278,6 +475,28 @@ namespace rhino_zmq_poc
             {
                 return $"listScriptParams CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
             }
+        }
+
+        private static void ApplyScriptParamPropsFromSpec(IGH_Param p, ScriptIOParam spec)
+        {
+            if (p == null || spec == null) return;
+            ApplyScriptParamProps(p, spec.Access, spec.DataMapping, spec.Simplify, spec.Reverse, spec.TypeHint);
+        }
+
+        private static void ApplyScriptParamProps(IGH_Param p, string access, string dataMapping, bool? simplify, bool? reverse, string typeHint)
+        {
+            p.Access = GH_ParamAccess.item;
+            if (!string.IsNullOrEmpty(access))
+            {
+                switch (access.ToLowerInvariant())
+                {
+                    case "list": p.Access = GH_ParamAccess.list; break;
+                    case "tree": p.Access = GH_ParamAccess.tree; break;
+                }
+            }
+
+            ApplyDataMapping(p, dataMapping, simplify, reverse);
+            GhScriptReflector.ApplyTypeHint(p, typeHint);
         }
 
         private static void ApplyDataMapping(IGH_Param p, string dataMapping, bool? simplify, bool? reverse)

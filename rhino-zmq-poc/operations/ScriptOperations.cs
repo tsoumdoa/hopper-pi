@@ -98,6 +98,13 @@ namespace rhino_zmq_poc
                 var reflector = GhScriptReflector.Get();
                 reflector.SetSource(obj, param.Code);
 
+                var comp = obj as GH_Component;
+                if (comp != null && (param.Inputs != null || param.Outputs != null))
+                {
+                    comp.RecordUndoEvent("Sync script params");
+                    ComponentLifecycleOps.SyncScriptParams(comp, param.Inputs, param.Outputs);
+                }
+
                 obj.ExpireSolution(true);
 
                 return $"setScriptCode: updated code on ({param.TargetId})";
@@ -107,6 +114,9 @@ namespace rhino_zmq_poc
                 return $"setScriptCode CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
             }
         }
+
+        public static string SyncParams(GH_Document doc, SyncScriptParamsParams param) =>
+            ComponentLifecycleOps.SyncScriptParams(doc, param);
 
         public static string GetScriptCode(GH_Document doc, GetScriptCodeParams param)
         {

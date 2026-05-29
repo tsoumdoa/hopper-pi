@@ -31,4 +31,7 @@ a = result
 **you must follow the following steps**
 1. Use `gh_edit_script` with action `"create"` to create a Python script node. Specify `language: "python"`, the code, and inputs/outputs. Each input may include `typeHint` (`object` default, `double` for numbers, `string` for text).
 2. If you need to modify inputs/outputs after creation, use `gh_edit_param` to add/remove/edit parameters.
-3. To update the code, use `gh_edit_script` with action `"setCode"`.
+3. To update code and ports, use `gh_edit_script` `"setCode"` with full `inputs`/`outputs` when the signature changes (omit lists to leave ports unchanged).
+4. For port-only sync, use `gh_edit_param` `"syncParams"`.
+5. **Renaming ports (keep wires):** same-order renames in a full `inputs`/`outputs` list are applied in place. If order changes or swapping names, use `previousName`, e.g. `{ "name": "radius", "previousName": "r", "typeHint": "double" }`. Omit `previousName` when only updating `typeHint` or access.
+6. **When renaming a port, always update the code too** — in the same `setCode` call, rename every input/output variable in the script body to match the new port names (e.g. change `r` to `radius` everywhere it is used). Renaming only the canvas ports without updating the script will break the solution.

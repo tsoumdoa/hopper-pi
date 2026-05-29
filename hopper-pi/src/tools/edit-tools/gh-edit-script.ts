@@ -9,8 +9,9 @@ import {
 	looksLikeGrasshopperCsharpScript,
 	validateCsharpScript,
 } from "../../services/csharp-script-validator.js";
-import { AccessType, DataMappingType, TypeHintType } from "./shared-types.js";
+import { ScriptIOFields } from "./shared-types.js";
 import type { CommandAction } from "../../types/commands.js";
+import type { ScriptIOParam } from "../../types/commands.js";
 
 type GhEditScriptItem =
 	| {
@@ -20,10 +21,16 @@ type GhEditScriptItem =
 		language: "python" | "csharp";
 		code: string;
 		nickName?: string;
-		inputs?: Array<{ name: string }>;
-		outputs?: Array<{ name: string }>;
+		inputs?: ScriptIOParam[];
+		outputs?: ScriptIOParam[];
 	}
-	| { action: "setCode"; targetId: string; code: string }
+	| {
+		action: "setCode";
+		targetId: string;
+		code: string;
+		inputs?: ScriptIOParam[];
+		outputs?: ScriptIOParam[];
+	}
 	| { action: "getCode"; targetId: string };
 
 function validateScriptItem(item: GhEditScriptItem): string | null {
@@ -36,8 +43,14 @@ function validateScriptItem(item: GhEditScriptItem): string | null {
 	if (!isCsharp) return null;
 
 	const result = validateCsharpScript(item.code, {
-		inputNames: item.action === "create" ? item.inputs?.map((i) => i.name) : undefined,
-		outputNames: item.action === "create" ? item.outputs?.map((o) => o.name) : undefined,
+		inputNames:
+			item.action === "create" || item.action === "setCode"
+				? item.inputs?.map((i) => i.name)
+				: undefined,
+		outputNames:
+			item.action === "create" || item.action === "setCode"
+				? item.outputs?.map((o) => o.name)
+				: undefined,
 	});
 
 	if (result.valid) return null;
@@ -48,7 +61,7 @@ export const ghEditScriptTool = defineTool({
 	name: "gh_edit_script",
 	label: "Edit Script",
 	description:
-		"create C#/Python script nodes with source code and I/O, or set code on existing scripts. Use gh_edit_param for port management.",
+		"create C#/Python script nodes, set code, or reconcile I/O. setCode/syncParams: pass full inputs/outputs; same-order renames keep wires; use previousName when reordering or swapping port names. Omit inputs/outputs to leave ports unchanged.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([
@@ -65,30 +78,32 @@ export const ghEditScriptTool = defineTool({
 						Type.String({ description: "Script nickname" })
 					),
 					inputs: Type.Optional(
-						Type.Array(Type.Object({
-							name: Type.String({ description: "Input parameter name" }),
-							typeHint: Type.Optional(TypeHintType),
-							access: Type.Optional(AccessType),
-							dataMapping: Type.Optional(DataMappingType),
-							simplify: Type.Optional(
-								Type.Boolean({ description: "Simplify data paths" })
-							),
-							reverse: Type.Optional(
-								Type.Boolean({ description: "Reverse item order" })
-							),
-						}), { description: "Input parameters" })
+						Type.Array(ScriptIOFields, {
+							description: "Desired input ports (full list for create)",
+						})
 					),
 					outputs: Type.Optional(
-						Type.Array(Type.Object({
-							name: Type.String({ description: "Output parameter name" }),
-							typeHint: Type.Optional(TypeHintType),
-						}), { description: "Output parameters" })
+						Type.Array(ScriptIOFields, {
+							description: "Desired output ports (full list for create)",
+						})
 					),
 				}),
 				Type.Object({
 					action: Type.Literal("setCode"),
 					targetId: Type.String({ description: "Script component GUID" }),
 					code: Type.String({ description: "Script source code" }),
+					inputs: Type.Optional(
+						Type.Array(ScriptIOFields, {
+							description:
+								"Full desired input list — reconciles ports. Omit to leave unchanged; [] removes all inputs.",
+						})
+					),
+					outputs: Type.Optional(
+						Type.Array(ScriptIOFields, {
+							description:
+								"Full desired output list — reconciles ports. Omit to leave unchanged; [] removes all outputs.",
+						})
+					),
 				}),
 				Type.Object({
 					action: Type.Literal("getCode"),
@@ -136,7 +151,15 @@ const runGhEditScript = createHybridExecute<GhEditScriptItem>(
 					},
 				};
 			case "setCode":
-				return { action: "setScriptCode" as CommandAction, params: { targetId: resolveInstanceGuid(item.targetId), code: item.code } };
+				return {
+					action: "setScriptCode" as CommandAction,
+					params: {
+						targetId: resolveInstanceGuid(item.targetId),
+						code: item.code,
+						inputs: item.inputs,
+						outputs: item.outputs,
+					},
+				};
 			default:
 				return null;
 		}
