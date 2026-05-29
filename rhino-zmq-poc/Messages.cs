@@ -369,6 +369,9 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("typeHint")]
         public string TypeHint { get; set; }
+
+        [JsonPropertyName("previousName")]
+        public string PreviousName { get; set; }
     }
 
     public class CreateScriptNodeParams
@@ -399,6 +402,24 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("code")]
         public string Code { get; set; }
+
+        [JsonPropertyName("inputs")]
+        public List<ScriptIOParam> Inputs { get; set; }
+
+        [JsonPropertyName("outputs")]
+        public List<ScriptIOParam> Outputs { get; set; }
+    }
+
+    public class SyncScriptParamsParams
+    {
+        [JsonPropertyName("targetId")]
+        public string TargetId { get; set; }
+
+        [JsonPropertyName("inputs")]
+        public List<ScriptIOParam> Inputs { get; set; }
+
+        [JsonPropertyName("outputs")]
+        public List<ScriptIOParam> Outputs { get; set; }
     }
 
     public class GetScriptCodeParams
@@ -534,6 +555,9 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("reverse")]
         public bool? Reverse { get; set; }
+
+        [JsonPropertyName("typeHint")]
+        public string TypeHint { get; set; }
     }
 
     public class PortRef

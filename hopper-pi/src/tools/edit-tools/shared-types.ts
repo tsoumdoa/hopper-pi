@@ -19,6 +19,21 @@ export const TypeHintType = Type.Union([
 	Type.Literal("string"),
 ], { description: "Script param type hint (default: object). Use double for numbers, string for text." });
 
+export const ScriptIOFields = Type.Object({
+	name: Type.String({ description: "Parameter name" }),
+	previousName: Type.Optional(
+		Type.String({
+			description:
+				"Old port name when renaming (preserves wires). Use when order changes or swapping names.",
+		})
+	),
+	typeHint: Type.Optional(TypeHintType),
+	access: Type.Optional(AccessType),
+	dataMapping: Type.Optional(DataMappingType),
+	simplify: Type.Optional(Type.Boolean({ description: "Simplify data paths" })),
+	reverse: Type.Optional(Type.Boolean({ description: "Reverse item order" })),
+});
+
 export const SliderCreateFields = Type.Object({
 	min: Type.Number(),
 	max: Type.Number(),

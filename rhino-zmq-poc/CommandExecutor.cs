@@ -52,6 +52,7 @@ namespace rhino_zmq_poc
                 "setValueListSelected" => ExecuteSetValueListSelected(doc, command.Params),
                 "createScriptNode" => ExecuteCreateScriptNode(doc, command.Params),
                 "setScriptCode" => ExecuteSetScriptCode(doc, command.Params),
+                "syncScriptParams" => ExecuteSyncScriptParams(doc, command.Params),
                 "getScriptCode" => ExecuteGetScriptCode(doc, command.Params),
                 "addScriptInput" => ExecuteAddScriptInput(doc, command.Params),
                 "removeScriptInput" => ExecuteRemoveScriptInput(doc, command.Params),
@@ -274,6 +275,13 @@ namespace rhino_zmq_poc
             var param = p.Deserialize<SetScriptCodeParams>();
             if (param == null) return "setScriptCode: invalid params";
             return ScriptOperations.SetScriptCode(doc, param);
+        }
+
+        private string ExecuteSyncScriptParams(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<SyncScriptParamsParams>();
+            if (param == null) return "syncScriptParams: invalid params";
+            return ScriptOperations.SyncParams(doc, param);
         }
 
         private string ExecuteGetScriptCode(GH_Document doc, JsonElement p)

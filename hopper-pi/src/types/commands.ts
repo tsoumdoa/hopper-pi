@@ -195,6 +195,7 @@ export type SetPanelParams = {
 
 export type ScriptIOParam = {
 	name: string;
+	previousName?: string;
 	access?: string;
 	dataMapping?: string;
 	simplify?: boolean;
@@ -214,6 +215,14 @@ export type CreateScriptNodeParams = {
 export type SetScriptCodeParams = {
 	targetId: string;
 	code: string;
+	inputs?: ScriptIOParam[];
+	outputs?: ScriptIOParam[];
+};
+
+export type SyncScriptParamsParams = {
+	targetId: string;
+	inputs?: ScriptIOParam[];
+	outputs?: ScriptIOParam[];
 };
 
 export type GetScriptCodeParams = {
@@ -262,6 +271,8 @@ export type ListScriptParamsParams = {
 export type EditParamPropsParams = {
 	targetId: string;
 	name: string;
+	access?: "item" | "list" | "tree";
+	typeHint?: "object" | "double" | "string";
 	dataMapping?: "none" | "flatten" | "graft";
 	simplify?: boolean;
 	reverse?: boolean;
@@ -298,6 +309,7 @@ export type CommandAction =
 	| "setValueListSelected"
 	| "createScriptNode"
 	| "setScriptCode"
+	| "syncScriptParams"
 	| "getScriptCode"
 	| "addScriptInput"
 	| "removeScriptInput"
@@ -337,6 +349,7 @@ export type CommandParams =
 	| SetValueListSelectedParams
 	| CreateScriptNodeParams
 	| SetScriptCodeParams
+	| SyncScriptParamsParams
 	| AddScriptInputParams
 	| RemoveScriptInputParams
 	| AddScriptOutputParams
