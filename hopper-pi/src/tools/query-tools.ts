@@ -20,11 +20,19 @@ export const ghGetCanvasTool = defineTool({
 	label: "Get Canvas",
 	description:
 		"Fetches the live Grasshopper canvas. With no params, returns a sub-graph index summary. " +
-		"Use 'subgraph' to inspect a specific sub-graph.",
+		"Use 'subgraph' to inspect a specific sub-graph. " +
+		"Use selectionOnly when the user has selected objects on the canvas and you need GUIDs or structure for only that subset (does not replace the single full read after placing all components in a new build).",
 	parameters: Type.Object({
 		subgraph: Type.Optional(
 			Type.String({
-				description: 'Show only this sub-graph (e.g. "subgraph_0")',
+				description: 'Show only this sub-graph (e.g. "subgraph_0"). Applied after selectionOnly when both are set.',
+			}),
+		),
+		selectionOnly: Type.Optional(
+			Type.Boolean({
+				description:
+					"Return only canvas objects currently selected in Grasshopper (groups expand to members). " +
+					"Includes internal wires between selected components only. Always returns detail view.",
 			}),
 		),
 	}),
@@ -32,13 +40,19 @@ export const ghGetCanvasTool = defineTool({
 	async execute(_toolCallId, params, _signal, onUpdate, _ctx) {
 		onUpdate?.({
 			content: [
-				{ type: "text", text: "Fetching current canvas from backend..." },
+				{
+					type: "text",
+					text: params.selectionOnly
+						? "Fetching selected canvas objects from backend..."
+						: "Fetching current canvas from backend...",
+				},
 			],
 			details: {},
 		});
-		const response =
-			await withRequester<GetCurrentCanvasResponse>(fetchCurrentCanvas);
-		const hasFilters = !!params.subgraph;
+		const response = await withRequester<GetCurrentCanvasResponse>((req) =>
+			fetchCurrentCanvas(req, { selectionOnly: params.selectionOnly === true }),
+		);
+		const hasFilters = !!params.subgraph || params.selectionOnly === true;
 		return formatCanvasResponse(response, hasFilters ? params : undefined);
 	},
 });

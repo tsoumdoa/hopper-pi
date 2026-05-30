@@ -40,6 +40,7 @@ export type GetCurrentCanvasResponse = {
 	timestamp: number;
 	docName: string;
 	xml: string;
+	selectedInstanceGuids?: string[];
 };
 
 export type CanvasError = {

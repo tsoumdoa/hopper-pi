@@ -693,6 +693,9 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("xml")]
         public string Xml { get; set; }
+
+        [JsonPropertyName("selectedInstanceGuids")]
+        public List<string> SelectedInstanceGuids { get; set; }
     }
 
     public class CanvasError

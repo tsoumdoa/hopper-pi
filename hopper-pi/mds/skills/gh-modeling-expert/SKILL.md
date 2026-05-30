@@ -65,6 +65,8 @@ how much batching and zone-by-zone placement the process requires.
          wasteful and slow.
        - The only exception: debugging errors after wiring. If something is
          wrong, read to diagnose, fix, then continue.
+       - `selectionOnly: true` is for inspecting the user's current canvas
+         selection only; it does not replace the single full read after placement.
 
     3. Prefer right-sized changes
        - Keep each batch of edits focused — place a logical group, then wire it
