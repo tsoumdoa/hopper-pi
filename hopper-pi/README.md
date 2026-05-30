@@ -68,9 +68,17 @@ Outputs to `dist/` with source maps. Not required for `pi -e` usage, but useful 
 
 ---
 
-## Available Tools (9)
+## Available Tools
 
-The extension registers **9 tools** — 3 query tools and 6 consolidated edit tools. Each edit tool accepts an `items` array for batch processing.
+The extension registers **Rhino document** and **Grasshopper canvas** tools. Edit tools accept an `items` array for batch processing.
+
+### Rhino document (`rh_run_script`, REQ/REP)
+
+| Tool | Parameters | What it does |
+|------|------------|--------------|
+| `rh_run_script` | `items[]` with `mode` (`command` \| `python` \| `csharp`), `source`, optional `echo` | Runs Rhino command macros or scripts on the active RhinoDoc. Returns stdout/errors synchronously. Grouped into one Rhino Undo step per agent turn. `echo` (command mode only): when `true`, echoes the macro in Rhino’s command history window; default `false` (silent). |
+
+Use for viewport geometry, layers, selection, bake — **not** for GH canvas wiring (use `gh_*`).
 
 ### Query Tools (REQ/REP pattern)
 

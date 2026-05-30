@@ -1,3 +1,4 @@
+import { rhRunScriptTool } from "./rh-run-script.js";
 import {
 	ghGetCanvasTool,
 	ghListComponentsTool,
@@ -14,8 +15,9 @@ import {
 	ghEditScriptTool,
 } from "./edit-tools/index.js";
 
-/** All tool definitions in registration order (query tools first, then edit tools) */
+/** All tool definitions in registration order (Rhino doc first, then GH edit/query tools) */
 export const ALL_TOOLS = [
+	rhRunScriptTool,
 	// ── Edit tools ──
 	ghCreateWidgetTool,
 	ghMutateWidgetTool,
@@ -32,6 +34,7 @@ export const ALL_TOOLS = [
 
 // Re-export for convenience
 export {
+	rhRunScriptTool,
 	ghGetCanvasTool,
 	ghListComponentsTool,
 	ghGetCanvasErrorsTool,

@@ -8,7 +8,7 @@
  *   - infra/        → ZMQ transport (REQ/REP, PUSH, SUB sockets)
  *   - types/        → Message & domain schemas
  *   - services/     → XML parser (Grasshopper archive → JSON)
- *   - tools/        → Pi extension tool definitions (14 tools)
+ *   - tools/        → Pi extension tool definitions (rh_run_script + GH tools)
  *
  * Backend ports (configurable via env vars):
  *   - PUB  :5555  (event publishing)
@@ -22,6 +22,11 @@ import {
 	cancelAgentTransaction,
 	commitAgentTransaction,
 } from "./services/agent-transaction.js";
+import {
+	beginRhinoAgentTransaction,
+	cancelRhinoAgentTransaction,
+	commitRhinoAgentTransaction,
+} from "./services/rhino-agent-transaction.js";
 import { probeBackend } from "./infra/backend-status.js";
 import { registerBackendStatusUI } from "./ui/backend-status.js";
 import { ALL_TOOLS } from "./tools/index.js";
@@ -41,18 +46,48 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => {
 		void probeBackend();
 		ctx.ui.notify(
-			"\u{1F998} Hopper Pi: Grasshopper canvas tools loaded (14 tools)",
+			"\u{1F998} Hopper Pi: rh_run_script (Rhino doc) + Grasshopper canvas tools loaded",
 			"info"
 		);
 	});
 
-	// ── Agent undo transaction (one GH undo/redo step per prompt) ───
+	const RHINO_DOC_RE =
+		/(?:^|[^\w])(rhino\s+doc(?:ument)?s?|viewports?|bakes?|layers?|selections?|select\s+|named\s*views?|blocks?|materials?|rhinoscript|scriptcontext|rh_run_script|_circle|_line|_extrude)(?=[^\w]|$)/i;
+	const GH_CANVAS_RE =
+		/(?:^|[^\w])(grasshopper|gh\s|canvases?|canvas|components?|wires?|sliders?|gh_edit|gh_get_canvas)(?=[^\w]|$)/i;
+
+	pi.on("before_agent_start", async (event) => {
+		const prompt = event.prompt ?? "";
+		if (!RHINO_DOC_RE.test(prompt)) return;
+
+		const both = GH_CANVAS_RE.test(prompt);
+		const content = both
+			? "This prompt may need both Rhino document and Grasshopper canvas changes. " +
+				"Use rh_run_script for RhinoDoc/viewport; use gh_* for canvas wiring and components."
+			: "This prompt targets the Rhino document. Use rh_run_script (command/python/csharp). " +
+				"Do not use gh_edit_* unless you also need Grasshopper canvas changes.";
+
+		return {
+			message: {
+				customType: "hopper-rhino-routing",
+				display: false,
+				content,
+			},
+		};
+	});
+
+	// ── Agent undo (one GH undo step + one Rhino undo step per prompt) ─
 
 	pi.on("agent_start", async () => {
 		try {
 			await beginAgentTransaction();
-		} catch (err) {
-			// console.error("[hopper-pi] Failed to begin agent transaction:", err);
+		} catch {
+			// Backend may be disconnected.
+		}
+		try {
+			await beginRhinoAgentTransaction();
+		} catch {
+			// Backend may be disconnected.
 		}
 	});
 
@@ -63,14 +98,24 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 
 		try {
 			await commitAgentTransaction();
-		} catch (err) {
-			// console.error("[hopper-pi] Failed to commit agent transaction:", err);
+		} catch {
+			// Backend may be disconnected.
+		}
+		try {
+			await commitRhinoAgentTransaction();
+		} catch {
+			// Backend may be disconnected.
 		}
 	});
 
 	pi.on("session_shutdown", async () => {
 		try {
 			await cancelAgentTransaction();
+		} catch {
+			// Backend may already be disconnected during shutdown.
+		}
+		try {
+			await cancelRhinoAgentTransaction();
 		} catch {
 			// Backend may already be disconnected during shutdown.
 		}

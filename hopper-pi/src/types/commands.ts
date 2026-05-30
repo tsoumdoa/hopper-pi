@@ -323,7 +323,10 @@ export type CommandAction =
 	| "editParamProps"
 	| "beginAgentTransaction"
 	| "commitAgentTransaction"
-	| "cancelAgentTransaction";
+	| "cancelAgentTransaction"
+	| "beginRhinoAgentTransaction"
+	| "commitRhinoAgentTransaction"
+	| "cancelRhinoAgentTransaction";
 
 export type CommandParams =
 	| AddComponentParams
