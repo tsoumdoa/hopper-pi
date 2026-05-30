@@ -19,9 +19,8 @@ export const ghGetCanvasTool = defineTool({
 	name: "gh_get_canvas",
 	label: "Get Canvas",
 	description:
-		"Fetches the live Grasshopper canvas. With no params, returns a sub-graph index summary. " +
-		"Use 'subgraph' to inspect a specific sub-graph. " +
-		"Use selectionOnly when the user has selected objects on the canvas and you need GUIDs or structure for only that subset (does not replace the single full read after placing all components in a new build).",
+		"Fetches the live Grasshopper canvas. With no params, returns a compact full wiring sheet: WIRES first, then every component with g= (instance) and p= (port) short GUIDs for gh_edit_wire. " +
+		"Call once after all placement, before wiring. Use subgraph to limit to one island; selectionOnly for user-selected objects only.",
 	parameters: Type.Object({
 		subgraph: Type.Optional(
 			Type.String({

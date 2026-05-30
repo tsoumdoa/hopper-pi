@@ -98,7 +98,7 @@ These publish commands to port 5556 and return immediately with a jobId for each
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `gh_edit_components` | `add`, `delete`, `move`, `rename`, `set_locked`, `set_hidden`                                                                                          | Unified component operations. Components are added with preview disabled by default (`preview: false`); set `preview: true` to enable viewport preview. Use `gh_get_canvas` for instance GUIDs, `gh_list_components` for component typeGuids.              |
 | `gh_edit_param`      | `listParams`, `addInput`, `removeInput`, `addOutput`, `removeOutput`, `editAccessType`                                                                 | Manage input/output ports on script components. List current params, add/remove ports, change access type (item/list/tree), set data mapping (flatten/graft), simplify/reverse flags. `editAccessType` works on both inputs and outputs for data mapping properties. |
-| `gh_edit_wire`       | `connect`, `disconnect`                                                                                                                                | Connect or disconnect wires between component ports. Requires COMPONENT_GUID and PORT_GUID values from `gh_get_canvas` output.                                                                                                                                       |
+| `gh_edit_wire`       | `connect`, `disconnect`                                                                                                                                | Connect or disconnect wires between component ports. Use `g=` / `p=` GUIDs from `gh_get_canvas` output.                                                                                                                                       |
 | `gh_edit_group`      | `add`, `remove`, `delete`, `changeColor`, `rename`, `changeStyle`                                                                                      | Group operations. Supports color (rgba), border style (Box/Blob/Rectangles), and batch operations.                                                                                                                                                                   |
 | `gh_create_widget`   | slider, panel, toggle, swatch, scribble, valueList                                                                                                     | Create Grasshopper UI widgets at a canvas position. Each type has its own required fields.                                                                                                                                                                           |
 | `gh_mutate_widget`   | slider: `setValue`, `setRange`; panel: `setText`, `setProperty`; toggle: `setValue`; swatch: `setColor`; scribble: `setText`; valueList: `setSelected` | Modify existing widgets by targetId.                                                                                                                                                                                                                                 |
@@ -113,12 +113,12 @@ You:   Connect the slider to the circle radius, then set it to 42
 
 Agent: [calls gh_get_canvas]  ← only because it needs GUIDs for wiring
        I see 3 components:
-         - Circle (COMPONENT_GUID=abc123) at pivot (10, 20)
-           OUTPUTS: Circle (PORT_GUID=xyz789)
-           INPUTS: Plane (PORT_GUID=...), Radius (PORT_GUID=...)
-         - Number Slider (COMPONENT_GUID=def456)
+         - Circle g=abc123 @10,20
+             out: Circle p=xyz789
+             in: Plane p=..., Radius p=...
+         - Number Slider g=def456
            slider: min=0 max=100 current=1.0
-         - Panel (COMPONENT_GUID=ghi789)
+         - Panel g=ghi789
            panel: "hello"
 
        [calls gh_edit_wire(items: [{ action: "connect", fromComponent: "def456",
@@ -272,7 +272,7 @@ These are declared in `package.json` under the `"pi"` config:
 3. Receives `{ type: "getCurrentCanvas.response", xml: "...", selectedInstanceGuids?: [...] }`
 4. Parses XML → `ParsedGrasshopper` via `buildGhJson()`
 5. Shortens all GUIDs via `guid-shortener` (SHA-256 → base62, 10-char aliases)
-6. Returns formatted text with `[id]`, `COMPONENT_GUID=`, and `PORT_GUID=` markers
+6. Returns compact text: `WIRES` block, then per-component lines with `g=` (instance) and `p=` (port) short GUIDs
 
 ### Edit flow (e.g., `gh_edit_components`)
 

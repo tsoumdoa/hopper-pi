@@ -10,6 +10,12 @@ import {
 } from "../services/guid-shortener.js";
 import { formatOverlapResult } from "./canvas-checks.js";
 import type { CanvasOverlapResult } from "./canvas-checks.js";
+import {
+	appendComponentBlocks,
+	appendWireBlock,
+	canvasDetailsSummary,
+	formatCanvasHeaderLine,
+} from "./canvas-format.js";
 import { EXCLUDED_TYPE_GUIDS, VANILLA_CATEGORIES, BLACKLISTED_SUBCATEGORIES } from "./constants.js";
 
 const WIDGET_KEYWORDS: ReadonlyMap<string, string> = new Map([
@@ -258,138 +264,6 @@ function truncateDescription(description: string): string {
 	return description.slice(0, DESCRIPTION_TRUNCATE_MAX - 3) + "...";
 }
 
-function formatComponentDetail(id: string, c: Component): string[] {
-	const lines: string[] = [];
-	lines.push(`[${id}] ${c.nickName} (${c.type})`);
-	lines.push(`  COMPONENT_GUID=${c.instanceGuid}`);
-
-	if (Object.keys(c.outputs).length > 0) {
-		lines.push("  OUTPUTS:");
-		for (const [_key, p] of Object.entries(c.outputs)) {
-			const desc = p.description ? ` - ${truncateDescription(p.description)}` : "";
-			lines.push(`    ${p.nick} (PORT_GUID=${p.instanceGuid})${desc}`);
-		}
-	}
-
-	if (Object.keys(c.inputs).length > 0) {
-		lines.push("  INPUTS:");
-		for (const [_key, p] of Object.entries(c.inputs)) {
-			const desc = p.description ? ` - ${truncateDescription(p.description)}` : "";
-			lines.push(`    ${p.nick} (PORT_GUID=${p.instanceGuid})${desc}`);
-		}
-	}
-
-	if (c.value) {
-		const v = c.value;
-		if (v.type === "slider") lines.push(`  slider: min=${v.min} max=${v.max} current=${v.current}`);
-		else if (v.type === "panel") lines.push(`  panel: "${v.text}"`);
-		else if (v.type === "number") lines.push(`  number: current=${v.current}`);
-		else lines.push(`  value: ${v.type}`);
-	}
-	if (c.state?.locked) lines.push("  locked");
-	if (c.state?.hidden) lines.push("  hidden");
-	if (c.visuals?.pivot) {
-		lines.push(`  pivot: (${c.visuals.pivot.x}, ${c.visuals.pivot.y})`);
-	}
-	if (c.visuals?.bounds) {
-		lines.push(`  bounds: x=${c.visuals.bounds.x} y=${c.visuals.bounds.y} w=${c.visuals.bounds.width} h=${c.visuals.bounds.height}`);
-	}
-	lines.push("");
-	return lines;
-}
-
-function formatCanvasIndex(
-	docName: string,
-	compCount: number,
-	wireCount: number,
-	subGraphCount: number,
-	subGraphs: SubGraph[],
-	components: Record<string, Component>,
-): { content: Array<{ type: "text"; text: string }>; details: Record<string, unknown> } {
-	const lines: string[] = [
-		`Canvas: ${docName} (${compCount} components, ${wireCount} wires, ${subGraphCount} sub-graphs)`,
-		"",
-	];
-
-	if (subGraphCount === 0) {
-		const typeCounts = new Map<string, number>();
-		for (const c of Object.values(components)) {
-			typeCounts.set(c.type, (typeCounts.get(c.type) ?? 0) + 1);
-		}
-		const typeSummary = Array.from(typeCounts.entries())
-			.sort((a, b) => b[1] - a[1])
-			.map(([type, count]) => `${type}(${count})`)
-			.join(", ");
-
-		if (typeSummary) {
-			lines.push(`Component types: ${typeSummary}`);
-		}
-		lines.push("");
-		lines.push("Use component or type params to inspect specific components.");
-	} else {
-		const realSubGraphs: SubGraph[] = [];
-		const isolated: SubGraph[] = [];
-		for (const sg of subGraphs) {
-			if (sg.components.length === 1 && sg.internalWires.length === 0 && sg.externalWires.length === 0) {
-				isolated.push(sg);
-			} else {
-				realSubGraphs.push(sg);
-			}
-		}
-
-		if (realSubGraphs.length > 0) {
-			lines.push("Sub-graph index:");
-			for (const sg of realSubGraphs) {
-				const typeCounts = new Map<string, number>();
-				for (const compId of sg.components) {
-					const c = components[compId];
-					if (c) {
-						typeCounts.set(c.type, (typeCounts.get(c.type) ?? 0) + 1);
-					}
-				}
-				const typeSummary = Array.from(typeCounts.entries())
-					.sort((a, b) => b[1] - a[1])
-					.map(([type, count]) => `${type}(${count})`)
-					.join(", ");
-
-				lines.push(`  ${sg.id}  — ${sg.components.length} components, ${sg.internalWires.length} internal wires, ${sg.externalWires.length} external`);
-				if (typeSummary) {
-					lines.push(`    types: ${typeSummary}`);
-				}
-			}
-			lines.push("");
-		}
-
-		if (isolated.length > 0) {
-			lines.push("Isolated:");
-			for (const sg of isolated) {
-				const compId = sg.components[0];
-				const c = components[compId];
-				if (c) {
-					lines.push(...formatComponentDetail(compId, c));
-				}
-			}
-		}
-
-		if (realSubGraphs.length > 0) {
-			lines.push("Use subgraph, component, or type params to inspect a specific sub-graph or component.");
-		} else {
-			lines.push("Use component or type params to inspect specific components.");
-		}
-	}
-
-	return {
-		content: [{ type: "text" as const, text: lines.join("\n") }],
-		details: {
-			docName,
-			componentCount: compCount,
-			wireCount,
-			subGraphCount,
-			subGraphs,
-		},
-	};
-}
-
 function formatCanvasDetail(
 	docName: string,
 	compCount: number,
@@ -400,10 +274,7 @@ function formatCanvasDetail(
 	filters: CanvasFilters,
 	filteredWires: Wire[],
 ): { content: Array<{ type: "text"; text: string }>; details: Record<string, unknown> } {
-	const lines: string[] = [
-		`Canvas: ${docName} (${compCount} components, ${wireCount} wires, ${subGraphCount} sub-graphs)`,
-		"",
-	];
+	const lines: string[] = [formatCanvasHeaderLine(docName, compCount, wireCount), ""];
 
 	const filterDesc: string[] = [];
 	if (filters.selectionOnly) filterDesc.push("selectionOnly=true");
@@ -414,60 +285,33 @@ function formatCanvasDetail(
 	}
 
 	if (subGraphs.length === 0) {
-		for (const [compId, c] of Object.entries(shortComponents)) {
-			lines.push(...formatComponentDetail(compId, c));
-		}
-
-		if (filteredWires.length > 0) {
-			lines.push("--- wires ---");
-			for (const w of filteredWires) {
-				lines.push(`  ${w.from} -> ${w.to}`);
-			}
-		}
+		appendWireBlock(lines, filteredWires);
+		appendComponentBlocks(lines, shortComponents);
 	} else {
 		for (const sg of subGraphs) {
 			if (filters.subgraph && sg.id !== filters.subgraph) {
-				lines.push(`  ${sg.id} — (${sg.components.length} components, skipped)`);
+				lines.push(`${sg.id} (${sg.components.length}c, skipped)`);
 				continue;
 			}
 
-			lines.push(`--- Sub-graph: ${sg.id} (${sg.components.length} components, ${sg.internalWires.length} internal wires, ${sg.externalWires.length} external) ---`);
-			lines.push("");
-
-			for (const compId of sg.components) {
-				const c = shortComponents[compId];
-				if (c) lines.push(...formatComponentDetail(compId, c));
-			}
-
-			if (sg.internalWires.length > 0) {
-				lines.push("--- internal wires ---");
-				for (const w of sg.internalWires) {
-					lines.push(`  ${w.from} -> ${w.to}`);
-				}
-			}
-			if (sg.externalWires.length > 0) {
-				if (sg.internalWires.length > 0) lines.push("");
-				lines.push("--- external wires ---");
-				for (const w of sg.externalWires) {
-					lines.push(`  ${w.from} -> ${w.to}`);
-				}
-			}
-
-			lines.push("");
+			lines.push(
+				`## ${sg.id} (${sg.components.length}c, ${sg.internalWires.length}w int, ${sg.externalWires.length}w ext)`,
+			);
+			appendWireBlock(lines, sg.internalWires, "WIRES (internal)");
+			appendWireBlock(lines, sg.externalWires, "WIRES (external)");
+			appendComponentBlocks(lines, shortComponents, sg.components);
 		}
 	}
 
 	return {
-		content: [{ type: "text" as const, text: lines.join("\n") }],
-		details: {
+		content: [{ type: "text" as const, text: lines.join("\n").trimEnd() }],
+		details: canvasDetailsSummary(
 			docName,
-			componentCount: compCount,
+			compCount,
 			wireCount,
 			subGraphCount,
-			components: shortComponents,
-			wires: filteredWires,
-			subGraphs,
-		},
+			subGraphs.map((sg) => sg.id),
+		),
 	};
 }
 
@@ -518,25 +362,15 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse, filters
 	const subGraphCount = filteredSubGraphs.length;
 
 	if (!filters) {
-		if (subGraphCount === 0) {
-			return formatCanvasDetail(
-				response.docName,
-				compCount,
-				wireCount,
-				subGraphCount,
-				filteredSubGraphs,
-				shortComponents,
-				{},
-				filteredWires,
-			);
-		}
-		return formatCanvasIndex(
+		return formatCanvasDetail(
 			response.docName,
 			compCount,
 			wireCount,
 			subGraphCount,
 			filteredSubGraphs,
 			shortComponents,
+			{},
+			filteredWires,
 		);
 	}
 
