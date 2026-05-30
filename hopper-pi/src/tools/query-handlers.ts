@@ -1,7 +1,7 @@
 import { Requester } from "../infra/requester.js";
 import { withRequester } from "../infra/request-helpers.js";
 import type { ListAllComponentsResponse, GetCurrentCanvasResponse, GetCanvasErrorsResponse, GhComponentInfo, ListScriptParamsResponse, GetScriptCodeResponse } from "../types/messages.js";
-import type { Component, SubGraph, Wire } from "../types/gh.js";
+import type { Component, ParsedGrasshopper, SubGraph, Wire } from "../types/gh.js";
 import { buildGhJson } from "../services/parser.js";
 import { computeSubGraphs } from "../services/subgraph.js";
 import {
@@ -67,8 +67,14 @@ export async function fetchGh<T>(req: Requester, type: string): Promise<T> {
 	return req.request<T>({ type });
 }
 
-export async function fetchCurrentCanvas(req: Requester): Promise<GetCurrentCanvasResponse> {
-	return fetchGh<GetCurrentCanvasResponse>(req, "getCurrentCanvas");
+export async function fetchCurrentCanvas(
+	req: Requester,
+	options?: { selectionOnly?: boolean },
+): Promise<GetCurrentCanvasResponse> {
+	return req.request<GetCurrentCanvasResponse>({
+		type: "getCurrentCanvas",
+		...(options?.selectionOnly ? { selectionOnly: true } : {}),
+	});
 }
 
 export async function fetchAllComponents(req: Requester): Promise<ListAllComponentsResponse> {
@@ -148,9 +154,98 @@ function expandExcludedIds(
 	return excluded;
 }
 
-type CanvasFilters = {
+export type CanvasFilters = {
 	subgraph?: string;
+	selectionOnly?: boolean;
 };
+
+function normalizeGuidSet(guids: Iterable<string>): Set<string> {
+	return new Set(
+		[...guids].map((g) => g.toLowerCase()),
+	);
+}
+
+function expandSelectedIdsForGroups(
+	components: Record<string, Component>,
+	selectedIds: Set<string>,
+): Set<string> {
+	const expanded = new Set(selectedIds);
+	let changed = true;
+	while (changed) {
+		changed = false;
+		for (const id of [...expanded]) {
+			const component = components[id];
+			if (component?.type !== "Group" || !component.members) continue;
+			for (const memberId of component.members) {
+				if (!expanded.has(memberId)) {
+					expanded.add(memberId);
+					changed = true;
+				}
+			}
+		}
+	}
+	return expanded;
+}
+
+function resolveSelectionGuids(
+	components: Record<string, Component>,
+	response: GetCurrentCanvasResponse,
+): Set<string> {
+	if (response.selectedInstanceGuids?.length) {
+		return normalizeGuidSet(response.selectedInstanceGuids);
+	}
+	const fromState = Object.values(components)
+		.filter((c) => c.state?.selected === true)
+		.map((c) => c.instanceGuid);
+	return normalizeGuidSet(fromState);
+}
+
+function filterCanvasBySelection(
+	parsed: Pick<ParsedGrasshopper, "components" | "wires">,
+	selectedInstanceGuids: Set<string>,
+): Pick<ParsedGrasshopper, "components" | "wires"> {
+	const selectedIds = new Set<string>();
+	for (const [id, component] of Object.entries(parsed.components)) {
+		if (selectedInstanceGuids.has(component.instanceGuid.toLowerCase())) {
+			selectedIds.add(id);
+		}
+	}
+
+	const expandedIds = expandSelectedIdsForGroups(parsed.components, selectedIds);
+
+	const components = Object.fromEntries(
+		Object.entries(parsed.components).filter(([id]) => expandedIds.has(id)),
+	);
+
+	const wires = parsed.wires.filter((w) => {
+		const fromId = w.from.split(".")[0];
+		const toId = w.to.split(".")[0];
+		return expandedIds.has(fromId) && expandedIds.has(toId);
+	});
+
+	return { components, wires };
+}
+
+function formatEmptySelectionResponse(docName: string) {
+	return {
+		content: [
+			{
+				type: "text" as const,
+				text: "No objects selected on the Grasshopper canvas. Select components in Grasshopper and call gh_get_canvas with selectionOnly: true.",
+			},
+		],
+		details: {
+			docName,
+			componentCount: 0,
+			wireCount: 0,
+			subGraphCount: 0,
+			components: {},
+			wires: [],
+			subGraphs: [],
+			selectionOnly: true,
+		},
+	};
+}
 
 function matchesCanvasComponent(_c: Component, _filters: CanvasFilters): boolean {
 	return true;
@@ -304,6 +399,7 @@ function formatCanvasDetail(
 	];
 
 	const filterDesc: string[] = [];
+	if (filters.selectionOnly) filterDesc.push("selectionOnly=true");
 	if (filters.subgraph) filterDesc.push(`subgraph=${filters.subgraph}`);
 	if (filterDesc.length > 0) {
 		lines.push(`Filter: ${filterDesc.join(", ")}`);
@@ -377,16 +473,30 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse, filters
 			.map(([id]) => id),
 	);
 	const excludedIds = expandExcludedIds(parsed.components, parsed.wires, initiallyExcluded);
-	const filteredComponents = Object.fromEntries(
+	let filteredComponents = Object.fromEntries(
 		Object.entries(parsed.components).filter(([id]) => !excludedIds.has(id)),
 	);
-	const filteredWires = parsed.wires.filter(
+	let filteredWires = parsed.wires.filter(
 		(w) => {
 			const fromId = w.from.split(".")[0];
 			const toId = w.to.split(".")[0];
 			return !excludedIds.has(fromId) && !excludedIds.has(toId);
 		},
 	);
+
+	if (filters?.selectionOnly) {
+		const selectionGuids = resolveSelectionGuids(filteredComponents, response);
+		const selected = filterCanvasBySelection(
+			{ components: filteredComponents, wires: filteredWires },
+			selectionGuids,
+		);
+		filteredComponents = selected.components;
+		filteredWires = selected.wires;
+
+		if (Object.keys(filteredComponents).length === 0) {
+			return formatEmptySelectionResponse(response.docName);
+		}
+	}
 
 	const filteredSubGraphs = computeSubGraphs({ version: "", components: filteredComponents, wires: filteredWires });
 

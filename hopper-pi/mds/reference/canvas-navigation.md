@@ -18,10 +18,16 @@ and **external wires** (crossing to another cluster).
 Use filter params to drill into specific sub-graphs or components:
 
 - `subgraph` — show only one sub-graph (e.g. `"subgraph_0"`)
+- `selectionOnly` — return only objects currently selected on the Grasshopper
+  canvas (groups expand to members; internal wires between selected objects
+  only). Always returns detail view. Use when the user has selected a subset
+  for targeted inspection or wiring — not as a substitute for the single full
+  read after placing all components in a new build.
 
 Examples:
 
 - `gh_get_canvas({subgraph: "subgraph_0"})` — full detail for subgraph_0
+- `gh_get_canvas({selectionOnly: true})` — detail for user selection only
 
 ## Canvas Read Discipline — HARD RULES
 
