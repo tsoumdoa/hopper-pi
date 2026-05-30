@@ -106,6 +106,7 @@ namespace rhino_zmq_poc
                 "text" => "string",
                 "float" => "double",
                 "str" => "string",
+                "boolean" => "bool",
                 _ => typeHint.Trim().ToLowerInvariant()
             };
         }

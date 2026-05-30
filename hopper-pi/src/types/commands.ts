@@ -193,6 +193,8 @@ export type SetPanelParams = {
 	bgColor?: string;
 };
 
+export type TypeHint = "object" | "double" | "string" | "bool" | "boolean";
+
 export type ScriptIOParam = {
 	name: string;
 	previousName?: string;
@@ -200,7 +202,7 @@ export type ScriptIOParam = {
 	dataMapping?: string;
 	simplify?: boolean;
 	reverse?: boolean;
-	typeHint?: "object" | "double" | "string";
+	typeHint?: TypeHint;
 };
 
 export type CreateScriptNodeParams = {
@@ -236,7 +238,7 @@ export type AddScriptInputParams = {
 	dataMapping?: string;
 	simplify?: boolean;
 	reverse?: boolean;
-	typeHint?: "object" | "double" | "string";
+	typeHint?: TypeHint;
 };
 
 export type RemoveScriptInputParams = {
@@ -250,7 +252,7 @@ export type AddScriptOutputParams = {
 	dataMapping?: string;
 	simplify?: boolean;
 	reverse?: boolean;
-	typeHint?: "object" | "double" | "string";
+	typeHint?: TypeHint;
 };
 
 export type RemoveScriptOutputParams = {
@@ -272,7 +274,7 @@ export type EditParamPropsParams = {
 	targetId: string;
 	name: string;
 	access?: "item" | "list" | "tree";
-	typeHint?: "object" | "double" | "string";
+	typeHint?: TypeHint;
 	dataMapping?: "none" | "flatten" | "graft";
 	simplify?: boolean;
 	reverse?: boolean;

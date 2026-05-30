@@ -17,7 +17,9 @@ export const TypeHintType = Type.Union([
 	Type.Literal("object"),
 	Type.Literal("double"),
 	Type.Literal("string"),
-], { description: "Script param type hint (default: object). Use double for numbers, string for text." });
+	Type.Literal("bool"),
+	Type.Literal("boolean"),
+], { description: "Script param type hint (default: object). Use double for numbers, string for text, bool for booleans." });
 
 export const ScriptIOFields = Type.Object({
 	name: Type.String({ description: "Parameter name" }),
