@@ -251,6 +251,13 @@ function matchesCanvasComponent(_c: Component, _filters: CanvasFilters): boolean
 	return true;
 }
 
+const DESCRIPTION_TRUNCATE_MAX = 60;
+
+function truncateDescription(description: string): string {
+	if (description.length <= DESCRIPTION_TRUNCATE_MAX) return description;
+	return description.slice(0, DESCRIPTION_TRUNCATE_MAX - 3) + "...";
+}
+
 function formatComponentDetail(id: string, c: Component): string[] {
 	const lines: string[] = [];
 	lines.push(`[${id}] ${c.nickName} (${c.type})`);
@@ -259,7 +266,7 @@ function formatComponentDetail(id: string, c: Component): string[] {
 	if (Object.keys(c.outputs).length > 0) {
 		lines.push("  OUTPUTS:");
 		for (const [_key, p] of Object.entries(c.outputs)) {
-			const desc = p.description ? ` - ${p.description}` : "";
+			const desc = p.description ? ` - ${truncateDescription(p.description)}` : "";
 			lines.push(`    ${p.nick} (PORT_GUID=${p.instanceGuid})${desc}`);
 		}
 	}
@@ -267,7 +274,7 @@ function formatComponentDetail(id: string, c: Component): string[] {
 	if (Object.keys(c.inputs).length > 0) {
 		lines.push("  INPUTS:");
 		for (const [_key, p] of Object.entries(c.inputs)) {
-			const desc = p.description ? ` - ${p.description}` : "";
+			const desc = p.description ? ` - ${truncateDescription(p.description)}` : "";
 			lines.push(`    ${p.nick} (PORT_GUID=${p.instanceGuid})${desc}`);
 		}
 	}
@@ -545,24 +552,102 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse, filters
 	);
 }
 
-function scoreComponent(c: GhComponentInfo, f: string): number {
-	const query = f.trim().toLowerCase();
-	if (!query) return 0;
+const MULTI_TOKEN_BONUS = 50;
+const MIN_TOKEN_LENGTH = 2;
+
+function isSubsequence(word: string, token: string): boolean {
+	if (token.length < MIN_TOKEN_LENGTH) return false;
+	let i = 0;
+	for (const ch of word) {
+		if (ch === token[i]) i++;
+		if (i === token.length) return true;
+	}
+	return false;
+}
+
+export function tokenizeQuery(query: string): string[] {
+	const tokens: string[] = [];
+	for (const part of query.trim().split(/\s+/)) {
+		if (!part) continue;
+		const camelParts = part.replace(/([a-z])([A-Z])/g, "$1 $2").split(/\s+/);
+		for (const segment of camelParts) {
+			const lower = segment.toLowerCase();
+			if (lower.length >= MIN_TOKEN_LENGTH) tokens.push(lower);
+		}
+	}
+	return [...new Set(tokens)];
+}
+
+export function scoreComponent(c: GhComponentInfo, token: string): number {
+	const query = token.trim().toLowerCase();
+	if (!query || query.length < MIN_TOKEN_LENGTH) return 0;
 
 	const name = c.name.toLowerCase();
 	const category = c.category.toLowerCase();
 	const subcategory = c.subcategory.toLowerCase();
 	const description = c.description.toLowerCase();
+	const nameWords = name.split(/\s+/);
 
 	if (name === query) return 100;
 	if (name.startsWith(query)) return 90;
 	if (name.includes(query)) return 80;
+	if (query.length >= MIN_TOKEN_LENGTH) {
+		for (const word of nameWords) {
+			if (word.startsWith(query)) return 75;
+		}
+		for (const word of nameWords) {
+			if (word.includes(query)) return 65;
+		}
+		for (const word of nameWords) {
+			if (isSubsequence(word, query)) return 62;
+		}
+	}
 	if (subcategory === query) return 70;
 	if (subcategory.includes(query)) return 60;
 	if (category === query) return 50;
 	if (category.includes(query)) return 40;
 	if (description.includes(query)) return 20;
 	return 0;
+}
+
+export function scoreComponentQuery(
+	c: GhComponentInfo,
+	tokens: string[],
+): { score: number; matchedTokenCount: number } {
+	if (tokens.length === 0) return { score: 0, matchedTokenCount: 0 };
+
+	let total = 0;
+	let matchedTokenCount = 0;
+	for (const token of tokens) {
+		const tokenScore = scoreComponent(c, token);
+		if (tokenScore > 0) matchedTokenCount++;
+		total += tokenScore;
+	}
+	if (matchedTokenCount === 0) return { score: 0, matchedTokenCount: 0 };
+	if (tokens.length > 1 && matchedTokenCount === tokens.length) {
+		total += MULTI_TOKEN_BONUS;
+	}
+	return { score: total, matchedTokenCount };
+}
+
+export function searchMatchedComponents(components: GhComponentInfo[], query: string): GhComponentInfo[] {
+	const tokens = tokenizeQuery(query);
+	if (tokens.length === 0) return [];
+
+	return components
+		.map((component) => {
+			const { score, matchedTokenCount } = scoreComponentQuery(component, tokens);
+			return { component, score, matchedTokenCount };
+		})
+		.filter(({ score }) => score > 0)
+		.sort((a, b) => {
+			const scoreCmp = b.score - a.score;
+			if (scoreCmp !== 0) return scoreCmp;
+			const tokenCmp = b.matchedTokenCount - a.matchedTokenCount;
+			if (tokenCmp !== 0) return tokenCmp;
+			return a.component.name.localeCompare(b.component.name);
+		})
+		.map(({ component }) => component);
 }
 
 const DEFAULT_LIMIT = 10;
@@ -613,23 +698,12 @@ function formatGroupedLines(components: GhComponentInfo[]): string {
 		for (const [subcategory, items] of subMap) {
 			parts.push(`  === ${subcategory} ===`);
 			for (const c of items) {
-				const desc = c.description.length > 60 ? c.description.slice(0, 57) + "..." : c.description;
+				const desc = truncateDescription(c.description);
 				parts.push(`    ${c.name} [${toShortTypeGuid(c.typeGuid)}]  --  ${desc}`);
 			}
 		}
 	}
 	return parts.join("\n");
-}
-
-function formatBestCandidateLines(components: GhComponentInfo[]): string {
-	const candidates = components.slice(0, 5);
-	if (candidates.length === 0) return "";
-	return candidates
-		.map((c) => {
-			const desc = c.description.length > 70 ? c.description.slice(0, 67) + "..." : c.description;
-			return `  ${c.name} [${toShortTypeGuid(c.typeGuid)}] - ${c.category}/${c.subcategory} -- ${desc}`;
-		})
-		.join("\n");
 }
 
 function pickComponentSummary(c: GhComponentInfo) {
@@ -647,7 +721,13 @@ function isBlacklisted(c: GhComponentInfo): boolean {
 	);
 }
 
-export function formatComponentsMultiQuery(response: ListAllComponentsResponse, queries?: string[], limit?: number, offset?: number, searchFrom: string = "vanilla") {
+export function formatComponentsMultiQuery(
+	response: ListAllComponentsResponse,
+	queries?: string[],
+	limit?: number,
+	offset?: number,
+	searchFrom: string = "vanilla",
+) {
 	const all = response.components
 		.filter((c) => !EXCLUDED_TYPE_GUIDS.includes(c.typeGuid))
 		.filter((c) => !isBlacklisted(c))
@@ -672,27 +752,17 @@ export function formatComponentsMultiQuery(response: ListAllComponentsResponse, 
 	const results: Array<{ queryKeyword: string; result: Array<Record<string, unknown>>; hasMore: boolean; totalMatched: number }> = [];
 
 	for (const q of queries) {
-		const matched = sorted
-			.map((component) => ({ component, score: scoreComponent(component, q) }))
-			.filter(({ score }) => score > 0)
-			.sort((a, b) => {
-				const scoreCmp = b.score - a.score;
-				if (scoreCmp !== 0) return scoreCmp;
-				return sortByCategoryThenName(a.component, b.component);
-			})
-			.map(({ component }) => component);
+		const matched = searchMatchedComponents(all, q);
 		const { slice, hasMore, totalMatched } = paginate(matched, limit, offset);
 		results.push({ queryKeyword: q, result: slice.map(pickComponentSummary), hasMore, totalMatched });
 
 		if (matched.length === 0) {
 			sections.push(`"${q}" — no matches`);
 		} else {
-			const body = formatGroupedLines(slice);
-			const bestCandidates = formatBestCandidateLines(slice);
-			const candidatesBlock = bestCandidates ? `\nBest candidates:\n${bestCandidates}\n\nGrouped results:\n` : "\n";
 			const showRange = `showing ${(offset ?? 0) + 1}-${(offset ?? 0) + slice.length}`;
 			const footer = hasMore ? `\n  ... ${totalMatched - (offset ?? 0) - slice.length} more (call with offset=${(offset ?? 0) + slice.length})` : "";
-			sections.push(`"${q}" (${totalMatched} matches, ${showRange}):${footer}${candidatesBlock}${body}`);
+			const body = formatGroupedLines(slice);
+			sections.push(`"${q}" (${totalMatched} matches, ${showRange}):${footer}\n${body}`);
 		}
 	}
 
