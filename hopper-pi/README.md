@@ -211,11 +211,19 @@ The `mds/` directory ships supplementary content loaded by Pi:
 ```
 hopper-pi/mds/
 ├── skills/
-│   └── gh-modeling-expert/   Skill definition for Grasshopper modeling expertise
+│   ├── gh-modeling-expert/   Grasshopper canvas workflow (tiers, layout, wiring)
+│   ├── gh-cookbook/          Recipe cards for common GH patterns
+│   └── rhino-document/       Rhino viewport / rh_run_script (not GH canvas)
 └── reference/
-    ├── csharp-boilerplate.md   C# script boilerplate for Grasshopper
-    ├── python-boilerplate.md   Python script boilerplate for Grasshopper
-    └── layout-system.md        Layout system reference
+    ├── README.md             Index — when to load each reference file
+    ├── layout-system.md      Bounds-based placement (Tier 3)
+    ├── canvas-navigation.md  Sub-graph / filter API
+    ├── data-type-guide.md    Type casts and panel inputs
+    ├── script-component-lifecycle.md
+    ├── csharp-boilerplate.md / python-boilerplate.md
+    └── rhino-script-boilerplate.md
+hopper-pi/docs/
+└── gh-cookbook-benchmarks.md  Human QA prompts (not agent runtime)
 ```
 
 These are declared in `package.json` under the `"pi"` config:
