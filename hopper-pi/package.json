@@ -8,6 +8,7 @@
 	"scripts": {
 		"dev": "tsx src/index.ts",
 		"build": "tsc -p tsconfig.json",
+		"test": "tsx src/tools/query-handlers.search.test.ts",
 		"pi": "pi -e .",
 		"dump:components": "tsx src/scripts/dump-components.ts"
 	},
