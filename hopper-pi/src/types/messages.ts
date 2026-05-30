@@ -77,3 +77,11 @@ export type GetCanvasErrorsResponse = {
 	docName: string;
 	errors: CanvasError[];
 };
+
+export type RunRhinoScriptResponse = {
+	type: "runRhinoScript.response";
+	timestamp: number;
+	ok: boolean;
+	output: string;
+	error: string;
+};

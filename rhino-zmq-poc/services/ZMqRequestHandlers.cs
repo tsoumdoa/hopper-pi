@@ -222,4 +222,50 @@ namespace rhino_zmq_poc
             }
         }
     }
+
+    public class RunRhinoScriptHandler : IUiRequestHandler
+    {
+        public string Handle(GH_Document doc, JsonElement root)
+        {
+            return Utilities.RunOnUiThread(() =>
+            {
+                try
+                {
+                    var mode = root.TryGetProperty("mode", out var modeEl)
+                        ? modeEl.GetString()
+                        : null;
+                    var source = root.TryGetProperty("source", out var sourceEl)
+                        ? sourceEl.GetString()
+                        : null;
+                    var echo = root.TryGetProperty("echo", out var echoEl) && echoEl.GetBoolean();
+
+                    var result = RhinoScriptExecutor.Run(new RunRhinoScriptParams
+                    {
+                        Mode = mode,
+                        Source = source,
+                        Echo = echo
+                    });
+
+                    var response = new RunRhinoScriptResponse
+                    {
+                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        Ok = result.Ok,
+                        Output = result.Output ?? "",
+                        Error = result.Error ?? ""
+                    };
+
+                    return JsonSerializer.Serialize(response);
+                }
+                catch (Exception ex)
+                {
+                    return JsonSerializer.Serialize(new RunRhinoScriptResponse
+                    {
+                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        Ok = false,
+                        Error = $"{ex.GetType().Name} - {ex.Message}"
+                    });
+                }
+            });
+        }
+    }
 }

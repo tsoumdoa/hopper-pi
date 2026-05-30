@@ -63,6 +63,9 @@ namespace rhino_zmq_poc
                 "beginAgentTransaction" => ExecuteBeginAgentTransaction(doc, command.Params),
                 "commitAgentTransaction" => ExecuteCommitAgentTransaction(doc, command.Params),
                 "cancelAgentTransaction" => ExecuteCancelAgentTransaction(doc, command.Params),
+                "beginRhinoAgentTransaction" => ExecuteBeginRhinoAgentTransaction(command.Params),
+                "commitRhinoAgentTransaction" => ExecuteCommitRhinoAgentTransaction(),
+                "cancelRhinoAgentTransaction" => ExecuteCancelRhinoAgentTransaction(),
                 _ => $"Unknown action: {command.Action}"
             };
 
@@ -347,6 +350,25 @@ namespace rhino_zmq_poc
 
         private string ExecuteCancelAgentTransaction(GH_Document doc, JsonElement _)
             => AgentTransaction.Cancel(doc);
+
+        private string ExecuteBeginRhinoAgentTransaction(JsonElement p)
+        {
+            var param = p.Deserialize<BeginAgentTransactionParams>();
+            var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
+            return RhinoAgentTransaction.Begin(rhinoDoc, param?.Name);
+        }
+
+        private string ExecuteCommitRhinoAgentTransaction()
+        {
+            var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
+            return RhinoAgentTransaction.Commit(rhinoDoc);
+        }
+
+        private string ExecuteCancelRhinoAgentTransaction()
+        {
+            var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
+            return RhinoAgentTransaction.Cancel(rhinoDoc);
+        }
     }
 }
 

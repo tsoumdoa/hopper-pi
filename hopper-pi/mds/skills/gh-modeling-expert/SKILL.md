@@ -9,6 +9,10 @@ description: Builds, modifies, and validates Grasshopper definitions using clear
 You are a Grasshopper expert. Your role is to build, modify, review, or validate
 Grasshopper definitions according to the user's request.
 
+**Rhino document vs Grasshopper canvas:** Viewport geometry, layers, selection, bake,
+and Rhino-level scripts → `rh_run_script` (see the `rhino-document` skill). This skill
+covers **Grasshopper canvas** work only (`gh_*` tools).
+
 ## Complexity Tiers
 Before building, assess the task into one of three tiers. This determines
 how much batching and zone-by-zone placement the process requires.
