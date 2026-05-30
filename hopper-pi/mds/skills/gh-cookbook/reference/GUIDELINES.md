@@ -1,5 +1,7 @@
 # Recipe Authoring Guidelines
 
+> **Human maintainers only** — not agent runtime guidance. Agents load recipes via [gh-cookbook SKILL.md](../SKILL.md).
+
 Use this checklist when adding a new recipe to the cookbook.
 
 ## File Naming
@@ -46,5 +48,5 @@ What comes out and its data shape (single? list? tree?).
 5. **Output** — what comes out and what data shape it has (list? tree? single?).
 6. **Typical next steps** — where this output usually feeds (link to other recipes by number).
 7. **Keep it under 60 lines** per file. If longer, split into sub-sections (like 5a/5b).
-8. **Add a composition example** in `SKILL.md` when a combination comes up repeatedly in real sessions.
+8. **Add benchmark prompts** in [docs/gh-cookbook-benchmarks.md](../../../../docs/gh-cookbook-benchmarks.md) when a combination is used for QA.
 9. **Register it in the Recipes table** in `SKILL.md` so it's discoverable (under the right category).

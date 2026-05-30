@@ -1,5 +1,7 @@
 # GH Cookbook — Benchmark Prompts
 
+> **Human QA only** — not agent runtime guidance. Operational recipes live in `mds/skills/gh-cookbook/`.
+
 Use these prompts to test how well the agent follows each recipe. Prompts are grouped by **tier** (complexity) and tagged with which **recipe(s)** they exercise.
 
 ## Scoring Criteria
