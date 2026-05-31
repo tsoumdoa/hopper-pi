@@ -6,7 +6,7 @@ const BASE62_ALPHABET =
 const DEFAULT_SHORT_LENGTH = 4;
 const MAX_SHORT_LENGTH = 22;
 
-type GuidKind = "type" | "instance";
+type GuidKind = "type" | "instance" | "rhino";
 
 type GuidStore = {
 	shortToFull: Map<string, string>;
@@ -21,6 +21,11 @@ const stores: Record<GuidKind, GuidStore> = {
 		normalizedToShort: new Map(),
 	},
 	instance: {
+		shortToFull: new Map(),
+		normalizedToFull: new Map(),
+		normalizedToShort: new Map(),
+	},
+	rhino: {
 		shortToFull: new Map(),
 		normalizedToFull: new Map(),
 		normalizedToShort: new Map(),
@@ -123,4 +128,18 @@ export function resolveTypeGuid(value: string): string {
 export function resolveInstanceGuid(value: string): string {
 	if (!value) return value;
 	return resolveGuid(value, "instance");
+}
+
+export function toShortRhinoGuid(guid: string): string {
+	if (!guid) return guid;
+	return registerGuid(guid, "rhino");
+}
+
+export function resolveRhinoGuid(value: string): string {
+	if (!value) return value;
+	return resolveGuid(value, "rhino");
+}
+
+export function resolveRhinoGuids(values: string[]): string[] {
+	return values.map(resolveRhinoGuid);
 }

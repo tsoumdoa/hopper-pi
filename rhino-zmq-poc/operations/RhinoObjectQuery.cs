@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Serialization;
 using Rhino;
 using Rhino.DocObjects;
 
@@ -16,9 +17,16 @@ namespace rhino_zmq_poc
 
     public class QueryRhinoObjectsParams
     {
+        [JsonPropertyName("selectionOnly")]
         public bool? SelectionOnly { get; set; }
+
+        [JsonPropertyName("layer")]
         public string Layer { get; set; }
+
+        [JsonPropertyName("objectIds")]
         public List<string> ObjectIds { get; set; }
+
+        [JsonPropertyName("objectType")]
         public string ObjectType { get; set; }
     }
 

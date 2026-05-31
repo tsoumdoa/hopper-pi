@@ -29,10 +29,25 @@ See [rhino-script-boilerplate.md](../../reference/rhino-script-boilerplate.md).
 
 ## Rhino → Grasshopper params
 
-1. `rh_query_objects` (or `rh_run_script` + `print(ids)`) → **Rhino objectId** GUIDs
+1. `rh_query_objects` → **short Rhino objectId** aliases (4–10 chars), or `countOnly: true` to check how many match
 2. `gh_list_components` with `searchFrom: "params"` → **typeGuid** (e.g. Curve, Point)
 3. `gh_edit_components` `add` → **param instance targetId** from `gh_get_canvas`
-4. `gh_param_rhino` — `reference`: `new GH_Curve(rhinoId)`; `internalize`: duplicate geometry (`curve.DuplicateCurve()`, etc.). Use `get` to verify (internalized → no `rhino=` on persistent items).
+4. `gh_param_rhino`:
+   - **Few objects (≤30):** `rhinoObjectIds` with short IDs from step 1
+   - **Whole layer / large sets:** `rhinoQuery: { layer, objectType?, selectionOnly? }` — no ID list in the agent turn (required above 30 objects)
+   - `reference` keeps live Rhino links; `internalize` copies geometry. Use `get` to verify (internalized → no `rhino=` on persistent items).
+
+**Bulk layer example:**
+
+```json
+{
+  "items": [{
+    "action": "reference",
+    "targetId": "a1b2",
+    "rhinoQuery": { "layer": "Geometry::Walls", "objectType": "curve" }
+  }]
+}
+```
 
 ## Examples
 

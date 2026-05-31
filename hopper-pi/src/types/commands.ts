@@ -286,10 +286,17 @@ export type BeginAgentTransactionParams = {
 	name?: string;
 };
 
+export type RhinoObjectQueryParams = {
+	selectionOnly?: boolean;
+	layer?: string;
+	objectType?: string;
+};
+
 export type SetParamRhinoGeometryParams = {
 	targetId: string;
 	mode: "reference" | "internalize";
-	rhinoObjectIds: string[];
+	rhinoObjectIds?: string[];
+	rhinoQuery?: RhinoObjectQueryParams;
 };
 
 export type CommandAction =

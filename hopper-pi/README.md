@@ -146,7 +146,8 @@ Key points:
 
 - **`gh_get_canvas` populates the GUID shortener** — component and port GUIDs are returned as short base62 aliases, and edit tools automatically resolve them back to full GUIDs before sending commands. But only call after all components are placed — one call per build cycle.
 - **`gh_list_components` returns typeGuids** — each component's typeGuid can be used as `componentType` in `gh_edit_components`. Use `searchFrom` to filter by source: `"vanilla"`, `"plugin"`, or `"params"`.
-- **GUID resolution via guid-shortener** — hash-based short GUID resolution via `guid-shortener` (SHA-256 + base62).
+- **GUID resolution via guid-shortener** — hash-based short GUID resolution via `guid-shortener` (SHA-256 + base62). GH canvas IDs (`type` / `instance`) are populated by `gh_get_canvas`. Rhino object IDs (`rhino`) are populated by `rh_query_objects` and resolved by `gh_param_rhino`.
+- **Bulk Rhino → GH params** — use `gh_param_rhino` with `rhinoQuery` (layer / selection / type) instead of listing thousands of `rhinoObjectIds`. Explicit `rhinoObjectIds` is capped at **30** per call.
 - **Canvas errors include overlap detection** — `gh_get_canvas_errors` reports both runtime errors/warnings and any components that visually overlap on the canvas
 
 ---
@@ -182,6 +183,7 @@ hopper-pi/src/
 │   ├── parser.ts            Grasshopper XML archive → ParsedGrasshopper JSON
 │   ├── guid-shortener.ts    SHA-256 + base62 GUID shortening/resolution
 │   │                              toShortInstanceGuid(), toShortTypeGuid(),
+│   │                              toShortRhinoGuid(), resolveRhinoGuid(),
 │   │                              resolveInstanceGuid(), resolveTypeGuid()
 │   └── component-registry.ts Per-call sequential number → typeGuid mapping
 │

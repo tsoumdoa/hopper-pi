@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Text.Json.Serialization;
 using Grasshopper.Kernel;
@@ -22,6 +23,9 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("rhinoObjectIds")]
         public List<string> RhinoObjectIds { get; set; }
+
+        [JsonPropertyName("rhinoQuery")]
+        public QueryRhinoObjectsParams RhinoQuery { get; set; }
     }
 
     public class GetParamRhinoGeometryParams
@@ -55,6 +59,8 @@ namespace rhino_zmq_poc
 
     public static class RhinoParamGeometryOps
     {
+        public const int MaxRhinoObjectIds = 30;
+
         public static string SetParamRhinoGeometry(GH_Document doc, RhinoDoc rhinoDoc, SetParamRhinoGeometryParams param)
         {
             if (doc == null) return "setParamRhinoGeometry error: Grasshopper document is null";
@@ -62,8 +68,39 @@ namespace rhino_zmq_poc
             if (param == null) return "setParamRhinoGeometry error: invalid params";
             if (!Guid.TryParse(param.TargetId, out var targetGuid))
                 return $"setParamRhinoGeometry error: invalid targetId '{param.TargetId}'";
-            if (param.RhinoObjectIds == null || param.RhinoObjectIds.Count == 0)
-                return "setParamRhinoGeometry error: rhinoObjectIds is required";
+            var hasIds = param.RhinoObjectIds != null && param.RhinoObjectIds.Count > 0;
+            var hasQuery = param.RhinoQuery != null && (
+                param.RhinoQuery.SelectionOnly == true
+                || !string.IsNullOrWhiteSpace(param.RhinoQuery.Layer)
+                || !string.IsNullOrWhiteSpace(param.RhinoQuery.ObjectType)
+                || (param.RhinoQuery.ObjectIds != null && param.RhinoQuery.ObjectIds.Count > 0));
+
+            if (hasIds && hasQuery)
+                return "setParamRhinoGeometry error: provide rhinoObjectIds or rhinoQuery, not both";
+            if (!hasIds && !hasQuery)
+            {
+                if (param.RhinoQuery != null)
+                    return "setParamRhinoGeometry error: rhinoQuery must include layer, objectType, or selectionOnly";
+                return "setParamRhinoGeometry error: rhinoObjectIds or rhinoQuery is required";
+            }
+
+            if (hasIds && param.RhinoObjectIds.Count > MaxRhinoObjectIds)
+                return $"setParamRhinoGeometry error: rhinoObjectIds accepts at most {MaxRhinoObjectIds} IDs; use rhinoQuery for bulk";
+
+            List<string> objectIds;
+            string queryNote = null;
+            if (hasQuery)
+            {
+                var matched = RhinoObjectQuery.Query(rhinoDoc, param.RhinoQuery);
+                if (matched.Count == 0)
+                    return "setParamRhinoGeometry error: rhinoQuery matched no Rhino objects";
+                objectIds = matched.Select(o => o.ObjectId).ToList();
+                queryNote = FormatRhinoQueryNote(param.RhinoQuery, matched.Count);
+            }
+            else
+            {
+                objectIds = param.RhinoObjectIds;
+            }
 
             var mode = (param.Mode ?? "").Trim().ToLowerInvariant();
             if (mode != "reference" && mode != "internalize")
@@ -78,7 +115,7 @@ namespace rhino_zmq_poc
             ghParam.ClearData();
             ClearPersistent(ghParam);
 
-            foreach (var rawId in param.RhinoObjectIds)
+            foreach (var rawId in objectIds)
             {
                 if (!Guid.TryParse(rawId, out var rhinoObjectId))
                     return $"setParamRhinoGeometry error: invalid rhinoObjectId '{rawId}'";
@@ -97,7 +134,22 @@ namespace rhino_zmq_poc
             ghParam.OnObjectChanged(GH_ObjectEventType.PersistentData);
             ghParam.ExpireSolution(true);
 
-            return $"setParamRhinoGeometry: {mode} {param.RhinoObjectIds.Count} object(s) on ({param.TargetId})";
+            var count = objectIds.Count;
+            if (!string.IsNullOrEmpty(queryNote))
+                return $"setParamRhinoGeometry: {mode} {count} object(s) on ({param.TargetId}) via {queryNote}";
+            return $"setParamRhinoGeometry: {mode} {count} object(s) on ({param.TargetId})";
+        }
+
+        private static string FormatRhinoQueryNote(QueryRhinoObjectsParams query, int count)
+        {
+            var parts = new List<string> { $"rhinoQuery matched {count}" };
+            if (query.SelectionOnly == true)
+                parts.Add("selectionOnly");
+            if (!string.IsNullOrWhiteSpace(query.Layer))
+                parts.Add($"layer=\"{query.Layer}\"");
+            if (!string.IsNullOrWhiteSpace(query.ObjectType))
+                parts.Add($"type={query.ObjectType}");
+            return string.Join(", ", parts);
         }
 
         public static GetParamRhinoGeometryResult GetParamRhinoGeometry(GH_Document doc, GetParamRhinoGeometryParams param)
