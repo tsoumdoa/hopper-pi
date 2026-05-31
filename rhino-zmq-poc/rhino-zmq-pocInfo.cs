@@ -10,7 +10,7 @@ namespace rhino_zmq_poc
     public override string Name => "rhino-zmq-poc Info";
 
     //Return a 24x24 pixel bitmap to represent this GHA library.
-    public override Bitmap Icon => null;
+    public override Bitmap Icon => PluginIcon.Bitmap;
 
     //Return a short string describing the purpose of this GHA library.
     public override string Description => "";

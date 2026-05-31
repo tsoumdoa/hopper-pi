@@ -36,7 +36,7 @@ namespace rhino_zmq_poc
         public rhino_zmq_pocComponent()
             : base("GH ZMQ Plugin", "GHZMQ",
                 "CLI-GH Connector: ZMQ pub/sub and command execution",
-                "CLI-GH", "Commands")
+                "Params", "Util")
         {
         }
 
@@ -215,7 +215,7 @@ namespace rhino_zmq_poc
 
         public override GH_Exposure Exposure => GH_Exposure.primary;
 
-        protected override Bitmap Icon => null;
+        protected override Bitmap Icon => PluginIcon.Bitmap;
 
         public override Guid ComponentGuid => new Guid("e07753b1-fdec-417a-b57a-83a95204a8dd");
 
