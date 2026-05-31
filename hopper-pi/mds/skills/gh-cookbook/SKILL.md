@@ -1,6 +1,6 @@
 ---
 name: gh-cookbook
-description: Repeatable recipe cards for Grasshopper patterns — rectangle surface, UV subdivision, edges, loft, extrude, pipe/sweep, dispatch, populate points, projection. Use when the user asks to build these workflows.
+description: Repeatable recipe cards for Grasshopper patterns — rectangle surface, UV subdivision, edges, loft, extrude, pipe/sweep, dispatch, populate points, projection, bake. Use when the user asks to build these workflows.
 ---
 
 # Grasshopper Cookbook
@@ -32,6 +32,7 @@ Pattern library — each recipe is a self-contained build card (components, wiri
 | **6** | [Dispatch Pattern](./reference/recipe-6-dispatch-pattern.md) | A/B split with boolean pattern |
 | **7** | [Populate Points](./reference/recipe-7-populate-points.md) | Grid or random points on surface |
 | **8** | [Project Points](./reference/recipe-8-project-points.md) | Ray-cast points onto geometry |
+| **9** | [Bake Geometry](./reference/recipe-9-bake-geometry.md) | Bake to Rhino doc on a named/colored layer via Model Object + Model Layer |
 
 ## New recipes
 
