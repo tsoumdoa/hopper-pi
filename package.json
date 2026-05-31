@@ -5,12 +5,21 @@
 		"pi-package"
 	],
 	"type": "module",
+	"files": [
+		"src",
+		"mds",
+		"guids.json",
+		"grasshopper-plugin",
+		"scripts"
+	],
 	"scripts": {
 		"dev": "tsx src/index.ts",
 		"build": "tsc -p tsconfig.json",
 		"test": "tsx src/tools/query-handlers.search.test.ts",
 		"pi": "pi -e .",
-		"dump:components": "tsx src/scripts/dump-components.ts"
+		"dump:components": "tsx src/scripts/dump-components.ts",
+		"postinstall": "node scripts/install-grasshopper-plugin.mjs",
+		"build:gh-plugin": "node scripts/install-grasshopper-plugin.mjs --build-only"
 	},
 	"devDependencies": {
 		"@types/node": "^20.19.41",
