@@ -226,8 +226,8 @@ namespace rhino_zmq_poc
         [JsonPropertyName("height")]
         public double? Height { get; set; }
 
-        [JsonPropertyName("multiline")]
-        public bool? Multiline { get; set; }
+        [JsonPropertyName("textOutput")]
+        public string TextOutput { get; set; }
 
         [JsonPropertyName("bgColor")]
         public string BgColor { get; set; }
@@ -238,14 +238,14 @@ namespace rhino_zmq_poc
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
 
+        [JsonPropertyName("textOutput")]
+        public string TextOutput { get; set; }
+
         [JsonPropertyName("width")]
         public double? Width { get; set; }
 
         [JsonPropertyName("height")]
         public double? Height { get; set; }
-
-        [JsonPropertyName("multiline")]
-        public bool? Multiline { get; set; }
 
         [JsonPropertyName("bgColor")]
         public string BgColor { get; set; }

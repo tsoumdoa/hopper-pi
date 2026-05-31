@@ -175,21 +175,23 @@ export type SetValueListSelectedParams = {
 	selectedIndex: number;
 };
 
+export type PanelTextOutput = "singleString" | "oneItemPerLine";
+
 export type CreatePanelParams = {
 	position: Position;
 	nickName?: string;
 	text: string;
+	textOutput: PanelTextOutput;
 	width?: number;
 	height?: number;
-	multiline?: boolean;
 	bgColor?: string;
 };
 
 export type SetPanelParams = {
 	targetId: string;
+	textOutput: PanelTextOutput;
 	width?: number;
 	height?: number;
-	multiline?: boolean;
 	bgColor?: string;
 };
 

@@ -10,6 +10,7 @@ export {
 	SliderCreateFields,
 	SliderSetFields,
 	SliderRangeFields,
+	PanelTextOutputType,
 	PanelCreateFields,
 	PanelPropertyFields,
 	PanelTextFields,

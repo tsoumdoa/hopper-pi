@@ -82,8 +82,8 @@ Use when Ks/Ke/transparency/etc. matter beyond swatch color. `H_GAP_TIGHT` betwe
 |----------------|--------------|-------|
 | Slider | ~160 × 20 | Variable width |
 | Toggle | ~50 × 20 | |
-| Panel (single-line) | ~80–200 × 20 | |
-| Panel (multi-line) | variable | Near consumer |
+| Panel (`textOutput: "singleString"`) | ~80–200 × 20 | One string output |
+| Panel (`textOutput: "oneItemPerLine"`, tall) | variable | One list item per line; near consumer |
 | Value List | ~100 × 20 | |
 | Colour Swatch | ~120 × 20 | |
 | Create Material | ~65 × 105 | Tall |

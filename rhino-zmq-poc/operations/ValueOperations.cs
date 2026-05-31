@@ -101,8 +101,10 @@ namespace rhino_zmq_poc
                 panel.UserText = param.Text;
                 panel.NickName = param.NickName ?? "Panel";
 
-                if (param.Multiline.HasValue)
-                    panel.Properties.Multiline = param.Multiline.Value;
+                var textOutputError = Utilities.TryResolvePanelMultiline(param.TextOutput, out var multiline);
+                if (textOutputError != null)
+                    return $"createPanel error: {textOutputError}";
+                panel.Properties.Multiline = multiline;
 
                 if (!string.IsNullOrEmpty(param.BgColor))
                     panel.Properties.Colour = Utilities.ParseRgbaColor(param.BgColor);
@@ -139,8 +141,10 @@ namespace rhino_zmq_poc
 
             if (obj is GH_Panel panel)
             {
-                if (param.Multiline.HasValue)
-                    panel.Properties.Multiline = param.Multiline.Value;
+                var textOutputError = Utilities.TryResolvePanelMultiline(param.TextOutput, out var multiline);
+                if (textOutputError != null)
+                    return $"setPanelParams error: {textOutputError}";
+                panel.Properties.Multiline = multiline;
 
                 if (!string.IsNullOrEmpty(param.BgColor))
                     panel.Properties.Colour = Utilities.ParseRgbaColor(param.BgColor);

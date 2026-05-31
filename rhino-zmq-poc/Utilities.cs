@@ -60,6 +60,25 @@ namespace rhino_zmq_poc
             _ => m.ToString()
         };
 
+        /// <summary>Maps API textOutput to GH_Panel.Properties.Multiline.</summary>
+        public static string TryResolvePanelMultiline(string textOutput, out bool multiline)
+        {
+            multiline = false;
+            if (string.IsNullOrEmpty(textOutput))
+                return "textOutput is required (singleString or oneItemPerLine)";
+            switch (textOutput)
+            {
+                case "singleString":
+                    multiline = true;
+                    return null;
+                case "oneItemPerLine":
+                    multiline = false;
+                    return null;
+                default:
+                    return $"invalid textOutput '{textOutput}' (expected 'singleString' or 'oneItemPerLine')";
+            }
+        }
+
         private static readonly TimeSpan DefaultUiTimeout = TimeSpan.FromSeconds(30);
 
         public static void RunOnUiThread(Action action, TimeSpan? timeout = null)

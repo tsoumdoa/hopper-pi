@@ -16,6 +16,24 @@ Lightweight type checks via parameter components:
 
 Remember: a line is two points; a plane needs origin + orientation (not three arbitrary points).
 
+## Panel `textOutput` (required on create / setProperty)
+
+| `textOutput` | Downstream data | Use when |
+|--------------|-----------------|----------|
+| `singleString` | One string; line breaks stay inside it | Domains (`0 to 1`), paths, labels, any single text value |
+| `oneItemPerLine` | One list item **per line** | Several numbers, points, or pattern tokens — one value per row |
+
+Examples (same panel text, different mode):
+
+```
+1
+2
+3
+```
+
+- `oneItemPerLine` → list `{1, 2, 3}`
+- `singleString` → one string `"1\n2\n3"`
+
 ## Input construction tips
 
 - Point/vector on panel: `{0,0,0}`

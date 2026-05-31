@@ -34,7 +34,7 @@ Assess tier before building. When in doubt, round **up**.
 | Type | ~size | Notes |
 |------|-------|-------|
 | Slider / Toggle / Swatch | ~160×20, ~50×20, ~120×20 | Short — stack in params zone |
-| Panel | ~80–200×20 | Single-line for one value; multi-line for lists |
+| Panel | ~80–200×20 | `textOutput: "singleString"` or `"oneItemPerLine"` (required) |
 | Custom Preview | ~45×60 | Output zone, rightmost |
 | Create Material | ~65×105 | Optional — see preview default below |
 | Script (C#/Python) | ~90×140+ | Tall — center on feeding group midpoint |

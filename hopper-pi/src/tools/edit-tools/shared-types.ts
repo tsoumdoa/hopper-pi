@@ -55,18 +55,26 @@ export const SliderRangeFields = Type.Object({
 	interval: Type.Optional(Type.Number({ description: "Not yet processed by backend" })),
 });
 
+export const PanelTextOutputType = Type.Union([
+	Type.Literal("singleString"),
+	Type.Literal("oneItemPerLine"),
+], {
+	description:
+		"How panel text becomes downstream data. singleString: entire text is one string (newlines preserved). oneItemPerLine: each line is a separate list item.",
+});
+
 export const PanelCreateFields = Type.Object({
 	text: Type.String(),
+	textOutput: PanelTextOutputType,
 	width: Type.Optional(Type.Number()),
 	height: Type.Optional(Type.Number()),
-	multiline: Type.Optional(Type.Boolean()),
 	bgColor: Type.Optional(Type.String({ description: "rgba string, e.g. 'rgba(255,0,0,255)'" })),
 });
 
 export const PanelPropertyFields = Type.Object({
+	textOutput: PanelTextOutputType,
 	width: Type.Optional(Type.Number()),
 	height: Type.Optional(Type.Number()),
-	multiline: Type.Optional(Type.Boolean()),
 	bgColor: Type.Optional(Type.String({ description: "rgba string, e.g. 'rgba(255,0,0,255)'" })),
 });
 
