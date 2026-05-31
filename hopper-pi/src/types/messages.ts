@@ -86,3 +86,32 @@ export type RunRhinoScriptResponse = {
 	output: string;
 	error: string;
 };
+
+export type RhinoObjectInfo = {
+	objectId: string;
+	name: string;
+	layer: string;
+	objectType: string;
+};
+
+export type QueryRhinoObjectsResponse = {
+	type: "queryRhinoObjects.response";
+	timestamp: number;
+	objects: RhinoObjectInfo[];
+};
+
+export type ParamRhinoGeometryItem = {
+	path: string;
+	gooType: string;
+	rhinoObjectId: string;
+	source: string;
+};
+
+export type GetParamRhinoGeometryResponse = {
+	type: "getParamRhinoGeometry.response";
+	timestamp: number;
+	targetId: string;
+	paramName: string;
+	volatileItems: ParamRhinoGeometryItem[];
+	persistentItems: ParamRhinoGeometryItem[];
+};

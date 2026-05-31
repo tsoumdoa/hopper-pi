@@ -45,6 +45,8 @@ namespace rhino_zmq_poc
             _requestDispatcher.Register("listScriptParams", new ListScriptParamsHandler());
             _requestDispatcher.Register("getScriptCode", new GetScriptCodeHandler());
             _requestDispatcher.Register("runRhinoScript", new RunRhinoScriptHandler());
+            _requestDispatcher.Register("queryRhinoObjects", new QueryRhinoObjectsHandler());
+            _requestDispatcher.Register("getParamRhinoGeometry", new GetParamRhinoGeometryHandler());
             _jobStatusHandler = status =>
             {
                 OnJobStatus?.Invoke(status);

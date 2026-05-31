@@ -766,4 +766,31 @@ namespace rhino_zmq_poc
         [JsonPropertyName("error")]
         public string Error { get; set; }
     }
+
+    public class RhinoObjectInfoDto
+    {
+        [JsonPropertyName("objectId")]
+        public string ObjectId { get; set; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; }
+
+        [JsonPropertyName("layer")]
+        public string Layer { get; set; }
+
+        [JsonPropertyName("objectType")]
+        public string ObjectType { get; set; }
+    }
+
+    public class QueryRhinoObjectsResponse
+    {
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = "queryRhinoObjects.response";
+
+        [JsonPropertyName("timestamp")]
+        public long Timestamp { get; set; }
+
+        [JsonPropertyName("objects")]
+        public List<RhinoObjectInfoDto> Objects { get; set; }
+    }
 }

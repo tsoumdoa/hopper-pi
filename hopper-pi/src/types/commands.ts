@@ -286,6 +286,12 @@ export type BeginAgentTransactionParams = {
 	name?: string;
 };
 
+export type SetParamRhinoGeometryParams = {
+	targetId: string;
+	mode: "reference" | "internalize";
+	rhinoObjectIds: string[];
+};
+
 export type CommandAction =
 	| "addComponent"
 	| "deleteComponent"
@@ -330,7 +336,8 @@ export type CommandAction =
 	| "cancelAgentTransaction"
 	| "beginRhinoAgentTransaction"
 	| "commitRhinoAgentTransaction"
-	| "cancelRhinoAgentTransaction";
+	| "cancelRhinoAgentTransaction"
+	| "setParamRhinoGeometry";
 
 export type CommandParams =
 	| AddComponentParams
@@ -372,6 +379,7 @@ export type CommandParams =
 	| ListScriptParamsParams
 	| EditParamPropsParams
 	| BeginAgentTransactionParams
+	| SetParamRhinoGeometryParams
 	| Record<string, never>;
 
 export type Command = {

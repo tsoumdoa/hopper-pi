@@ -5,6 +5,7 @@ import { runRhinoScript } from "./rhino-script-handlers.js";
 
 const ROUTING_PREFIX =
 	"USE rh_run_script for Rhino document / viewport work (geometry, layers, selection, blocks, bake, materials). " +
+	"USE rh_query_objects to list Rhino object GUIDs for gh_param_rhino. " +
 	"USE gh_* tools for Grasshopper canvas (components, wires, sliders, GH script nodes). ";
 
 export const rhRunScriptTool = defineTool({

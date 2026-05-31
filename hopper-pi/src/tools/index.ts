@@ -1,4 +1,6 @@
 import { rhRunScriptTool } from "./rh-run-script.js";
+import { rhQueryObjectsTool } from "./rh-query-objects.js";
+import { ghParamRhinoTool } from "./gh-param-rhino.js";
 import {
 	ghGetCanvasTool,
 	ghListComponentsTool,
@@ -18,7 +20,9 @@ import {
 /** All tool definitions in registration order (Rhino doc first, then GH edit/query tools) */
 export const ALL_TOOLS = [
 	rhRunScriptTool,
+	rhQueryObjectsTool,
 	// ── Edit tools ──
+	ghParamRhinoTool,
 	ghCreateWidgetTool,
 	ghMutateWidgetTool,
 	ghEditComponentsTool,
@@ -35,6 +39,8 @@ export const ALL_TOOLS = [
 // Re-export for convenience
 export {
 	rhRunScriptTool,
+	rhQueryObjectsTool,
+	ghParamRhinoTool,
 	ghGetCanvasTool,
 	ghListComponentsTool,
 	ghGetCanvasErrorsTool,

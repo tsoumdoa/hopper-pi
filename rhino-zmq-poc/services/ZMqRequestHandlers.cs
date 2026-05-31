@@ -274,4 +274,92 @@ namespace rhino_zmq_poc
             });
         }
     }
+
+    public class GetParamRhinoGeometryHandler : IUiRequestHandler
+    {
+        public string Handle(GH_Document doc, JsonElement root)
+        {
+            return Utilities.RunOnUiThread(() =>
+            {
+                try
+                {
+                    var targetId = root.TryGetProperty("targetId", out var idEl)
+                        ? idEl.GetString()
+                        : null;
+                    if (string.IsNullOrEmpty(targetId))
+                        return JsonSerializer.Serialize(new { error = "targetId is required" });
+
+                    var result = RhinoParamGeometryOps.GetParamRhinoGeometry(doc, new GetParamRhinoGeometryParams
+                    {
+                        TargetId = targetId,
+                    });
+
+                    return JsonSerializer.Serialize(new
+                    {
+                        type = "getParamRhinoGeometry.response",
+                        timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        targetId = result.TargetId,
+                        paramName = result.ParamName,
+                        volatileItems = result.Volatile,
+                        persistentItems = result.Persistent,
+                    });
+                }
+                catch (Exception ex)
+                {
+                    return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
+                }
+            });
+        }
+    }
+
+    public class QueryRhinoObjectsHandler : IUiRequestHandler
+    {
+        public string Handle(GH_Document doc, JsonElement root)
+        {
+            return Utilities.RunOnUiThread(() =>
+            {
+                try
+                {
+                    var query = new QueryRhinoObjectsParams();
+                    if (root.TryGetProperty("selectionOnly", out var selEl))
+                        query.SelectionOnly = selEl.GetBoolean();
+                    if (root.TryGetProperty("layer", out var layerEl))
+                        query.Layer = layerEl.GetString();
+                    if (root.TryGetProperty("objectType", out var typeEl))
+                        query.ObjectType = typeEl.GetString();
+                    if (root.TryGetProperty("objectIds", out var idsEl) && idsEl.ValueKind == JsonValueKind.Array)
+                    {
+                        query.ObjectIds = new List<string>();
+                        foreach (var item in idsEl.EnumerateArray())
+                        {
+                            var id = item.GetString();
+                            if (!string.IsNullOrEmpty(id))
+                                query.ObjectIds.Add(id);
+                        }
+                    }
+
+                    var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
+                    var objects = RhinoObjectQuery.Query(rhinoDoc, query);
+
+                    var response = new QueryRhinoObjectsResponse
+                    {
+                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        Objects = objects.Select(o => new RhinoObjectInfoDto
+                        {
+                            ObjectId = o.ObjectId,
+                            Name = o.Name,
+                            Layer = o.Layer,
+                            ObjectType = o.ObjectType,
+                        }).ToList(),
+                    };
+
+                    return JsonSerializer.Serialize(response);
+                }
+                catch (Exception ex)
+                {
+                    return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
+                }
+            });
+        }
+    }
 }

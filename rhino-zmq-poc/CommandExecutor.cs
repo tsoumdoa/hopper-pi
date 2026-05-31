@@ -66,6 +66,7 @@ namespace rhino_zmq_poc
                 "beginRhinoAgentTransaction" => ExecuteBeginRhinoAgentTransaction(command.Params),
                 "commitRhinoAgentTransaction" => ExecuteCommitRhinoAgentTransaction(),
                 "cancelRhinoAgentTransaction" => ExecuteCancelRhinoAgentTransaction(),
+                "setParamRhinoGeometry" => ExecuteSetParamRhinoGeometry(doc, command.Params),
                 _ => $"Unknown action: {command.Action}"
             };
 
@@ -368,6 +369,17 @@ namespace rhino_zmq_poc
         {
             var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
             return RhinoAgentTransaction.Cancel(rhinoDoc);
+        }
+
+        private string ExecuteSetParamRhinoGeometry(GH_Document doc, JsonElement p)
+        {
+            var param = p.Deserialize<SetParamRhinoGeometryParams>();
+            if (param == null)
+                return "setParamRhinoGeometry error: invalid params";
+            if (string.IsNullOrWhiteSpace(param.TargetId))
+                return "setParamRhinoGeometry error: missing targetId";
+            var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
+            return RhinoParamGeometryOps.SetParamRhinoGeometry(doc, rhinoDoc, param);
         }
     }
 }

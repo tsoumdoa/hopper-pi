@@ -13,6 +13,8 @@ description: >
 | Task | Tool |
 |------|------|
 | Rhino geometry, layers, selection, bake, materials, viewport | `rh_run_script` |
+| List Rhino object GUIDs (for GH params) | `rh_query_objects` |
+| Get / reference / internalize Rhino geometry on a GH param | `gh_param_rhino` |
 | Grasshopper components, wires, sliders, GH script nodes | `gh_*` tools |
 
 If both are needed in one request, use **both**: `rh_run_script` for the document, `gh_*` for the canvas.
@@ -24,6 +26,13 @@ If both are needed in one request, use **both**: `rh_run_script` for the documen
 - **csharp** — Rhino C# script editor source (Rhino 8)
 
 See [rhino-script-boilerplate.md](../../reference/rhino-script-boilerplate.md).
+
+## Rhino → Grasshopper params
+
+1. `rh_query_objects` (or `rh_run_script` + `print(ids)`) → **Rhino objectId** GUIDs
+2. `gh_list_components` with `searchFrom: "params"` → **typeGuid** (e.g. Curve, Point)
+3. `gh_edit_components` `add` → **param instance targetId** from `gh_get_canvas`
+4. `gh_param_rhino` — `reference`: `new GH_Curve(rhinoId)`; `internalize`: duplicate geometry (`curve.DuplicateCurve()`, etc.). Use `get` to verify (internalized → no `rhino=` on persistent items).
 
 ## Examples
 

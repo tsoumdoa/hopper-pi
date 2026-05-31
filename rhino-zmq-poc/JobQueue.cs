@@ -122,9 +122,17 @@ namespace rhino_zmq_poc
 
                 try
                 {
-                    RhinoZmqPlugin.Instance?.Component?.ExecuteCommand(job.Command);
-                    job.Progress = 100;
-                    job.State = JobState.Completed;
+                    var result = RhinoZmqPlugin.Instance?.Component?.ExecuteCommand(job.Command) ?? "";
+                    if (result.IndexOf(" error:", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        job.State = JobState.Failed;
+                        job.Error = result;
+                    }
+                    else
+                    {
+                        job.Progress = 100;
+                        job.State = JobState.Completed;
+                    }
                 }
                 catch (Exception ex)
                 {
