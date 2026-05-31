@@ -34,7 +34,7 @@ namespace rhino_zmq_poc
         private bool _isOwner;
 
         public rhino_zmq_pocComponent()
-            : base("GH ZMQ Plugin", "GHZMQ",
+            : base("Hopper Code Backend", "GHZMQ",
                 "CLI-GH Connector: ZMQ pub/sub and command execution",
                 "Params", "Util")
         {
