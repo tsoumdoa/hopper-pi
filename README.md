@@ -1,5 +1,8 @@
 # hoppercode
 
+A transparent, hackable modeling agent for computational designers who want
+AI inside their real workflow — not locked behind a black-box SaaS.
+
 > **Heads up:** This project was heavily vibe-coded and is super early in its own development. APIs, tools, and behavior will change without notice. **Use it at your own risk.**
 
 **hoppercode** (published as [`hopper-pi`](https://www.npmjs.com/package/hopper-pi)) is a [Pi](https://github.com/earendil-works/pi) extension plus a Grasshopper plugin that lets an AI agent inspect and edit a Grasshopper canvas—and run scripts against the Rhino document—over ZeroMQ while Rhino is open.
