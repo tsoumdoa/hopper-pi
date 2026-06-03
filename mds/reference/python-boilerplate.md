@@ -13,7 +13,8 @@ Grasshopper Python component — not a standalone script. No `main()`, CLI, or p
 - `ghpythonlib.treehelpers` for list/tree work; prefer simple Python lists for list outputs.
 - Port changes: `gh_edit_param`.
 
-## Template
+## Examples to work with list and tree
+list is what python expeccts, and tree is what Grasshopper expects
 
 ```python
 import ghpythonlib.treehelpers as th
@@ -27,5 +28,5 @@ for branch in nested:
     else:
         result.append(branch)
 
-a = result
+a = th.list_to_tree(result)
 ```

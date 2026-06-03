@@ -81,6 +81,11 @@ Full table, bounds math, pivot safety, worked examples → [layout-system.md](..
 - 3D geometry: **Breps** unless specified.
 - Solids: prefer extrude, pipe, sweep, loft over heavy booleans.
 
+## Common problems
+- lists are not converted to tree using  ```ghpythonlib.treehelpers.list_to_tree(res)``` before assining to the output
+- Extruded crvs result in open breps, you need to extrude them as srf or cap
+  them.
+
 ## Final checklist
 
 - Delete unused components; fix errors; no overlaps.
