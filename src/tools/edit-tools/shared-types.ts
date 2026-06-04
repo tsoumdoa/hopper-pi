@@ -16,10 +16,12 @@ export const AccessType = Type.Union([
 export const TypeHintType = Type.Union([
 	Type.Literal("object"),
 	Type.Literal("double"),
+	Type.Literal("int"),
+	Type.Literal("integer"),
 	Type.Literal("string"),
 	Type.Literal("bool"),
 	Type.Literal("boolean"),
-], { description: "Script param type hint (default: object). Use double for numbers, string for text, bool for booleans." });
+], { description: "Script param type hint (default: object). Use double for floating-point numbers, int for integers, string for text, bool for booleans." });
 
 export const ScriptIOFields = Type.Object({
 	name: Type.String({ description: "Parameter name" }),

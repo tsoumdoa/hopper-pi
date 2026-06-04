@@ -195,7 +195,7 @@ export type SetPanelParams = {
 	bgColor?: string;
 };
 
-export type TypeHint = "object" | "double" | "string" | "bool" | "boolean";
+export type TypeHint = "object" | "double" | "int" | "integer" | "string" | "bool" | "boolean";
 
 export type ScriptIOParam = {
 	name: string;
