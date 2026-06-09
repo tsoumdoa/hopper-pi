@@ -39,6 +39,7 @@ namespace rhino_zmq_poc
         {
             _jobQueue = jobQueue;
             _doc = doc;
+            _requestDispatcher.Register("ping", new PingHandler());
             _requestDispatcher.Register("listAllComponents", new ListAllComponentsHandler());
             _requestDispatcher.Register("getCurrentCanvas", new GetCurrentCanvasHandler());
             _requestDispatcher.Register("getCanvasErrors", new GetCanvasErrorsHandler());
@@ -231,10 +232,13 @@ namespace rhino_zmq_poc
                 using var doc = JsonDocument.Parse(message);
                 var type = doc.RootElement.GetProperty("type").GetString();
 
-                if (_requestDispatcher.TryDispatch(type, _doc, doc.RootElement, out var response))
+                if (_requestDispatcher.TryDispatch(type, _doc, doc.RootElement, out var response, out var handler))
                 {
                     if (_cts.IsCancellationRequested)
                         return JsonSerializer.Serialize(new { error = "Service shutting down" });
+
+                    if (!handler.RequiresUiThread)
+                        return response;
 
                     return Utilities.RunOnUiThread(() => response, TimeSpan.FromSeconds(5));
                 }

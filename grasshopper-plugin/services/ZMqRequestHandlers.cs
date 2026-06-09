@@ -9,6 +9,8 @@ namespace rhino_zmq_poc
 {
     public interface IUiRequestHandler
     {
+        bool RequiresUiThread => true;
+
         string Handle(GH_Document doc, JsonElement root);
     }
 
@@ -21,12 +23,27 @@ namespace rhino_zmq_poc
             _handlers[requestType] = handler;
         }
 
-        public bool TryDispatch(string requestType, GH_Document doc, JsonElement root, out string response)
+        public bool TryDispatch(string requestType, GH_Document doc, JsonElement root, out string response, out IUiRequestHandler handler)
         {
             response = null;
-            if (!_handlers.TryGetValue(requestType, out var handler)) return false;
+            handler = null;
+            if (!_handlers.TryGetValue(requestType, out handler)) return false;
             response = handler.Handle(doc, root);
             return true;
+        }
+    }
+
+    /// <summary>Lightweight liveness probe; must not wait on RhinoApp.Idle.</summary>
+    public class PingHandler : IUiRequestHandler
+    {
+        public bool RequiresUiThread => false;
+
+        public string Handle(GH_Document doc, JsonElement root)
+        {
+            return JsonSerializer.Serialize(new PingResponse
+            {
+                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            });
         }
     }
 

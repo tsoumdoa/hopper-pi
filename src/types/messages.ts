@@ -72,6 +72,11 @@ export type GetScriptCodeResponse = {
 	code: string;
 };
 
+export type PingResponse = {
+	type: "ping.response";
+	timestamp: number;
+};
+
 export type GetCanvasErrorsResponse = {
 	type: "getCanvasErrors.response";
 	timestamp: number;

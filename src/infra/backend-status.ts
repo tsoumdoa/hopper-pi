@@ -1,11 +1,15 @@
-import type { GetCanvasErrorsResponse } from "../types/messages.js";
+import type { PingResponse } from "../types/messages.js";
 import {
 	type BackendStatus,
+	getCachedBackendStatus,
 	setCachedBackendStatus,
 } from "./backend-status-cache.js";
 import { Requester } from "./requester.js";
 
 const PROBE_TIMEOUT_MS = 3_000;
+const OFFLINE_AFTER_CONSECUTIVE_FAILURES = 3;
+
+let consecutiveProbeFailures = 0;
 
 export type { BackendStatus } from "./backend-status-cache.js";
 export {
@@ -21,10 +25,10 @@ export {
 async function probeRequester(
 	requester: import("./requester.js").Requester
 ): Promise<void> {
-	const res = await requester.request<GetCanvasErrorsResponse>({
-		type: "getCanvasErrors",
+	const res = await requester.request<PingResponse>({
+		type: "ping",
 	});
-	if (res.type !== "getCanvasErrors.response") {
+	if (res.type !== "ping.response") {
 		throw new Error(`unexpected response: ${res.type}`);
 	}
 }
@@ -43,7 +47,7 @@ async function withProbeRequester(
 
 /** Lightweight REQ/REP probe to see if the Rhino ZMQ backend is reachable. */
 export async function probeBackend(): Promise<BackendStatus> {
-	let status: BackendStatus;
+	let errorMessage: string | undefined;
 	try {
 		await Promise.race([
 			withProbeRequester(probeRequester),
@@ -54,11 +58,24 @@ export async function probeBackend(): Promise<BackendStatus> {
 				);
 			}),
 		]);
-		status = { online: true };
+		consecutiveProbeFailures = 0;
+		const status: BackendStatus = { online: true };
+		setCachedBackendStatus(status);
+		return status;
 	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
-		status = { online: false, error: message };
+		errorMessage = err instanceof Error ? err.message : String(err);
+		consecutiveProbeFailures++;
 	}
+
+	if (consecutiveProbeFailures < OFFLINE_AFTER_CONSECUTIVE_FAILURES) {
+		const previous = getCachedBackendStatus();
+		if (previous) {
+			return previous;
+		}
+		return { online: true };
+	}
+
+	const status: BackendStatus = { online: false, error: errorMessage };
 	setCachedBackendStatus(status);
 	return status;
 }
