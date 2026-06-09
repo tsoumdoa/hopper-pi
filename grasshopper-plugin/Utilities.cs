@@ -9,6 +9,9 @@ namespace rhino_zmq_poc
 {
     public static class Utilities
     {
+        public static readonly TimeSpan ZmqUiTimeout = TimeSpan.FromSeconds(15);
+        private static readonly TimeSpan DefaultUiTimeout = TimeSpan.FromSeconds(30);
+
         public static Color ParseRgbaColor(string rgba, Color fallback = default)
         {
             if (string.IsNullOrEmpty(rgba)) return fallback == default ? Color.White : fallback;
@@ -79,52 +82,54 @@ namespace rhino_zmq_poc
             }
         }
 
-        private static readonly TimeSpan DefaultUiTimeout = TimeSpan.FromSeconds(30);
-
-        public static void RunOnUiThread(Action action, TimeSpan? timeout = null)
+        /// <summary>
+        /// Nudge Grasshopper to recompute. Required for Rhino.Inside.Revit when the GH
+        /// window is inactive and the solver is dormant.
+        /// </summary>
+        public static void WakeGrasshopper(GH_Document doc)
         {
-            RunOnUiThread<bool>(() => { action(); return true; }, timeout);
+            if (doc == null) return;
+            try
+            {
+                doc.ScheduleSolution(5);
+            }
+            catch (Exception ex)
+            {
+                RhinoApp.WriteLine($"[Utilities] WakeGrasshopper failed: {ex.Message}");
+            }
         }
 
-        public static T RunOnUiThread<T>(Func<T> func, TimeSpan? timeout = null)
+        public static void RunOnUiThread(Action action, TimeSpan? timeout = null, GH_Document wakeDocument = null)
+        {
+            RunOnUiThread<bool>(() => { action(); return true; }, timeout, wakeDocument);
+        }
+
+        public static T RunOnUiThread<T>(Func<T> func, TimeSpan? timeout = null, GH_Document wakeDocument = null)
         {
             var wait = timeout ?? DefaultUiTimeout;
-            var tcs = new TaskCompletionSource<T>();
-            EventHandler handler = null;
-            var idleFired = false;
 
-            handler = (s, a) =>
+            if (!RhinoApp.InvokeRequired)
+                return func();
+
+            WakeGrasshopper(wakeDocument);
+
+            var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+            RhinoApp.InvokeOnUiThread((Action)(() =>
             {
-                idleFired = true;
-                RhinoApp.Idle -= handler;
                 try
                 {
-                    tcs.SetResult(func());
+                    tcs.TrySetResult(func());
                 }
                 catch (Exception ex)
                 {
-                    tcs.SetException(ex);
+                    tcs.TrySetException(ex);
                 }
-            };
+            }));
 
-            RhinoApp.Idle += handler;
+            if (!tcs.Task.Wait(wait))
+                throw new TimeoutException($"RunOnUiThread timed out ({wait.TotalSeconds}s) waiting for UI thread");
 
-            try
-            {
-                tcs.Task.Wait(wait);
-            }
-            catch (AggregateException)
-            {
-                RhinoApp.Idle -= handler;
-                throw;
-            }
-
-            if (tcs.Task.IsCompleted)
-                return tcs.Task.Result;
-
-            RhinoApp.Idle -= handler;
-            var phase = idleFired ? "executing on UI thread" : "waiting for RhinoApp.Idle";
-            throw new TimeoutException($"RunOnUiThread timed out ({wait.TotalSeconds}s) while {phase}");
+            return tcs.Task.GetAwaiter().GetResult();
         }
     }
 }

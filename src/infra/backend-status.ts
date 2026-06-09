@@ -6,7 +6,8 @@ import {
 } from "./backend-status-cache.js";
 import { Requester } from "./requester.js";
 
-const PROBE_TIMEOUT_MS = 3_000;
+/** Allow time for Rhino.Inside.Revit to wake dormant Grasshopper on ping. */
+const PROBE_TIMEOUT_MS = 10_000;
 const OFFLINE_AFTER_CONSECUTIVE_FAILURES = 3;
 
 let consecutiveProbeFailures = 0;

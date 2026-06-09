@@ -288,7 +288,7 @@ namespace rhino_zmq_poc
                         Error = $"{ex.GetType().Name} - {ex.Message}"
                     });
                 }
-            });
+            }, Utilities.ZmqUiTimeout, doc);
         }
     }
 
@@ -325,7 +325,7 @@ namespace rhino_zmq_poc
                 {
                     return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
                 }
-            });
+            }, Utilities.ZmqUiTimeout, doc);
         }
     }
 
@@ -376,7 +376,7 @@ namespace rhino_zmq_poc
                 {
                     return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
                 }
-            });
+            }, Utilities.ZmqUiTimeout, doc);
         }
     }
 }

@@ -29,7 +29,8 @@ export function backendOfflineMessage(): string {
 	const endpoint = formatBackendEndpoint();
 	return (
 		`Grasshopper backend is offline (${endpoint}). ` +
-		"Please check that Rhino is running, Grasshopper is open, and the Hopper connection is active."
+		"Please check that Rhino is running, Grasshopper is open, and the Hopper connection is active. " +
+		"In Rhino.Inside.Revit, use RiR 1.27+ so Grasshopper can wake while unfocused."
 	);
 }
 

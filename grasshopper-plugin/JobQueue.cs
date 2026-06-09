@@ -89,7 +89,11 @@ namespace rhino_zmq_poc
 
                 try
                 {
-                    Utilities.RunOnUiThread(() => ExecuteBatch(batch), TimeSpan.FromSeconds(5));
+                    var doc = RhinoZmqPlugin.Instance?.Component?.OnPingDocument();
+                    Utilities.RunOnUiThread(
+                        () => ExecuteBatch(batch),
+                        Utilities.ZmqUiTimeout,
+                        doc);
                 }
                 catch (Exception ex)
                 {

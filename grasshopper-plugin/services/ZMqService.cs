@@ -229,6 +229,8 @@ namespace rhino_zmq_poc
 
             try
             {
+                Utilities.WakeGrasshopper(_doc);
+
                 using var doc = JsonDocument.Parse(message);
                 var type = doc.RootElement.GetProperty("type").GetString();
 
@@ -240,7 +242,7 @@ namespace rhino_zmq_poc
                     if (!handler.RequiresUiThread)
                         return response;
 
-                    return Utilities.RunOnUiThread(() => response, TimeSpan.FromSeconds(5));
+                    return Utilities.RunOnUiThread(() => response, Utilities.ZmqUiTimeout, _doc);
                 }
 
                 return JsonSerializer.Serialize(new { error = $"Unknown request type: {type}" });
