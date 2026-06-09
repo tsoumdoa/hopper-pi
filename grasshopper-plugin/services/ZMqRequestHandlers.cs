@@ -23,13 +23,9 @@ namespace rhino_zmq_poc
             _handlers[requestType] = handler;
         }
 
-        public bool TryDispatch(string requestType, GH_Document doc, JsonElement root, out string response, out IUiRequestHandler handler)
+        public bool TryGetHandler(string requestType, out IUiRequestHandler handler)
         {
-            response = null;
-            handler = null;
-            if (!_handlers.TryGetValue(requestType, out handler)) return false;
-            response = handler.Handle(doc, root);
-            return true;
+            return _handlers.TryGetValue(requestType, out handler);
         }
     }
 
@@ -250,45 +246,42 @@ namespace rhino_zmq_poc
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
-            return Utilities.RunOnUiThread(() =>
+            try
             {
-                try
+                var mode = root.TryGetProperty("mode", out var modeEl)
+                    ? modeEl.GetString()
+                    : null;
+                var source = root.TryGetProperty("source", out var sourceEl)
+                    ? sourceEl.GetString()
+                    : null;
+                var echo = root.TryGetProperty("echo", out var echoEl) && echoEl.GetBoolean();
+
+                var result = RhinoScriptExecutor.Run(new RunRhinoScriptParams
                 {
-                    var mode = root.TryGetProperty("mode", out var modeEl)
-                        ? modeEl.GetString()
-                        : null;
-                    var source = root.TryGetProperty("source", out var sourceEl)
-                        ? sourceEl.GetString()
-                        : null;
-                    var echo = root.TryGetProperty("echo", out var echoEl) && echoEl.GetBoolean();
+                    Mode = mode,
+                    Source = source,
+                    Echo = echo
+                });
 
-                    var result = RhinoScriptExecutor.Run(new RunRhinoScriptParams
-                    {
-                        Mode = mode,
-                        Source = source,
-                        Echo = echo
-                    });
-
-                    var response = new RunRhinoScriptResponse
-                    {
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                        Ok = result.Ok,
-                        Output = result.Output ?? "",
-                        Error = result.Error ?? ""
-                    };
-
-                    return JsonSerializer.Serialize(response);
-                }
-                catch (Exception ex)
+                var response = new RunRhinoScriptResponse
                 {
-                    return JsonSerializer.Serialize(new RunRhinoScriptResponse
-                    {
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                        Ok = false,
-                        Error = $"{ex.GetType().Name} - {ex.Message}"
-                    });
-                }
-            }, Utilities.ZmqUiTimeout, doc);
+                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    Ok = result.Ok,
+                    Output = result.Output ?? "",
+                    Error = result.Error ?? ""
+                };
+
+                return JsonSerializer.Serialize(response);
+            }
+            catch (Exception ex)
+            {
+                return JsonSerializer.Serialize(new RunRhinoScriptResponse
+                {
+                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    Ok = false,
+                    Error = $"{ex.GetType().Name} - {ex.Message}"
+                });
+            }
         }
     }
 
@@ -296,36 +289,33 @@ namespace rhino_zmq_poc
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
-            return Utilities.RunOnUiThread(() =>
+            try
             {
-                try
-                {
-                    var targetId = root.TryGetProperty("targetId", out var idEl)
-                        ? idEl.GetString()
-                        : null;
-                    if (string.IsNullOrEmpty(targetId))
-                        return JsonSerializer.Serialize(new { error = "targetId is required" });
+                var targetId = root.TryGetProperty("targetId", out var idEl)
+                    ? idEl.GetString()
+                    : null;
+                if (string.IsNullOrEmpty(targetId))
+                    return JsonSerializer.Serialize(new { error = "targetId is required" });
 
-                    var result = RhinoParamGeometryOps.GetParamRhinoGeometry(doc, new GetParamRhinoGeometryParams
-                    {
-                        TargetId = targetId,
-                    });
-
-                    return JsonSerializer.Serialize(new
-                    {
-                        type = "getParamRhinoGeometry.response",
-                        timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                        targetId = result.TargetId,
-                        paramName = result.ParamName,
-                        volatileItems = result.Volatile,
-                        persistentItems = result.Persistent,
-                    });
-                }
-                catch (Exception ex)
+                var result = RhinoParamGeometryOps.GetParamRhinoGeometry(doc, new GetParamRhinoGeometryParams
                 {
-                    return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
-                }
-            }, Utilities.ZmqUiTimeout, doc);
+                    TargetId = targetId,
+                });
+
+                return JsonSerializer.Serialize(new
+                {
+                    type = "getParamRhinoGeometry.response",
+                    timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    targetId = result.TargetId,
+                    paramName = result.ParamName,
+                    volatileItems = result.Volatile,
+                    persistentItems = result.Persistent,
+                });
+            }
+            catch (Exception ex)
+            {
+                return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
+            }
         }
     }
 
@@ -333,50 +323,47 @@ namespace rhino_zmq_poc
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
-            return Utilities.RunOnUiThread(() =>
+            try
             {
-                try
+                var query = new QueryRhinoObjectsParams();
+                if (root.TryGetProperty("selectionOnly", out var selEl))
+                    query.SelectionOnly = selEl.GetBoolean();
+                if (root.TryGetProperty("layer", out var layerEl))
+                    query.Layer = layerEl.GetString();
+                if (root.TryGetProperty("objectType", out var typeEl))
+                    query.ObjectType = typeEl.GetString();
+                if (root.TryGetProperty("objectIds", out var idsEl) && idsEl.ValueKind == JsonValueKind.Array)
                 {
-                    var query = new QueryRhinoObjectsParams();
-                    if (root.TryGetProperty("selectionOnly", out var selEl))
-                        query.SelectionOnly = selEl.GetBoolean();
-                    if (root.TryGetProperty("layer", out var layerEl))
-                        query.Layer = layerEl.GetString();
-                    if (root.TryGetProperty("objectType", out var typeEl))
-                        query.ObjectType = typeEl.GetString();
-                    if (root.TryGetProperty("objectIds", out var idsEl) && idsEl.ValueKind == JsonValueKind.Array)
+                    query.ObjectIds = new List<string>();
+                    foreach (var item in idsEl.EnumerateArray())
                     {
-                        query.ObjectIds = new List<string>();
-                        foreach (var item in idsEl.EnumerateArray())
-                        {
-                            var id = item.GetString();
-                            if (!string.IsNullOrEmpty(id))
-                                query.ObjectIds.Add(id);
-                        }
+                        var id = item.GetString();
+                        if (!string.IsNullOrEmpty(id))
+                            query.ObjectIds.Add(id);
                     }
-
-                    var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
-                    var objects = RhinoObjectQuery.Query(rhinoDoc, query);
-
-                    var response = new QueryRhinoObjectsResponse
-                    {
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                        Objects = objects.Select(o => new RhinoObjectInfoDto
-                        {
-                            ObjectId = o.ObjectId,
-                            Name = o.Name,
-                            Layer = o.Layer,
-                            ObjectType = o.ObjectType,
-                        }).ToList(),
-                    };
-
-                    return JsonSerializer.Serialize(response);
                 }
-                catch (Exception ex)
+
+                var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
+                var objects = RhinoObjectQuery.Query(rhinoDoc, query);
+
+                var response = new QueryRhinoObjectsResponse
                 {
-                    return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
-                }
-            }, Utilities.ZmqUiTimeout, doc);
+                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    Objects = objects.Select(o => new RhinoObjectInfoDto
+                    {
+                        ObjectId = o.ObjectId,
+                        Name = o.Name,
+                        Layer = o.Layer,
+                        ObjectType = o.ObjectType,
+                    }).ToList(),
+                };
+
+                return JsonSerializer.Serialize(response);
+            }
+            catch (Exception ex)
+            {
+                return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
+            }
         }
     }
 }

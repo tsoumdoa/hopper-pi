@@ -234,18 +234,19 @@ namespace rhino_zmq_poc
                 using var doc = JsonDocument.Parse(message);
                 var type = doc.RootElement.GetProperty("type").GetString();
 
-                if (_requestDispatcher.TryDispatch(type, _doc, doc.RootElement, out var response, out var handler))
-                {
-                    if (_cts.IsCancellationRequested)
-                        return JsonSerializer.Serialize(new { error = "Service shutting down" });
+                if (!_requestDispatcher.TryGetHandler(type, out var handler))
+                    return JsonSerializer.Serialize(new { error = $"Unknown request type: {type}" });
 
-                    if (!handler.RequiresUiThread)
-                        return response;
+                if (_cts.IsCancellationRequested)
+                    return JsonSerializer.Serialize(new { error = "Service shutting down" });
 
-                    return Utilities.RunOnUiThread(() => response, Utilities.ZmqUiTimeout, _doc);
-                }
+                if (!handler.RequiresUiThread)
+                    return handler.Handle(_doc, doc.RootElement);
 
-                return JsonSerializer.Serialize(new { error = $"Unknown request type: {type}" });
+                return Utilities.RunOnUiThread(
+                    () => handler.Handle(_doc, doc.RootElement),
+                    Utilities.ZmqUiTimeout,
+                    _doc);
             }
             catch (Exception ex)
             {

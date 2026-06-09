@@ -163,7 +163,7 @@ namespace rhino_zmq_poc
             {
                 _liveZmqService = _zmqService;
                 RhinoZmqPlugin.Instance.Component = this;
-                AppendLog($"[{DateTime.Now:HH:mm:ss}] ZMQ started: PUB @ 5555, PULL @ 5556, REP @ 5557\n");
+                AppendLog($"[{DateTime.Now:HH:mm:ss}] ZMQ started (v2 ScheduleSolution dispatch): PUB @ 5555, PULL @ 5556, REP @ 5557\n");
             }
             else
             {

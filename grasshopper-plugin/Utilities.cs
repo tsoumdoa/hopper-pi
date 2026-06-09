@@ -9,8 +9,8 @@ namespace rhino_zmq_poc
 {
     public static class Utilities
     {
-        public static readonly TimeSpan ZmqUiTimeout = TimeSpan.FromSeconds(15);
-        private static readonly TimeSpan DefaultUiTimeout = TimeSpan.FromSeconds(30);
+        public static readonly TimeSpan ZmqUiTimeout = TimeSpan.FromSeconds(60);
+        private static readonly TimeSpan DefaultUiTimeout = TimeSpan.FromSeconds(60);
 
         public static Color ParseRgbaColor(string rgba, Color fallback = default)
         {
@@ -83,20 +83,29 @@ namespace rhino_zmq_poc
         }
 
         /// <summary>
-        /// Nudge Grasshopper to recompute. Required for Rhino.Inside.Revit when the GH
-        /// window is inactive and the solver is dormant.
+        /// Nudge Grasshopper to recompute. Rhino.Inside.Revit queues this on the UI thread
+        /// so the solver can wake while the GH window is inactive.
         /// </summary>
         public static void WakeGrasshopper(GH_Document doc)
         {
             if (doc == null) return;
-            try
+
+            void Wake()
             {
-                doc.ScheduleSolution(5);
+                try
+                {
+                    doc.ScheduleSolution(5);
+                }
+                catch (Exception ex)
+                {
+                    RhinoApp.WriteLine($"[Utilities] WakeGrasshopper failed: {ex.Message}");
+                }
             }
-            catch (Exception ex)
-            {
-                RhinoApp.WriteLine($"[Utilities] WakeGrasshopper failed: {ex.Message}");
-            }
+
+            if (RhinoApp.InvokeRequired)
+                RhinoApp.InvokeOnUiThread((Action)Wake);
+            else
+                Wake();
         }
 
         public static void RunOnUiThread(Action action, TimeSpan? timeout = null, GH_Document wakeDocument = null)
@@ -104,6 +113,11 @@ namespace rhino_zmq_poc
             RunOnUiThread<bool>(() => { action(); return true; }, timeout, wakeDocument);
         }
 
+        /// <summary>
+        /// Run work on the Grasshopper/Rhino UI thread. Uses GH_Document.ScheduleSolution
+        /// (required for Rhino.Inside.Revit when Grasshopper is unfocused) with
+        /// RhinoApp.InvokeOnUiThread as fallback.
+        /// </summary>
         public static T RunOnUiThread<T>(Func<T> func, TimeSpan? timeout = null, GH_Document wakeDocument = null)
         {
             var wait = timeout ?? DefaultUiTimeout;
@@ -114,7 +128,8 @@ namespace rhino_zmq_poc
             WakeGrasshopper(wakeDocument);
 
             var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-            RhinoApp.InvokeOnUiThread((Action)(() =>
+
+            void RunCallback()
             {
                 try
                 {
@@ -124,10 +139,30 @@ namespace rhino_zmq_poc
                 {
                     tcs.TrySetException(ex);
                 }
-            }));
+            }
+
+            var scheduled = false;
+            if (wakeDocument != null)
+            {
+                try
+                {
+                    wakeDocument.ScheduleSolution(5, _ => RunCallback());
+                    scheduled = true;
+                }
+                catch (Exception ex)
+                {
+                    RhinoApp.WriteLine($"[Utilities] ScheduleSolution dispatch failed: {ex.Message}");
+                }
+            }
+
+            if (!scheduled)
+                RhinoApp.InvokeOnUiThread((Action)RunCallback);
 
             if (!tcs.Task.Wait(wait))
-                throw new TimeoutException($"RunOnUiThread timed out ({wait.TotalSeconds}s) waiting for UI thread");
+            {
+                throw new TimeoutException(
+                    $"RunOnUiThread timed out ({wait.TotalSeconds}s) waiting for Grasshopper UI thread");
+            }
 
             return tcs.Task.GetAwaiter().GetResult();
         }
