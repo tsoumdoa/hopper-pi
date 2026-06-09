@@ -713,6 +713,15 @@ namespace rhino_zmq_poc
         public string Text { get; set; }
     }
 
+    public class PingResponse
+    {
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = "ping.response";
+
+        [JsonPropertyName("timestamp")]
+        public long Timestamp { get; set; }
+    }
+
     public class GetCanvasErrorsResponse
     {
         [JsonPropertyName("type")]

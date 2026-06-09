@@ -1,9 +1,6 @@
 import { nanoid } from "nanoid";
-import {
-	BackendOfflineError,
-	backendOfflineToolResult,
-	isBackendKnownOffline,
-} from "../infra/backend-status-cache.js";
+import { backendOfflineToolResult } from "../infra/backend-status-cache.js";
+import { ensureBackendReachable, refreshBackendIfOffline } from "../infra/backend-status.js";
 import { getPublisher } from "../infra/publisher.js";
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import type { TextContent } from "@earendil-works/pi-ai";
@@ -40,9 +37,7 @@ export async function submitCommand(
 	action: CommandAction,
 	params: unknown,
 ): Promise<{ jobId: string }> {
-	if (isBackendKnownOffline()) {
-		throw new BackendOfflineError();
-	}
+	await ensureBackendReachable();
 	const request = buildJobRequest(action, params);
 	const publisher = getPublisher();
 	await publisher.connect();
@@ -72,7 +67,7 @@ export function createExecute<P>(
 		_signal: unknown,
 		onUpdate: unknown,
 	): Promise<AgentToolResult<unknown>> => {
-		if (isBackendKnownOffline()) {
+		if (!(await refreshBackendIfOffline())) {
 			return backendOfflineToolResult();
 		}
 
@@ -123,7 +118,7 @@ export function createHybridExecute<P>(
 		_signal: unknown,
 		onUpdate: unknown,
 	): Promise<AgentToolResult<unknown>> => {
-		if (isBackendKnownOffline()) {
+		if (!(await refreshBackendIfOffline())) {
 			return backendOfflineToolResult();
 		}
 

@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Threading;
 using System.Threading.Tasks;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Special;
@@ -89,42 +90,67 @@ namespace rhino_zmq_poc
         public static T RunOnUiThread<T>(Func<T> func, TimeSpan? timeout = null)
         {
             var wait = timeout ?? DefaultUiTimeout;
-            var tcs = new TaskCompletionSource<T>();
-            EventHandler handler = null;
-            var idleFired = false;
 
-            handler = (s, a) =>
+            if (!RhinoApp.InvokeRequired)
+                return func();
+
+            var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var completed = 0;
+
+            void ExecuteOnce()
             {
-                idleFired = true;
-                RhinoApp.Idle -= handler;
+                if (Interlocked.CompareExchange(ref completed, 1, 0) != 0)
+                    return;
+
                 try
                 {
-                    tcs.SetResult(func());
+                    tcs.TrySetResult(func());
                 }
                 catch (Exception ex)
                 {
-                    tcs.SetException(ex);
+                    tcs.TrySetException(ex);
                 }
-            };
+            }
 
-            RhinoApp.Idle += handler;
+            void PostToUi()
+            {
+                if (Volatile.Read(ref completed) != 0)
+                    return;
+
+                try
+                {
+                    RhinoApp.InvokeOnUiThread((Action)ExecuteOnce);
+                }
+                catch
+                {
+                    // Rhino may not be ready; idle/timer fallbacks will retry.
+                }
+            }
+
+            PostToUi();
+
+            EventHandler idleHandler = null;
+            idleHandler = (_, __) => PostToUi();
+            RhinoApp.Idle += idleHandler;
+
+            using var timer = new Timer(_ => PostToUi(), null, 100, 100);
 
             try
             {
-                tcs.Task.Wait(wait);
-            }
-            catch (AggregateException)
-            {
-                RhinoApp.Idle -= handler;
-                throw;
-            }
+                if (!tcs.Task.Wait(wait))
+                    throw new TimeoutException($"RunOnUiThread timed out ({wait.TotalSeconds}s) waiting for UI thread");
 
-            if (tcs.Task.IsCompleted)
                 return tcs.Task.Result;
-
-            RhinoApp.Idle -= handler;
-            var phase = idleFired ? "executing on UI thread" : "waiting for RhinoApp.Idle";
-            throw new TimeoutException($"RunOnUiThread timed out ({wait.TotalSeconds}s) while {phase}");
+            }
+            catch (AggregateException ex) when (ex.InnerException != null)
+            {
+                throw ex.InnerException;
+            }
+            finally
+            {
+                RhinoApp.Idle -= idleHandler;
+                Interlocked.Exchange(ref completed, 1);
+            }
         }
     }
 }

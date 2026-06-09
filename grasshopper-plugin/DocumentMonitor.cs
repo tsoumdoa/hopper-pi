@@ -29,16 +29,12 @@ namespace rhino_zmq_poc
         {
             if (_disposed != 0) return;
             var doc = sender as GH_Document;
-            EventHandler idleHandler = null;
 
-            idleHandler = (s, a) =>
+            Utilities.RunOnUiThread(() =>
             {
-                RhinoApp.Idle -= idleHandler;
                 if (_disposed == 0)
                     OnSolutionEnd?.Invoke(doc);
-            };
-
-            RhinoApp.Idle += idleHandler;
+            });
         }
 
         public void Unsubscribe()

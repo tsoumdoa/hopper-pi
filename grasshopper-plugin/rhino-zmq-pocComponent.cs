@@ -173,7 +173,7 @@ namespace rhino_zmq_poc
 
         private void ScheduleExpire()
         {
-            RhinoApp.Idle += OnIdleExpire;
+            Utilities.RunOnUiThread(() => ExpireSolution(true));
         }
 
         private void AppendLog(string msg)
@@ -184,12 +184,6 @@ namespace rhino_zmq_poc
                 if (_debugLog.Length > MaxLogLength)
                     _debugLog = _debugLog.Substring(_debugLog.Length - MaxLogLength);
             }
-        }
-
-        private void OnIdleExpire(object sender, EventArgs e)
-        {
-            RhinoApp.Idle -= OnIdleExpire;
-            ExpireSolution(true);
         }
 
         public string ExecuteCommand(GhCommand command) => _cmdExecutor?.Execute(OnPingDocument(), command);
