@@ -22,13 +22,13 @@
 		"build:gh-plugin": "node scripts/install-grasshopper-plugin.mjs --build-only"
 	},
 	"devDependencies": {
-		"@types/node": "^20.19.41",
-		"tsx": "^4.22.3",
+		"@types/node": "^20.19.42",
+		"tsx": "^4.22.4",
 		"typescript": "^5.9.3"
 	},
 	"dependencies": {
-		"@earendil-works/pi-ai": "^0.77.0",
-		"@earendil-works/pi-coding-agent": "^0.77.0",
+		"@earendil-works/pi-ai": "^0.79.1",
+		"@earendil-works/pi-coding-agent": "^0.79.1",
 		"chalk": "^5.6.2",
 		"fast-xml-parser": "^5.8.0",
 		"nanoid": "^5.1.11",
