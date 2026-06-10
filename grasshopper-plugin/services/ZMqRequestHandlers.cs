@@ -34,6 +34,11 @@ namespace rhino_zmq_poc
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
+            return Utilities.RunOnUiThread(() => HandleOnUiThread(doc), TimeSpan.FromSeconds(5));
+        }
+
+        private static string HandleOnUiThread(GH_Document doc)
+        {
             var components = new List<GhComponentInfo>();
 
             foreach (var proxy in Instances.ComponentServer.ObjectProxies)
@@ -100,6 +105,11 @@ namespace rhino_zmq_poc
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
+            return Utilities.RunOnUiThread(() => HandleOnUiThread(doc, root), TimeSpan.FromSeconds(5));
+        }
+
+        private static string HandleOnUiThread(GH_Document doc, JsonElement root)
+        {
             string docName = doc?.FilePath ?? "Untitled";
             string xml = XmlPublisher.SerializeToXml(doc) ?? "";
 
@@ -124,6 +134,11 @@ namespace rhino_zmq_poc
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
+            return Utilities.RunOnUiThread(() => HandleOnUiThread(doc), TimeSpan.FromSeconds(5));
+        }
+
+        private static string HandleOnUiThread(GH_Document doc)
+        {
             var messages = GhMessageReader.GetAllWarningsAndErrors(doc);
 
             var response = new GetCanvasErrorsResponse
@@ -140,6 +155,11 @@ namespace rhino_zmq_poc
     public class ListScriptParamsHandler : IUiRequestHandler
     {
         public string Handle(GH_Document doc, JsonElement root)
+        {
+            return Utilities.RunOnUiThread(() => HandleOnUiThread(doc, root), TimeSpan.FromSeconds(5));
+        }
+
+        private static string HandleOnUiThread(GH_Document doc, JsonElement root)
         {
             try
             {
@@ -197,6 +217,11 @@ namespace rhino_zmq_poc
     public class GetScriptCodeHandler : IUiRequestHandler
     {
         public string Handle(GH_Document doc, JsonElement root)
+        {
+            return Utilities.RunOnUiThread(() => HandleOnUiThread(doc, root), TimeSpan.FromSeconds(5));
+        }
+
+        private static string HandleOnUiThread(GH_Document doc, JsonElement root)
         {
             try
             {

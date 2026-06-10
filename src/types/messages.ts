@@ -79,6 +79,11 @@ export type GetCanvasErrorsResponse = {
 	errors: CanvasError[];
 };
 
+export type PingResponse = {
+	type: "ping.response";
+	timestamp: number;
+};
+
 export type RunRhinoScriptResponse = {
 	type: "runRhinoScript.response";
 	timestamp: number;

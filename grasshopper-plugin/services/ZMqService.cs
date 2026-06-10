@@ -231,12 +231,20 @@ namespace rhino_zmq_poc
                 using var doc = JsonDocument.Parse(message);
                 var type = doc.RootElement.GetProperty("type").GetString();
 
+                if (type == "ping")
+                {
+                    return JsonSerializer.Serialize(new PingResponse
+                    {
+                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                    });
+                }
+
                 if (_requestDispatcher.TryDispatch(type, _doc, doc.RootElement, out var response))
                 {
                     if (_cts.IsCancellationRequested)
                         return JsonSerializer.Serialize(new { error = "Service shutting down" });
 
-                    return Utilities.RunOnUiThread(() => response, TimeSpan.FromSeconds(5));
+                    return response;
                 }
 
                 return JsonSerializer.Serialize(new { error = $"Unknown request type: {type}" });

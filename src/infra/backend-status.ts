@@ -1,11 +1,13 @@
-import type { GetCanvasErrorsResponse } from "../types/messages.js";
+import type { PingResponse } from "../types/messages.js";
 import {
+	BackendOfflineError,
 	type BackendStatus,
+	isBackendKnownOffline,
 	setCachedBackendStatus,
 } from "./backend-status-cache.js";
 import { Requester } from "./requester.js";
 
-const PROBE_TIMEOUT_MS = 3_000;
+const PROBE_TIMEOUT_MS = 8_000;
 
 export type { BackendStatus } from "./backend-status-cache.js";
 export {
@@ -21,10 +23,10 @@ export {
 async function probeRequester(
 	requester: import("./requester.js").Requester
 ): Promise<void> {
-	const res = await requester.request<GetCanvasErrorsResponse>({
-		type: "getCanvasErrors",
+	const res = await requester.request<PingResponse>({
+		type: "ping",
 	});
-	if (res.type !== "getCanvasErrors.response") {
+	if (res.type !== "ping.response") {
 		throw new Error(`unexpected response: ${res.type}`);
 	}
 }
@@ -61,4 +63,20 @@ export async function probeBackend(): Promise<BackendStatus> {
 	}
 	setCachedBackendStatus(status);
 	return status;
+}
+
+/** Re-probe when cached offline so a transient miss does not block tools. */
+export async function refreshBackendIfOffline(): Promise<boolean> {
+	if (!isBackendKnownOffline()) {
+		return true;
+	}
+	const status = await probeBackend();
+	return status.online;
+}
+
+/** Throw when the backend is unreachable after an optional refresh probe. */
+export async function ensureBackendReachable(): Promise<void> {
+	if (!(await refreshBackendIfOffline())) {
+		throw new BackendOfflineError();
+	}
 }

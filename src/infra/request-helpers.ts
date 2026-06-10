@@ -1,15 +1,10 @@
-import {
-	BackendOfflineError,
-	isBackendKnownOffline,
-} from "./backend-status-cache.js";
+import { ensureBackendReachable } from "./backend-status.js";
 import { Requester } from "./requester.js";
 
 export async function withRequester<T>(
 	fn: (requester: Requester) => Promise<T>
 ): Promise<T> {
-	if (isBackendKnownOffline()) {
-		throw new BackendOfflineError();
-	}
+	await ensureBackendReachable();
 	const requester = new Requester();
 	try {
 		await requester.connect();
