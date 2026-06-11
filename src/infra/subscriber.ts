@@ -1,5 +1,9 @@
 import type { GhMessage } from "../types/messages.js";
-import { PUB_ENDPOINT, DEBUG } from "./connection.js";
+import {
+	DEBUG,
+	type ConnectionConfig,
+	resolveConnection,
+} from "./connection.js";
 
 export type MessageHandler = (message: GhMessage) => void;
 
@@ -7,15 +11,21 @@ let _cached: Subscriber | null = null;
 
 export class Subscriber {
 	private socket: import("zeromq").Subscriber | null = null;
+	private connection: ConnectionConfig | null = null;
 
 	async connect(): Promise<void> {
-		if (this.socket) return;
+		const connection = resolveConnection();
+		if (this.socket && this.connection?.pubEndpoint === connection.pubEndpoint) {
+			return;
+		}
+		await this.close();
+		this.connection = connection;
 		const { Subscriber } = await import("zeromq");
 		this.socket = new Subscriber();
 		if (DEBUG) {
-			console.log(`[SUB] Connecting to ${PUB_ENDPOINT}`);
+			console.log(`[SUB] Connecting to ${connection.pubEndpoint}`);
 		}
-		this.socket.connect(PUB_ENDPOINT);
+		this.socket.connect(connection.pubEndpoint);
 		this.socket.receiveTimeout = 1000;
 		this.socket.subscribe("");
 	}

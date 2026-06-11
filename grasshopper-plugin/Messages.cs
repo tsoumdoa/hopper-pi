@@ -583,6 +583,9 @@ namespace rhino_zmq_poc
         [JsonPropertyName("type")]
         public string Type { get; set; }
 
+        [JsonPropertyName("token")]
+        public string Token { get; set; }
+
         [JsonPropertyName("jobId")]
         public string JobId { get; set; }
 
@@ -720,6 +723,18 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("timestamp")]
         public long Timestamp { get; set; }
+    }
+
+    public class AuthErrorResponse
+    {
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = "auth.error";
+
+        [JsonPropertyName("timestamp")]
+        public long Timestamp { get; set; }
+
+        [JsonPropertyName("error")]
+        public string Error { get; set; }
     }
 
     public class GetCanvasErrorsResponse
