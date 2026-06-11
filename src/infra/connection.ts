@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 export type ConnectionConfig = {
 	pubEndpoint: string;
@@ -35,17 +35,29 @@ export function clearConnectionCache(): void {
 	cachedConnection = null;
 }
 
+export function connectionProfileDirectory(): string {
+	if (process.env.HOPPER_CONNECTION_PROFILE) {
+		return dirname(process.env.HOPPER_CONNECTION_PROFILE);
+	}
+
+	if (process.platform === "win32" && process.env.APPDATA) {
+		return join(process.env.APPDATA, "hopper-pi");
+	}
+
+	if (process.platform === "darwin") {
+		return join(homedir(), "Library", "Application Support", "hopper-pi");
+	}
+
+	const dataHome = process.env.XDG_DATA_HOME || join(homedir(), ".local", "share");
+	return join(dataHome, "hopper-pi");
+}
+
 export function connectionProfilePath(): string {
 	if (process.env.HOPPER_CONNECTION_PROFILE) {
 		return process.env.HOPPER_CONNECTION_PROFILE;
 	}
 
-	if (process.platform === "win32" && process.env.APPDATA) {
-		return join(process.env.APPDATA, "hopper-pi", "connection.json");
-	}
-
-	const configHome = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
-	return join(configHome, "hopper-pi", "connection.json");
+	return join(connectionProfileDirectory(), "connection.json");
 }
 
 export function resolveConnection(options: { refresh?: boolean } = {}): ConnectionConfig {
@@ -54,6 +66,7 @@ export function resolveConnection(options: { refresh?: boolean } = {}): Connecti
 	}
 
 	const profilePath = connectionProfilePath();
+	const profileDir = connectionProfileDirectory();
 	const profile = readProfile(profilePath);
 	const hasEndpointEnv =
 		Boolean(process.env.GH_ZMQ_PUB) ||
@@ -74,7 +87,10 @@ export function resolveConnection(options: { refresh?: boolean } = {}): Connecti
 			process.env.GH_ZMQ_REQ ||
 			profile?.reqEndpoint ||
 			DEFAULT_REQ_ENDPOINT,
-		token: process.env.GH_ZMQ_TOKEN || profile?.token,
+		token:
+			process.env.GH_ZMQ_TOKEN ||
+			profile?.token ||
+			readTokenFile(profileDir),
 		source: hasEndpointEnv || hasTokenEnv ? "env" : profile ? "profile" : "defaults",
 		profilePath,
 		instanceId: profile?.instanceId,
@@ -103,6 +119,20 @@ export function withConnectionToken<T>(data: T, connection: ConnectionConfig): T
 		...data,
 		token: connection.token,
 	};
+}
+
+function readTokenFile(profileDir: string): string | undefined {
+	const tokenPath = join(profileDir, "connection-token");
+	if (!existsSync(tokenPath)) {
+		return undefined;
+	}
+
+	try {
+		const token = readFileSync(tokenPath, "utf8").trim();
+		return token || undefined;
+	} catch {
+		return undefined;
+	}
 }
 
 function readProfile(profilePath: string): ConnectionProfile | null {
