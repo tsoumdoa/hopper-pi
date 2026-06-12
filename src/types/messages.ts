@@ -84,6 +84,12 @@ export type PingResponse = {
 	timestamp: number;
 };
 
+export type AuthErrorResponse = {
+	type: "auth.error";
+	timestamp: number;
+	error: string;
+};
+
 export type RunRhinoScriptResponse = {
 	type: "runRhinoScript.response";
 	timestamp: number;

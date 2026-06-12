@@ -396,6 +396,7 @@ export type Command = {
 
 export type SubmitJobRequest = {
 	type: "submitJob";
+	token?: string;
 	jobId: string;
 	command: Command;
 };

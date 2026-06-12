@@ -57,7 +57,7 @@ node scripts/install-grasshopper-plugin.mjs --force
 ## Architecture
 
 ```
-Pi agent  →  hopper-pi (Node/TS)  →  ZMQ :5555–5557  →  Hopper Code Backend (Grasshopper in Rhino)
+Pi agent  →  hopper-pi (Node/TS)  →  ZMQ  →  Hopper Code Backend (Grasshopper in Rhino)
 ```
 
 | Port | Pattern | Purpose |
@@ -66,7 +66,13 @@ Pi agent  →  hopper-pi (Node/TS)  →  ZMQ :5555–5557  →  Hopper Code Back
 | `5556` | PUSH/PULL | Commands: edits, scripts, widgets |
 | `5557` | REQ/REP | Queries: canvas state, component search, errors |
 
-Override endpoints with `GH_ZMQ_PUB`, `GH_ZMQ_PUSH`, and `GH_ZMQ_REQ` (see `src/infra/connection.ts`).
+The backend tries the legacy `5555`-`5557` ports first. If any are already in use, it automatically binds a free loopback port triplet and writes the live endpoints plus a local connection token to a user-local connection profile:
+
+- Windows: `%APPDATA%\hopper-pi\connection.json`
+- macOS: `~/Library/Application Support/hopper-pi/connection.json`
+- Linux: `~/.local/share/hopper-pi/connection.json` (or `$XDG_DATA_HOME/hopper-pi/connection.json`)
+
+The token is generated once and reused across backend/frontend restarts, so normal restarts do not require re-pairing. Override discovery with `HOPPER_CONNECTION_PROFILE`, or override endpoints manually with `GH_ZMQ_PUB`, `GH_ZMQ_PUSH`, and `GH_ZMQ_REQ`. If you manually point at a token-protected backend, set `GH_ZMQ_TOKEN` as well.
 
 ## Agent tools (overview)
 
@@ -117,10 +123,13 @@ Bundled Pi **skills** and **prompts** live under `mds/` (e.g. `gh-modeling-exper
 | `HOPPER_GH_PLUGIN_DIR` | Subfolder under Libraries (default: `hopper-pi`) |
 | `HOPPER_GH_STRICT=1` | Fail install on build/copy errors (default: warn and continue) |
 | `GH_ZMQ_PUB` / `GH_ZMQ_PUSH` / `GH_ZMQ_REQ` | ZMQ endpoint overrides |
+| `GH_ZMQ_TOKEN` | Connection token override when manually setting endpoints |
+| `HOPPER_CONNECTION_PROFILE` | Connection profile path override |
 
 ## Troubleshooting
 
-- **No backend / tools fail:** Ensure **Hopper Code Backend** is on the canvas and Rhino is running. Check that nothing else is bound to ports 5555–5557.
+- **No backend / tools fail:** Ensure **Hopper Code Backend** is on the canvas and Rhino is running, then run `/hopper-backend` to refresh the connection. If ports 5555–5557 are busy, the backend should fall back to free loopback ports automatically and show the profile path in the component log.
+- **Invalid connection token:** Restart the frontend after the backend has started so it can reread the connection profile. If you are using manual endpoint env vars, also set `GH_ZMQ_TOKEN`.
 - **GH shows offline when Revit has focus (Rhino Inside):** The plugin marshals Grasshopper work onto Rhino's UI thread via `InvokeOnUiThread` (not `Idle`). Keep Grasshopper visible while the agent is working, or run `/hopper-backend` after refocusing. Liveness checks use a lightweight `ping` probe that does not touch the canvas. Older Rhino.Inside.Revit versions may still limit background Grasshopper — RiR 1.27+ improves this.
 - **Plugin did not install:** Install [.NET 7 SDK](https://dotnet.microsoft.com/download), then run `pnpm run build:gh-plugin`. On Windows, set `HOPPER_GH_LIBRARIES` if auto-detect fails.
 - **Stale plugin after `git pull`:** `node scripts/install-grasshopper-plugin.mjs --force`, then restart Rhino.

@@ -1,5 +1,5 @@
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
-import { REQ_ENDPOINT } from "./connection.js";
+import { formatEndpoint, resolveConnection } from "./connection.js";
 
 export type BackendStatus = {
 	online: boolean;
@@ -22,14 +22,14 @@ export function isBackendKnownOffline(): boolean {
 }
 
 export function formatBackendEndpoint(): string {
-	return REQ_ENDPOINT.replace(/^tcp:\/\//, "");
+	return formatEndpoint(resolveConnection().reqEndpoint);
 }
 
 export function backendOfflineMessage(): string {
 	const endpoint = formatBackendEndpoint();
 	return (
 		`Grasshopper backend is offline (${endpoint}). ` +
-		"Please check that Rhino is running, Grasshopper is open, and the Hopper connection is active."
+		"Please check that Rhino is running, Grasshopper is open, and the Hopper connection profile/token is current."
 	);
 }
 

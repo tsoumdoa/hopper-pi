@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,9 +14,10 @@ namespace rhino_zmq_poc
 {
     public class ZMqService : IDisposable
     {
-        private const string PubEndpoint = "tcp://*:5555";
-        private const string PullEndpoint = "tcp://*:5556";
-        private const string RepEndpoint = "tcp://*:5557";
+        private const string LoopbackHost = "127.0.0.1";
+        private const int DefaultPubPort = 5555;
+        private const int DefaultPullPort = 5556;
+        private const int DefaultRepPort = 5557;
         private const int StartMaxAttempts = 5;
 
         private PublisherSocket _pubSocket;
@@ -28,12 +32,18 @@ namespace rhino_zmq_poc
         private readonly UiRequestDispatcher _requestDispatcher = new UiRequestDispatcher();
         private readonly ConcurrentQueue<(string topic, string json)> _publishQueue = new ConcurrentQueue<(string, string)>();
         private readonly Action<GhJobStatus> _jobStatusHandler;
+        private string _pubEndpoint;
+        private string _pullEndpoint;
+        private string _repEndpoint;
+        private string _connectionToken;
+        private string _instanceId;
 
         public event Action<GhJobStatus> OnJobStatus;
         public event Action<string> OnDebugLog;
         public event Action<string> OnJobReceived;
 
         public bool IsRunning { get; private set; }
+        public ConnectionProfile Profile { get; private set; }
 
         public ZMqService(JobQueue jobQueue, GH_Document doc)
         {
@@ -57,49 +67,19 @@ namespace rhino_zmq_poc
 
         public void Start()
         {
+            _connectionToken = ConnectionProfileStore.LoadOrCreateToken();
+            _instanceId = Guid.NewGuid().ToString("N");
+
+            if (TryStart(DefaultEndpoints(), "default"))
+                return;
+
             for (var attempt = 1; attempt <= StartMaxAttempts; attempt++)
             {
-                PublisherSocket pub = null;
-                PullSocket pull = null;
-                ResponseSocket rep = null;
-
-                try
-                {
-                    pub = BindSocket(new PublisherSocket(), PubEndpoint);
-                    pull = BindSocket(new PullSocket(), PullEndpoint);
-                    rep = BindSocket(new ResponseSocket(), RepEndpoint);
-
-                    _pubSocket = pub;
-                    _pullSocket = pull;
-                    _repSocket = rep;
-
-                    var token = _cts.Token;
-                    _commandTask = Task.Run(() => CommandLoop(token));
-                    _repTask = Task.Run(() => RepLoop(token));
-                    IsRunning = true;
-                    DebugLog($"[ZMQ] Started on attempt {attempt}");
+                if (TryStart(RandomEndpoints(), $"dynamic attempt {attempt}/{StartMaxAttempts}"))
                     return;
-                }
-                catch (Exception ex)
-                {
-                    IsRunning = false;
-                    ReleaseSocket(pub, PubEndpoint);
-                    ReleaseSocket(pull, PullEndpoint);
-                    ReleaseSocket(rep, RepEndpoint);
-                    _pubSocket = null;
-                    _pullSocket = null;
-                    _repSocket = null;
-
-                    if (attempt < StartMaxAttempts && IsAddressInUse(ex))
-                    {
-                        DebugLog($"[ZMQ] Start error (attempt {attempt}/{StartMaxAttempts}): {ex.Message}; retrying...");
-                        continue;
-                    }
-
-                    DebugLog($"[ZMQ] Start error: {ex.Message}");
-                    return;
-                }
             }
+
+            DebugLog("[ZMQ] Start error: unable to bind default or dynamic loopback ports");
         }
 
         private static T BindSocket<T>(T socket, string endpoint) where T : NetMQSocket
@@ -107,6 +87,92 @@ namespace rhino_zmq_poc
             socket.Options.Linger = TimeSpan.Zero;
             socket.Bind(endpoint);
             return socket;
+        }
+
+        private bool TryStart(EndpointSet endpoints, string label)
+        {
+            PublisherSocket pub = null;
+            PullSocket pull = null;
+            ResponseSocket rep = null;
+
+            try
+            {
+                pub = BindSocket(new PublisherSocket(), endpoints.PubEndpoint);
+                pull = BindSocket(new PullSocket(), endpoints.PullEndpoint);
+                rep = BindSocket(new ResponseSocket(), endpoints.RepEndpoint);
+
+                _pubSocket = pub;
+                _pullSocket = pull;
+                _repSocket = rep;
+                _pubEndpoint = endpoints.PubEndpoint;
+                _pullEndpoint = endpoints.PullEndpoint;
+                _repEndpoint = endpoints.RepEndpoint;
+
+                Profile = new ConnectionProfile
+                {
+                    InstanceId = _instanceId,
+                    PubEndpoint = endpoints.PubEndpoint,
+                    PushEndpoint = endpoints.PullEndpoint,
+                    ReqEndpoint = endpoints.RepEndpoint,
+                    Token = _connectionToken,
+                    StartedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                };
+                ConnectionProfileStore.Write(Profile);
+
+                var token = _cts.Token;
+                _commandTask = Task.Run(() => CommandLoop(token));
+                _repTask = Task.Run(() => RepLoop(token));
+                IsRunning = true;
+                DebugLog($"[ZMQ] Started ({label}) PUB={endpoints.PubEndpoint}, PULL={endpoints.PullEndpoint}, REP={endpoints.RepEndpoint}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                IsRunning = false;
+                ReleaseSocket(pub, endpoints.PubEndpoint);
+                ReleaseSocket(pull, endpoints.PullEndpoint);
+                ReleaseSocket(rep, endpoints.RepEndpoint);
+                _pubSocket = null;
+                _pullSocket = null;
+                _repSocket = null;
+
+                var suffix = IsAddressInUse(ex) ? "address in use" : ex.Message;
+                DebugLog($"[ZMQ] Could not start on {label} ({endpoints.Summary}): {suffix}");
+                return false;
+            }
+        }
+
+        private static EndpointSet DefaultEndpoints()
+        {
+            return new EndpointSet(DefaultPubPort, DefaultPullPort, DefaultRepPort);
+        }
+
+        private static EndpointSet RandomEndpoints()
+        {
+            var ports = new HashSet<int>();
+            return new EndpointSet(
+                ReserveLoopbackPort(ports),
+                ReserveLoopbackPort(ports),
+                ReserveLoopbackPort(ports));
+        }
+
+        private static int ReserveLoopbackPort(HashSet<int> used)
+        {
+            while (true)
+            {
+                var listener = new TcpListener(IPAddress.Loopback, 0);
+                listener.Start();
+                try
+                {
+                    var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+                    if (used.Add(port))
+                        return port;
+                }
+                finally
+                {
+                    listener.Stop();
+                }
+            }
         }
 
         private static bool IsAddressInUse(Exception ex)
@@ -162,6 +228,12 @@ namespace rhino_zmq_poc
                 if (request.Type != "submitJob")
                 {
                     DebugLog($"[PULL] Unknown request type: {request.Type}");
+                    return;
+                }
+
+                if (!IsAuthorized(request.Token))
+                {
+                    DebugLog("[PULL] Rejected submitJob: invalid connection token");
                     return;
                 }
 
@@ -233,9 +305,27 @@ namespace rhino_zmq_poc
 
                 if (type == "ping")
                 {
+                    if (!IsAuthorized(doc.RootElement))
+                    {
+                        return JsonSerializer.Serialize(new AuthErrorResponse
+                        {
+                            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                            Error = "Invalid connection token"
+                        });
+                    }
+
                     return JsonSerializer.Serialize(new PingResponse
                     {
                         Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                    });
+                }
+
+                if (!IsAuthorized(doc.RootElement))
+                {
+                    return JsonSerializer.Serialize(new AuthErrorResponse
+                    {
+                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        Error = "Invalid connection token"
                     });
                 }
 
@@ -254,6 +344,19 @@ namespace rhino_zmq_poc
                 DebugLog($"[REP] HandleRequest error: {ex.Message}");
                 return JsonSerializer.Serialize(new { error = ex.Message });
             }
+        }
+
+        private bool IsAuthorized(JsonElement root)
+        {
+            return root.TryGetProperty("token", out var tokenElement) &&
+                tokenElement.ValueKind == JsonValueKind.String &&
+                IsAuthorized(tokenElement.GetString());
+        }
+
+        private bool IsAuthorized(string token)
+        {
+            return !string.IsNullOrEmpty(_connectionToken) &&
+                string.Equals(token, _connectionToken, StringComparison.Ordinal);
         }
 
         private void DrainPublishQueue()
@@ -312,9 +415,10 @@ namespace rhino_zmq_poc
             if (_jobStatusHandler != null)
                 _jobQueue.OnStatusChanged -= _jobStatusHandler;
 
-            ReleaseSocket(_pubSocket, PubEndpoint);
-            ReleaseSocket(_pullSocket, PullEndpoint);
-            ReleaseSocket(_repSocket, RepEndpoint);
+            ReleaseSocket(_pubSocket, _pubEndpoint);
+            ReleaseSocket(_pullSocket, _pullEndpoint);
+            ReleaseSocket(_repSocket, _repEndpoint);
+            ConnectionProfileStore.DeleteIfOwned(_instanceId);
             _pubSocket = null;
             _pullSocket = null;
             _repSocket = null;
@@ -325,6 +429,7 @@ namespace rhino_zmq_poc
             _commandTask = null;
             _repTask = null;
             _cts = null;
+            Profile = null;
 
             _ = Task.Run(() => DrainBackgroundTasks(commandTask, repTask, cts));
         }
@@ -353,7 +458,7 @@ namespace rhino_zmq_poc
 
         private static void ReleaseSocket(NetMQSocket socket, string endpoint)
         {
-            if (socket == null)
+            if (socket == null || string.IsNullOrEmpty(endpoint))
                 return;
 
             try
@@ -372,6 +477,27 @@ namespace rhino_zmq_poc
             catch
             {
                 // Best effort during shutdown.
+            }
+        }
+
+        private class EndpointSet
+        {
+            public EndpointSet(int pubPort, int pullPort, int repPort)
+            {
+                PubEndpoint = FormatEndpoint(pubPort);
+                PullEndpoint = FormatEndpoint(pullPort);
+                RepEndpoint = FormatEndpoint(repPort);
+                Summary = $"{pubPort}/{pullPort}/{repPort}";
+            }
+
+            public string PubEndpoint { get; }
+            public string PullEndpoint { get; }
+            public string RepEndpoint { get; }
+            public string Summary { get; }
+
+            private static string FormatEndpoint(int port)
+            {
+                return $"tcp://{ZMqService.LoopbackHost}:{port}";
             }
         }
     }
