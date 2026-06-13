@@ -2,7 +2,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import type { TextContent } from "@earendil-works/pi-ai";
-import { createExecute, formatDefaultResult } from "../edit-handlers.js";
+import { formatDefaultResult, submitCommand } from "../edit-handlers.js";
 import { withRequester } from "../../infra/request-helpers.js";
 import { backendOfflineToolResult } from "../../infra/backend-status-cache.js";
 import { refreshBackendIfOffline } from "../../infra/backend-status.js";
@@ -27,6 +27,17 @@ import { applyPatchesToPythonScript } from "../../services/python-script-patcher
 import { ScriptIOFields } from "./shared-types.js";
 import type { CommandAction } from "../../types/commands.js";
 import type { CsharpScriptPartsInput } from "../../types/csharp-script.js";
+import {
+	logGhEditScriptCall,
+	logGhEditScriptStep,
+	sanitizeGhEditScriptItem,
+	summarizeGhEditScriptItem,
+} from "../../services/gh-edit-script-log.js";
+import {
+	renderGhEditScriptCall,
+	renderGhEditScriptResult,
+	type GhEditScriptDetails,
+} from "./gh-edit-script-render.js";
 import type { GhEditScriptItem, ResolvedGhEditScriptItem } from "../../types/gh-edit-script.js";
 
 const PatchScopeType = Type.Union([
@@ -91,6 +102,11 @@ function isCsharpItem(item: GhEditScriptItem): boolean {
 
 function defaultPatchScope(code: string): "runScriptBody" | "body" {
 	return isCsharpCode(code) ? "runScriptBody" : "body";
+}
+
+function lineCount(text: string): number {
+	if (!text) return 0;
+	return text.split("\n").length;
 }
 
 const CSHARP_ONLY_PATCH_SCOPES = new Set([
@@ -326,19 +342,30 @@ export const ghEditScriptTool = defineTool({
 			]),
 		),
 	}),
-	execute: async (toolCallId, params, signal, onUpdate) => {
+	execute: async (toolCallId, params, _signal, onUpdate) => {
 		const items = params.items as GhEditScriptItem[];
+		const summaries = items.map(summarizeGhEditScriptItem);
+		logGhEditScriptCall(toolCallId, items);
 
 		let preparedMutations: ResolvedGhEditScriptItem[] = [];
 		try {
 			preparedMutations = await prepareMutationItems(items);
 		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			logGhEditScriptStep(`prepare failed: ${message}`);
 			return {
 				content: [{
 					type: "text" as const,
-					text: err instanceof Error ? err.message : String(err),
+					text: message,
 				}],
-				details: {},
+				details: {
+					summaries,
+					results: [`prepare failed: ${message}`],
+					items: items.map(sanitizeGhEditScriptItem),
+					queryCount: 0,
+					mutationCount: 0,
+					error: message,
+				} satisfies GhEditScriptDetails,
 			};
 		}
 
@@ -355,9 +382,17 @@ export const ghEditScriptTool = defineTool({
 			.filter((msg): msg is string => msg != null);
 
 		if (validationErrors.length > 0) {
+			logGhEditScriptStep(`validation failed: ${validationErrors.join(" | ")}`);
 			return {
 				content: [{ type: "text" as const, text: validationErrors.join("\n\n") }],
-				details: {},
+				details: {
+					summaries,
+					results: validationErrors.map((e) => `validation: ${e}`),
+					items: items.map(sanitizeGhEditScriptItem),
+					queryCount: 0,
+					mutationCount: 0,
+					validationErrors,
+				} satisfies GhEditScriptDetails,
 			};
 		}
 
@@ -373,17 +408,20 @@ export const ghEditScriptTool = defineTool({
 			? (onUpdate as (msg: { content: TextContent[]; details: unknown }) => void)
 			: undefined;
 
+		const outcomeResults: string[] = [];
 		const results: string[] = [];
 
 		for (const item of queryItems) {
 			if (item.action !== "getCode" && item.action !== "getCodeParts") continue;
+			const summary = summarizeGhEditScriptItem(item);
+			logGhEditScriptStep(`executing ${summary}`);
 			if (progressFn) {
 				progressFn({
 					content: [{
 						type: "text" as const,
-						text: `Querying ${item.action} on ${item.targetId}...`,
+						text: summary,
 					}],
-					details: {},
+					details: { item: sanitizeGhEditScriptItem(item) },
 				});
 			}
 			try {
@@ -392,36 +430,67 @@ export const ghEditScriptTool = defineTool({
 				);
 				if (item.action === "getCode") {
 					results.push(response.code);
+					outcomeResults.push(`${summary} → ${lineCount(response.code)} lines`);
 				} else if (isCsharpCode(response.code)) {
 					const parts = parseCsharpScript(response.code);
-					results.push(
-						parts
-							? formatCsharpScriptParts(parts)
-							: "getCodeParts error: not a parseable C# script.",
-					);
+					const formatted = parts
+						? formatCsharpScriptParts(parts)
+						: "getCodeParts error: not a parseable C# script.";
+					results.push(formatted);
+					outcomeResults.push(`${summary} → ${lineCount(formatted)} lines`);
 				} else {
-					results.push(formatPythonScriptParts(parsePythonScript(response.code)));
+					const formatted = formatPythonScriptParts(parsePythonScript(response.code));
+					results.push(formatted);
+					outcomeResults.push(`${summary} → ${lineCount(formatted)} lines`);
 				}
 			} catch (err) {
-				results.push(`${item.action} error: ${err}`);
+				const message = `${item.action} error: ${err}`;
+				results.push(message);
+				outcomeResults.push(`${summary} → failed`);
 			}
 		}
 
 		if (mutationItems.length > 0) {
-			const execute = createExecute<ResolvedGhEditScriptItem>(
-				mapMutation,
-				formatDefaultResult,
-				(item) => `${item.action} on ${"targetId" in item ? item.targetId : "new script"}...`,
-			);
-			const jobResults = await execute(toolCallId, { items: mutationItems }, signal, onUpdate);
-			if (jobResults.content.length > 0 && "text" in jobResults.content[0]) {
-				results.push((jobResults.content[0] as TextContent).text);
+			for (const item of mutationItems) {
+				const summary = summarizeGhEditScriptItem(item);
+				logGhEditScriptStep(`executing ${summary}`);
+				if (progressFn) {
+					progressFn({
+						content: [{ type: "text" as const, text: summary }],
+						details: { item: sanitizeGhEditScriptItem(item) },
+					});
+				}
+
+				const mapped = mapMutation(item);
+				if (!mapped) continue;
+
+				const job = await submitCommand(mapped.action, mapped.params);
+				const outcome = `${summary} → ${job.jobId}`;
+				outcomeResults.push(outcome);
+				results.push(formatDefaultResult(
+					{ action: item.action, targetId: "targetId" in item ? item.targetId : undefined },
+					job,
+				));
 			}
 		}
 
+		logGhEditScriptStep(`done (${queryItems.length} queries, ${mutationItems.length} mutations)`);
+
+		const details: GhEditScriptDetails = {
+			summaries,
+			results: outcomeResults,
+			items: items.map(sanitizeGhEditScriptItem),
+			queryCount: queryItems.length,
+			mutationCount: mutationItems.length,
+		};
+
 		return {
 			content: [{ type: "text" as const, text: results.join("\n") }],
-			details: {},
-		} satisfies AgentToolResult<unknown>;
+			details,
+		} satisfies AgentToolResult<GhEditScriptDetails>;
 	},
+
+	renderCall: (args, theme) => renderGhEditScriptCall(args as { items: GhEditScriptItem[] }, theme),
+	renderResult: (result, options, theme) =>
+		renderGhEditScriptResult(result as AgentToolResult<GhEditScriptDetails>, options, theme),
 });
