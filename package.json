@@ -15,7 +15,7 @@
 	"scripts": {
 		"dev": "tsx src/index.ts",
 		"build": "tsc -p tsconfig.json",
-		"test": "tsx src/tools/query-handlers.search.test.ts && tsx src/services/csharp-script-assembler.test.ts",
+		"test": "vitest run",
 		"pi": "pi -e .",
 		"dump:components": "tsx src/scripts/dump-components.ts",
 		"postinstall": "node scripts/install-grasshopper-plugin.mjs",
@@ -32,6 +32,7 @@
 		"chalk": "^5.6.2",
 		"fast-xml-parser": "^5.8.0",
 		"nanoid": "^5.1.11",
+		"vitest": "^4.1.8",
 		"zeromq": "^6.5.0"
 	},
 	"pi": {
