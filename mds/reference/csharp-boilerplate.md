@@ -14,9 +14,47 @@ Grasshopper C# script component inside Rhino — not a standalone app.
 - Helpers below `RunScript` only when needed.
 - Prefer `List<T>`; `DataTree<T>` only when trees are required.
 
-## Template
+## Agent workflow (preferred)
 
-Pass **whole code** to `gh_edit_script`.
+Do **not** emit the class wrapper or `using` lines. Use `gh_edit_script` with `scriptParts` — the server assembles the full Grasshopper script.
+
+```json
+{
+  "action": "setCode",
+  "targetId": "<guid>",
+  "scriptParts": {
+    "references": ["System", "Rhino.Geometry"],
+    "runScript": "private void RunScript(\n  double x,\n  ref double a\n)\n{\n  a = x * 2;\n}"
+  }
+}
+```
+
+- `references`: namespace strings only (no `using`, no `;`). Omit to use the default GH set.
+- `runScript`: the full `private void RunScript(...)` method.
+- `helpers`: optional methods placed below `RunScript` inside the class.
+
+### Small edits
+
+Use `patchCode` instead of rewriting everything. Line numbers are **1-based within the chosen scope** (default `runScriptBody`):
+
+```json
+{
+  "action": "patchCode",
+  "targetId": "<guid>",
+  "scope": "runScriptBody",
+  "patches": [
+    { "op": "replace", "startLine": 1, "endLine": 1, "lines": ["a = x * 3;"] }
+  ]
+}
+```
+
+Scopes: `runScriptBody` (default), `runScript`, `helpers`, `references`, `full`.
+
+Read structured code with `getCodeParts` (returns `references`, `runScript`, `runScriptBody`, `helpers`, `lineMap`).
+
+## Legacy full-code template
+
+`code` with the full script still works, but prefer `scriptParts` / `patchCode`.
 
 ```csharp
 using System;

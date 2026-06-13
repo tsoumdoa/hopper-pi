@@ -1,3 +1,7 @@
+import {
+	extractRunScript,
+} from "./csharp-script-assembler.js";
+
 export type CsharpScriptValidationOptions = {
 	inputNames?: string[];
 	outputNames?: string[];
@@ -22,105 +26,11 @@ const TYPE_PATTERN = "[\\w<>,\\[\\].\\s?]+";
 
 const SCRIPT_CLASS_PATTERN =
 	/public\s+class\s+Script_Instance\s*:\s*GH_ScriptInstance\b/;
-const RUN_SCRIPT_PATTERN = /\bprivate\s+void\s+RunScript\s*\(/;
 
 function stripComments(code: string): string {
 	return code
 		.replace(/\/\*[\s\S]*?\*\//g, "")
 		.replace(/\/\/[^\n\r]*/g, "");
-}
-
-function findMatchingBrace(code: string, openIndex: number): number {
-	let depth = 0;
-	let inString: "'" | '"' | null = null;
-	let escape = false;
-
-	for (let i = openIndex; i < code.length; i++) {
-		const ch = code[i];
-
-		if (inString) {
-			if (escape) {
-				escape = false;
-				continue;
-			}
-			if (ch === "\\") {
-				escape = true;
-				continue;
-			}
-			if (ch === inString) inString = null;
-			continue;
-		}
-
-		if (ch === '"' || ch === "'") {
-			inString = ch;
-			continue;
-		}
-
-		if (ch === "{") depth++;
-		else if (ch === "}") {
-			depth--;
-			if (depth === 0) return i;
-		}
-	}
-
-	return -1;
-}
-
-function extractRunScript(code: string): { signature: string; body: string } | null {
-	const match = RUN_SCRIPT_PATTERN.exec(code);
-	if (!match) return null;
-
-	const openParen = code.indexOf("(", match.index);
-	if (openParen < 0) return null;
-
-	let depth = 0;
-	let inString: "'" | '"' | null = null;
-	let escape = false;
-	let closeParen = -1;
-
-	for (let i = openParen; i < code.length; i++) {
-		const ch = code[i];
-
-		if (inString) {
-			if (escape) {
-				escape = false;
-				continue;
-			}
-			if (ch === "\\") {
-				escape = true;
-				continue;
-			}
-			if (ch === inString) inString = null;
-			continue;
-		}
-
-		if (ch === '"' || ch === "'") {
-			inString = ch;
-			continue;
-		}
-
-		if (ch === "(") depth++;
-		else if (ch === ")") {
-			depth--;
-			if (depth === 0) {
-				closeParen = i;
-				break;
-			}
-		}
-	}
-
-	if (closeParen < 0) return null;
-
-	const bodyOpen = code.indexOf("{", closeParen);
-	if (bodyOpen < 0) return null;
-
-	const bodyClose = findMatchingBrace(code, bodyOpen);
-	if (bodyClose < 0) return null;
-
-	return {
-		signature: code.slice(openParen + 1, closeParen),
-		body: code.slice(bodyOpen + 1, bodyClose),
-	};
 }
 
 function parseRunScriptParams(signature: string): RunScriptParams | null {

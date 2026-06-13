@@ -1,9 +1,19 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { createHybridExecute, formatDefaultResult } from "../edit-handlers.js";
+import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
+import type { TextContent } from "@earendil-works/pi-ai";
+import { createExecute, formatDefaultResult } from "../edit-handlers.js";
 import { withRequester } from "../../infra/request-helpers.js";
-import { fetchScriptCode, formatScriptCodeResponse } from "../query-handlers.js";
+import { backendOfflineToolResult } from "../../infra/backend-status-cache.js";
+import { refreshBackendIfOffline } from "../../infra/backend-status.js";
+import { fetchScriptCode } from "../query-handlers.js";
 import { resolveInstanceGuid } from "../../services/guid-shortener.js";
+import {
+	assembleCsharpScript,
+	formatCsharpScriptParts,
+	parseCsharpScript,
+} from "../../services/csharp-script-assembler.js";
+import { applyPatchesToScript } from "../../services/csharp-script-patcher.js";
 import {
 	formatCsharpValidationErrors,
 	looksLikeGrasshopperCsharpScript,
@@ -11,38 +21,111 @@ import {
 } from "../../services/csharp-script-validator.js";
 import { ScriptIOFields } from "./shared-types.js";
 import type { CommandAction } from "../../types/commands.js";
-import type { ScriptIOParam } from "../../types/commands.js";
+import type { CsharpScriptPartsInput } from "../../types/csharp-script.js";
+import type { GhEditScriptItem, ResolvedGhEditScriptItem } from "../../types/gh-edit-script.js";
 
-type GhEditScriptItem =
-	| {
-		action: "create";
-		x: number;
-		y: number;
-		language: "python" | "csharp";
-		code: string;
-		nickName?: string;
-		inputs?: ScriptIOParam[];
-		outputs?: ScriptIOParam[];
+const PatchScopeType = Type.Union([
+	Type.Literal("runScriptBody"),
+	Type.Literal("runScript"),
+	Type.Literal("helpers"),
+	Type.Literal("references"),
+	Type.Literal("full"),
+], { description: "Patch target. Default runScriptBody (1-based lines inside RunScript body only)." });
+
+const LinePatchType = Type.Union([
+	Type.Object({
+		op: Type.Literal("insert"),
+		afterLine: Type.Number({ description: "0 inserts before first line; N inserts after line N" }),
+		lines: Type.Array(Type.String()),
+	}),
+	Type.Object({
+		op: Type.Literal("replace"),
+		startLine: Type.Number({ description: "1-based inclusive start line in scope" }),
+		endLine: Type.Number({ description: "1-based inclusive end line in scope" }),
+		lines: Type.Array(Type.String()),
+	}),
+	Type.Object({
+		op: Type.Literal("delete"),
+		startLine: Type.Number({ description: "1-based inclusive start line in scope" }),
+		endLine: Type.Number({ description: "1-based inclusive end line in scope" }),
+	}),
+]);
+
+const CsharpScriptPartsFields = Type.Object({
+	references: Type.Optional(
+		Type.Array(Type.String(), {
+			description: "Namespaces without using/semicolon (e.g. System, Rhino.Geometry). Defaults to standard GH set.",
+		}),
+	),
+	runScript: Type.String({
+		description: "private void RunScript(...) method only — no class wrapper or using lines",
+	}),
+	helpers: Type.Optional(
+		Type.String({
+			description: "Optional helper methods inside Script_Instance, below RunScript",
+		}),
+	),
+});
+
+function isCsharpItem(item: GhEditScriptItem): boolean {
+	if (item.action === "create") return item.language === "csharp";
+	if (item.action === "patchCode" || item.action === "getCodeParts") return true;
+	if (item.action === "setCode") {
+		return Boolean(item.scriptParts) || looksLikeGrasshopperCsharpScript(item.code ?? "");
 	}
-	| {
-		action: "setCode";
-		targetId: string;
-		code: string;
-		inputs?: ScriptIOParam[];
-		outputs?: ScriptIOParam[];
+	return false;
+}
+
+function resolveCsharpCode(item: {
+	code?: string;
+	scriptParts?: CsharpScriptPartsInput;
+}): string {
+	if (item.scriptParts) {
+		return assembleCsharpScript(item.scriptParts);
 	}
-	| { action: "getCode"; targetId: string };
+	if (item.code) {
+		return item.code;
+	}
+	throw new Error("Provide either code or scriptParts.");
+}
 
-function validateScriptItem(item: GhEditScriptItem): string | null {
-	if (item.action === "getCode") return null;
+function validateScriptItem(item: GhEditScriptItem, resolvedCode?: string): string | null {
+	if (item.action === "getCode" || item.action === "getCodeParts") return null;
 
-	const isCsharp =
-		(item.action === "create" && item.language === "csharp") ||
-		(item.action === "setCode" && looksLikeGrasshopperCsharpScript(item.code));
+	if (item.action === "create" && item.language === "python") {
+		if (!item.code) return "Python create requires code.";
+		return null;
+	}
 
-	if (!isCsharp) return null;
+	if (item.action === "create" || item.action === "setCode") {
+		if (!item.code && !item.scriptParts) {
+			return `${item.action} requires code or scriptParts.`;
+		}
+		if (item.code && item.scriptParts) {
+			return `${item.action} accepts code or scriptParts, not both.`;
+		}
+	}
 
-	const result = validateCsharpScript(item.code, {
+	if (!isCsharpItem(item)) return null;
+
+	if (item.action === "patchCode") {
+		if (!resolvedCode) return null;
+		const result = validateCsharpScript(resolvedCode, {
+			inputNames: item.inputs?.map((i) => i.name),
+			outputNames: item.outputs?.map((o) => o.name),
+		});
+		if (result.valid) return null;
+		return formatCsharpValidationErrors(result.errors);
+	}
+
+	let code: string;
+	try {
+		code = resolveCsharpCode(item);
+	} catch (err) {
+		return err instanceof Error ? err.message : String(err);
+	}
+
+	const result = validateCsharpScript(code, {
 		inputNames:
 			item.action === "create" || item.action === "setCode"
 				? item.inputs?.map((i) => i.name)
@@ -57,11 +140,77 @@ function validateScriptItem(item: GhEditScriptItem): string | null {
 	return formatCsharpValidationErrors(result.errors);
 }
 
+async function resolvePatchCode(item: Extract<GhEditScriptItem, { action: "patchCode" }>): Promise<string> {
+	const response = await withRequester((req) =>
+		fetchScriptCode(req, resolveInstanceGuid(item.targetId)),
+	);
+	return applyPatchesToScript(response.code, item.patches, item.scope ?? "runScriptBody");
+}
+
+async function prepareMutationItems(items: GhEditScriptItem[]): Promise<ResolvedGhEditScriptItem[]> {
+	const prepared: ResolvedGhEditScriptItem[] = [];
+
+	for (const item of items) {
+		if (item.action === "getCode" || item.action === "getCodeParts") continue;
+
+		if (item.action === "patchCode") {
+			prepared.push({
+				...item,
+				resolvedCode: await resolvePatchCode(item),
+			});
+			continue;
+		}
+
+		prepared.push(item);
+	}
+
+	return prepared;
+}
+
+function mapMutation(item: ResolvedGhEditScriptItem) {
+	switch (item.action) {
+		case "create":
+			return {
+				action: "createScriptNode" as CommandAction,
+				params: {
+					position: { x: item.x, y: item.y },
+					language: item.language,
+					code: item.language === "csharp"
+						? resolveCsharpCode(item)
+						: item.code ?? "",
+					nickName: item.nickName,
+					inputs: item.inputs,
+					outputs: item.outputs,
+				},
+			};
+		case "setCode":
+			return {
+				action: "setScriptCode" as CommandAction,
+				params: {
+					targetId: resolveInstanceGuid(item.targetId),
+					code: resolveCsharpCode(item),
+					inputs: item.inputs,
+					outputs: item.outputs,
+				},
+			};
+		case "patchCode":
+			return {
+				action: "setScriptCode" as CommandAction,
+				params: {
+					targetId: resolveInstanceGuid(item.targetId),
+					code: item.resolvedCode ?? "",
+					inputs: item.inputs,
+					outputs: item.outputs,
+				},
+			};
+	}
+}
+
 export const ghEditScriptTool = defineTool({
 	name: "gh_edit_script",
 	label: "Edit Script",
 	description:
-		"create C#/Python script nodes, set code, or reconcile I/O. setCode/syncParams: pass full inputs/outputs; same-order renames keep wires; use previousName when reordering or swapping port names. Omit inputs/outputs to leave ports unchanged.",
+		"C#/Python script nodes. Prefer scriptParts for C# (references + RunScript only — class wrapper assembled server-side). Use patchCode for line edits without rewriting full code. setCode/create still accept full code. getCodeParts returns structured C# parts with lineMap.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([
@@ -73,48 +222,85 @@ export const ghEditScriptTool = defineTool({
 						Type.Literal("python"),
 						Type.Literal("csharp"),
 					], { description: "Script language (immutable after creation)" }),
-					code: Type.String({ description: "Script source code" }),
+					code: Type.Optional(Type.String({ description: "Full script source (Python or legacy C#)" })),
+					scriptParts: Type.Optional(CsharpScriptPartsFields),
 					nickName: Type.Optional(
-						Type.String({ description: "Script nickname" })
+						Type.String({ description: "Script nickname" }),
 					),
 					inputs: Type.Optional(
 						Type.Array(ScriptIOFields, {
 							description: "Desired input ports (full list for create)",
-						})
+						}),
 					),
 					outputs: Type.Optional(
 						Type.Array(ScriptIOFields, {
 							description: "Desired output ports (full list for create)",
-						})
+						}),
 					),
 				}),
 				Type.Object({
 					action: Type.Literal("setCode"),
 					targetId: Type.String({ description: "Script component GUID" }),
-					code: Type.String({ description: "Script source code" }),
+					code: Type.Optional(Type.String({ description: "Full script source" })),
+					scriptParts: Type.Optional(CsharpScriptPartsFields),
 					inputs: Type.Optional(
 						Type.Array(ScriptIOFields, {
 							description:
 								"Full desired input list — reconciles ports. Omit to leave unchanged; [] removes all inputs.",
-						})
+						}),
 					),
 					outputs: Type.Optional(
 						Type.Array(ScriptIOFields, {
 							description:
 								"Full desired output list — reconciles ports. Omit to leave unchanged; [] removes all outputs.",
-						})
+						}),
 					),
+				}),
+				Type.Object({
+					action: Type.Literal("patchCode"),
+					targetId: Type.String({ description: "C# script component GUID" }),
+					patches: Type.Array(LinePatchType),
+					scope: Type.Optional(PatchScopeType),
+					inputs: Type.Optional(Type.Array(ScriptIOFields)),
+					outputs: Type.Optional(Type.Array(ScriptIOFields)),
 				}),
 				Type.Object({
 					action: Type.Literal("getCode"),
 					targetId: Type.String({ description: "Script component GUID" }),
 				}),
-			])
+				Type.Object({
+					action: Type.Literal("getCodeParts"),
+					targetId: Type.String({ description: "C# script component GUID" }),
+				}),
+			]),
 		),
 	}),
 	execute: async (toolCallId, params, signal, onUpdate) => {
-		const validationErrors = (params.items as GhEditScriptItem[])
-			.map((item) => validateScriptItem(item))
+		const items = params.items as GhEditScriptItem[];
+
+		let preparedMutations: ResolvedGhEditScriptItem[] = [];
+		try {
+			preparedMutations = await prepareMutationItems(items);
+		} catch (err) {
+			return {
+				content: [{
+					type: "text" as const,
+					text: err instanceof Error ? err.message : String(err),
+				}],
+				details: {},
+			};
+		}
+
+		const validationErrors = items
+			.map((item) => {
+				if (item.action === "patchCode") {
+					const prepared = preparedMutations.find(
+						(m) => m.action === "patchCode" && m.targetId === item.targetId,
+					);
+					return validateScriptItem(item, prepared?.resolvedCode);
+				}
+				return validateScriptItem(item);
+			})
 			.filter((msg): msg is string => msg != null);
 
 		if (validationErrors.length > 0) {
@@ -124,46 +310,65 @@ export const ghEditScriptTool = defineTool({
 			};
 		}
 
-		return runGhEditScript(toolCallId, params, signal, onUpdate);
+		if (!(await refreshBackendIfOffline())) {
+			return backendOfflineToolResult();
+		}
+
+		const queryActions = new Set(["getCode", "getCodeParts"]);
+		const queryItems = items.filter((item) => queryActions.has(item.action));
+		const mutationItems = preparedMutations;
+
+		const progressFn = typeof onUpdate === "function"
+			? (onUpdate as (msg: { content: TextContent[]; details: unknown }) => void)
+			: undefined;
+
+		const results: string[] = [];
+
+		for (const item of queryItems) {
+			if (item.action !== "getCode" && item.action !== "getCodeParts") continue;
+			if (progressFn) {
+				progressFn({
+					content: [{
+						type: "text" as const,
+						text: `Querying ${item.action} on ${item.targetId}...`,
+					}],
+					details: {},
+				});
+			}
+			try {
+				const response = await withRequester((req) =>
+					fetchScriptCode(req, resolveInstanceGuid(item.targetId)),
+				);
+				if (item.action === "getCode") {
+					results.push(response.code);
+				} else {
+					const parts = parseCsharpScript(response.code);
+					results.push(
+						parts
+							? formatCsharpScriptParts(parts)
+							: "getCodeParts error: not a parseable C# script.",
+					);
+				}
+			} catch (err) {
+				results.push(`${item.action} error: ${err}`);
+			}
+		}
+
+		if (mutationItems.length > 0) {
+			const execute = createExecute<ResolvedGhEditScriptItem>(
+				mapMutation,
+				formatDefaultResult,
+				(item) => `${item.action} on ${"targetId" in item ? item.targetId : "new script"}...`,
+			);
+			const jobResults = await execute(toolCallId, { items: mutationItems }, signal, onUpdate);
+			if (jobResults.content.length > 0 && "text" in jobResults.content[0]) {
+				results.push((jobResults.content[0] as TextContent).text);
+			}
+		}
+
+		return {
+			content: [{ type: "text" as const, text: results.join("\n") }],
+			details: {},
+		} satisfies AgentToolResult<unknown>;
 	},
 });
-
-const runGhEditScript = createHybridExecute<GhEditScriptItem>(
-	"getCode",
-	async (item) => {
-		if (item.action !== "getCode") return "";
-		const response = await withRequester((req) => fetchScriptCode(req, resolveInstanceGuid(item.targetId)));
-		const formatted = formatScriptCodeResponse(response);
-		return formatted.content[0].text;
-	},
-	(item) => {
-		switch (item.action) {
-			case "create":
-				return {
-					action: "createScriptNode" as CommandAction,
-					params: {
-						position: { x: item.x, y: item.y },
-						language: item.language,
-						code: item.code,
-						nickName: item.nickName,
-						inputs: item.inputs,
-						outputs: item.outputs,
-					},
-				};
-			case "setCode":
-				return {
-					action: "setScriptCode" as CommandAction,
-					params: {
-						targetId: resolveInstanceGuid(item.targetId),
-						code: item.code,
-						inputs: item.inputs,
-						outputs: item.outputs,
-					},
-				};
-			default:
-				return null;
-		}
-	},
-	formatDefaultResult,
-	(item) => `${item.action} on ${"targetId" in item ? item.targetId : "new script"}...`,
-);
