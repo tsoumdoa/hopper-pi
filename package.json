@@ -1,6 +1,6 @@
 {
 	"name": "hopper-pi",
-	"version": "0.1.2",
+	"version": "0.1.3",
 	"keywords": [
 		"pi-package"
 	],
@@ -22,7 +22,7 @@
 		"build:gh-plugin": "node scripts/install-grasshopper-plugin.mjs --build-only"
 	},
 	"devDependencies": {
-		"@types/node": "^20.19.42",
+		"@types/node": "^20.19.43",
 		"tsx": "^4.22.4",
 		"typescript": "^5.9.3"
 	},
