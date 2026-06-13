@@ -4,7 +4,8 @@ const IMPORT_PATTERN = /^\s*(import\s+|from\s+[\w.]+\s+import\s+)/;
 
 function countLines(text: string): number {
 	if (text.length === 0) return 0;
-	return text.split("\n").length;
+	const lines = text.split("\n");
+	return lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
 }
 
 function isImportLine(line: string): boolean {

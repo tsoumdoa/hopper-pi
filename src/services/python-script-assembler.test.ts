@@ -41,4 +41,9 @@ test("python-script-assembler", () => {
 	assert.ok(noImports);
 	assert.deepEqual(noImports.imports, []);
 	assert.equal(noImports.body, "a = x * 2");
+
+	const trailingNewline = parsePythonScript("import x\n\na = x * 2\n");
+	assert.equal(trailingNewline.body, "a = x * 2\n");
+	assert.equal(trailingNewline.lineMap.body.lineCount, 1);
+	assert.equal(trailingNewline.lineMap.imports.lineCount, 1);
 });
