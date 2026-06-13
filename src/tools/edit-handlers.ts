@@ -58,7 +58,7 @@ function normalizeMapped(mapped: MappedAction | MappedAction[] | null): MappedAc
 
 export function createExecute<P>(
 	mapParams: (item: P) => MappedAction | MappedAction[] | null,
-	_formatMessage: (item: P, result: SubmitResult) => string,
+	formatMessage: (item: P, result: SubmitResult) => string,
 	progressMsg?: (item: P) => string,
 ) {
 	return async (
@@ -75,6 +75,8 @@ export function createExecute<P>(
 			? (onUpdate as ProgressFn)
 			: undefined;
 
+		const results: string[] = [];
+
 		for (const p of params.items) {
 			const actions = normalizeMapped(mapParams(p));
 
@@ -83,19 +85,28 @@ export function createExecute<P>(
 			}
 
 			for (const mapped of actions) {
+				const summary = progressMsg?.(p) ?? `Executing ${mapped.action}...`;
+
 				if (progressFn) {
 					progressFn({
-						content: [{ type: "text" as const, text: progressMsg?.(p) ?? `Executing ${mapped.action}...` }],
+						content: [{ type: "text" as const, text: summary }],
 						details: {},
 					});
 				}
 
-				await submitCommand(mapped.action, mapped.params);
+				try {
+					const job = await submitCommand(mapped.action, mapped.params);
+					results.push(formatMessage(p, job));
+				} catch (err) {
+					const message = err instanceof Error ? err.message : String(err);
+					results.push(`${summary} → ERROR: ${message}`);
+					results.push(formatMessage(p, { jobId: `failed: ${message}` }));
+				}
 			}
 		}
 
 		return {
-			content: [{ type: "text" as const, text: "OK" }],
+			content: [{ type: "text" as const, text: results.length > 0 ? results.join("\n") : "OK" }],
 			details: {},
 		};
 	};
