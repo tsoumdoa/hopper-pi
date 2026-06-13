@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { test } from "vitest";
 import type { GhComponentInfo } from "../types/messages.js";
 import {
 	tokenizeQuery,
@@ -51,34 +52,34 @@ function matchedNames(query: string): string[] {
 	return searchMatchedComponents(FIXTURE, query).map((c) => c.name);
 }
 
-// --- tokenizeQuery ---
+test("query-handlers search", () => {
+	// --- tokenizeQuery ---
 
-assert.deepEqual(tokenizeQuery("divSrf isotrim"), ["div", "srf", "isotrim"]);
-assert.deepEqual(tokenizeQuery("trim brep"), ["trim", "brep"]);
-assert.deepEqual(tokenizeQuery("a"), []);
+	assert.deepEqual(tokenizeQuery("divSrf isotrim"), ["div", "srf", "isotrim"]);
+	assert.deepEqual(tokenizeQuery("trim brep"), ["trim", "brep"]);
+	assert.deepEqual(tokenizeQuery("a"), []);
 
-// --- scoreComponent ---
+	// --- scoreComponent ---
 
-assert.ok(scoreComponent(comp("Isotrim"), "isotrim") >= 100);
-assert.ok(scoreComponent(comp("Divide Surface"), "div") >= 75);
-assert.ok(scoreComponent(comp("Divide Surface"), "srf") >= 62);
+	assert.ok(scoreComponent(comp("Isotrim"), "isotrim") >= 100);
+	assert.ok(scoreComponent(comp("Divide Surface"), "div") >= 75);
+	assert.ok(scoreComponent(comp("Divide Surface"), "srf") >= 62);
 
-// --- search ranking ---
+	// --- search ranking ---
 
-assert.ok(matchedNames("Trim").some((n) => n.startsWith("Trim")), "Trim query matches trim components");
-assert.equal(topName("trim brep"), "Trim with Brep", "multi-token prefers Trim with Brep");
-assert.equal(topName("isotrim"), "Isotrim");
-assert.ok(
-	matchedNames("divSrf").slice(0, 5).includes("Divide Surface"),
-	"divSrf shorthand surfaces Divide Surface in top 5",
-);
+	assert.ok(matchedNames("Trim").some((n) => n.startsWith("Trim")), "Trim query matches trim components");
+	assert.equal(topName("trim brep"), "Trim with Brep", "multi-token prefers Trim with Brep");
+	assert.equal(topName("isotrim"), "Isotrim");
+	assert.ok(
+		matchedNames("divSrf").slice(0, 5).includes("Divide Surface"),
+		"divSrf shorthand surfaces Divide Surface in top 5",
+	);
 
-const both = matchedNames("divSrf isotrim");
-assert.ok(both.includes("Divide Surface"), "OR: Divide Surface in matches");
-assert.ok(both.includes("Isotrim"), "OR: Isotrim in matches");
+	const both = matchedNames("divSrf isotrim");
+	assert.ok(both.includes("Divide Surface"), "OR: Divide Surface in matches");
+	assert.ok(both.includes("Isotrim"), "OR: Isotrim in matches");
 
-const trimBrepScore = scoreComponentQuery(comp("Trim with Brep"), tokenizeQuery("trim brep"));
-const trimSolidScore = scoreComponentQuery(comp("Trim Solid"), tokenizeQuery("trim brep"));
-assert.ok(trimBrepScore.score > trimSolidScore.score, "all-token bonus ranks Trim with Brep above partial matches");
-
-console.log("query-handlers.search.test.ts: all assertions passed");
+	const trimBrepScore = scoreComponentQuery(comp("Trim with Brep"), tokenizeQuery("trim brep"));
+	const trimSolidScore = scoreComponentQuery(comp("Trim Solid"), tokenizeQuery("trim brep"));
+	assert.ok(trimBrepScore.score > trimSolidScore.score, "all-token bonus ranks Trim with Brep above partial matches");
+});

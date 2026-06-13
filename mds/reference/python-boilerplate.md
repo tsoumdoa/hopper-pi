@@ -13,6 +13,37 @@ Grasshopper Python component — not a standalone script. No `main()`, CLI, or p
 - `ghpythonlib.treehelpers` for list/tree work; prefer simple Python lists for list outputs.
 - Port changes: `gh_edit_param`.
 
+## Agent workflow (preferred)
+
+Unlike C#, there is no class wrapper — emit the full script via `code` on `create` / `setCode`.
+
+```json
+{
+  "action": "setCode",
+  "targetId": "<guid>",
+  "code": "import ghpythonlib.treehelpers as th\n\na = x * 2"
+}
+```
+
+### Small edits
+
+Use `patchCode` instead of rewriting everything. Line numbers are **1-based within the chosen scope** (default `body` — logic after imports):
+
+```json
+{
+  "action": "patchCode",
+  "targetId": "<guid>",
+  "scope": "body",
+  "patches": [
+    { "op": "replace", "startLine": 1, "endLine": 1, "lines": ["a = x * 3"] }
+  ]
+}
+```
+
+Scopes: `body` (default), `imports`, `full`.
+
+Read structured code with `getCodeParts` (returns `imports`, `body`, `lineMap`).
+
 ## Examples to work with list and tree
 list is what python expeccts, and tree is what Grasshopper expects
 

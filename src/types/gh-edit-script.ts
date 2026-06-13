@@ -1,5 +1,8 @@
 import type { ScriptIOParam } from "./commands.js";
 import type { CsharpScriptPartsInput, LinePatch, PatchScope } from "./csharp-script.js";
+import type { PythonPatchScope } from "./python-script.js";
+
+export type ScriptPatchScope = PatchScope | PythonPatchScope;
 
 export type GhEditScriptItem =
 	| {
@@ -25,7 +28,7 @@ export type GhEditScriptItem =
 		action: "patchCode";
 		targetId: string;
 		patches: LinePatch[];
-		scope?: PatchScope;
+		scope?: ScriptPatchScope;
 		inputs?: ScriptIOParam[];
 		outputs?: ScriptIOParam[];
 	}

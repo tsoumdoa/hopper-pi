@@ -15,7 +15,7 @@
 	"scripts": {
 		"dev": "tsx src/index.ts",
 		"build": "tsc -p tsconfig.json",
-		"test": "tsx src/tools/query-handlers.search.test.ts && tsx src/services/csharp-script-assembler.test.ts",
+		"test": "vitest run",
 		"pi": "pi -e .",
 		"dump:components": "tsx src/scripts/dump-components.ts",
 		"postinstall": "node scripts/install-grasshopper-plugin.mjs",
@@ -24,7 +24,8 @@
 	"devDependencies": {
 		"@types/node": "^20.19.43",
 		"tsx": "^4.22.4",
-		"typescript": "^5.9.3"
+		"typescript": "^5.9.3",
+		"vitest": "^4.1.8"
 	},
 	"dependencies": {
 		"@earendil-works/pi-ai": "^0.79.1",

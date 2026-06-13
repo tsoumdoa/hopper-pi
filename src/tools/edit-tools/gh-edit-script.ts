@@ -19,6 +19,11 @@ import {
 	looksLikeGrasshopperCsharpScript,
 	validateCsharpScript,
 } from "../../services/csharp-script-validator.js";
+import {
+	formatPythonScriptParts,
+	parsePythonScript,
+} from "../../services/python-script-assembler.js";
+import { applyPatchesToPythonScript } from "../../services/python-script-patcher.js";
 import { ScriptIOFields } from "./shared-types.js";
 import type { CommandAction } from "../../types/commands.js";
 import type { CsharpScriptPartsInput } from "../../types/csharp-script.js";
@@ -29,8 +34,13 @@ const PatchScopeType = Type.Union([
 	Type.Literal("runScript"),
 	Type.Literal("helpers"),
 	Type.Literal("references"),
+	Type.Literal("body"),
+	Type.Literal("imports"),
 	Type.Literal("full"),
-], { description: "Patch target. Default runScriptBody (1-based lines inside RunScript body only)." });
+], {
+	description:
+		"Patch target. C# default runScriptBody; Python default body. Scopes: C# runScriptBody/runScript/helpers/references; Python body/imports; full works for both.",
+});
 
 const LinePatchType = Type.Union([
 	Type.Object({
@@ -67,13 +77,45 @@ const CsharpScriptPartsFields = Type.Object({
 	),
 });
 
+function isCsharpCode(code: string): boolean {
+	return looksLikeGrasshopperCsharpScript(code);
+}
+
 function isCsharpItem(item: GhEditScriptItem): boolean {
 	if (item.action === "create") return item.language === "csharp";
-	if (item.action === "patchCode" || item.action === "getCodeParts") return true;
 	if (item.action === "setCode") {
 		return Boolean(item.scriptParts) || looksLikeGrasshopperCsharpScript(item.code ?? "");
 	}
 	return false;
+}
+
+function defaultPatchScope(code: string): "runScriptBody" | "body" {
+	return isCsharpCode(code) ? "runScriptBody" : "body";
+}
+
+const CSHARP_ONLY_PATCH_SCOPES = new Set([
+	"runScriptBody",
+	"runScript",
+	"helpers",
+	"references",
+]);
+const PYTHON_ONLY_PATCH_SCOPES = new Set(["body", "imports"]);
+
+function validatePatchScope(code: string, scope: string): string | null {
+	if (scope === "full") return null;
+
+	if (isCsharpCode(code)) {
+		if (PYTHON_ONLY_PATCH_SCOPES.has(scope)) {
+			return `Patch scope "${scope}" is for Python scripts; this target is C#. Use runScriptBody (default), runScript, helpers, references, or full.`;
+		}
+		return null;
+	}
+
+	if (CSHARP_ONLY_PATCH_SCOPES.has(scope)) {
+		return `Patch scope "${scope}" is for C# scripts; this target is Python. Use body (default), imports, or full.`;
+	}
+
+	return null;
 }
 
 function resolveCsharpCode(item: {
@@ -106,10 +148,9 @@ function validateScriptItem(item: GhEditScriptItem, resolvedCode?: string): stri
 		}
 	}
 
-	if (!isCsharpItem(item)) return null;
-
 	if (item.action === "patchCode") {
 		if (!resolvedCode) return null;
+		if (!looksLikeGrasshopperCsharpScript(resolvedCode)) return null;
 		const result = validateCsharpScript(resolvedCode, {
 			inputNames: item.inputs?.map((i) => i.name),
 			outputNames: item.outputs?.map((o) => o.name),
@@ -117,6 +158,8 @@ function validateScriptItem(item: GhEditScriptItem, resolvedCode?: string): stri
 		if (result.valid) return null;
 		return formatCsharpValidationErrors(result.errors);
 	}
+
+	if (!isCsharpItem(item)) return null;
 
 	let code: string;
 	try {
@@ -144,7 +187,15 @@ async function resolvePatchCode(item: Extract<GhEditScriptItem, { action: "patch
 	const response = await withRequester((req) =>
 		fetchScriptCode(req, resolveInstanceGuid(item.targetId)),
 	);
-	return applyPatchesToScript(response.code, item.patches, item.scope ?? "runScriptBody");
+	const scope = item.scope ?? defaultPatchScope(response.code);
+	const scopeError = validatePatchScope(response.code, scope);
+	if (scopeError) {
+		throw new Error(scopeError);
+	}
+	if (isCsharpCode(response.code)) {
+		return applyPatchesToScript(response.code, item.patches, scope as "runScriptBody");
+	}
+	return applyPatchesToPythonScript(response.code, item.patches, scope as "body");
 }
 
 async function prepareMutationItems(items: GhEditScriptItem[]): Promise<ResolvedGhEditScriptItem[]> {
@@ -188,7 +239,7 @@ function mapMutation(item: ResolvedGhEditScriptItem) {
 				action: "setScriptCode" as CommandAction,
 				params: {
 					targetId: resolveInstanceGuid(item.targetId),
-					code: resolveCsharpCode(item),
+					code: isCsharpItem(item) ? resolveCsharpCode(item) : item.code ?? "",
 					inputs: item.inputs,
 					outputs: item.outputs,
 				},
@@ -210,7 +261,7 @@ export const ghEditScriptTool = defineTool({
 	name: "gh_edit_script",
 	label: "Edit Script",
 	description:
-		"C#/Python script nodes. Prefer scriptParts for C# (references + RunScript only — class wrapper assembled server-side). Use patchCode for line edits without rewriting full code. setCode/create still accept full code. getCodeParts returns structured C# parts with lineMap.",
+		"C#/Python script nodes. C#: prefer scriptParts (references + RunScript — wrapper assembled server-side). Python: use full code (no wrapper). Both: patchCode for line edits (C# default scope runScriptBody, Python body). getCodeParts returns structured parts with lineMap.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([
@@ -258,7 +309,7 @@ export const ghEditScriptTool = defineTool({
 				}),
 				Type.Object({
 					action: Type.Literal("patchCode"),
-					targetId: Type.String({ description: "C# script component GUID" }),
+					targetId: Type.String({ description: "Script component GUID" }),
 					patches: Type.Array(LinePatchType),
 					scope: Type.Optional(PatchScopeType),
 					inputs: Type.Optional(Type.Array(ScriptIOFields)),
@@ -270,7 +321,7 @@ export const ghEditScriptTool = defineTool({
 				}),
 				Type.Object({
 					action: Type.Literal("getCodeParts"),
-					targetId: Type.String({ description: "C# script component GUID" }),
+					targetId: Type.String({ description: "Script component GUID" }),
 				}),
 			]),
 		),
@@ -341,13 +392,15 @@ export const ghEditScriptTool = defineTool({
 				);
 				if (item.action === "getCode") {
 					results.push(response.code);
-				} else {
+				} else if (isCsharpCode(response.code)) {
 					const parts = parseCsharpScript(response.code);
 					results.push(
 						parts
 							? formatCsharpScriptParts(parts)
 							: "getCodeParts error: not a parseable C# script.",
 					);
+				} else {
+					results.push(formatPythonScriptParts(parsePythonScript(response.code)));
 				}
 			} catch (err) {
 				results.push(`${item.action} error: ${err}`);
