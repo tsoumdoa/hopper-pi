@@ -41,5 +41,6 @@ const inserted = applyPatchesToScript(SAMPLE, [
 ]);
 assert.match(inserted, /\/\/ scale input/);
 assert.match(inserted, /a = x \* 2;/);
+assert.equal(validateCsharpScript(inserted).valid, true);
 
 console.log("csharp-script-assembler tests passed");

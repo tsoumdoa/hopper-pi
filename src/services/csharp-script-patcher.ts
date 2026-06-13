@@ -96,6 +96,10 @@ export function applyPatchesToScript(
 	patches: LinePatch[],
 	scope: PatchScope = "runScriptBody",
 ): string {
+	if (scope === "full") {
+		return applyLinePatches(code, patches);
+	}
+
 	const parsed = parseCsharpScript(code);
 	if (!parsed) {
 		throw new Error("Script must be a Grasshopper C# script with Script_Instance and RunScript.");
@@ -115,8 +119,6 @@ export function applyPatchesToScript(
 		case "helpers":
 			nextParts = patchHelpers(parsed, patches);
 			break;
-		case "full":
-			return applyLinePatches(code, patches);
 		default:
 			throw new Error(`Unknown patch scope "${scope as string}".`);
 	}

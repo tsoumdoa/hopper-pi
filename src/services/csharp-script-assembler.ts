@@ -21,40 +21,163 @@ const SCRIPT_CLASS_PATTERN =
 const RUN_SCRIPT_PATTERN = /\bprivate\s+void\s+RunScript\s*\(/;
 const USING_PATTERN = /^\s*using\s+([\w.]+)\s*;\s*$/;
 
-export function findMatchingBrace(code: string, openIndex: number): number {
+function skipComment(code: string, index: number): number | null {
+	if (code[index] !== "/") return null;
+
+	const next = code[index + 1];
+	if (next === "/") {
+		const newline = code.indexOf("\n", index + 2);
+		return newline === -1 ? code.length - 1 : newline;
+	}
+	if (next === "*") {
+		const end = code.indexOf("*/", index + 2);
+		return end === -1 ? code.length - 1 : end + 1;
+	}
+
+	return null;
+}
+
+type ScanFrame =
+	| { type: "root" }
+	| { type: "char"; escape: boolean }
+	| { type: "string"; verbatim: boolean; escape: boolean; interpolated: boolean }
+	| { type: "interp"; depth: number };
+
+function detectStringStart(
+	code: string,
+	index: number,
+): { endIndex: number; frame: ScanFrame } | null {
+	const ch = code[index];
+	if (ch === "'") {
+		return { endIndex: index, frame: { type: "char", escape: false } };
+	}
+	if (ch === "$" && code[index + 1] === "@" && code[index + 2] === '"') {
+		return {
+			endIndex: index + 2,
+			frame: { type: "string", verbatim: true, escape: false, interpolated: true },
+		};
+	}
+	if (ch === "$" && code[index + 1] === '"') {
+		return {
+			endIndex: index + 1,
+			frame: { type: "string", verbatim: false, escape: false, interpolated: true },
+		};
+	}
+	if (ch === "@" && code[index + 1] === '"') {
+		return {
+			endIndex: index + 1,
+			frame: { type: "string", verbatim: true, escape: false, interpolated: false },
+		};
+	}
+	if (ch === '"') {
+		return {
+			endIndex: index,
+			frame: { type: "string", verbatim: false, escape: false, interpolated: false },
+		};
+	}
+	return null;
+}
+
+function advanceInStringFrame(code: string, index: number, stack: ScanFrame[]): number {
+	const frame = stack[stack.length - 1];
+	const ch = code[index];
+
+	if (frame.type === "char") {
+		if (frame.escape) {
+			frame.escape = false;
+			return index;
+		}
+		if (ch === "\\") {
+			frame.escape = true;
+			return index;
+		}
+		if (ch === "'") {
+			stack.pop();
+			return index;
+		}
+		return index;
+	}
+
+	if (!frame.verbatim && frame.escape) {
+		frame.escape = false;
+		return index;
+	}
+	if (!frame.verbatim && ch === "\\") {
+		frame.escape = true;
+		return index;
+	}
+
+	if (frame.interpolated && ch === "{") {
+		if (code[index + 1] === "{") return index + 1;
+		stack.push({ type: "interp", depth: 1 });
+		return index;
+	}
+	if (frame.interpolated && ch === "}") {
+		if (code[index + 1] === "}") return index + 1;
+		return index;
+	}
+
+	if (ch === '"') {
+		if (frame.verbatim && code[index + 1] === '"') return index + 1;
+		stack.pop();
+		return index;
+	}
+
+	return index;
+}
+
+function findMatchingDelimiter(
+	code: string,
+	openIndex: number,
+	openChar: "{" | "(",
+	closeChar: "}" | ")",
+): number {
+	const stack: ScanFrame[] = [{ type: "root" }];
 	let depth = 0;
-	let inString: "'" | '"' | null = null;
-	let escape = false;
 
 	for (let i = openIndex; i < code.length; i++) {
+		const frame = stack[stack.length - 1];
 		const ch = code[i];
 
-		if (inString) {
-			if (escape) {
-				escape = false;
-				continue;
-			}
-			if (ch === "\\") {
-				escape = true;
-				continue;
-			}
-			if (ch === inString) inString = null;
+		if (frame.type === "char" || frame.type === "string") {
+			i = advanceInStringFrame(code, i, stack);
 			continue;
 		}
 
-		if (ch === '"' || ch === "'") {
-			inString = ch;
+		const commentEnd = skipComment(code, i);
+		if (commentEnd !== null) {
+			i = commentEnd;
 			continue;
 		}
 
-		if (ch === "{") depth++;
-		else if (ch === "}") {
+		const stringStart = detectStringStart(code, i);
+		if (stringStart) {
+			stack.push(stringStart.frame);
+			i = stringStart.endIndex;
+			continue;
+		}
+
+		if (frame.type === "interp") {
+			if (ch === "{") frame.depth++;
+			else if (ch === "}") {
+				frame.depth--;
+				if (frame.depth === 0) stack.pop();
+			}
+			continue;
+		}
+
+		if (ch === openChar) depth++;
+		else if (ch === closeChar) {
 			depth--;
 			if (depth === 0) return i;
 		}
 	}
 
 	return -1;
+}
+
+export function findMatchingBrace(code: string, openIndex: number): number {
+	return findMatchingDelimiter(code, openIndex, "{", "}");
 }
 
 export function extractRunScript(code: string): {
@@ -71,42 +194,7 @@ export function extractRunScript(code: string): {
 	const openParen = code.indexOf("(", match.index);
 	if (openParen < 0) return null;
 
-	let depth = 0;
-	let inString: "'" | '"' | null = null;
-	let escape = false;
-	let closeParen = -1;
-
-	for (let i = openParen; i < code.length; i++) {
-		const ch = code[i];
-
-		if (inString) {
-			if (escape) {
-				escape = false;
-				continue;
-			}
-			if (ch === "\\") {
-				escape = true;
-				continue;
-			}
-			if (ch === inString) inString = null;
-			continue;
-		}
-
-		if (ch === '"' || ch === "'") {
-			inString = ch;
-			continue;
-		}
-
-		if (ch === "(") depth++;
-		else if (ch === ")") {
-			depth--;
-			if (depth === 0) {
-				closeParen = i;
-				break;
-			}
-		}
-	}
-
+	const closeParen = findMatchingDelimiter(code, openParen, "(", ")");
 	if (closeParen < 0) return null;
 
 	const bodyOpen = code.indexOf("{", closeParen);
