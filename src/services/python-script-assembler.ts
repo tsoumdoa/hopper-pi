@@ -16,7 +16,15 @@ function isSkippableLeadingLine(line: string): boolean {
 	return trimmed.length === 0 || trimmed.startsWith("#");
 }
 
-export function parsePythonScript(code: string): ParsedPythonScript | null {
+/**
+ * Split Grasshopper Python script source into imports and body.
+ *
+ * Line-based v1 parser: only consecutive leading import lines are recognized.
+ * Does not handle parenthesized multi-line imports, imports after other code,
+ * or blank lines/comments between import statements. Use scope "full" when patching
+ * scripts with those patterns.
+ */
+export function parsePythonScript(code: string): ParsedPythonScript {
 	const normalized = code.replace(/\r\n/g, "\n");
 	const lines = normalized.split("\n");
 	const imports: string[] = [];

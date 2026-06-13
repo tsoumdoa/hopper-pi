@@ -93,6 +93,31 @@ function defaultPatchScope(code: string): "runScriptBody" | "body" {
 	return isCsharpCode(code) ? "runScriptBody" : "body";
 }
 
+const CSHARP_ONLY_PATCH_SCOPES = new Set([
+	"runScriptBody",
+	"runScript",
+	"helpers",
+	"references",
+]);
+const PYTHON_ONLY_PATCH_SCOPES = new Set(["body", "imports"]);
+
+function validatePatchScope(code: string, scope: string): string | null {
+	if (scope === "full") return null;
+
+	if (isCsharpCode(code)) {
+		if (PYTHON_ONLY_PATCH_SCOPES.has(scope)) {
+			return `Patch scope "${scope}" is for Python scripts; this target is C#. Use runScriptBody (default), runScript, helpers, references, or full.`;
+		}
+		return null;
+	}
+
+	if (CSHARP_ONLY_PATCH_SCOPES.has(scope)) {
+		return `Patch scope "${scope}" is for C# scripts; this target is Python. Use body (default), imports, or full.`;
+	}
+
+	return null;
+}
+
 function resolveCsharpCode(item: {
 	code?: string;
 	scriptParts?: CsharpScriptPartsInput;
@@ -123,8 +148,6 @@ function validateScriptItem(item: GhEditScriptItem, resolvedCode?: string): stri
 		}
 	}
 
-	if (!isCsharpItem(item)) return null;
-
 	if (item.action === "patchCode") {
 		if (!resolvedCode) return null;
 		if (!looksLikeGrasshopperCsharpScript(resolvedCode)) return null;
@@ -135,6 +158,8 @@ function validateScriptItem(item: GhEditScriptItem, resolvedCode?: string): stri
 		if (result.valid) return null;
 		return formatCsharpValidationErrors(result.errors);
 	}
+
+	if (!isCsharpItem(item)) return null;
 
 	let code: string;
 	try {
@@ -163,6 +188,10 @@ async function resolvePatchCode(item: Extract<GhEditScriptItem, { action: "patch
 		fetchScriptCode(req, resolveInstanceGuid(item.targetId)),
 	);
 	const scope = item.scope ?? defaultPatchScope(response.code);
+	const scopeError = validatePatchScope(response.code, scope);
+	if (scopeError) {
+		throw new Error(scopeError);
+	}
 	if (isCsharpCode(response.code)) {
 		return applyPatchesToScript(response.code, item.patches, scope as "runScriptBody");
 	}
@@ -371,12 +400,7 @@ export const ghEditScriptTool = defineTool({
 							: "getCodeParts error: not a parseable C# script.",
 					);
 				} else {
-					const parts = parsePythonScript(response.code);
-					results.push(
-						parts
-							? formatPythonScriptParts(parts)
-							: "getCodeParts error: not parseable Python source.",
-					);
+					results.push(formatPythonScriptParts(parsePythonScript(response.code)));
 				}
 			} catch (err) {
 				results.push(`${item.action} error: ${err}`);

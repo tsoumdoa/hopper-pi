@@ -1,7 +1,8 @@
-import type { LinePatch, PythonPatchScope } from "../types/python-script.js";
+import type { LinePatch, ParsedPythonScript, PythonPatchScope } from "../types/python-script.js";
 import { assemblePythonScript, parsePythonScript } from "./python-script-assembler.js";
 import { applyLinePatches } from "./csharp-script-patcher.js";
 
+// lineMap is not recomputed here; only assemblePythonScript output is used.
 function patchImports(parts: ParsedPythonScript, patches: LinePatch[]): ParsedPythonScript {
 	const current = parts.imports.join("\n");
 	const next = applyLinePatches(current, patches);
@@ -18,8 +19,6 @@ function patchBody(parts: ParsedPythonScript, patches: LinePatch[]): ParsedPytho
 	};
 }
 
-type ParsedPythonScript = NonNullable<ReturnType<typeof parsePythonScript>>;
-
 export function applyPatchesToPythonScript(
 	code: string,
 	patches: LinePatch[],
@@ -30,9 +29,6 @@ export function applyPatchesToPythonScript(
 	}
 
 	const parsed = parsePythonScript(code);
-	if (!parsed) {
-		throw new Error("Script must be parseable Python source.");
-	}
 
 	let nextParts: ParsedPythonScript;
 	switch (scope) {
