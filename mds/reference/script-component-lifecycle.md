@@ -10,8 +10,8 @@ Shared steps for Grasshopper **Python** and **C#** script components. Language t
 ## Update code
 
 3. `gh_edit_script` `"setCode"`: C# — pass `scriptParts` (preferred) or full `code`. Python — pass full `code`. Include full `inputs`/`outputs` when the signature changes; omit lists if only code changes.
-4. Small edits: `"patchCode"` with line patches — C# default scope `runScriptBody`, Python default scope `body`. Use scope `full` to patch anywhere.
-5. Read split code: `"getCodeParts"` — C# returns `references`, `runScript`, `runScriptBody`, `helpers`, `lineMap`; Python returns `imports`, `body`, `lineMap`.
+4. Small edits: `"patchCode"` with line patches — C# default scope `runScriptBody`, Python default scope `full` (line numbers from file top).
+5. Read split code: `"getCodeParts"` — C# only (returns `references`, `runScript`, `runScriptBody`, `helpers`, `lineMap`). Python: use `"getCode"`.
 
 ## Ports only
 

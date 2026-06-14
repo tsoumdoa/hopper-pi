@@ -11,17 +11,12 @@ import {
 	formatCsharpScriptParts,
 	parseCsharpScript,
 } from "./csharp-script-assembler.js";
-import { applyPatchesToScript } from "./csharp-script-patcher.js";
+import { applyLinePatches, applyPatchesToScript } from "./csharp-script-patcher.js";
 import {
 	formatCsharpValidationErrors,
 	looksLikeGrasshopperCsharpScript,
 	validateCsharpScript,
 } from "./csharp-script-validator.js";
-import {
-	formatPythonScriptParts,
-	parsePythonScript,
-} from "./python-script-assembler.js";
-import { applyPatchesToPythonScript } from "./python-script-patcher.js";
 import {
 	logGhEditScriptStep,
 	sanitizeGhEditScriptItem,
@@ -29,7 +24,6 @@ import {
 } from "./gh-edit-script-log.js";
 import type { CommandAction } from "../types/commands.js";
 import type { CsharpScriptPartsInput, PatchScope } from "../types/csharp-script.js";
-import type { PythonPatchScope } from "../types/python-script.js";
 import type { GhEditScriptItem, ResolvedGhEditScriptItem } from "../types/gh-edit-script.js";
 import type { GhEditScriptDetails } from "../tools/edit-tools/gh-edit-script-render.js";
 
@@ -39,7 +33,7 @@ const CSHARP_ONLY_PATCH_SCOPES = new Set([
 	"helpers",
 	"references",
 ]);
-const PYTHON_ONLY_PATCH_SCOPES = new Set(["body", "imports"]);
+const REMOVED_PYTHON_PATCH_SCOPES = new Set(["body", "imports"]);
 
 export function isCsharpCode(code: string): boolean {
 	return looksLikeGrasshopperCsharpScript(code);
@@ -53,25 +47,29 @@ export function isCsharpItem(item: GhEditScriptItem): boolean {
 	return false;
 }
 
-export function defaultPatchScope(code: string): "runScriptBody" | "body" {
-	return isCsharpCode(code) ? "runScriptBody" : "body";
+export function defaultPatchScope(code: string): "runScriptBody" | "full" {
+	return isCsharpCode(code) ? "runScriptBody" : "full";
 }
 
 export function validatePatchScope(code: string, scope: string): string | null {
 	if (scope === "full") return null;
 
 	if (isCsharpCode(code)) {
-		if (PYTHON_ONLY_PATCH_SCOPES.has(scope)) {
-			return `Patch scope "${scope}" is for Python scripts; this target is C#. Use runScriptBody (default), runScript, helpers, references, or full.`;
+		if (REMOVED_PYTHON_PATCH_SCOPES.has(scope)) {
+			return `Patch scope "${scope}" is not supported for C# scripts. Use runScriptBody (default), runScript, helpers, references, or full.`;
 		}
 		return null;
 	}
 
 	if (CSHARP_ONLY_PATCH_SCOPES.has(scope)) {
-		return `Patch scope "${scope}" is for C# scripts; this target is Python. Use body (default), imports, or full.`;
+		return `Patch scope "${scope}" is for C# scripts; this target is Python. Use full (default).`;
 	}
 
-	return null;
+	if (REMOVED_PYTHON_PATCH_SCOPES.has(scope)) {
+		return `Patch scope "${scope}" is no longer supported for Python. Use full (default); line numbers are 1-based from the top of the script.`;
+	}
+
+	return `Patch scope "${scope}" is not supported for Python scripts. Use full (default).`;
 }
 
 export function resolveCsharpCode(item: {
@@ -151,7 +149,7 @@ async function resolvePatchCode(item: Extract<GhEditScriptItem, { action: "patch
 	if (isCsharpCode(response.code)) {
 		return applyPatchesToScript(response.code, item.patches, scope as PatchScope);
 	}
-	return applyPatchesToPythonScript(response.code, item.patches, scope as PythonPatchScope);
+	return applyLinePatches(response.code, item.patches);
 }
 
 export async function prepareMutationItems(items: GhEditScriptItem[]): Promise<ResolvedGhEditScriptItem[]> {
@@ -226,7 +224,7 @@ async function executeQueryItem(item: Extract<GhEditScriptItem, { action: "getCo
 			? formatCsharpScriptParts(parts)
 			: "getCodeParts error: not a parseable C# script.";
 	}
-	return formatPythonScriptParts(parsePythonScript(response.code));
+	return "getCodeParts error: getCodeParts is for C# scripts; use getCode for Python.";
 }
 
 export async function executeGhEditScript(

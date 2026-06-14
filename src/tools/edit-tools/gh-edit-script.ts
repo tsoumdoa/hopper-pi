@@ -18,12 +18,10 @@ const PatchScopeType = Type.Union([
 	Type.Literal("runScript"),
 	Type.Literal("helpers"),
 	Type.Literal("references"),
-	Type.Literal("body"),
-	Type.Literal("imports"),
 	Type.Literal("full"),
 ], {
 	description:
-		"Patch target. C# default runScriptBody; Python default body. Scopes: C# runScriptBody/runScript/helpers/references; Python body/imports; full works for both.",
+		"Patch target. C# default runScriptBody (scopes: runScriptBody/runScript/helpers/references). Python uses full only (default). full patches the entire script for both.",
 });
 
 const LinePatchType = Type.Union([
@@ -65,7 +63,7 @@ export const ghEditScriptTool = defineTool({
 	name: "gh_edit_script",
 	label: "Edit Script",
 	description:
-		"C#/Python script nodes. C#: prefer scriptParts (references + RunScript — wrapper assembled server-side). Python: use full code (no wrapper). Both: patchCode for line edits (C# default scope runScriptBody, Python body). getCodeParts returns structured parts with lineMap.",
+		"C#/Python script nodes. C#: prefer scriptParts (references + RunScript — wrapper assembled server-side). Python: use full code (no wrapper); tree ports require ghpythonlib.treehelpers — see mds/reference/python-boilerplate.md. Both: patchCode for line edits (C# default scope runScriptBody, Python full). getCodeParts is C#-only; use getCode for Python.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([

@@ -88,7 +88,7 @@ Full table, bounds math, pivot safety, worked examples → [layout-system.md](..
 - Solids: prefer extrude, pipe, sweep, loft over heavy booleans.
 
 ## Common problems
-- lists are not converted to tree using  ```ghpythonlib.treehelpers.list_to_tree(res)``` before assining to the output
+- **Python tree/list boundary** — if you see `Data conversion failed from Goo to …`, a Python script likely returned a plain list instead of a DataTree. Use `th.tree_to_list` on tree inputs and `th.list_to_tree` on tree outputs. Run `gh_get_canvas_errors` for an inline hint. Recipes → [python-boilerplate.md](../../reference/python-boilerplate.md#list-vs-tree-access-types).
 - Extruded crvs result in open breps, you need to extrude them as srf or cap
   them.
 

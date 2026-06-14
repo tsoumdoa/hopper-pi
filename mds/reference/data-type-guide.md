@@ -34,6 +34,15 @@ Examples (same panel text, different mode):
 - `oneItemPerLine` → list `{1, 2, 3}`
 - `singleString` → one string `"1\n2\n3"`
 
+## Python script tree/list ports
+
+When a Python script port uses **tree** access, convert at the boundary with `ghpythonlib.treehelpers`:
+
+- **Tree input** → `th.tree_to_list(x)` before list-style Python work
+- **Tree output** → `a = th.list_to_tree(result)` before assigning to the output
+
+List-access ports use plain Python lists; item-access ports use single values. Full recipes and anti-patterns → [python-boilerplate.md](./python-boilerplate.md#list-vs-tree-access-types). If you see `Data conversion failed from Goo to …` on the canvas, run `gh_get_canvas_errors` for an inline treehelpers hint.
+
 ## Input construction tips
 
 - Point/vector on panel: `{0,0,0}`

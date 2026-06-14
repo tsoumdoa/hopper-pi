@@ -12,6 +12,10 @@ import {
 	searchMatchedComponents,
 	sortedComponents,
 } from "../services/component-search.js";
+import {
+	formatPythonTreeConversionHint,
+	hasGooConversionError,
+} from "../services/python-tree-error-hints.js";
 import { formatOverlapResult } from "./canvas-checks.js";
 import type { CanvasOverlapResult } from "./canvas-checks.js";
 import { EXCLUDED_TYPE_GUIDS, VANILLA_CATEGORIES, BLACKLISTED_SUBCATEGORIES } from "./constants.js";
@@ -166,6 +170,12 @@ export function formatCanvasErrorsResponse(response: GetCanvasErrorsResponse, ov
 			const levelIcon = err.level === "error" ? "❌" : err.level === "warning" ? "⚠️" : "ℹ️";
 			lines.push(`${levelIcon} [${err.level}] ${err.componentNickName} (${err.componentId})`);
 			lines.push(`   ${err.text}`);
+			lines.push("");
+		}
+
+		if (hasGooConversionError(errors)) {
+			lines.push("--- Python tree/list hint ---");
+			lines.push(formatPythonTreeConversionHint());
 			lines.push("");
 		}
 	}

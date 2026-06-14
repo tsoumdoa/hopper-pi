@@ -113,7 +113,7 @@ export const ghGetCanvasErrorsTool = defineTool({
 	name: "gh_get_canvas_errors",
 	label: "Get Canvas Errors",
 	description:
-		"Retrieve all runtime errors, warnings, and messages from the Grasshopper canvas. Returns a per-component list of error/warning bubbles currently showing on the canvas, including script compilation errors.",
+		"Retrieve all runtime errors, warnings, and messages from the Grasshopper canvas. Surfaces Python tree/list hints when Goo conversion errors appear (e.g. missing list_to_tree).",
 	parameters: Type.Object({}),
 
 	async execute(_toolCallId, _params, _signal, onUpdate) {
