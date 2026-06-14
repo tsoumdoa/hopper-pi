@@ -2,6 +2,7 @@ import type {
 	CsharpScriptPartsInput,
 	ParsedCsharpScript,
 } from "../types/csharp-script.js";
+import { lineCount } from "../lib/line-count.js";
 
 export const DEFAULT_CSHARP_REFERENCES = [
 	"System",
@@ -16,9 +17,7 @@ export const DEFAULT_CSHARP_REFERENCES = [
 	"Grasshopper.Kernel.Types",
 ];
 
-const SCRIPT_CLASS_PATTERN =
-	/public\s+class\s+Script_Instance\s*:\s*GH_ScriptInstance\b/;
-const RUN_SCRIPT_PATTERN = /\bprivate\s+void\s+RunScript\s*\(/;
+import { SCRIPT_CLASS_PATTERN, RUN_SCRIPT_PATTERN } from "./csharp-script-patterns.js";
 const USING_PATTERN = /^\s*using\s+([\w.]+)\s*;\s*$/;
 
 function skipComment(code: string, index: number): number | null {
@@ -95,6 +94,10 @@ function advanceInStringFrame(code: string, index: number, stack: ScanFrame[]): 
 			stack.pop();
 			return index;
 		}
+		return index;
+	}
+
+	if (frame.type !== "string") {
 		return index;
 	}
 
@@ -270,11 +273,6 @@ function extractClassBody(code: string): { body: string; bodyStart: number; body
 	};
 }
 
-function countLines(text: string): number {
-	if (text.length === 0) return 0;
-	return text.split("\n").length;
-}
-
 function lineNumberAt(code: string, index: number): number {
 	return code.slice(0, index).split("\n").length;
 }
@@ -327,11 +325,11 @@ export function parseCsharpScript(code: string): ParsedCsharpScript | null {
 		helpers,
 		lineMap: {
 			references: { startLine: 1, lineCount: references.length },
-			runScript: { startLine: runScriptStartLine, lineCount: countLines(runScriptMethod) },
-			runScriptBody: { startLine: 1, lineCount: countLines(runScriptBody) },
+			runScript: { startLine: runScriptStartLine, lineCount: lineCount(runScriptMethod) },
+			runScriptBody: { startLine: 1, lineCount: lineCount(runScriptBody) },
 			helpers: {
 				startLine: 1,
-				lineCount: countLines(helpers),
+				lineCount: lineCount(helpers),
 			},
 		},
 	};

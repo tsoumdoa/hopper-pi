@@ -6,7 +6,7 @@ import {
 	scoreComponent,
 	scoreComponentQuery,
 	searchMatchedComponents,
-} from "./query-handlers.js";
+} from "../services/component-search.js";
 
 function comp(
 	name: string,

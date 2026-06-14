@@ -4,7 +4,7 @@ using Grasshopper.Kernel;
 
 namespace rhino_zmq_poc
 {
-    public class CommandExecutor
+    public partial class CommandExecutor
     {
         private readonly Action<string> _log;
 
@@ -20,55 +20,10 @@ namespace rhino_zmq_poc
 
             _log?.Invoke($"Executing: {command.Action}");
 
-            string result = command.Action switch
-            {
-                "addComponent" => ExecuteAddComponent(doc, command.Params),
-                "deleteComponent" => ExecuteDeleteComponent(doc, command.Params),
-                "connectWire" => ExecuteConnectWire(doc, command.Params),
-                "disconnectWire" => ExecuteDisconnectWire(doc, command.Params),
-                "moveComponent" => ExecuteMoveComponent(doc, command.Params),
-                "renameComponent" => ExecuteRenameComponent(doc, command.Params),
-                "setComponentLocked" => ExecuteSetComponentLocked(doc, command.Params),
-                "setComponentHidden" => ExecuteSetComponentHidden(doc, command.Params),
-                "addGroup" => ExecuteAddGroup(doc, command.Params),
-                "removeFromGroup" => ExecuteRemoveFromGroup(doc, command.Params),
-                "deleteGroup" => ExecuteDeleteGroup(doc, command.Params),
-                "changeGroupColor" => ExecuteChangeGroupColor(doc, command.Params),
-                "renameGroup" => ExecuteRenameGroup(doc, command.Params),
-                "changeGroupStyle" => ExecuteChangeGroupStyle(doc, command.Params),
-                "createSlider" => ExecuteCreateSlider(doc, command.Params),
-                "editSliderRange" => ExecuteEditSliderRange(doc, command.Params),
-                "setSliderValue" => ExecuteSetSliderValue(doc, command.Params),
-                "createPanel" => ExecuteCreatePanel(doc, command.Params),
-                "setPanelParams" => ExecuteSetPanelParams(doc, command.Params),
-                "setPanelText" => ExecuteSetPanelText(doc, command.Params),
-                "createToggle" => ExecuteCreateToggle(doc, command.Params),
-                "setToggleValue" => ExecuteSetToggleValue(doc, command.Params),
-                "createSwatch" => ExecuteCreateSwatch(doc, command.Params),
-                "setSwatchColor" => ExecuteSetSwatchColor(doc, command.Params),
-                "createScribble" => ExecuteCreateScribble(doc, command.Params),
-                "setScribbleText" => ExecuteSetScribbleText(doc, command.Params),
-                "createValueList" => ExecuteCreateValueList(doc, command.Params),
-                "setValueListSelected" => ExecuteSetValueListSelected(doc, command.Params),
-                "createScriptNode" => ExecuteCreateScriptNode(doc, command.Params),
-                "setScriptCode" => ExecuteSetScriptCode(doc, command.Params),
-                "syncScriptParams" => ExecuteSyncScriptParams(doc, command.Params),
-                "getScriptCode" => ExecuteGetScriptCode(doc, command.Params),
-                "addScriptInput" => ExecuteAddScriptInput(doc, command.Params),
-                "removeScriptInput" => ExecuteRemoveScriptInput(doc, command.Params),
-                "addScriptOutput" => ExecuteAddScriptOutput(doc, command.Params),
-                "removeScriptOutput" => ExecuteRemoveScriptOutput(doc, command.Params),
-                "listScriptParams" => ExecuteListScriptParams(doc, command.Params),
-                "editParamProps" => ExecuteEditParamProps(doc, command.Params),
-                "beginAgentTransaction" => ExecuteBeginAgentTransaction(doc, command.Params),
-                "commitAgentTransaction" => ExecuteCommitAgentTransaction(doc, command.Params),
-                "cancelAgentTransaction" => ExecuteCancelAgentTransaction(doc, command.Params),
-                "beginRhinoAgentTransaction" => ExecuteBeginRhinoAgentTransaction(command.Params),
-                "commitRhinoAgentTransaction" => ExecuteCommitRhinoAgentTransaction(),
-                "cancelRhinoAgentTransaction" => ExecuteCancelRhinoAgentTransaction(),
-                "setParamRhinoGeometry" => ExecuteSetParamRhinoGeometry(doc, command.Params),
-                _ => $"Unknown action: {command.Action}"
-            };
+            if (!Handlers.TryGetValue(command.Action, out var handler))
+                return $"Unknown action: {command.Action}";
+
+            string result = handler(this, doc, command);
 
             _log?.Invoke($"Result: {result}");
             return result;

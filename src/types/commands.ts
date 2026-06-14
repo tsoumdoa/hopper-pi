@@ -8,21 +8,6 @@ export type PortRef = {
 	port: string;
 };
 
-export type ActionParamDef = {
-	name: string;
-	cliFlag: string;
-	cliDescription: string;
-	prompt: string;
-	parse?: (v: string) => string | number | boolean | string[];
-};
-
-export type ActionDef = {
-	id: number;
-	action: CommandAction;
-	label: string;
-	params: ActionParamDef[];
-};
-
 export type AddComponentParams = {
 	typeGuid: string;
 	position: Position;
@@ -286,6 +271,8 @@ export type BeginAgentTransactionParams = {
 	name?: string;
 };
 
+export type EmptyParams = Record<string, never>;
+
 export type RhinoObjectQueryParams = {
 	selectionOnly?: boolean;
 	layer?: string;
@@ -299,100 +286,111 @@ export type SetParamRhinoGeometryParams = {
 	rhinoQuery?: RhinoObjectQueryParams;
 };
 
-export type CommandAction =
-	| "addComponent"
-	| "deleteComponent"
-	| "connectWire"
-	| "disconnectWire"
-	| "moveComponent"
-	| "renameComponent"
-	| "setComponentLocked"
-	| "setComponentHidden"
-	| "addGroup"
-	| "removeFromGroup"
-	| "deleteGroup"
-	| "changeGroupColor"
-	| "renameGroup"
-	| "changeGroupStyle"
-	| "createSlider"
-	| "editSliderRange"
-	| "setSliderValue"
-	| "createPanel"
-	| "setPanelParams"
-	| "setPanelText"
-	| "createToggle"
-	| "setToggleValue"
-	| "createSwatch"
-	| "setSwatchColor"
-	| "createScribble"
-	| "setScribbleText"
-	| "createValueList"
-	| "setValueListSelected"
-	| "createScriptNode"
-	| "setScriptCode"
-	| "syncScriptParams"
-	| "getScriptCode"
-	| "addScriptInput"
-	| "removeScriptInput"
-	| "addScriptOutput"
-	| "removeScriptOutput"
-	| "listScriptParams"
-	| "editParamProps"
-	| "beginAgentTransaction"
-	| "commitAgentTransaction"
-	| "cancelAgentTransaction"
-	| "beginRhinoAgentTransaction"
-	| "commitRhinoAgentTransaction"
-	| "cancelRhinoAgentTransaction"
-	| "setParamRhinoGeometry";
-
-export type CommandParams =
-	| AddComponentParams
-	| DeleteComponentParams
-	| ConnectWireParams
-	| DisconnectWireParams
-	| MoveComponentParams
-	| RenameComponentParams
-	| SetComponentLockedParams
-	| SetComponentHiddenParams
-	| AddGroupParams
-	| RemoveFromGroupParams
-	| DeleteGroupParams
-	| ChangeGroupColorParams
-	| RenameGroupParams
-	| ChangeGroupStyleParams
-	| CreateSliderParams
-	| EditSliderRangeParams
-	| SetSliderValueParams
-	| CreatePanelParams
-	| SetPanelParams
-	| SetPanelTextParams
-	| CreateToggleParams
-	| SetToggleValueParams
-	| CreateSwatchParams
-	| SetSwatchColorParams
-	| CreateScribbleParams
-	| SetScribbleTextParams
-	| CreateValueListParams
-	| SetValueListSelectedParams
-	| CreateScriptNodeParams
-	| SetScriptCodeParams
-	| SyncScriptParamsParams
-	| AddScriptInputParams
-	| RemoveScriptInputParams
-	| AddScriptOutputParams
-	| RemoveScriptOutputParams
-	| EditScriptAccessParams
-	| ListScriptParamsParams
-	| EditParamPropsParams
-	| BeginAgentTransactionParams
-	| SetParamRhinoGeometryParams
-	| Record<string, never>;
-
-export type Command = {
-	action: CommandAction;
-	params: CommandParams;
+export type CommandMap = {
+	addComponent: AddComponentParams;
+	deleteComponent: DeleteComponentParams;
+	connectWire: ConnectWireParams;
+	disconnectWire: DisconnectWireParams;
+	moveComponent: MoveComponentParams;
+	renameComponent: RenameComponentParams;
+	setComponentLocked: SetComponentLockedParams;
+	setComponentHidden: SetComponentHiddenParams;
+	addGroup: AddGroupParams;
+	removeFromGroup: RemoveFromGroupParams;
+	deleteGroup: DeleteGroupParams;
+	changeGroupColor: ChangeGroupColorParams;
+	renameGroup: RenameGroupParams;
+	changeGroupStyle: ChangeGroupStyleParams;
+	createSlider: CreateSliderParams;
+	editSliderRange: EditSliderRangeParams;
+	setSliderValue: SetSliderValueParams;
+	createPanel: CreatePanelParams;
+	setPanelParams: SetPanelParams;
+	setPanelText: SetPanelTextParams;
+	createToggle: CreateToggleParams;
+	setToggleValue: SetToggleValueParams;
+	createSwatch: CreateSwatchParams;
+	setSwatchColor: SetSwatchColorParams;
+	createScribble: CreateScribbleParams;
+	setScribbleText: SetScribbleTextParams;
+	createValueList: CreateValueListParams;
+	setValueListSelected: SetValueListSelectedParams;
+	createScriptNode: CreateScriptNodeParams;
+	setScriptCode: SetScriptCodeParams;
+	syncScriptParams: SyncScriptParamsParams;
+	getScriptCode: GetScriptCodeParams;
+	addScriptInput: AddScriptInputParams;
+	removeScriptInput: RemoveScriptInputParams;
+	addScriptOutput: AddScriptOutputParams;
+	removeScriptOutput: RemoveScriptOutputParams;
+	listScriptParams: ListScriptParamsParams;
+	editParamProps: EditParamPropsParams;
+	beginAgentTransaction: BeginAgentTransactionParams;
+	commitAgentTransaction: EmptyParams;
+	cancelAgentTransaction: EmptyParams;
+	beginRhinoAgentTransaction: BeginAgentTransactionParams;
+	commitRhinoAgentTransaction: EmptyParams;
+	cancelRhinoAgentTransaction: EmptyParams;
+	setParamRhinoGeometry: SetParamRhinoGeometryParams;
 };
+
+export type CommandAction = keyof CommandMap;
+
+/** Runtime list of all command actions; keep in sync with CommandMap and C# CommandActionRegistry. */
+export const COMMAND_ACTIONS = [
+	"addComponent",
+	"deleteComponent",
+	"connectWire",
+	"disconnectWire",
+	"moveComponent",
+	"renameComponent",
+	"setComponentLocked",
+	"setComponentHidden",
+	"addGroup",
+	"removeFromGroup",
+	"deleteGroup",
+	"changeGroupColor",
+	"renameGroup",
+	"changeGroupStyle",
+	"createSlider",
+	"editSliderRange",
+	"setSliderValue",
+	"createPanel",
+	"setPanelParams",
+	"setPanelText",
+	"createToggle",
+	"setToggleValue",
+	"createSwatch",
+	"setSwatchColor",
+	"createScribble",
+	"setScribbleText",
+	"createValueList",
+	"setValueListSelected",
+	"createScriptNode",
+	"setScriptCode",
+	"syncScriptParams",
+	"getScriptCode",
+	"addScriptInput",
+	"removeScriptInput",
+	"addScriptOutput",
+	"removeScriptOutput",
+	"listScriptParams",
+	"editParamProps",
+	"beginAgentTransaction",
+	"commitAgentTransaction",
+	"cancelAgentTransaction",
+	"beginRhinoAgentTransaction",
+	"commitRhinoAgentTransaction",
+	"cancelRhinoAgentTransaction",
+	"setParamRhinoGeometry",
+] as const satisfies readonly CommandAction[];
+
+export type Command<A extends CommandAction = CommandAction> = {
+	action: A;
+	params: CommandMap[A];
+};
+
+export type CommandParams = CommandMap[CommandAction];
 
 export type SubmitJobRequest = {
 	type: "submitJob";

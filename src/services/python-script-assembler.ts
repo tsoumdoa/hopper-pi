@@ -1,12 +1,7 @@
 import type { ParsedPythonScript } from "../types/python-script.js";
+import { lineCount } from "../lib/line-count.js";
 
 const IMPORT_PATTERN = /^\s*(import\s+|from\s+[\w.]+\s+import\s+)/;
-
-function countLines(text: string): number {
-	if (text.length === 0) return 0;
-	const lines = text.split("\n");
-	return lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
-}
 
 function isImportLine(line: string): boolean {
 	return IMPORT_PATTERN.test(line);
@@ -58,8 +53,8 @@ export function parsePythonScript(code: string): ParsedPythonScript {
 		imports,
 		body,
 		lineMap: {
-			imports: { startLine: 1, lineCount: countLines(imports.join("\n")) },
-			body: { startLine: 1, lineCount: countLines(body) },
+			imports: { startLine: 1, lineCount: lineCount(imports.join("\n")) },
+			body: { startLine: 1, lineCount: lineCount(body) },
 		},
 	};
 }

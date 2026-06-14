@@ -43,6 +43,7 @@
 		],
 		"skills": [
 			"./mds/skills",
+			"./mds/reference",
 			"./mds/agents"
 		],
 		"prompts": [

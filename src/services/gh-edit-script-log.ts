@@ -1,12 +1,8 @@
 import type { GhEditScriptItem } from "../types/gh-edit-script.js";
 import type { LinePatch } from "../types/csharp-script.js";
+import { lineCount } from "../lib/line-count.js";
 
 const LOG_PREFIX = "[GH_EDIT_SCRIPT]";
-
-function lineCount(text: string): number {
-	if (!text) return 0;
-	return text.split("\n").length;
-}
 
 function formatIoSummary(
 	item: { inputs?: { name: string }[]; outputs?: { name: string }[] },

@@ -3,7 +3,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { withRequester } from "../infra/request-helpers.js";
-import { fetchAllComponents } from "../tools/query-handlers.js";
+import { fetchAllComponents } from "../tools/canvas-fetch.js";
 import { shortGuidBase62 } from "../services/guid-shortener.js";
 import type { GhComponentInfo } from "../types/messages.js";
 

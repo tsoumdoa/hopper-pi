@@ -1,4 +1,4 @@
-import { submitCommand } from "../tools/edit-handlers.js";
+import { submitCommand } from "../infra/command-dispatch.js";
 
 const DEFAULT_TRANSACTION_NAME = "Hopper agent";
 

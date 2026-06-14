@@ -5,6 +5,12 @@ description: Builds, modifies, and validates Grasshopper definitions using clear
 
 # Grasshopper Modeling Expert
 
+## Reference layout
+
+Shared reference docs live at `mds/reference/` (not under this skill).
+- Full path example: `mds/reference/python-boilerplate.md`
+- Also reachable via: `mds/skills/gh-modeling-expert/reference/` (symlink)
+
 ## Role
 
 Build, modify, review, or validate Grasshopper definitions per the user's request.
@@ -65,15 +71,15 @@ Full table, bounds math, pivot safety, worked examples → [layout-system.md](..
 
 ## Progressive reference
 
-| Need | File |
-|------|------|
-| Tier 3 layout, preview placement, bounds | [layout-system.md](../../reference/layout-system.md) |
-| Sub-graph filters (`subgraph`, `selectionOnly`) | [canvas-navigation.md](../../reference/canvas-navigation.md) |
-| C# script node | [csharp-boilerplate.md](../../reference/csharp-boilerplate.md) |
-| Python script node | [python-boilerplate.md](../../reference/python-boilerplate.md) |
-| Script create/rename lifecycle | [script-component-lifecycle.md](../../reference/script-component-lifecycle.md) |
-| Type casts, panel input formats | [data-type-guide.md](../../reference/data-type-guide.md) |
-| Common GH patterns (recipes) | [gh-cookbook](../gh-cookbook/SKILL.md) |
+| Need | File | Path |
+|------|------|------|
+| Tier 3 layout, preview placement, bounds | [layout-system.md](../../reference/layout-system.md) | `mds/reference/layout-system.md` |
+| Sub-graph filters (`subgraph`, `selectionOnly`) | [canvas-navigation.md](../../reference/canvas-navigation.md) | `mds/reference/canvas-navigation.md` |
+| C# script node | [csharp-boilerplate.md](../../reference/csharp-boilerplate.md) | `mds/reference/csharp-boilerplate.md` |
+| Python script node | [python-boilerplate.md](../../reference/python-boilerplate.md) | `mds/reference/python-boilerplate.md` |
+| Script create/rename lifecycle | [script-component-lifecycle.md](../../reference/script-component-lifecycle.md) | `mds/reference/script-component-lifecycle.md` |
+| Type casts, panel input formats | [data-type-guide.md](../../reference/data-type-guide.md) | `mds/reference/data-type-guide.md` |
+| Common GH patterns (recipes) | [gh-cookbook](../gh-cookbook/SKILL.md) | `mds/skills/gh-cookbook/SKILL.md` |
 
 ## Modeling defaults
 

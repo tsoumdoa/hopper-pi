@@ -8,6 +8,12 @@ description: >
 
 # Rhino Document Expert
 
+## Reference layout
+
+Shared reference docs live at `mds/reference/` (not under this skill).
+- Full path example: `mds/reference/rhino-script-boilerplate.md`
+- Also reachable via: `mds/skills/rhino-document/reference/` (symlink)
+
 ## Routing (mandatory)
 
 | Task | Tool |
@@ -29,7 +35,7 @@ Both script modes run via RhinoCode and return captured stdout to the agent.
 
 **Do not** call `doc.Objects.GetObjectList()` with no args in Rhino 8 — use `rh_query_objects`, `rs.ObjectsByType(...)`, or `GetObjectList(ObjectType.AnyObject)`.
 
-See [rhino-script-boilerplate.md](../../reference/rhino-script-boilerplate.md).
+See [rhino-script-boilerplate.md](../../reference/rhino-script-boilerplate.md) — path: `mds/reference/rhino-script-boilerplate.md`
 
 ## Rhino → Grasshopper params
 

@@ -1,3 +1,4 @@
+import { PROBE_TIMEOUT_MS } from "../config.js";
 import type { AuthErrorResponse, PingResponse } from "../types/messages.js";
 import { clearConnectionCache } from "./connection.js";
 import {
@@ -7,8 +8,6 @@ import {
 	setCachedBackendStatus,
 } from "./backend-status-cache.js";
 import { Requester } from "./requester.js";
-
-const PROBE_TIMEOUT_MS = 8_000;
 
 export type { BackendStatus } from "./backend-status-cache.js";
 export {

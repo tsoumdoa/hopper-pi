@@ -11,8 +11,9 @@ import {
 import type { CommandAction, RhinoObjectQueryParams, SetParamRhinoGeometryParams } from "../types/commands.js";
 import type { GetParamRhinoGeometryResponse } from "../types/messages.js";
 
-/** Max explicit Rhino object IDs per reference/internalize (use rhinoQuery for larger sets). */
-export const MAX_RHINO_OBJECT_IDS = 30;
+import { MAX_RHINO_OBJECT_IDS } from "../config.js";
+
+export { MAX_RHINO_OBJECT_IDS };
 
 const rhinoQuerySchema = Type.Object({
 	selectionOnly: Type.Optional(

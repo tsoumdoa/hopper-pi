@@ -18,15 +18,10 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
-	beginAgentTransaction,
-	cancelAgentTransaction,
-	commitAgentTransaction,
-} from "./services/agent-transaction.js";
-import {
-	beginRhinoAgentTransaction,
-	cancelRhinoAgentTransaction,
-	commitRhinoAgentTransaction,
-} from "./services/rhino-agent-transaction.js";
+	beginTransactionPair,
+	cancelTransactionPair,
+	commitTransactionPair,
+} from "./services/transaction-lifecycle.js";
 import { probeBackend } from "./infra/backend-status.js";
 import { registerBackendStatusUI } from "./ui/backend-status.js";
 import { ALL_TOOLS } from "./tools/index.js";
@@ -79,45 +74,17 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 	// ── Agent undo (one GH undo step + one Rhino undo step per prompt) ─
 
 	pi.on("agent_start", async () => {
-		try {
-			await beginAgentTransaction();
-		} catch {
-			// Backend may be disconnected.
-		}
-		try {
-			await beginRhinoAgentTransaction();
-		} catch {
-			// Backend may be disconnected.
-		}
+		await beginTransactionPair();
 	});
 
 	pi.on("agent_end", async (event) => {
 		if ("willRetry" in event && event.willRetry) {
 			return;
 		}
-
-		try {
-			await commitAgentTransaction();
-		} catch {
-			// Backend may be disconnected.
-		}
-		try {
-			await commitRhinoAgentTransaction();
-		} catch {
-			// Backend may be disconnected.
-		}
+		await commitTransactionPair();
 	});
 
 	pi.on("session_shutdown", async () => {
-		try {
-			await cancelAgentTransaction();
-		} catch {
-			// Backend may already be disconnected during shutdown.
-		}
-		try {
-			await cancelRhinoAgentTransaction();
-		} catch {
-			// Backend may already be disconnected during shutdown.
-		}
+		await cancelTransactionPair();
 	});
 }

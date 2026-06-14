@@ -1,6 +1,7 @@
 import {
 	extractRunScript,
 } from "./csharp-script-assembler.js";
+import { SCRIPT_CLASS_PATTERN } from "./csharp-script-patterns.js";
 
 export type CsharpScriptValidationOptions = {
 	inputNames?: string[];
@@ -23,9 +24,6 @@ type RunScriptParams = {
 };
 
 const TYPE_PATTERN = "[\\w<>,\\[\\].\\s?]+";
-
-const SCRIPT_CLASS_PATTERN =
-	/public\s+class\s+Script_Instance\s*:\s*GH_ScriptInstance\b/;
 
 function stripComments(code: string): string {
 	return code

@@ -1,6 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { validateRhinoScriptItem } from "../services/rhino-script-validator.js";
+import { formatToolFailed } from "./result-formatters.js";
 import { runRhinoScript } from "./rhino-script-handlers.js";
 
 const ROUTING_PREFIX =
@@ -44,7 +45,7 @@ export const rhRunScriptTool = defineTool({
 		for (const item of params.items) {
 			const validationError = validateRhinoScriptItem(item);
 			if (validationError) {
-				results.push(`FAILED: ${validationError}`);
+				results.push(formatToolFailed(validationError));
 				continue;
 			}
 
@@ -56,7 +57,7 @@ export const rhRunScriptTool = defineTool({
 			try {
 				results.push(await runRhinoScript(item));
 			} catch (err) {
-				results.push(`FAILED: ${err}`);
+				results.push(formatToolFailed(err));
 			}
 		}
 

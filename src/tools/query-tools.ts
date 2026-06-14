@@ -1,5 +1,6 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
+import { createQueryExecute } from "./execute-factory.js";
 import { withRequester } from "../infra/request-helpers.js";
 import type {
 	GetCurrentCanvasResponse,
@@ -7,10 +8,12 @@ import type {
 } from "../types/messages.js";
 import {
 	fetchCurrentCanvas,
-	formatCanvasResponse,
-	formatComponentsMultiQuery,
-	getCachedOrFetchComponents,
 	fetchCanvasErrors,
+	getCachedOrFetchComponents,
+} from "./canvas-fetch.js";
+import { formatCanvasResponse } from "./canvas-formatters.js";
+import {
+	formatComponentsMultiQuery,
 	formatCanvasErrorsResponse,
 } from "./query-handlers.js";
 import { checkCanvasOverlaps } from "./canvas-checks.js";
@@ -37,24 +40,18 @@ export const ghGetCanvasTool = defineTool({
 		),
 	}),
 
-	async execute(_toolCallId, params, _signal, onUpdate, _ctx) {
-		onUpdate?.({
-			content: [
-				{
-					type: "text",
-					text: params.selectionOnly
-						? "Fetching selected canvas objects from backend..."
-						: "Fetching current canvas from backend...",
-				},
-			],
-			details: {},
-		});
-		const response = await withRequester<GetCurrentCanvasResponse>((req) =>
-			fetchCurrentCanvas(req, { selectionOnly: params.selectionOnly === true }),
-		);
-		const hasFilters = !!params.subgraph || params.selectionOnly === true;
-		return formatCanvasResponse(response, hasFilters ? params : undefined);
-	},
+	execute: createQueryExecute(
+		(params) => params.selectionOnly
+			? "Fetching selected canvas objects from backend..."
+			: "Fetching current canvas from backend...",
+		async (params) => {
+			const response = await withRequester<GetCurrentCanvasResponse>((req) =>
+				fetchCurrentCanvas(req, { selectionOnly: params.selectionOnly === true }),
+			);
+			const hasFilters = !!params.subgraph || params.selectionOnly === true;
+			return formatCanvasResponse(response, hasFilters ? params : undefined);
+		},
+	),
 });
 
 export const ghListComponentsTool = defineTool({

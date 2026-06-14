@@ -40,7 +40,7 @@ export class Requester {
 			console.log(`[REQ] Received: ${response.toString().slice(0, 100)}...`);
 		}
 
-		return JSON.parse(response.toString()) as T;
+		return parseJsonResponse<T>(response.toString());
 	}
 
 	async close(): Promise<void> {
@@ -52,4 +52,12 @@ export class Requester {
 			console.log("[REQ] Closed");
 		}
 	}
+}
+
+function parseJsonResponse<T>(raw: string): T {
+	const parsed: unknown = JSON.parse(raw);
+	if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+		throw new Error("Invalid response: expected JSON object");
+	}
+	return parsed as T;
 }

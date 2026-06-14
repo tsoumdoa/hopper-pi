@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { BACKEND_POLL_INTERVAL_MS } from "../config.js";
 import {
 	formatBackendEndpoint,
 	probeBackend,
@@ -7,7 +8,6 @@ import {
 
 const STATUS_KEY = "hopper-backend";
 const WIDGET_KEY = "hopper-backend";
-const POLL_INTERVAL_MS = 3_000;
 
 function renderStatusLine(
 	theme: ExtensionContext["ui"]["theme"],
@@ -58,7 +58,7 @@ export function registerBackendStatusUI(pi: ExtensionAPI): void {
 
 		pollTimer = setInterval(() => {
 			void refresh(ctx);
-		}, POLL_INTERVAL_MS);
+		}, BACKEND_POLL_INTERVAL_MS);
 	});
 
 	pi.on("session_shutdown", async (_event, ctx) => {

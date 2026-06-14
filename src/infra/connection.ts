@@ -23,11 +23,9 @@ type ConnectionProfile = {
 	startedAt?: number;
 };
 
-const DEFAULT_PUB_ENDPOINT = "tcp://127.0.0.1:5555";
-const DEFAULT_PUSH_ENDPOINT = "tcp://127.0.0.1:5556";
-const DEFAULT_REQ_ENDPOINT = "tcp://127.0.0.1:5557";
+import { DEBUG, DEFAULT_ZMQ_ENDPOINTS, ENV } from "../config.js";
 
-export const DEBUG = process.env.GH_DEBUG === "1";
+export { DEBUG };
 
 let cachedConnection: ConnectionConfig | null = null;
 
@@ -36,8 +34,8 @@ export function clearConnectionCache(): void {
 }
 
 export function connectionProfileDirectory(): string {
-	if (process.env.HOPPER_CONNECTION_PROFILE) {
-		return dirname(process.env.HOPPER_CONNECTION_PROFILE);
+	if (process.env[ENV.HOPPER_CONNECTION_PROFILE]) {
+		return dirname(process.env[ENV.HOPPER_CONNECTION_PROFILE]!);
 	}
 
 	if (process.platform === "win32" && process.env.APPDATA) {
@@ -53,8 +51,8 @@ export function connectionProfileDirectory(): string {
 }
 
 export function connectionProfilePath(): string {
-	if (process.env.HOPPER_CONNECTION_PROFILE) {
-		return process.env.HOPPER_CONNECTION_PROFILE;
+	if (process.env[ENV.HOPPER_CONNECTION_PROFILE]) {
+		return process.env[ENV.HOPPER_CONNECTION_PROFILE]!;
 	}
 
 	return join(connectionProfileDirectory(), "connection.json");
@@ -69,26 +67,26 @@ export function resolveConnection(options: { refresh?: boolean } = {}): Connecti
 	const profileDir = connectionProfileDirectory();
 	const profile = readProfile(profilePath);
 	const hasEndpointEnv =
-		Boolean(process.env.GH_ZMQ_PUB) ||
-		Boolean(process.env.GH_ZMQ_PUSH) ||
-		Boolean(process.env.GH_ZMQ_REQ);
-	const hasTokenEnv = Boolean(process.env.GH_ZMQ_TOKEN);
+		Boolean(process.env[ENV.GH_ZMQ_PUB]) ||
+		Boolean(process.env[ENV.GH_ZMQ_PUSH]) ||
+		Boolean(process.env[ENV.GH_ZMQ_REQ]);
+	const hasTokenEnv = Boolean(process.env[ENV.GH_ZMQ_TOKEN]);
 
 	const connection: ConnectionConfig = {
 		pubEndpoint:
-			process.env.GH_ZMQ_PUB ||
+			process.env[ENV.GH_ZMQ_PUB] ||
 			profile?.pubEndpoint ||
-			DEFAULT_PUB_ENDPOINT,
+			DEFAULT_ZMQ_ENDPOINTS.pub,
 		pushEndpoint:
-			process.env.GH_ZMQ_PUSH ||
+			process.env[ENV.GH_ZMQ_PUSH] ||
 			profile?.pushEndpoint ||
-			DEFAULT_PUSH_ENDPOINT,
+			DEFAULT_ZMQ_ENDPOINTS.push,
 		reqEndpoint:
-			process.env.GH_ZMQ_REQ ||
+			process.env[ENV.GH_ZMQ_REQ] ||
 			profile?.reqEndpoint ||
-			DEFAULT_REQ_ENDPOINT,
+			DEFAULT_ZMQ_ENDPOINTS.req,
 		token:
-			process.env.GH_ZMQ_TOKEN ||
+			process.env[ENV.GH_ZMQ_TOKEN] ||
 			profile?.token ||
 			readTokenFile(profileDir),
 		source: hasEndpointEnv || hasTokenEnv ? "env" : profile ? "profile" : "defaults",
