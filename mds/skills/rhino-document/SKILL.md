@@ -22,8 +22,12 @@ If both are needed in one request, use **both**: `rh_run_script` for the documen
 ## rh_run_script
 
 - **command** — one-liner macros (`_Circle`, `_SelLayer`, …)
-- **python** — preferred for scripts using `rhinoscriptsyntax` / `scriptcontext`
-- **csharp** — Rhino C# script editor source (Rhino 8)
+- **python** — preferred for scripts using `rhinoscriptsyntax` / `scriptcontext`; use `print()` for return values
+- **csharp** — Rhino C# script editor body (Rhino 8 RhinoCode); use `Console.WriteLine()` like Python's `print()`
+
+Both script modes run via RhinoCode and return captured stdout to the agent.
+
+**Do not** call `doc.Objects.GetObjectList()` with no args in Rhino 8 — use `rh_query_objects`, `rs.ObjectsByType(...)`, or `GetObjectList(ObjectType.AnyObject)`.
 
 See [rhino-script-boilerplate.md](../../reference/rhino-script-boilerplate.md).
 
@@ -61,6 +65,12 @@ See [rhino-script-boilerplate.md](../../reference/rhino-script-boilerplate.md).
 
 ```json
 { "items": [{ "mode": "command", "source": "-Layer Current \"Geometry\"" }] }
+```
+
+**Draw a circle in C# (same stdout contract as Python `print`):**
+
+```json
+{ "items": [{ "mode": "csharp", "source": "using Rhino;\nusing Rhino.Geometry;\n\nvar doc = RhinoDoc.ActiveDoc;\nvar id = doc.Objects.AddCircle(new Circle(Point3d.Origin, 10));\ndoc.Views.Redraw();\nConsole.WriteLine(id);" }] }
 ```
 
 ## Never

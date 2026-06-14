@@ -163,6 +163,7 @@ namespace rhino_zmq_poc
             {
                 _liveZmqService = _zmqService;
                 RhinoZmqPlugin.Instance.Component = this;
+                RhinoCodeRunner.ScheduleWarmup("python", "csharp");
                 var profile = _zmqService.Profile;
                 AppendLog($"[{DateTime.Now:HH:mm:ss}] ZMQ started: PUB @ {profile?.PubEndpoint}, PULL @ {profile?.PushEndpoint}, REP @ {profile?.ReqEndpoint}\n");
                 AppendLog($"[{DateTime.Now:HH:mm:ss}] Connection profile: {ConnectionProfileStore.ProfilePath}\n");

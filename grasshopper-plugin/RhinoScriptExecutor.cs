@@ -1,8 +1,5 @@
 using System;
-using System.Reflection;
-using System.Text;
 using Rhino;
-using Rhino.Runtime;
 
 namespace rhino_zmq_poc
 {
@@ -44,8 +41,8 @@ namespace rhino_zmq_poc
                 return mode switch
                 {
                     "command" => RunCommand(rhinoDoc, p.Source, p.Echo),
-                    "python" => RunPython(rhinoDoc, p.Source),
-                    "csharp" => RunCSharp(rhinoDoc, p.Source),
+                    "python" => RunScript(rhinoDoc, "python", p.Source),
+                    "csharp" => RunScript(rhinoDoc, "csharp", p.Source),
                     _ => Fail($"Unknown mode '{p.Mode}' (use command, python, or csharp)")
                 };
             }
@@ -70,128 +67,14 @@ namespace rhino_zmq_poc
             return Success("");
         }
 
-        private static RunRhinoScriptResult RunPython(RhinoDoc doc, string source)
+        private static RunRhinoScriptResult RunScript(RhinoDoc doc, string mode, string source)
         {
-            var output = new StringBuilder();
-            var py = PythonScript.Create();
-            py.SetupScriptContext(doc);
-            py.Output = text => output.AppendLine(text);
-
-            if (!py.ExecuteScript(source))
-                return Fail("Python script execution failed", output.ToString());
+            var result = RhinoCodeRunner.Run(doc, mode, source);
+            if (!result.Ok)
+                return Fail(result.Error ?? $"{mode} script execution failed", result.Output);
 
             doc.Views.Redraw();
-            return Success(output.ToString());
-        }
-
-        private static RunRhinoScriptResult RunCSharp(RhinoDoc doc, string source)
-        {
-            if (TryRunCSharpViaRhinoCode(doc, source, out var output, out var error))
-            {
-                doc.Views.Redraw();
-                return Success(output);
-            }
-
-            return Fail(error ?? "C# script execution failed", output);
-        }
-
-        private static bool TryRunCSharpViaRhinoCode(RhinoDoc doc, string source, out string output, out string error)
-        {
-            output = "";
-            error = null;
-
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                var name = asm.GetName().Name ?? "";
-                if (!name.Contains("RhinoCode", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                if (TryInvokeRhinoCodeExecute(asm, doc, source, out output, out error))
-                    return string.IsNullOrEmpty(error);
-            }
-
-            error =
-                "C# execution requires Rhino 8 RhinoCode assemblies in-process. " +
-                "Use mode 'python' or 'command', or run C# from the Rhino Script Editor manually.";
-            return false;
-        }
-
-        private static bool TryInvokeRhinoCodeExecute(Assembly asm, RhinoDoc doc, string source, out string output, out string error)
-        {
-            output = "";
-            error = null;
-            var outputBuilder = new StringBuilder();
-
-            Type[] types;
-            try
-            {
-                types = asm.GetTypes();
-            }
-            catch
-            {
-                return false;
-            }
-
-            foreach (var type in types)
-            {
-                if (type == null || !type.IsClass || type.IsAbstract)
-                    continue;
-
-                foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance))
-                {
-                    if (!string.Equals(method.Name, "Execute", StringComparison.OrdinalIgnoreCase) &&
-                        !string.Equals(method.Name, "ExecuteScript", StringComparison.OrdinalIgnoreCase) &&
-                        !string.Equals(method.Name, "RunScript", StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    var parameters = method.GetParameters();
-                    if (parameters.Length < 1 || parameters.Length > 4)
-                        continue;
-
-                    try
-                    {
-                        object instance = null;
-                        if (!method.IsStatic)
-                        {
-                            if (!type.IsPublic)
-                                continue;
-                            instance = Activator.CreateInstance(type);
-                            if (instance == null)
-                                continue;
-                        }
-
-                        object result = null;
-                        if (parameters.Length == 1 && parameters[0].ParameterType == typeof(string))
-                            result = method.Invoke(instance, new object[] { source });
-                        else if (parameters.Length >= 2 &&
-                                 parameters[0].ParameterType == typeof(string) &&
-                                 typeof(RhinoDoc).IsAssignableFrom(parameters[1].ParameterType))
-                            result = method.Invoke(instance, new object[] { source, doc });
-                        else
-                            continue;
-
-                        if (result is bool ok && !ok)
-                        {
-                            error = $"{type.FullName}.{method.Name} returned false";
-                            return false;
-                        }
-
-                        output = outputBuilder.ToString();
-                        return true;
-                    }
-                    catch (TargetInvocationException tie)
-                    {
-                        error = tie.InnerException?.Message ?? tie.Message;
-                        return false;
-                    }
-                    catch
-                    {
-                        // try next method
-                    }
-                }
-            }
-
-            return false;
+            return Success(result.Output);
         }
 
         private static RunRhinoScriptResult Success(string output) =>

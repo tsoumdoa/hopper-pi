@@ -13,8 +13,9 @@ export const rhRunScriptTool = defineTool({
 	label: "Run Rhino Script",
 	description:
 		ROUTING_PREFIX +
-		"Runs Rhino command macros or Python/C# scripts on the active RhinoDoc. " +
+		"Runs Rhino command macros or Python/C# scripts on the active RhinoDoc (Rhino 8 RhinoCode). " +
 		"Prefer mode=python for multi-step geometry; mode=command for one-liners (_Circle, _SelLayer). " +
+		"For script modes, use print() in Python and Console.WriteLine() in C# so stdout is returned to the agent. " +
 		"Changes group into one Rhino Undo step per agent turn when the extension lifecycle hooks run.",
 	parameters: Type.Object({
 		items: Type.Array(
