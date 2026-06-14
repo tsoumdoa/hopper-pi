@@ -1,7 +1,7 @@
 {
 	"name": "hopper-pi",
 	"license": "MIT",
-	"version": "0.1.3a",
+	"version": "0.1.3-a",
 	"keywords": [
 		"pi-package"
 	],
