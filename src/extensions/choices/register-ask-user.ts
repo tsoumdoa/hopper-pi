@@ -18,12 +18,12 @@ export function registerAskUserTool(pi: ExtensionAPI): void {
 			placeholder: Type.Optional(Type.String({ description: "Placeholder hint in the input field" })),
 		}),
 
-		async execute(_id, params, _signal, _onUpdate, ctx) {
+		async execute(_id, params, signal, _onUpdate, ctx) {
 			if (!ctx.hasUI) {
 				throwNoUi("ask_user");
 			}
 
-			const answer = await ctx.ui.input("Question:", params.placeholder ?? params.question);
+			const answer = await ctx.ui.input(params.question, params.placeholder, { signal });
 			const text = answer?.trim() ? answer.trim() : "(no answer)";
 
 			return {

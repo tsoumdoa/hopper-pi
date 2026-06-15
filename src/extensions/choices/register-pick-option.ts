@@ -58,21 +58,25 @@ export function registerPickOptionTool(pi: ExtensionAPI): void {
 			}),
 		}),
 
-		async execute(_id, params, _signal, _onUpdate, ctx) {
+		async execute(_id, params, signal, _onUpdate, ctx) {
 			if (!ctx.hasUI) {
 				throwNoUi("pick_option");
 			}
 
 			const options = params.options as PickOption[];
+			if (options.some((option) => isOtherChoice(option.label))) {
+				throw new Error(`pick_option reserves the "${OTHER_OPTION_LABEL}" label for custom answers. Rename that option or omit it.`);
+			}
+
 			const labels = appendOtherOptionLabels(formatPickOptionLabels(options));
-			const choice = await ctx.ui.select(params.question, labels);
+			const choice = await ctx.ui.select(params.question, labels, { signal });
 
 			if (!choice) {
 				return cancelledResult(params.question);
 			}
 
 			if (isOtherChoice(choice)) {
-				const custom = await ctx.ui.input("Please specify:", params.question);
+				const custom = await ctx.ui.input("Please specify:", params.question, { signal });
 				const text = custom?.trim();
 				if (!text) {
 					return cancelledResult(params.question);

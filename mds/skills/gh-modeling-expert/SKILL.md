@@ -99,13 +99,13 @@ When the user's intent is ambiguous, ask before acting (do not guess):
 | Situation | Tool |
 |-----------|------|
 | Vague scope ("fix this", "clean up", multiple interpretations) | `pick_option` |
-| 2+ plausible components after `gh_list_components` | `pick_option` (value = typeGuid) |
+| 2+ plausible component types after `gh_list_components` | `pick_option` for the type to create (value = typeGuid) |
 | "This/that/the" refers to multiple canvas objects | `pick_option` after `gh_get_canvas` (value = targetId) |
-| Tier 2–3 build planning (scope, approach, output) | `pick_option` once per dimension |
+| Tier 2–3 build planning with unresolved scope, approach, or output choices | `pick_option` for the highest-impact choices only (max 2 calls total) |
 | Errors after wiring — repair strategy unclear | `pick_option` (surgical fix / rebuild / stop) |
 | Open-ended clarification with no good options | `ask_user` (free-text question) |
 
-**Limits:** Max 2 `pick_option`/`ask_user` calls per turn unless the user wants collaboration. `pick_option` needs 2–7 options per call (an "Other" option is always shown for custom answers — do not add it yourself); if you have only one, use `ask_user`. Do not ask about layout spacing, slider ranges, or standard Custom Preview patterns.
+**Limits:** Max 2 `pick_option`/`ask_user` calls per turn unless the user wants collaboration. For Tier 2–3 planning, ask only choices that materially change the build and stay within that cap. `pick_option` needs 2–7 options per call (an "Other" option is always shown for custom answers — do not add it yourself); if you have only one, use `ask_user`. Do not ask about layout spacing, slider ranges, or standard Custom Preview patterns.
 
 Before `gh_param_rhino` **internalize** on >10 objects or a whole layer, use `pick_option` to confirm reference vs internalize.
 

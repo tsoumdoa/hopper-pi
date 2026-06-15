@@ -25,15 +25,11 @@ export function resolvePickOption(options: PickOption[], choice: string): PickOp
 	return idx >= 0 ? options[idx] : options.find((o) => o.label === choice || o.value === choice);
 }
 
-function hasOtherLikeLabel(labels: string[]): boolean {
-	return labels.some((l) => l.toLowerCase().startsWith("other"));
-}
-
 export function appendOtherOptionLabels(labels: string[]): string[] {
-	if (hasOtherLikeLabel(labels)) return labels;
+	if (labels.some(isOtherChoice)) return labels;
 	return [...labels, OTHER_OPTION_LABEL];
 }
 
 export function isOtherChoice(choice: string): boolean {
-	return choice === OTHER_OPTION_LABEL;
+	return choice.trim().toLowerCase() === OTHER_OPTION_LABEL.toLowerCase();
 }
