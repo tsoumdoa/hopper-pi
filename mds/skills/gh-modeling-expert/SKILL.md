@@ -19,7 +19,7 @@ Build, modify, review, or validate Grasshopper definitions per the user's reques
 
 ## Complexity tiers
 
-Assess tier before building. When in doubt, round **up**.
+Assess tier before building. When tier is ambiguous **and** the build would be Tier 2+, use `pick_option` to confirm scope before placing components.
 
 | Tier | When | Placement | Read canvas |
 |------|------|-----------|-------------|
@@ -91,6 +91,23 @@ Full table, bounds math, pivot safety, worked examples → [layout-system.md](..
 - **Python tree/list boundary** — if you see `Data conversion failed from Goo to …`, a Python script likely returned a plain list instead of a DataTree. Use `th.tree_to_list` on tree inputs and `th.list_to_tree` on tree outputs. Run `gh_get_canvas_errors` for an inline hint. Recipes → [python-boilerplate.md](../../reference/python-boilerplate.md#list-vs-tree-access-types).
 - Extruded crvs result in open breps, you need to extrude them as srf or cap
   them.
+
+## User clarification tools
+
+When the user's intent is ambiguous, ask before acting (do not guess):
+
+| Situation | Tool |
+|-----------|------|
+| Vague scope ("fix this", "clean up", multiple interpretations) | `pick_option` |
+| 2+ plausible components after `gh_list_components` | `pick_option` (value = typeGuid) |
+| "This/that/the" refers to multiple canvas objects | `pick_option` after `gh_get_canvas` (value = targetId) |
+| Tier 2–3 build planning (scope, approach, output) | `pick_option` once per dimension |
+| Errors after wiring — repair strategy unclear | `pick_option` (surgical fix / rebuild / stop) |
+| Open-ended clarification with no good options | `ask_user` (free-text question) |
+
+**Limits:** Max 2 `pick_option`/`ask_user` calls per turn unless the user wants collaboration. `pick_option` needs 2–7 options per call (an "Other" option is always shown for custom answers — do not add it yourself); if you have only one, use `ask_user`. Do not ask about layout spacing, slider ranges, or standard Custom Preview patterns.
+
+Before `gh_param_rhino` **internalize** on >10 objects or a whole layer, use `pick_option` to confirm reference vs internalize.
 
 ## Final checklist
 

@@ -6,7 +6,7 @@ import type {
 	ListScriptParamsResponse,
 } from "../types/messages.js";
 import {
-	formatGroupedLines,
+	formatComponentLines,
 	paginate,
 	pickComponentSummary,
 	searchMatchedComponents,
@@ -91,7 +91,7 @@ export function formatComponentsMultiQuery(
 
 	if (!queries || queries.length === 0) {
 		const { slice, hasMore, totalMatched } = paginate(sorted, limit, offset);
-		const body = formatGroupedLines(slice);
+		const body = formatComponentLines(slice);
 		const footer = hasMore ? `\n  ... ${totalMatched - (offset ?? 0) - slice.length} more (call with offset=${(offset ?? 0) + slice.length})` : "";
 		return {
 			content: [{ type: "text" as const, text: `All components (${totalMatched}, showing ${slice.length}):${footer}\n${body}` }],
@@ -112,7 +112,7 @@ export function formatComponentsMultiQuery(
 		} else {
 			const showRange = `showing ${(offset ?? 0) + 1}-${(offset ?? 0) + slice.length}`;
 			const footer = hasMore ? `\n  ... ${totalMatched - (offset ?? 0) - slice.length} more (call with offset=${(offset ?? 0) + slice.length})` : "";
-			const body = formatGroupedLines(slice);
+			const body = formatComponentLines(slice);
 			sections.push(`"${q}" (${totalMatched} matches, ${showRange}):${footer}\n${body}`);
 		}
 	}

@@ -3,7 +3,7 @@ import { toShortTypeGuid } from "./guid-shortener.js";
 
 const MULTI_TOKEN_BONUS = 50;
 const MIN_TOKEN_LENGTH = 2;
-const DESCRIPTION_TRUNCATE_MAX = 60;
+const DESCRIPTION_TRUNCATE_MAX = 90;
 
 export const DEFAULT_LIMIT = 10;
 export const MAX_LIMIT = 50;
@@ -131,38 +131,16 @@ export function sortedComponents(components: GhComponentInfo[]): GhComponentInfo
 	return [...components].sort(sortByCategoryThenName);
 }
 
-function groupByCategory(components: GhComponentInfo[]): Map<string, Map<string, GhComponentInfo[]>> {
-	const groups = new Map<string, Map<string, GhComponentInfo[]>>();
-	for (const c of components) {
-		let subMap = groups.get(c.category);
-		if (!subMap) {
-			subMap = new Map();
-			groups.set(c.category, subMap);
-		}
-		let list = subMap.get(c.subcategory);
-		if (!list) {
-			list = [];
-			subMap.set(c.subcategory, list);
-		}
-		list.push(c);
-	}
-	return groups;
-}
-
-export function formatGroupedLines(components: GhComponentInfo[]): string {
-	const groups = groupByCategory(components);
-	const parts: string[] = [];
-	for (const [category, subMap] of groups) {
-		parts.push(`== ${category} ==`);
-		for (const [subcategory, items] of subMap) {
-			parts.push(`  === ${subcategory} ===`);
-			for (const c of items) {
-				const desc = truncateDescription(c.description);
-				parts.push(`    ${c.name} [${toShortTypeGuid(c.typeGuid)}]  --  ${desc}`);
-			}
-		}
-	}
-	return parts.join("\n");
+export function formatComponentLines(components: GhComponentInfo[]): string {
+	return components
+		.map((c) => {
+			const path = `${c.category}/${c.subcategory}`;
+			const base = `${c.name} [${toShortTypeGuid(c.typeGuid)}] · ${path}`;
+			const desc = c.description.trim();
+			if (!desc) return base;
+			return `${base} — ${truncateDescription(desc)}`;
+		})
+		.join("\n");
 }
 
 export function pickComponentSummary(c: GhComponentInfo) {

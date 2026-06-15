@@ -25,6 +25,8 @@ Shared reference docs live at `mds/reference/` (not under this skill).
 
 If both are needed in one request, use **both**: `rh_run_script` for the document, `gh_*` for the canvas.
 
+When the prompt is vague about Rhino vs Grasshopper scope (e.g. "fix the model", "clean this up"), use `pick_option` to ask whether to focus on the Rhino document, Grasshopper canvas, both, or current selection — **before** editing. An "Other" option is always shown for custom answers; do not add it to the options list.
+
 ## rh_run_script
 
 - **command** — one-liner macros (`_Circle`, `_SelLayer`, …)
@@ -46,6 +48,7 @@ See [rhino-script-boilerplate.md](../../reference/rhino-script-boilerplate.md) �
    - **Few objects (≤30):** `rhinoObjectIds` with short IDs from step 1
    - **Whole layer / large sets:** `rhinoQuery: { layer, objectType?, selectionOnly? }` — no ID list in the agent turn (required above 30 objects)
    - `reference` keeps live Rhino links; `internalize` copies geometry. Use `get` to verify (internalized → no `rhino=` on persistent items).
+   - Before **internalize** on >10 objects or a whole layer (`rhinoQuery`), see [gh-modeling-expert: User clarification tools](../gh-modeling-expert/SKILL.md#user-clarification-tools).
 
 **Bulk layer example:**
 
