@@ -1,11 +1,5 @@
-import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
-
-export function noUiResult(
-	message: string,
-	details: Record<string, unknown> = {},
-): AgentToolResult<Record<string, unknown>> {
-	return {
-		content: [{ type: "text" as const, text: message }],
-		details,
-	};
+export function throwNoUi(toolName: "ask_user" | "pick_option"): never {
+	throw new Error(
+		`${toolName} requires an interactive UI, which is not available in this session. Proceed without asking the user; use reasonable defaults or state assumptions in your reply.`,
+	);
 }

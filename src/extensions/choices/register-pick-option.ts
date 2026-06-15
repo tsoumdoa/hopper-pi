@@ -9,7 +9,7 @@ import {
 	isOtherChoice,
 	resolvePickOption,
 } from "../../types/choices.js";
-import { noUiResult } from "./ui-helpers.js";
+import { throwNoUi } from "./ui-helpers.js";
 
 const OptionSchema = Type.Object({
 	label: Type.String({ description: "Display label shown in the picker" }),
@@ -22,13 +22,8 @@ const OptionSchema = Type.Object({
 const PROMPT_GUIDELINES = [
 	"Use pick_option when multiple valid approaches exist and the user's prompt does not specify which.",
 	"Use pick_option after gh_list_components when 2+ component matches are plausible — pass typeGuid as each option's value.",
-	"Use pick_option after gh_get_canvas when 'this/that/the' refers to multiple objects — pass instance targetId as each option's value.",
-	"Use pick_option for vague Rhino vs Grasshopper scope (e.g. 'fix the model') with values like gh_canvas, rhino_doc, both, selection.",
-	"Use pick_option after gh_get_canvas_errors when repair strategy is unclear (surgical, rebuild, stop).",
-	"For Tier 2–3 builds, use pick_option once per planning dimension (scope, approach, output) rather than one mega-question.",
 	"Prefer pick_option over ask_user when you can list 2–6 informed options after reading the canvas.",
-	"Do not include an Other option — it is added automatically.",
-	"Do not use pick_option for layout spacing, slider ranges, or standard Custom Preview patterns.",
+	"Do not include an Other option in pick_option — it is added automatically.",
 ];
 
 function cancelledResult(question: string): {
@@ -57,19 +52,15 @@ export function registerPickOptionTool(pi: ExtensionAPI): void {
 			question: Type.String({ description: "The question to ask, with brief context" }),
 			options: Type.Array(OptionSchema, {
 				minItems: 2,
+				maxItems: 7,
 				description:
-					"Options to present (2–7 recommended; Other is appended automatically). value is returned to the agent.",
+					"Options to present (2–7; Other is appended automatically). value is returned to the agent.",
 			}),
 		}),
 
 		async execute(_id, params, _signal, _onUpdate, ctx) {
 			if (!ctx.hasUI) {
-				return noUiResult("No UI available", {
-					question: params.question,
-					choice: null,
-					value: null,
-					label: null,
-				} satisfies PickOptionResult);
+				throwNoUi("pick_option");
 			}
 
 			const options = params.options as PickOption[];

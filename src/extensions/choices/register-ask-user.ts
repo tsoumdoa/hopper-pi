@@ -1,7 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { noUiResult } from "./ui-helpers.js";
+import { throwNoUi } from "./ui-helpers.js";
 
 export function registerAskUserTool(pi: ExtensionAPI): void {
 	pi.registerTool({
@@ -20,10 +20,7 @@ export function registerAskUserTool(pi: ExtensionAPI): void {
 
 		async execute(_id, params, _signal, _onUpdate, ctx) {
 			if (!ctx.hasUI) {
-				return noUiResult("No UI available", {
-					question: params.question,
-					answer: null,
-				});
+				throwNoUi("ask_user");
 			}
 
 			const answer = await ctx.ui.input("Question:", params.placeholder ?? params.question);

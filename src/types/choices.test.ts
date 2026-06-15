@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import assert from "node:assert/strict";
+import { test } from "vitest";
 import {
 	OTHER_OPTION_LABEL,
 	appendOtherOptionLabels,
@@ -8,35 +9,33 @@ import {
 	type PickOption,
 } from "./choices.js";
 
-describe("choices types", () => {
-	const options: PickOption[] = [
-		{ label: "Pipe", value: "guid-pipe", description: "Surface > Freeform" },
-		{ label: "Divide Surface", value: "guid-divide" },
-	];
+const options: PickOption[] = [
+	{ label: "Pipe", value: "guid-pipe", description: "Surface > Freeform" },
+	{ label: "Divide Surface", value: "guid-divide" },
+];
 
-	it("formats labels with descriptions", () => {
-		expect(formatPickOptionLabels(options)).toEqual([
-			"Pipe — Surface > Freeform",
-			"Divide Surface",
-		]);
-	});
+test("formats labels with descriptions", () => {
+	assert.deepEqual(formatPickOptionLabels(options), [
+		"Pipe — Surface > Freeform",
+		"Divide Surface",
+	]);
+});
 
-	it("resolves selection by display label", () => {
-		const labels = formatPickOptionLabels(options);
-		expect(resolvePickOption(options, labels[0])?.value).toBe("guid-pipe");
-	});
+test("resolves selection by display label", () => {
+	const labels = formatPickOptionLabels(options);
+	assert.equal(resolvePickOption(options, labels[0])?.value, "guid-pipe");
+});
 
-	it("appends Other once", () => {
-		expect(appendOtherOptionLabels(["A", "B"])).toEqual(["A", "B", OTHER_OPTION_LABEL]);
-	});
+test("appends Other once", () => {
+	assert.deepEqual(appendOtherOptionLabels(["A", "B"]), ["A", "B", OTHER_OPTION_LABEL]);
+});
 
-	it("skips Other when already present", () => {
-		expect(appendOtherOptionLabels(["A", "Other"])).toEqual(["A", "Other"]);
-		expect(appendOtherOptionLabels(["A", "Others"])).toEqual(["A", "Others"]);
-	});
+test("skips Other when already present", () => {
+	assert.deepEqual(appendOtherOptionLabels(["A", "Other"]), ["A", "Other"]);
+	assert.deepEqual(appendOtherOptionLabels(["A", "Others"]), ["A", "Others"]);
+});
 
-	it("detects Other choice", () => {
-		expect(isOtherChoice(OTHER_OPTION_LABEL)).toBe(true);
-		expect(isOtherChoice("Pipe")).toBe(false);
-	});
+test("detects Other choice", () => {
+	assert.equal(isOtherChoice(OTHER_OPTION_LABEL), true);
+	assert.equal(isOtherChoice("Pipe"), false);
 });
