@@ -18,7 +18,6 @@ import {
 	validateCsharpScript,
 } from "./csharp-script-validator.js";
 import {
-	logGhEditScriptStep,
 	sanitizeGhEditScriptItem,
 	summarizeGhEditScriptItem,
 } from "./gh-edit-script-log.js";
@@ -238,7 +237,6 @@ export async function executeGhEditScript(
 		preparedMutations = await prepareMutationItems(items);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
-		logGhEditScriptStep(`prepare failed: ${message}`);
 		return {
 			content: [{ type: "text" as const, text: message }],
 			details: {
@@ -265,7 +263,6 @@ export async function executeGhEditScript(
 		.filter((msg): msg is string => msg != null);
 
 	if (validationErrors.length > 0) {
-		logGhEditScriptStep(`validation failed: ${validationErrors.join(" | ")}`);
 		return {
 			content: [{ type: "text" as const, text: validationErrors.join("\n\n") }],
 			details: {
@@ -289,7 +286,6 @@ export async function executeGhEditScript(
 	for (const item of queryItems) {
 		if (item.action !== "getCode" && item.action !== "getCodeParts") continue;
 		const summary = summarizeGhEditScriptItem(item);
-		logGhEditScriptStep(`executing ${summary}`);
 		onUpdate?.({
 			content: [{ type: "text" as const, text: summary }],
 			details: { item: sanitizeGhEditScriptItem(item) },
@@ -308,7 +304,6 @@ export async function executeGhEditScript(
 	if (mutationItems.length > 0) {
 		for (const item of mutationItems) {
 			const summary = summarizeGhEditScriptItem(item);
-			logGhEditScriptStep(`executing ${summary}`);
 			onUpdate?.({
 				content: [{ type: "text" as const, text: summary }],
 				details: { item: sanitizeGhEditScriptItem(item) },
@@ -325,8 +320,6 @@ export async function executeGhEditScript(
 			));
 		}
 	}
-
-	logGhEditScriptStep(`done (${queryItems.length} queries, ${mutationItems.length} mutations)`);
 
 	return {
 		content: [{ type: "text" as const, text: results.join("\n") }],

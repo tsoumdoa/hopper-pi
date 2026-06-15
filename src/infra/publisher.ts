@@ -1,10 +1,5 @@
 import type { SubmitJobRequest } from "../types/commands.js";
-import {
-	DEBUG,
-	type ConnectionConfig,
-	resolveConnection,
-	withConnectionToken,
-} from "./connection.js";
+import { type ConnectionConfig, resolveConnection, withConnectionToken } from "./connection.js";
 
 let _cached: Publisher | null = null;
 
@@ -25,9 +20,6 @@ export class Publisher {
 		this.connection = connection;
 		const { Push } = await import("zeromq");
 		this.socket = new Push();
-		if (DEBUG) {
-			console.log(`[PUSH] Connecting to ${connection.pushEndpoint}`);
-		}
 		await this.socket.connect(connection.pushEndpoint);
 	}
 
@@ -40,10 +32,6 @@ export class Publisher {
 		}
 		const payload = JSON.stringify(withConnectionToken(request, this.connection));
 
-		if (DEBUG) {
-			console.log(`[PUSH] Publishing command: ${payload.slice(0, 100)}...`);
-		}
-
 		await this.socket.send(payload);
 	}
 
@@ -51,9 +39,6 @@ export class Publisher {
 		if (this.socket) {
 			await this.socket.close();
 			this.socket = null;
-		}
-		if (DEBUG) {
-			console.log("[PUSH] Closed");
 		}
 	}
 }

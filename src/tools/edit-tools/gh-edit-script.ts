@@ -3,9 +3,6 @@ import { defineTool } from "@earendil-works/pi-coding-agent";
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import { executeGhEditScript } from "../../services/gh-edit-script-executor.js";
 import {
-	logGhEditScriptCall,
-} from "../../services/gh-edit-script-log.js";
-import {
 	renderGhEditScriptCall,
 	renderGhEditScriptResult,
 	type GhEditScriptDetails,
@@ -128,9 +125,8 @@ export const ghEditScriptTool = defineTool({
 			]),
 		),
 	}),
-	execute: async (toolCallId, params, _signal, onUpdate) => {
+	execute: async (_toolCallId, params, _signal, onUpdate) => {
 		const items = params.items as GhEditScriptItem[];
-		logGhEditScriptCall(toolCallId, items);
 		const progressFn = typeof onUpdate === "function"
 			? onUpdate as (msg: { content: import("@earendil-works/pi-ai").TextContent[]; details: unknown }) => void
 			: undefined;
