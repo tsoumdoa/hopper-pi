@@ -41,12 +41,14 @@ export class Subscriber {
 			const topicStr = topic.toString();
 			const payload = data.toString();
 
+			let parsed: GhMessage;
 			try {
-				const parsed = JSON.parse(payload) as GhMessage;
-				handler(parsed);
+				parsed = JSON.parse(payload) as GhMessage;
 			} catch {
 				// ignore unparseable subscriber messages
+				continue;
 			}
+			handler(parsed);
 		}
 	}
 
