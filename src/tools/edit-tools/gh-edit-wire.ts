@@ -1,6 +1,6 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { createExecute, formatDefaultResult } from "../edit-handlers.js";
+import { createExecute } from "../edit-handlers.js";
 import { resolveInstanceGuid } from "../../services/guid-shortener.js";
 import type { CommandAction } from "../../types/commands.js";
 
@@ -39,15 +39,16 @@ export const ghEditWireTool = defineTool({
 				to: { componentId: resolveInstanceGuid(item.toComponent), port: resolveInstanceGuid(item.toPort) },
 			},
 		}),
-		(item, result) => {
+		(item, result) =>
+			`Wire ${item.action === "connect" ? "connected" : "disconnected"}. jobId=${result.jobId}`,
+		(item) => {
 			const resolvedFromComp = resolveInstanceGuid(item.fromComponent);
 			const resolvedFromPort = resolveInstanceGuid(item.fromPort);
 			const resolvedToComp = resolveInstanceGuid(item.toComponent);
 			const resolvedToPort = resolveInstanceGuid(item.toPort);
-			return `Wire ${item.action === "connect" ? "connected" : "disconnected"}. ` +
+			return `${item.action === "connect" ? "Connecting" : "Disconnecting"} wire ` +
 				`from=${item.fromComponent}->${resolvedFromComp}:${item.fromPort}->${resolvedFromPort} ` +
-				`to=${item.toComponent}->${resolvedToComp}:${item.toPort}->${resolvedToPort}, jobId=${result.jobId}`;
+				`to=${item.toComponent}->${resolvedToComp}:${item.toPort}->${resolvedToPort}...`;
 		},
-		(item) => `${item.action === "connect" ? "Connecting" : "Disconnecting"} wire ${item.fromComponent}:${item.fromPort} → ${item.toComponent}:${item.toPort}...`,
 	),
 });

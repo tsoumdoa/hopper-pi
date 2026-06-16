@@ -1,9 +1,5 @@
 import type { GhMessage } from "../types/messages.js";
-import {
-	DEBUG,
-	type ConnectionConfig,
-	resolveConnection,
-} from "./connection.js";
+import { type ConnectionConfig, resolveConnection } from "./connection.js";
 
 export type MessageHandler = (message: GhMessage) => void;
 
@@ -22,9 +18,6 @@ export class Subscriber {
 		this.connection = connection;
 		const { Subscriber } = await import("zeromq");
 		this.socket = new Subscriber();
-		if (DEBUG) {
-			console.log(`[SUB] Connecting to ${connection.pubEndpoint}`);
-		}
 		this.socket.connect(connection.pubEndpoint);
 		this.socket.receiveTimeout = 1000;
 		this.socket.subscribe("");
@@ -33,9 +26,6 @@ export class Subscriber {
 	async subscribeTopic(topic: string): Promise<void> {
 		if (!this.socket) {
 			throw new Error("Subscriber not connected");
-		}
-		if (DEBUG) {
-			console.log(`[SUB] Subscribing to: ${topic}`);
 		}
 		this.socket.subscribe(topic);
 	}
@@ -51,16 +41,14 @@ export class Subscriber {
 			const topicStr = topic.toString();
 			const payload = data.toString();
 
-			if (DEBUG) {
-				console.log(`[SUB] Received ${topicStr}: ${payload.slice(0, 100)}...`);
-			}
-
+			let parsed: GhMessage;
 			try {
-				const parsed = JSON.parse(payload) as GhMessage;
-				handler(parsed);
-			} catch (err) {
-				console.error(`[SUB] Failed to parse message: ${err}`);
+				parsed = JSON.parse(payload) as GhMessage;
+			} catch {
+				// ignore unparseable subscriber messages
+				continue;
 			}
+			handler(parsed);
 		}
 	}
 
@@ -69,9 +57,6 @@ export class Subscriber {
 		const [topic, data] = await this.socket.receive();
 		if (!topic || !data) return null;
 		const payload = data.toString();
-		if (DEBUG) {
-			console.log(`[SUB] Received one: ${payload.slice(0, 100)}...`);
-		}
 		return JSON.parse(payload) as GhMessage;
 	}
 

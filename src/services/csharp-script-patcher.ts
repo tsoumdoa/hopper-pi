@@ -15,10 +15,25 @@ function joinLines(lines: string[]): string {
 	return lines.join("\n");
 }
 
+function patchAnchorLine(patch: LinePatch): number {
+	return patch.op === "insert" ? patch.afterLine : patch.startLine;
+}
+
+function sortPatchesForApplication(patches: LinePatch[]): LinePatch[] {
+	return patches
+		.map((patch, index) => ({ patch, index }))
+		.sort((a, b) => {
+			const lineDelta = patchAnchorLine(b.patch) - patchAnchorLine(a.patch);
+			if (lineDelta !== 0) return lineDelta;
+			return b.index - a.index;
+		})
+		.map(({ patch }) => patch);
+}
+
 export function applyLinePatches(text: string, patches: LinePatch[]): string {
 	let lines = splitLines(text);
 
-	for (const patch of patches) {
+	for (const patch of sortPatchesForApplication(patches)) {
 		switch (patch.op) {
 			case "insert": {
 				if (patch.afterLine < 0 || patch.afterLine > lines.length) {

@@ -6,6 +6,8 @@ import {
 	scoreComponent,
 	scoreComponentQuery,
 	searchMatchedComponents,
+	formatComponentLines,
+	truncateDescription,
 } from "../services/component-search.js";
 
 function comp(
@@ -82,4 +84,38 @@ test("query-handlers search", () => {
 	const trimBrepScore = scoreComponentQuery(comp("Trim with Brep"), tokenizeQuery("trim brep"));
 	const trimSolidScore = scoreComponentQuery(comp("Trim Solid"), tokenizeQuery("trim brep"));
 	assert.ok(trimBrepScore.score > trimSolidScore.score, "all-token bonus ranks Trim with Brep above partial matches");
+});
+
+test("formatComponentLines", () => {
+	const analysis = [
+		comp("Evaluate Surface", { subcategory: "Analysis", description: "Evaluate local surface properties." }),
+		comp("Evaluate Box", { subcategory: "Analysis", description: "Evaluate a box in normalised space." }),
+	];
+	const output = formatComponentLines(analysis);
+	const lines = output.split("\n");
+
+	assert.equal(lines.length, 2);
+	assert.ok(!output.includes("=="), "no category header markers");
+	assert.match(lines[0], /^Evaluate Surface \[.+\] · Surface\/Analysis — Evaluate local surface properties\.$/);
+	assert.match(lines[1], /^Evaluate Box \[.+\] · Surface\/Analysis — Evaluate a box in normalised space\.$/);
+
+	const order = formatComponentLines([
+		comp("Zed", { category: "Zoo", subcategory: "Alpha", description: "last" }),
+		comp("Ape", { category: "Aardvark", subcategory: "Beta", description: "first" }),
+	]);
+	assert.equal(order.split("\n")[0]?.startsWith("Zed "), true, "preserves input order");
+	assert.equal(order.split("\n")[1]?.startsWith("Ape "), true, "preserves input order");
+
+	const noDesc = formatComponentLines([comp("Panel", { description: "" })]);
+	assert.match(noDesc, /^Panel \[.+\] · Surface\/Util$/);
+	assert.ok(!noDesc.includes(" — "), "omits description segment when empty");
+
+	const longDesc = "x".repeat(95);
+	const truncated = truncateDescription(longDesc);
+	assert.equal(truncated.length, 90);
+	assert.ok(truncated.endsWith("..."));
+	assert.match(
+		formatComponentLines([comp("Long", { description: longDesc })]),
+		/^Long \[.+\] · Surface\/Util — x+\.\.\.$/,
+	);
 });

@@ -2,8 +2,6 @@ import type { GhEditScriptItem } from "../types/gh-edit-script.js";
 import type { LinePatch } from "../types/csharp-script.js";
 import { lineCount } from "../lib/line-count.js";
 
-const LOG_PREFIX = "[GH_EDIT_SCRIPT]";
-
 function formatIoSummary(
 	item: { inputs?: { name: string }[]; outputs?: { name: string }[] },
 ): string {
@@ -142,16 +140,4 @@ export function sanitizeGhEditScriptItem(item: GhEditScriptItem): Record<string,
 	}
 }
 
-export function logGhEditScriptCall(toolCallId: string, items: GhEditScriptItem[]): void {
-	console.log(`${LOG_PREFIX} call id=${toolCallId} itemCount=${items.length}`);
-	items.forEach((item, index) => {
-		console.log(`${LOG_PREFIX}   [${index + 1}/${items.length}] ${summarizeGhEditScriptItem(item)}`);
-	});
-	console.log(
-		`${LOG_PREFIX} payload ${JSON.stringify(items.map(sanitizeGhEditScriptItem))}`,
-	);
-}
 
-export function logGhEditScriptStep(message: string): void {
-	console.log(`${LOG_PREFIX} ${message}`);
-}
