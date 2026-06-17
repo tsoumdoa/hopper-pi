@@ -8,6 +8,20 @@ AI inside their real workflow — not locked behind a black-box SaaS.
 **hoppercode** (published as [`hopper-pi`](https://www.npmjs.com/package/hopper-pi)) is a [Pi](https://github.com/earendil-works/pi) extension plus a Grasshopper plugin that lets an AI agent inspect and edit a Grasshopper canvas—and run scripts against the Rhino document—over ZeroMQ while Rhino is open.
 
 
+## What's new
+
+### 0.1.5 — View capture & control
+
+- **`rh_capture_view`** — capture a Rhino viewport screenshot as PNG visual context for visual QA, composition, visibility, and display checks. Permission-gated: only active after you allow Rhino viewport screenshots for the session, and only on models that accept image input.
+- **`rh_view_control`** — drive the viewport: switch active / standard / named / CPlane views, set the camera (location, target, lens length, projection), zoom (extents / selected / bounding box), and save named views.
+- New per-session viewport-capture consent flow so screenshots are opt-in.
+
+### 0.1.4 — Agent can ask questions
+
+- **`ask_user`** — ask the user a free-text clarifying question and wait for an answer when requirements are ambiguous.
+- **`pick_option`** — present 2–6 informed options to pick from (e.g. resolving ambiguous component matches after `gh_list_components`). An "Other" choice is appended automatically.
+- Fixes: silent failures on certain operations, long GUIDs leaking into output, and license corrections.
+
 ## What you need
 
 - **Rhino 8** on Win or Mac
