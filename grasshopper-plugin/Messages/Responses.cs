@@ -207,4 +207,100 @@ namespace rhino_zmq_poc
         [JsonPropertyName("objects")]
         public List<RhinoObjectInfoDto> Objects { get; set; }
     }
+
+    public class RhinoPointDto
+    {
+        [JsonPropertyName("x")]
+        public double X { get; set; }
+
+        [JsonPropertyName("y")]
+        public double Y { get; set; }
+
+        [JsonPropertyName("z")]
+        public double Z { get; set; }
+    }
+
+    public class RhinoViewMetadataDto
+    {
+        [JsonPropertyName("viewName")]
+        public string ViewName { get; set; }
+
+        [JsonPropertyName("viewportId")]
+        public string ViewportId { get; set; }
+
+        [JsonPropertyName("projection")]
+        public string Projection { get; set; }
+
+        [JsonPropertyName("cameraLocation")]
+        public RhinoPointDto CameraLocation { get; set; }
+
+        [JsonPropertyName("cameraTarget")]
+        public RhinoPointDto CameraTarget { get; set; }
+
+        [JsonPropertyName("cameraDirection")]
+        public RhinoPointDto CameraDirection { get; set; }
+
+        [JsonPropertyName("cameraUp")]
+        public RhinoPointDto CameraUp { get; set; }
+
+        [JsonPropertyName("lensLength")]
+        public double LensLength { get; set; }
+
+        [JsonPropertyName("cplaneName")]
+        public string CPlaneName { get; set; }
+
+        [JsonPropertyName("cplaneOrigin")]
+        public RhinoPointDto CPlaneOrigin { get; set; }
+
+        [JsonPropertyName("width")]
+        public int? Width { get; set; }
+
+        [JsonPropertyName("height")]
+        public int? Height { get; set; }
+    }
+
+    public class CaptureRhinoViewResponse
+    {
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = "captureRhinoView.response";
+
+        [JsonPropertyName("timestamp")]
+        public long Timestamp { get; set; }
+
+        [JsonPropertyName("ok")]
+        public bool Ok { get; set; }
+
+        [JsonPropertyName("imageBase64")]
+        public string ImageBase64 { get; set; }
+
+        [JsonPropertyName("mediaType")]
+        public string MediaType { get; set; } = "image/png";
+
+        [JsonPropertyName("error")]
+        public string Error { get; set; }
+
+        [JsonPropertyName("metadata")]
+        public RhinoViewMetadataDto Metadata { get; set; }
+    }
+
+    public class ControlRhinoViewResponse
+    {
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = "controlRhinoView.response";
+
+        [JsonPropertyName("timestamp")]
+        public long Timestamp { get; set; }
+
+        [JsonPropertyName("ok")]
+        public bool Ok { get; set; }
+
+        [JsonPropertyName("error")]
+        public string Error { get; set; }
+
+        [JsonPropertyName("message")]
+        public string Message { get; set; }
+
+        [JsonPropertyName("metadata")]
+        public RhinoViewMetadataDto Metadata { get; set; }
+    }
 }

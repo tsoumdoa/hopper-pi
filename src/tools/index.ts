@@ -1,5 +1,6 @@
 import { rhRunScriptTool } from "./rh-run-script.js";
 import { rhQueryObjectsTool } from "./rh-query-objects.js";
+import { rhViewControlTool } from "./rh-view-control.js";
 import { ghParamRhinoTool } from "./gh-param-rhino.js";
 import {
 	ghGetCanvasTool,
@@ -18,6 +19,7 @@ import { ghEditScriptTool } from "./edit-tools/gh-edit-script.js";
 export const ALL_TOOLS = [
 	rhRunScriptTool,
 	rhQueryObjectsTool,
+	rhViewControlTool,
 	// ── Edit tools ──
 	ghParamRhinoTool,
 	ghCreateWidgetTool,
