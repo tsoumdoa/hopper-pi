@@ -387,4 +387,44 @@ namespace rhino_zmq_poc
             });
         }
     }
+
+    public class CaptureRhinoViewHandler : IUiRequestHandler
+    {
+        public string Handle(GH_Document doc, JsonElement root)
+        {
+            return Utilities.RunOnUiThread(() =>
+            {
+                try
+                {
+                    var param = root.Deserialize<CaptureRhinoViewParams>();
+                    var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
+                    return JsonSerializer.Serialize(ViewportCaptureOps.Capture(rhinoDoc, param));
+                }
+                catch (Exception ex)
+                {
+                    return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
+                }
+            }, TimeSpan.FromSeconds(10));
+        }
+    }
+
+    public class ControlRhinoViewHandler : IUiRequestHandler
+    {
+        public string Handle(GH_Document doc, JsonElement root)
+        {
+            return Utilities.RunOnUiThread(() =>
+            {
+                try
+                {
+                    var param = root.Deserialize<ControlRhinoViewParams>();
+                    var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
+                    return JsonSerializer.Serialize(ViewportCaptureOps.Control(rhinoDoc, param));
+                }
+                catch (Exception ex)
+                {
+                    return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
+                }
+            }, TimeSpan.FromSeconds(10));
+        }
+    }
 }

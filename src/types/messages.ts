@@ -111,6 +111,46 @@ export type QueryRhinoObjectsResponse = {
 	objects: RhinoObjectInfo[];
 };
 
+export type RhinoPoint3d = {
+	x: number;
+	y: number;
+	z: number;
+};
+
+export type RhinoViewMetadata = {
+	viewName: string;
+	viewportId: string;
+	projection: string;
+	cameraLocation: RhinoPoint3d;
+	cameraTarget: RhinoPoint3d;
+	cameraDirection: RhinoPoint3d;
+	cameraUp: RhinoPoint3d;
+	lensLength: number;
+	cplaneName: string;
+	cplaneOrigin: RhinoPoint3d;
+	width?: number;
+	height?: number;
+};
+
+export type CaptureRhinoViewResponse = {
+	type: "captureRhinoView.response";
+	timestamp: number;
+	ok: boolean;
+	imageBase64: string;
+	mediaType: "image/png";
+	error?: string | null;
+	metadata?: RhinoViewMetadata | null;
+};
+
+export type ControlRhinoViewResponse = {
+	type: "controlRhinoView.response";
+	timestamp: number;
+	ok: boolean;
+	error?: string | null;
+	message: string;
+	metadata?: RhinoViewMetadata | null;
+};
+
 export type ParamRhinoGeometryItem = {
 	path: string;
 	gooType: string;
