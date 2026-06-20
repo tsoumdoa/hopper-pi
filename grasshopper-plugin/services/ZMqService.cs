@@ -442,7 +442,7 @@ namespace rhino_zmq_poc
             _cts = null;
             Profile = null;
 
-            _ = Task.Run(() => DrainBackgroundTasks(commandTask, repTask, cts));
+            DrainBackgroundTasks(commandTask, repTask, cts);
         }
 
         private static void DrainBackgroundTasks(Task commandTask, Task repTask, CancellationTokenSource cts)

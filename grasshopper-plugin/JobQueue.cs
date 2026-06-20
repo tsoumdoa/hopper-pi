@@ -171,17 +171,15 @@ namespace rhino_zmq_poc
             var processingTask = _processingTask;
             _processingTask = null;
 
-            _ = Task.Run(() =>
+            try
             {
-                try
-                {
-                    processingTask?.Wait(TimeSpan.FromSeconds(2));
-                }
-                catch
-                {
-                    // Best effort while shutting down.
-                }
-            });
+                processingTask?.Wait(TimeSpan.FromSeconds(2));
+            }
+            catch
+            {
+            }
+
+            _jobAvailable.Dispose();
         }
     }
 }
