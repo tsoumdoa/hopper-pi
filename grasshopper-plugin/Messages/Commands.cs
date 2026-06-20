@@ -559,19 +559,4 @@ namespace rhino_zmq_poc
         [JsonPropertyName("name")]
         public string Name { get; set; }
     }
-
-    internal class RunRhinoScriptRequest
-    {
-        [JsonPropertyName("type")]
-        public string Type { get; set; } = "runRhinoScript";
-
-        [JsonPropertyName("mode")]
-        public string Mode { get; set; }
-
-        [JsonPropertyName("source")]
-        public string Source { get; set; }
-
-        [JsonPropertyName("echo")]
-        public bool Echo { get; set; }
-    }
 }

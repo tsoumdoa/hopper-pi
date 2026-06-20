@@ -16,8 +16,8 @@
     <!-- Specifies information for Assembly and Yak -->
     <Version>1.0</Version>
     <Title>rhino-zmq-poc</Title>
-    <Company>rhino-zmq-poc Authors</Company>
-    <Description>Description of rhino-zmq-poc</Description>
+    <Company>hoppercode</Company>
+    <Description>Hopper Code Backend — ZMQ bridge for AI-driven Grasshopper/Rhino control</Description>
   </PropertyGroup>
   
   <ItemGroup>
