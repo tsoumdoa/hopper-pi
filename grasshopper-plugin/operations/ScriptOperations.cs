@@ -5,7 +5,7 @@ using Grasshopper.Kernel;
 
 namespace rhino_zmq_poc
 {
-    public static class ScriptOperations
+    internal static class ScriptOperations
     {
         public static string CreateScriptNode(GH_Document doc, CreateScriptNodeParams param)
         {

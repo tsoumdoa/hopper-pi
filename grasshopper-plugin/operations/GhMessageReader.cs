@@ -5,7 +5,7 @@ using Grasshopper.Kernel;
 
 namespace rhino_zmq_poc
 {
-    public static class GhMessageReader
+    internal static class GhMessageReader
     {
         public static List<CanvasError> GetAllWarningsAndErrors(GH_Document doc)
         {

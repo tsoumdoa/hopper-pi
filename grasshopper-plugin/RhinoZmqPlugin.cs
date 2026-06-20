@@ -2,7 +2,7 @@ using System;
 
 namespace rhino_zmq_poc
 {
-    public class RhinoZmqPlugin
+    internal class RhinoZmqPlugin
     {
         private static RhinoZmqPlugin _instance = new RhinoZmqPlugin();
         public static RhinoZmqPlugin Instance

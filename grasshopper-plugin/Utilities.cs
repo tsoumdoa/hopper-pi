@@ -8,7 +8,7 @@ using Rhino;
 
 namespace rhino_zmq_poc
 {
-    public static class Utilities
+    internal static class Utilities
     {
         public static Color ParseRgbaColor(string rgba, Color fallback = default)
         {

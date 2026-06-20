@@ -6,7 +6,7 @@ using Grasshopper.Kernel;
 
 namespace rhino_zmq_poc
 {
-    public static class DocumentSnapshots
+    internal static class DocumentSnapshots
     {
         private const string ArchiveKey = "Definition";
 

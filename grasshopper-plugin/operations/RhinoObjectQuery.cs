@@ -7,7 +7,7 @@ using Rhino.DocObjects;
 
 namespace rhino_zmq_poc
 {
-    public class RhinoObjectInfo
+    internal class RhinoObjectInfo
     {
         public string ObjectId { get; set; }
         public string Name { get; set; }
@@ -15,7 +15,7 @@ namespace rhino_zmq_poc
         public string ObjectType { get; set; }
     }
 
-    public class QueryRhinoObjectsParams
+    internal class QueryRhinoObjectsParams
     {
         [JsonPropertyName("selectionOnly")]
         public bool? SelectionOnly { get; set; }
@@ -30,7 +30,7 @@ namespace rhino_zmq_poc
         public string ObjectType { get; set; }
     }
 
-    public static class RhinoObjectQuery
+    internal static class RhinoObjectQuery
     {
         public static List<RhinoObjectInfo> Query(RhinoDoc doc, QueryRhinoObjectsParams param)
         {

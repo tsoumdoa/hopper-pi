@@ -4,7 +4,7 @@ using Grasshopper.Kernel;
 
 namespace rhino_zmq_poc
 {
-    public static class WireOperations
+    internal static class WireOperations
     {
         private static IGH_DocumentObject FindByInstanceId(GH_Document doc, string id)
         {

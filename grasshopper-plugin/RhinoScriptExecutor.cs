@@ -3,21 +3,21 @@ using Rhino;
 
 namespace rhino_zmq_poc
 {
-    public class RunRhinoScriptParams
+    internal class RunRhinoScriptParams
     {
         public string Mode { get; set; }
         public string Source { get; set; }
         public bool Echo { get; set; }
     }
 
-    public class RunRhinoScriptResult
+    internal class RunRhinoScriptResult
     {
         public bool Ok { get; set; }
         public string Output { get; set; }
         public string Error { get; set; }
     }
 
-    public static class RhinoScriptExecutor
+    internal static class RhinoScriptExecutor
     {
         public static RhinoDoc ResolveRhinoDoc()
         {

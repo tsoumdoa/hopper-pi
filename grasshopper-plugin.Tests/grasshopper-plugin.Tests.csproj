@@ -6,6 +6,7 @@
     <IsTestProject>true</IsTestProject>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AssemblyName>rhino-zmq-poc.Tests</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>

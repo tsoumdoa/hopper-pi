@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace rhino_zmq_poc
 {
-    public class ListScriptParamsResponse
+    internal class ListScriptParamsResponse
     {
         [JsonPropertyName("type")]
         public string Type { get; set; } = "listScriptParams.response";
@@ -16,7 +16,7 @@ namespace rhino_zmq_poc
         public List<ScriptParamInfo> Outputs { get; set; } = new();
     }
 
-    public class ScriptParamInfo
+    internal class ScriptParamInfo
     {
         [JsonPropertyName("name")]
         public string Name { get; set; }
@@ -33,7 +33,7 @@ namespace rhino_zmq_poc
         public string TypeHint { get; set; }
     }
 
-    public class GetScriptCodeResponse
+    internal class GetScriptCodeResponse
     {
         [JsonPropertyName("type")]
         public string Type { get; set; } = "getScriptCode.response";
@@ -43,7 +43,7 @@ namespace rhino_zmq_poc
         public string Code { get; set; }
     }
 
-    public class CommandResult
+    internal class CommandResult
     {
         [JsonPropertyName("executed")]
         public bool Executed { get; set; }
@@ -58,7 +58,7 @@ namespace rhino_zmq_poc
         public long Timestamp { get; set; }
     }
 
-    public class GhComponentInfo
+    internal class GhComponentInfo
     {
         [JsonPropertyName("name")]
         public string Name { get; set; }
@@ -82,7 +82,7 @@ namespace rhino_zmq_poc
         public string Description { get; set; }
     }
 
-    public class ListAllComponentsResponse
+    internal class ListAllComponentsResponse
     {
         [JsonPropertyName("type")]
         public string Type { get; set; } = "listAllComponents.response";
@@ -94,7 +94,7 @@ namespace rhino_zmq_poc
         public List<GhComponentInfo> Components { get; set; }
     }
 
-    public class GetCurrentCanvasResponse
+    internal class GetCurrentCanvasResponse
     {
         [JsonPropertyName("type")]
         public string Type { get; set; } = "getCurrentCanvas.response";
@@ -112,7 +112,7 @@ namespace rhino_zmq_poc
         public List<string> SelectedInstanceGuids { get; set; }
     }
 
-    public class CanvasError
+    internal class CanvasError
     {
         [JsonPropertyName("componentId")]
         public string ComponentId { get; set; }
@@ -127,7 +127,7 @@ namespace rhino_zmq_poc
         public string Text { get; set; }
     }
 
-    public class PingResponse
+    internal class PingResponse
     {
         [JsonPropertyName("type")]
         public string Type { get; set; } = "ping.response";
@@ -136,7 +136,7 @@ namespace rhino_zmq_poc
         public long Timestamp { get; set; }
     }
 
-    public class AuthErrorResponse
+    internal class AuthErrorResponse
     {
         [JsonPropertyName("type")]
         public string Type { get; set; } = "auth.error";
@@ -148,7 +148,7 @@ namespace rhino_zmq_poc
         public string Error { get; set; }
     }
 
-    public class GetCanvasErrorsResponse
+    internal class GetCanvasErrorsResponse
     {
         [JsonPropertyName("type")]
         public string Type { get; set; } = "getCanvasErrors.response";
@@ -163,7 +163,7 @@ namespace rhino_zmq_poc
         public List<CanvasError> Errors { get; set; }
     }
 
-    public class RunRhinoScriptResponse
+    internal class RunRhinoScriptResponse
     {
         [JsonPropertyName("type")]
         public string Type { get; set; } = "runRhinoScript.response";
@@ -181,7 +181,7 @@ namespace rhino_zmq_poc
         public string Error { get; set; }
     }
 
-    public class RhinoObjectInfoDto
+    internal class RhinoObjectInfoDto
     {
         [JsonPropertyName("objectId")]
         public string ObjectId { get; set; }
@@ -196,7 +196,7 @@ namespace rhino_zmq_poc
         public string ObjectType { get; set; }
     }
 
-    public class QueryRhinoObjectsResponse
+    internal class QueryRhinoObjectsResponse
     {
         [JsonPropertyName("type")]
         public string Type { get; set; } = "queryRhinoObjects.response";
@@ -208,7 +208,7 @@ namespace rhino_zmq_poc
         public List<RhinoObjectInfoDto> Objects { get; set; }
     }
 
-    public class RhinoPointDto
+    internal class RhinoPointDto
     {
         [JsonPropertyName("x")]
         public double X { get; set; }
@@ -220,7 +220,7 @@ namespace rhino_zmq_poc
         public double Z { get; set; }
     }
 
-    public class RhinoViewMetadataDto
+    internal class RhinoViewMetadataDto
     {
         [JsonPropertyName("viewName")]
         public string ViewName { get; set; }
@@ -259,7 +259,7 @@ namespace rhino_zmq_poc
         public int? Height { get; set; }
     }
 
-    public class CaptureRhinoViewResponse
+    internal class CaptureRhinoViewResponse
     {
         [JsonPropertyName("type")]
         public string Type { get; set; } = "captureRhinoView.response";
@@ -283,7 +283,7 @@ namespace rhino_zmq_poc
         public RhinoViewMetadataDto Metadata { get; set; }
     }
 
-    public class ControlRhinoViewResponse
+    internal class ControlRhinoViewResponse
     {
         [JsonPropertyName("type")]
         public string Type { get; set; } = "controlRhinoView.response";

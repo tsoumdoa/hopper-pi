@@ -6,7 +6,7 @@ using Grasshopper.Kernel;
 
 namespace rhino_zmq_poc
 {
-    public static class ComponentLifecycleOps
+    internal static class ComponentLifecycleOps
     {
         public static string AddComponentToCanvas(GH_Document doc, AddComponentParams param)
         {

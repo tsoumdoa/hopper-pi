@@ -3,7 +3,7 @@ using Grasshopper.Kernel;
 
 namespace rhino_zmq_poc
 {
-    public static class ComponentPropertyOps
+    internal static class ComponentPropertyOps
     {
         public static string RenameComponent(GH_Document doc, RenameComponentParams param)
         {

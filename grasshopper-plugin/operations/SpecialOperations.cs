@@ -8,7 +8,7 @@ using Grasshopper.Kernel.Special;
 
 namespace rhino_zmq_poc
 {
-    public static class SpecialOperations
+    internal static class SpecialOperations
     {
         public static string CreateToggle(GH_Document doc, CreateToggleParams param)
         {

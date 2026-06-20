@@ -13,7 +13,7 @@ using Rhino.Geometry;
 
 namespace rhino_zmq_poc
 {
-    public class SetParamRhinoGeometryParams
+    internal class SetParamRhinoGeometryParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
@@ -28,13 +28,13 @@ namespace rhino_zmq_poc
         public QueryRhinoObjectsParams RhinoQuery { get; set; }
     }
 
-    public class GetParamRhinoGeometryParams
+    internal class GetParamRhinoGeometryParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
     }
 
-    public class ParamRhinoGeometryItem
+    internal class ParamRhinoGeometryItem
     {
         [JsonPropertyName("path")]
         public string Path { get; set; }
@@ -49,7 +49,7 @@ namespace rhino_zmq_poc
         public string Source { get; set; }
     }
 
-    public class GetParamRhinoGeometryResult
+    internal class GetParamRhinoGeometryResult
     {
         public string TargetId { get; set; }
         public string ParamName { get; set; }
@@ -57,7 +57,7 @@ namespace rhino_zmq_poc
         public List<ParamRhinoGeometryItem> Persistent { get; set; } = new();
     }
 
-    public static class RhinoParamGeometryOps
+    internal static class RhinoParamGeometryOps
     {
         public const int MaxRhinoObjectIds = 30;
 

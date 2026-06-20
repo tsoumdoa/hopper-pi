@@ -14,7 +14,7 @@ using NetMQ.Sockets;
 
 namespace rhino_zmq_poc
 {
-    public class ZMqService : IDisposable
+    internal class ZMqService : IDisposable
     {
         private const string LoopbackHost = "127.0.0.1";
         private const int DefaultPubPort = 5555;

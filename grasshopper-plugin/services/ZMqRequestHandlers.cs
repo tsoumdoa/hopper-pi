@@ -7,12 +7,12 @@ using Grasshopper.Kernel;
 
 namespace rhino_zmq_poc
 {
-    public interface IUiRequestHandler
+    internal interface IUiRequestHandler
     {
         string Handle(GH_Document doc, JsonElement root);
     }
 
-    public class UiRequestDispatcher
+    internal class UiRequestDispatcher
     {
         private readonly Dictionary<string, IUiRequestHandler> _handlers = new Dictionary<string, IUiRequestHandler>();
 
@@ -30,7 +30,7 @@ namespace rhino_zmq_poc
         }
     }
 
-    public class ListAllComponentsHandler : IUiRequestHandler
+    internal class ListAllComponentsHandler : IUiRequestHandler
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
@@ -101,7 +101,7 @@ namespace rhino_zmq_poc
         }
     }
 
-    public class GetCurrentCanvasHandler : IUiRequestHandler
+    internal class GetCurrentCanvasHandler : IUiRequestHandler
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
@@ -130,7 +130,7 @@ namespace rhino_zmq_poc
         }
     }
 
-    public class GetCanvasErrorsHandler : IUiRequestHandler
+    internal class GetCanvasErrorsHandler : IUiRequestHandler
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
@@ -152,7 +152,7 @@ namespace rhino_zmq_poc
         }
     }
 
-    public class ListScriptParamsHandler : IUiRequestHandler
+    internal class ListScriptParamsHandler : IUiRequestHandler
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
@@ -214,7 +214,7 @@ namespace rhino_zmq_poc
         }
     }
 
-    public class GetScriptCodeHandler : IUiRequestHandler
+    internal class GetScriptCodeHandler : IUiRequestHandler
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
@@ -254,7 +254,7 @@ namespace rhino_zmq_poc
         }
     }
 
-    public class RunRhinoScriptHandler : IUiRequestHandler
+    internal class RunRhinoScriptHandler : IUiRequestHandler
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
@@ -300,7 +300,7 @@ namespace rhino_zmq_poc
         }
     }
 
-    public class GetParamRhinoGeometryHandler : IUiRequestHandler
+    internal class GetParamRhinoGeometryHandler : IUiRequestHandler
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
@@ -337,7 +337,7 @@ namespace rhino_zmq_poc
         }
     }
 
-    public class QueryRhinoObjectsHandler : IUiRequestHandler
+    internal class QueryRhinoObjectsHandler : IUiRequestHandler
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
@@ -388,7 +388,7 @@ namespace rhino_zmq_poc
         }
     }
 
-    public class CaptureRhinoViewHandler : IUiRequestHandler
+    internal class CaptureRhinoViewHandler : IUiRequestHandler
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
@@ -408,7 +408,7 @@ namespace rhino_zmq_poc
         }
     }
 
-    public class ControlRhinoViewHandler : IUiRequestHandler
+    internal class ControlRhinoViewHandler : IUiRequestHandler
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
