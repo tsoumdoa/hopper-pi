@@ -8,7 +8,7 @@ export type CanvasFilters = {
 };
 
 export function expandExcludedIds(
-	components: Record<string, Component>,
+	_components: Record<string, Component>,
 	wires: Wire[],
 	initialExcluded: Set<string>,
 ): Set<string> {

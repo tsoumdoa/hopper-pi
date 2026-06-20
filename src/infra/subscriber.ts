@@ -38,7 +38,6 @@ export class Subscriber {
 			const [topic, data] = await this.socket.receive();
 			if (!topic || !data) continue;
 
-			const topicStr = topic.toString();
 			const payload = data.toString();
 
 			let parsed: GhMessage;
