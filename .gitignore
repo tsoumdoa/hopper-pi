@@ -52,6 +52,7 @@ pnpm-debug.log*
 # ------------------------------------------------------------
 node_modules/
 bower_components/
+package-lock.json
 
 # Python
 __pycache__/

@@ -9,10 +9,10 @@
 	"files": [
 		"src",
 		"mds",
-		"guids.json",
 		"grasshopper-plugin",
 		"scripts"
 	],
+	"packageManager": "pnpm@11.5.3",
 	"scripts": {
 		"dev": "tsx src/index.ts",
 		"build": "tsc -p tsconfig.json",
@@ -44,11 +44,7 @@
 		],
 		"skills": [
 			"./mds/skills",
-			"./mds/reference",
-			"./mds/agents"
-		],
-		"prompts": [
-			"./mds/prompts"
+			"./mds/reference"
 		]
 	}
 }
