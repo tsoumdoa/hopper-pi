@@ -3,6 +3,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -357,8 +359,15 @@ namespace rhino_zmq_poc
 
         private bool IsAuthorized(string token)
         {
-            return !string.IsNullOrEmpty(_connectionToken) &&
-                string.Equals(token, _connectionToken, StringComparison.Ordinal);
+            if (string.IsNullOrEmpty(_connectionToken) || string.IsNullOrEmpty(token))
+                return false;
+
+            var expected = Encoding.UTF8.GetBytes(_connectionToken);
+            var actual = Encoding.UTF8.GetBytes(token);
+            if (expected.Length != actual.Length)
+                return false;
+
+            return CryptographicOperations.FixedTimeEquals(expected, actual);
         }
 
         private void DrainPublishQueue()
