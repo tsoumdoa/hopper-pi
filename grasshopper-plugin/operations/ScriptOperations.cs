@@ -77,7 +77,7 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"createScriptNode CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"createScriptNode error: {ex.GetType().Name}: {ex.Message}";
             }
         }
 
@@ -85,15 +85,8 @@ namespace rhino_zmq_poc
         {
             try
             {
-                if (doc == null)
-                    return "setScriptCode error: document is null";
-
-                if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                    return $"setScriptCode error: invalid targetId '{param.TargetId}'";
-
-                IGH_DocumentObject obj = doc.FindObject(targetGuid, false);
-                if (obj == null)
-                    return $"setScriptCode error: object not found '{param.TargetId}'";
+                if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"setScriptCode error: {err}";
 
                 var reflector = GhScriptReflector.Get();
                 reflector.SetSource(obj, param.Code);
@@ -111,7 +104,7 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"setScriptCode CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"setScriptCode error: {ex.GetType().Name}: {ex.Message}";
             }
         }
 
@@ -122,15 +115,8 @@ namespace rhino_zmq_poc
         {
             try
             {
-                if (doc == null)
-                    return "getScriptCode error: document is null";
-
-                if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                    return $"getScriptCode error: invalid targetId '{param.TargetId}'";
-
-                IGH_DocumentObject obj = doc.FindObject(targetGuid, false);
-                if (obj == null)
-                    return $"getScriptCode error: object not found '{param.TargetId}'";
+                if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"getScriptCode error: {err}";
 
                 var reflector = GhScriptReflector.Get();
                 var code = reflector.GetSourceCode(obj);
@@ -139,7 +125,7 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"getScriptCode CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"getScriptCode error: {ex.GetType().Name}: {ex.Message}";
             }
         }
 
@@ -147,11 +133,8 @@ namespace rhino_zmq_poc
         {
             try
             {
-                if (doc == null) return "addScriptInput error: document is null";
-                if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                    return $"addScriptInput error: invalid targetId '{param.TargetId}'";
-                var obj = doc.FindObject(targetGuid, false);
-                if (obj == null) return $"addScriptInput error: object not found '{param.TargetId}'";
+                if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"addScriptInput error: {err}";
                 var comp = obj as GH_Component;
                 if (comp == null) return $"addScriptInput error: '{param.TargetId}' is not a GH_Component";
                 ComponentLifecycleOps.AddScriptInputParam(comp, param.Name, access: param.Access, dataMapping: param.DataMapping, simplify: param.Simplify, reverse: param.Reverse, typeHint: param.TypeHint);
@@ -160,7 +143,7 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"addScriptInput CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"addScriptInput error: {ex.GetType().Name}: {ex.Message}";
             }
         }
 
@@ -168,11 +151,8 @@ namespace rhino_zmq_poc
         {
             try
             {
-                if (doc == null) return "removeScriptInput error: document is null";
-                if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                    return $"removeScriptInput error: invalid targetId '{param.TargetId}'";
-                var obj = doc.FindObject(targetGuid, false);
-                if (obj == null) return $"removeScriptInput error: object not found '{param.TargetId}'";
+                if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"removeScriptInput error: {err}";
                 var comp = obj as GH_Component;
                 if (comp == null) return $"removeScriptInput error: '{param.TargetId}' is not a GH_Component";
                 ComponentLifecycleOps.RemoveScriptInputParam(comp, param.Name);
@@ -180,7 +160,7 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"removeScriptInput CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"removeScriptInput error: {ex.GetType().Name}: {ex.Message}";
             }
         }
 
@@ -188,11 +168,8 @@ namespace rhino_zmq_poc
         {
             try
             {
-                if (doc == null) return "addScriptOutput error: document is null";
-                if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                    return $"addScriptOutput error: invalid targetId '{param.TargetId}'";
-                var obj = doc.FindObject(targetGuid, false);
-                if (obj == null) return $"addScriptOutput error: object not found '{param.TargetId}'";
+                if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"addScriptOutput error: {err}";
                 var comp = obj as GH_Component;
                 if (comp == null) return $"addScriptOutput error: '{param.TargetId}' is not a GH_Component";
                 ComponentLifecycleOps.AddScriptOutputParam(comp, param.Name, dataMapping: param.DataMapping, simplify: param.Simplify, reverse: param.Reverse, typeHint: param.TypeHint);
@@ -201,7 +178,7 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"addScriptOutput CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"addScriptOutput error: {ex.GetType().Name}: {ex.Message}";
             }
         }
 
@@ -209,11 +186,8 @@ namespace rhino_zmq_poc
         {
             try
             {
-                if (doc == null) return "removeScriptOutput error: document is null";
-                if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                    return $"removeScriptOutput error: invalid targetId '{param.TargetId}'";
-                var obj = doc.FindObject(targetGuid, false);
-                if (obj == null) return $"removeScriptOutput error: object not found '{param.TargetId}'";
+                if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"removeScriptOutput error: {err}";
                 var comp = obj as GH_Component;
                 if (comp == null) return $"removeScriptOutput error: '{param.TargetId}' is not a GH_Component";
                 ComponentLifecycleOps.RemoveScriptOutputParam(comp, param.Name);
@@ -221,7 +195,7 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"removeScriptOutput CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"removeScriptOutput error: {ex.GetType().Name}: {ex.Message}";
             }
         }
     }

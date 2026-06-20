@@ -31,21 +31,14 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"createSlider CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"createSlider error: {ex.GetType().Name}: {ex.Message}";
             }
         }
 
         public static string EditSliderRange(GH_Document doc, EditSliderRangeParams param)
         {
-            if (doc == null)
-                return "editSliderRange error: document is null";
-
-            if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                return $"editSliderRange error: invalid targetId '{param.TargetId}'";
-
-            IGH_DocumentObject obj = doc.FindObject(targetGuid, false);
-            if (obj == null)
-                return $"editSliderRange error: object not found '{param.TargetId}'";
+            if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"editSliderRange error: {err}";
 
             if (obj is GH_NumberSlider slider)
             {
@@ -64,15 +57,8 @@ namespace rhino_zmq_poc
 
         public static string SetSliderValue(GH_Document doc, SetSliderValueParams param)
         {
-            if (doc == null)
-                return "setSliderValue error: document is null";
-
-            if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                return $"setSliderValue error: invalid targetId '{param.TargetId}'";
-
-            IGH_DocumentObject obj = doc.FindObject(targetGuid, false);
-            if (obj == null)
-                return $"setSliderValue error: object not found '{param.TargetId}'";
+            if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"setSliderValue error: {err}";
 
             if (obj is GH_NumberSlider slider)
             {
@@ -123,21 +109,14 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"createPanel CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"createPanel error: {ex.GetType().Name}: {ex.Message}";
             }
         }
 
         public static string SetPanelParams(GH_Document doc, SetPanelParams param)
         {
-            if (doc == null)
-                return "setPanelParams error: document is null";
-
-            if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                return $"setPanelParams error: invalid targetId '{param.TargetId}'";
-
-            IGH_DocumentObject obj = doc.FindObject(targetGuid, false);
-            if (obj == null)
-                return $"setPanelParams error: object not found '{param.TargetId}'";
+            if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"setPanelParams error: {err}";
 
             if (obj is GH_Panel panel)
             {
@@ -169,15 +148,8 @@ namespace rhino_zmq_poc
 
         public static string SetPanelText(GH_Document doc, SetPanelTextParams param)
         {
-            if (doc == null)
-                return "setPanelText error: document is null";
-
-            if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                return $"setPanelText error: invalid targetId '{param.TargetId}'";
-
-            IGH_DocumentObject obj = doc.FindObject(targetGuid, false);
-            if (obj == null)
-                return $"setPanelText error: object not found '{param.TargetId}'";
+            if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"setPanelText error: {err}";
 
             if (obj is GH_Panel panel)
             {
