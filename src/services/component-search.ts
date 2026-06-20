@@ -1,5 +1,6 @@
 import type { GhComponentInfo } from "../types/messages.js";
 import { toShortTypeGuid } from "./guid-shortener.js";
+import { paginate as paginateShared } from "../lib/pagination.js";
 
 const MULTI_TOKEN_BONUS = 50;
 const MIN_TOKEN_LENGTH = 2;
@@ -113,10 +114,8 @@ export function paginate<T>(
 	limit?: number,
 	offset?: number,
 ): { slice: T[]; hasMore: boolean; totalMatched: number } {
-	const effectiveLimit = Math.min(limit ?? DEFAULT_LIMIT, MAX_LIMIT);
-	const effectiveOffset = Math.max(offset ?? 0, 0);
-	const slice = items.slice(effectiveOffset, effectiveOffset + effectiveLimit);
-	return { slice, hasMore: effectiveOffset + slice.length < items.length, totalMatched: items.length };
+	const { slice, hasMore, total } = paginateShared(items, limit, offset, DEFAULT_LIMIT, MAX_LIMIT);
+	return { slice, hasMore, totalMatched: total };
 }
 
 function sortByCategoryThenName(a: GhComponentInfo, b: GhComponentInfo): number {

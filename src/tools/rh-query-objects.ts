@@ -5,26 +5,11 @@ import {
 	resolveRhinoGuid,
 	toShortRhinoGuid,
 } from "../services/guid-shortener.js";
+import { paginate } from "../lib/pagination.js";
 import type { QueryRhinoObjectsResponse } from "../types/messages.js";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
-
-function paginate<T>(items: T[], limit?: number, offset?: number): {
-	slice: T[];
-	hasMore: boolean;
-	total: number;
-} {
-	const total = items.length;
-	const effectiveLimit = Math.min(limit ?? DEFAULT_LIMIT, MAX_LIMIT);
-	const effectiveOffset = Math.max(offset ?? 0, 0);
-	const slice = items.slice(effectiveOffset, effectiveOffset + effectiveLimit);
-	return {
-		slice,
-		hasMore: effectiveOffset + slice.length < total,
-		total,
-	};
-}
 
 export const rhQueryObjectsTool = defineTool({
 	name: "rh_query_objects",
@@ -109,7 +94,7 @@ export const rhQueryObjectsTool = defineTool({
 			};
 		}
 
-		const { slice, hasMore, total } = paginate(objects, params.limit, params.offset);
+		const { slice, hasMore, total } = paginate(objects, params.limit, params.offset, DEFAULT_LIMIT, MAX_LIMIT);
 		const offset = params.offset ?? 0;
 
 		const lines = slice.map((o) => {

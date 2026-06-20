@@ -21,10 +21,6 @@ export function setRhinoVisualCaptureConsent(allowed: boolean): void {
 	visualCaptureConsent = allowed ? "allowed" : "denied";
 }
 
-export function resetRhinoVisualCaptureConsent(): void {
-	visualCaptureConsent = "unknown";
-}
-
 export function resetRhinoVisualCaptureState(): void {
 	visualCaptureConsent = "unknown";
 }

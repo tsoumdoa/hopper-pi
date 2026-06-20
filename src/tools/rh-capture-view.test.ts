@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { beforeEach, test, vi } from "vitest";
 import {
 	getRhinoVisualCaptureConsent,
-	resetRhinoVisualCaptureConsent,
 	resetRhinoVisualCaptureState,
 	setRhinoVisualCaptureConsent,
 } from "../services/rhino-visual-consent.js";
@@ -35,7 +34,7 @@ test("Rhino visual capture consent defaults to unknown and supports session rese
 	assert.equal(getRhinoVisualCaptureConsent(), "unknown");
 	setRhinoVisualCaptureConsent(true);
 	assert.equal(getRhinoVisualCaptureConsent(), "allowed");
-	resetRhinoVisualCaptureConsent();
+	resetRhinoVisualCaptureState();
 	assert.equal(getRhinoVisualCaptureConsent(), "unknown");
 	setRhinoVisualCaptureConsent(false);
 	assert.equal(getRhinoVisualCaptureConsent(), "denied");
