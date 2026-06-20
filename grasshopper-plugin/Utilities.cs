@@ -80,6 +80,34 @@ namespace rhino_zmq_poc
             }
         }
 
+        /// <summary>
+        /// Sanitizes a user-supplied string before it is interpolated into a Rhino macro
+        /// as a double-quoted argument (e.g. _-SetActiveViewport "{value}"). Strips
+        /// control characters (newline/tab injection that would terminate or redirect the
+        /// macro) and escapes backslashes and double quotes so the argument cannot break
+        /// out of its quotes. Returns null if the input is null/empty/whitespace-only.
+        /// </summary>
+        public static string SanitizeMacroArgument(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            var sb = new System.Text.StringBuilder(value.Length);
+            foreach (var ch in value.Trim())
+            {
+                if (ch < 0x20)
+                    continue;
+                if (ch == '\\')
+                    sb.Append("\\\\");
+                else if (ch == '"')
+                    sb.Append("\\\"");
+                else
+                    sb.Append(ch);
+            }
+            var result = sb.ToString();
+            return result.Length == 0 ? null : result;
+        }
+
         private static readonly TimeSpan DefaultUiTimeout = TimeSpan.FromSeconds(30);
 
         public static void RunOnUiThread(Action action, TimeSpan? timeout = null)

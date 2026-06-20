@@ -467,11 +467,10 @@ namespace rhino_zmq_poc
 
         private static void SetActiveViewport(RhinoDoc doc, RhinoView view)
         {
-            var name = view?.ActiveViewport?.Name;
-            if (string.IsNullOrWhiteSpace(name))
+            var sanitized = Utilities.SanitizeMacroArgument(view?.ActiveViewport?.Name);
+            if (sanitized == null)
                 return;
-            var escaped = name.Replace("\"", "\\\"");
-            RhinoApp.RunScript(doc.RuntimeSerialNumber, $"_-SetActiveViewport \"{escaped}\"", "Hopper agent", false);
+            RhinoApp.RunScript(doc.RuntimeSerialNumber, $"_-SetActiveViewport \"{sanitized}\"", "Hopper agent", false);
         }
 
         private static Point3d ToPoint(RhinoPointInput point)
