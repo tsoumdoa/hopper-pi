@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -106,6 +107,27 @@ namespace rhino_zmq_poc
                 File.Delete(path);
 
             File.Move(tempPath, path);
+            RestrictFilePermissions(path);
         }
+
+        private static void RestrictFilePermissions(string path)
+        {
+            if (!File.Exists(path) || OperatingSystem.IsWindows())
+                return;
+
+            try
+            {
+                // 0600 = owner read/write only. P/Invoke avoids the net7.0-windows
+                // compiler error from File.SetUnixPermissionMode (Unix-only BCL symbol).
+                chmod(path, 0b_110_000_000);
+            }
+            catch
+            {
+                // Best effort — hardening is defense-in-depth, not a hard gate.
+            }
+        }
+
+        [DllImport("libc", SetLastError = true)]
+        private static extern int chmod(string path, int mode);
     }
 }

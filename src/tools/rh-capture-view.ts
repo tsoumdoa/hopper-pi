@@ -18,7 +18,7 @@ function formatPoint(point: { x: number; y: number; z: number }): string {
 	return `(${point.x.toFixed(3)}, ${point.y.toFixed(3)}, ${point.z.toFixed(3)})`;
 }
 
-function formatMetadata(metadata?: RhinoViewMetadata): string {
+function formatMetadata(metadata?: RhinoViewMetadata | null): string {
 	if (!metadata) return "Captured Rhino viewport.";
 	return [
 		`Captured Rhino viewport "${metadata.viewName}" (${metadata.width ?? "?"}x${metadata.height ?? "?"}).`,
