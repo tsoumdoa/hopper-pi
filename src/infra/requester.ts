@@ -1,4 +1,5 @@
 import { type ConnectionConfig, resolveConnection, withConnectionToken } from "./connection.js";
+import { REQUEST_TIMEOUT_MS } from "../config.js";
 
 export class Requester {
 	private socket: import("zeromq").Request | null = null;
@@ -22,9 +23,28 @@ export class Requester {
 
 		await this.socket.send(payload);
 
-		const [response] = await this.socket.receive();
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			const timeoutPromise = new Promise<never>((_, reject) => {
+				timer = setTimeout(() => {
+					reject(new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`));
+				}, REQUEST_TIMEOUT_MS);
+			});
 
-		return parseJsonResponse<T>(response.toString());
+			const [response] = await Promise.race([
+				this.socket.receive(),
+				timeoutPromise,
+			]);
+
+			return parseJsonResponse<T>(response.toString());
+		} catch (err) {
+			if (err instanceof Error && err.message.includes("Request timed out")) {
+				await this.close();
+			}
+			throw err;
+		} finally {
+			if (timer) clearTimeout(timer);
+		}
 	}
 
 	async close(): Promise<void> {

@@ -18,6 +18,7 @@ export const DEFAULT_ZMQ_ENDPOINTS = {
 
 export const PROBE_TIMEOUT_MS = 8_000;
 export const BACKEND_POLL_INTERVAL_MS = 3_000;
+export const REQUEST_TIMEOUT_MS = 30_000;
 export const MAX_RHINO_OBJECT_IDS = 30;
 
 export const DEBUG = process.env[ENV.GH_DEBUG] === "1";
