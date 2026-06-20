@@ -1,6 +1,6 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { createExecute } from "../edit-handlers.js";
+import { createExecute } from "../execute-factory.js";
 import {
 	SliderCreateFields,
 	PanelCreateFields,
