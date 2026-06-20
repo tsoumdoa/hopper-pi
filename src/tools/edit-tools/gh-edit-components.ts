@@ -51,38 +51,68 @@ export const ghEditComponentsTool = defineTool({
 	execute: createExecute(
 		(item) => {
 			switch (item.action) {
-				case "add":
+				case "add": {
+					if (!item.componentType) {
+						throw new Error("add action requires componentType");
+					}
+					if (item.x === undefined || item.y === undefined) {
+						throw new Error("add action requires x and y");
+					}
 					return {
 						action: "addComponent" as CommandAction,
 						params: {
-							typeGuid: resolveTypeGuid(item.componentType!),
-							position: { x: item.x!, y: item.y! },
+							typeGuid: resolveTypeGuid(item.componentType),
+							position: { x: item.x, y: item.y },
 							nickName: item.nickName,
 							preview: item.preview ?? false,
 						},
 					};
-				case "delete":
-					return { action: "deleteComponent", params: { targetId: resolveInstanceGuid(item.targetId!) } };
-				case "move":
+				}
+				case "delete": {
+					if (!item.targetId) {
+						throw new Error("delete action requires targetId");
+					}
+					return { action: "deleteComponent", params: { targetId: resolveInstanceGuid(item.targetId) } };
+				}
+				case "move": {
+					if (!item.targetId) {
+						throw new Error("move action requires targetId");
+					}
+					if (item.x === undefined || item.y === undefined) {
+						throw new Error("move action requires x and y");
+					}
 					return {
 						action: "moveComponent",
-						params: { targetId: resolveInstanceGuid(item.targetId!), position: { x: item.x!, y: item.y! } },
+						params: { targetId: resolveInstanceGuid(item.targetId), position: { x: item.x, y: item.y } },
 					};
-				case "rename":
+				}
+				case "rename": {
+					if (!item.targetId) {
+						throw new Error("rename action requires targetId");
+					}
 					return {
 						action: "renameComponent",
-						params: { targetId: resolveInstanceGuid(item.targetId!), nickName: item.nickName },
+						params: { targetId: resolveInstanceGuid(item.targetId), nickName: item.nickName },
 					};
-				case "set_locked":
+				}
+				case "set_locked": {
+					if (!item.targetId) {
+						throw new Error("set_locked action requires targetId");
+					}
 					return {
 						action: "setComponentLocked",
-						params: { targetId: resolveInstanceGuid(item.targetId!), locked: item.locked },
+						params: { targetId: resolveInstanceGuid(item.targetId), locked: item.locked },
 					};
-				case "set_hidden":
+				}
+				case "set_hidden": {
+					if (!item.targetId) {
+						throw new Error("set_hidden action requires targetId");
+					}
 					return {
 						action: "setComponentHidden",
-						params: { targetId: resolveInstanceGuid(item.targetId!), hidden: item.hidden },
+						params: { targetId: resolveInstanceGuid(item.targetId), hidden: item.hidden },
 					};
+				}
 				default:
 					return null;
 			}
