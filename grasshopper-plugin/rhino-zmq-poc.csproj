@@ -29,7 +29,6 @@
   <ItemGroup>
     <PackageReference Include="Grasshopper" Version="8.0.23304.9001" ExcludeAssets="runtime" />
     <PackageReference Include="NetMQ" Version="4.0.1.9" />
-    <PackageReference Include="roslyn-language-server.linux-arm64" Version="5.8.0-1.26252.1" />
   </ItemGroup>
   
   <!-- For Windows only builds -->
