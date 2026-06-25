@@ -182,7 +182,8 @@ namespace rhino_zmq_poc
 
             TrySetMember(ctx, "OutputStream", outputStream);
             TrySetMember(ctx, "AutoApplyParams", true);
-            TrySetMember(ctx, "RecordDocumentUndo", true);
+            // Outer RhinoAgentTransaction already groups one agent turn into one undo step.
+            TrySetMember(ctx, "RecordDocumentUndo", !RhinoAgentTransaction.IsActive);
 
             PrepareRunContextForRhinoDoc(ctx, doc);
 
