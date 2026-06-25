@@ -57,11 +57,8 @@ namespace rhino_zmq_poc
             try
             {
                 if (_undoSerial != 0)
-                {
                     doc.EndUndoRecord(_undoSerial);
-                    doc.Undo();
-                }
-                return "cancelRhinoAgentTransaction: reverted";
+                return "cancelRhinoAgentTransaction: closed";
             }
             finally
             {
