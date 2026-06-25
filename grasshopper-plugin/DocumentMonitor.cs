@@ -6,7 +6,7 @@ using Rhino;
 
 namespace rhino_zmq_poc
 {
-    public class DocumentMonitor : IDisposable
+    internal class DocumentMonitor : IDisposable
     {
         private GH_Document _subscribedDoc;
         private int _disposed;

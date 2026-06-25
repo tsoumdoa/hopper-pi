@@ -6,7 +6,7 @@ namespace rhino_zmq_poc
     /// Canonical list of command actions handled by <see cref="CommandExecutor"/>.
     /// Keep in sync with TypeScript CommandAction in src/types/commands.ts.
     /// </summary>
-    public static class CommandActionRegistry
+    internal static class CommandActionRegistry
     {
         public static IReadOnlyList<string> KnownActions { get; } = new[]
         {

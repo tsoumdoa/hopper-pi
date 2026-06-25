@@ -10,7 +10,7 @@ using Rhino.Geometry;
 
 namespace rhino_zmq_poc
 {
-    public class CaptureRhinoViewParams
+    internal class CaptureRhinoViewParams
     {
         [JsonPropertyName("view")]
         public string View { get; set; }
@@ -31,7 +31,7 @@ namespace rhino_zmq_poc
         public bool? RestoreView { get; set; }
     }
 
-    public class RhinoPointInput
+    internal class RhinoPointInput
     {
         [JsonPropertyName("x")]
         public double X { get; set; }
@@ -43,7 +43,7 @@ namespace rhino_zmq_poc
         public double Z { get; set; }
     }
 
-    public class RhinoCameraControlParams
+    internal class RhinoCameraControlParams
     {
         [JsonPropertyName("location")]
         public RhinoPointInput Location { get; set; }
@@ -58,7 +58,7 @@ namespace rhino_zmq_poc
         public string Projection { get; set; }
     }
 
-    public class RhinoZoomControlParams
+    internal class RhinoZoomControlParams
     {
         [JsonPropertyName("mode")]
         public string Mode { get; set; }
@@ -70,7 +70,7 @@ namespace rhino_zmq_poc
         public RhinoPointInput Max { get; set; }
     }
 
-    public class ControlRhinoViewParams
+    internal class ControlRhinoViewParams
     {
         [JsonPropertyName("action")]
         public string Action { get; set; }
@@ -94,7 +94,7 @@ namespace rhino_zmq_poc
         public RhinoZoomControlParams Zoom { get; set; }
     }
 
-    public static class ViewportCaptureOps
+    internal static class ViewportCaptureOps
     {
         private const int DefaultWidth = 1280;
         private const int DefaultHeight = 720;

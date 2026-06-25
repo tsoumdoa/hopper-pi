@@ -189,7 +189,7 @@ namespace rhino_zmq_poc
             }
         }
 
-        public string ExecuteCommand(GhCommand command) => _cmdExecutor?.Execute(OnPingDocument(), command);
+        internal string ExecuteCommand(GhCommand command) => _cmdExecutor?.Execute(OnPingDocument(), command);
 
         protected override void SolveInstance(IGH_DataAccess DA)
         {

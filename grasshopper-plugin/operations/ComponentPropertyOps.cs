@@ -3,19 +3,12 @@ using Grasshopper.Kernel;
 
 namespace rhino_zmq_poc
 {
-    public static class ComponentPropertyOps
+    internal static class ComponentPropertyOps
     {
         public static string RenameComponent(GH_Document doc, RenameComponentParams param)
         {
-            if (doc == null)
-                return "renameComponent error: document is null";
-
-            if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                return $"renameComponent error: invalid targetId '{param.TargetId}'";
-
-            IGH_DocumentObject obj = doc.FindObject(targetGuid, false);
-            if (obj == null)
-                return $"renameComponent error: object not found '{param.TargetId}'";
+            if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"renameComponent error: {err}";
 
             obj.NickName = param.NickName;
             doc.NewSolution(true);
@@ -25,15 +18,8 @@ namespace rhino_zmq_poc
 
         public static string SetComponentLocked(GH_Document doc, SetComponentLockedParams param)
         {
-            if (doc == null)
-                return "setComponentLocked error: document is null";
-
-            if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                return $"setComponentLocked error: invalid targetId '{param.TargetId}'";
-
-            IGH_DocumentObject obj = doc.FindObject(targetGuid, false);
-            if (obj == null)
-                return $"setComponentLocked error: object not found '{param.TargetId}'";
+            if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"setComponentLocked error: {err}";
 
             if (obj is GH_ActiveObject activeObj)
                 activeObj.Locked = param.Locked;
@@ -45,15 +31,8 @@ namespace rhino_zmq_poc
 
         public static string SetComponentHidden(GH_Document doc, SetComponentHiddenParams param)
         {
-            if (doc == null)
-                return "setComponentHidden error: document is null";
-
-            if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                return $"setComponentHidden error: invalid targetId '{param.TargetId}'";
-
-            IGH_DocumentObject obj = doc.FindObject(targetGuid, false);
-            if (obj == null)
-                return $"setComponentHidden error: object not found '{param.TargetId}'";
+            if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"setComponentHidden error: {err}";
 
             var hiddenProp = obj.GetType().GetProperty("Hidden");
             if (hiddenProp != null)

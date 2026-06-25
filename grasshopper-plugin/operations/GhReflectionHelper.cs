@@ -6,7 +6,7 @@ using Grasshopper.Kernel;
 
 namespace rhino_zmq_poc
 {
-    public class GhScriptReflector
+    internal class GhScriptReflector
     {
         private static readonly Lazy<GhScriptReflector> _instance = new(() => new());
 

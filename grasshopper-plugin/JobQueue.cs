@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace rhino_zmq_poc
 {
-    public enum JobState
+    internal enum JobState
     {
         Queued,
         Running,
@@ -14,7 +14,7 @@ namespace rhino_zmq_poc
         Cancelled
     }
 
-    public class Job
+    internal class Job
     {
         public string JobId { get; set; }
         public string CommandId { get; set; }
@@ -27,7 +27,7 @@ namespace rhino_zmq_poc
         public long CompletedAt { get; set; }
     }
 
-    public class JobQueue : IDisposable
+    internal class JobQueue : IDisposable
     {
         private readonly Queue<Job> _jobs = new Queue<Job>();
         private readonly object _lock = new object();
@@ -171,17 +171,15 @@ namespace rhino_zmq_poc
             var processingTask = _processingTask;
             _processingTask = null;
 
-            _ = Task.Run(() =>
+            try
             {
-                try
-                {
-                    processingTask?.Wait(TimeSpan.FromSeconds(2));
-                }
-                catch
-                {
-                    // Best effort while shutting down.
-                }
-            });
+                processingTask?.Wait(TimeSpan.FromSeconds(2));
+            }
+            catch
+            {
+            }
+
+            _jobAvailable.Dispose();
         }
     }
 }

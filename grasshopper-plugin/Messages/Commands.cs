@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 
 namespace rhino_zmq_poc
 {
-    public class Position
+    internal class Position
     {
         [JsonPropertyName("x")]
         public double X { get; set; }
@@ -14,7 +14,7 @@ namespace rhino_zmq_poc
         public double Y { get; set; }
     }
 
-    public class AddComponentParams
+    internal class AddComponentParams
     {
         [JsonPropertyName("typeGuid")]
         public string TypeGuid { get; set; }
@@ -26,13 +26,13 @@ namespace rhino_zmq_poc
         public bool Preview { get; set; } = false;
     }
 
-    public class DeleteComponentParams
+    internal class DeleteComponentParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
     }
 
-    public class ConnectWireParams
+    internal class ConnectWireParams
     {
         [JsonPropertyName("from")]
         public PortRef From { get; set; }
@@ -41,7 +41,7 @@ namespace rhino_zmq_poc
         public PortRef To { get; set; }
     }
 
-    public class DisconnectWireParams
+    internal class DisconnectWireParams
     {
         [JsonPropertyName("from")]
         public PortRef From { get; set; }
@@ -50,7 +50,7 @@ namespace rhino_zmq_poc
         public PortRef To { get; set; }
     }
 
-    public class MoveComponentParams
+    internal class MoveComponentParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
@@ -59,7 +59,7 @@ namespace rhino_zmq_poc
         public Position Position { get; set; }
     }
 
-    public class RenameComponentParams
+    internal class RenameComponentParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
@@ -68,7 +68,7 @@ namespace rhino_zmq_poc
         public string NickName { get; set; }
     }
 
-    public class SetComponentLockedParams
+    internal class SetComponentLockedParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
@@ -77,7 +77,7 @@ namespace rhino_zmq_poc
         public bool Locked { get; set; }
     }
 
-    public class SetComponentHiddenParams
+    internal class SetComponentHiddenParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
@@ -86,7 +86,7 @@ namespace rhino_zmq_poc
         public bool Hidden { get; set; }
     }
 
-    public class AddGroupParams
+    internal class AddGroupParams
     {
         [JsonPropertyName("componentIds")]
         public string[] ComponentIds { get; set; }
@@ -101,7 +101,7 @@ namespace rhino_zmq_poc
         public string Border { get; set; }
     }
 
-    public class RemoveFromGroupParams
+    internal class RemoveFromGroupParams
     {
         [JsonPropertyName("componentIds")]
         public string[] ComponentIds { get; set; }
@@ -110,13 +110,13 @@ namespace rhino_zmq_poc
         public string GroupName { get; set; }
     }
 
-    public class DeleteGroupParams
+    internal class DeleteGroupParams
     {
         [JsonPropertyName("groupName")]
         public string GroupName { get; set; }
     }
 
-    public class ChangeGroupColorParams
+    internal class ChangeGroupColorParams
     {
         [JsonPropertyName("groupName")]
         public string GroupName { get; set; }
@@ -125,7 +125,7 @@ namespace rhino_zmq_poc
         public string Color { get; set; } = "rgba(255,255,255,150)";
     }
 
-    public class RenameGroupParams
+    internal class RenameGroupParams
     {
         [JsonPropertyName("groupName")]
         public string GroupName { get; set; }
@@ -134,7 +134,7 @@ namespace rhino_zmq_poc
         public string Name { get; set; }
     }
 
-    public class ChangeGroupStyleParams
+    internal class ChangeGroupStyleParams
     {
         [JsonPropertyName("groupName")]
         public string GroupName { get; set; }
@@ -149,7 +149,7 @@ namespace rhino_zmq_poc
         public string Border { get; set; }
     }
 
-    public class SetSliderValueParams
+    internal class SetSliderValueParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
@@ -158,7 +158,7 @@ namespace rhino_zmq_poc
         public double Value { get; set; }
     }
 
-    public class CreateSliderParams
+    internal class CreateSliderParams
     {
         [JsonPropertyName("position")]
         public Position Position { get; set; }
@@ -182,7 +182,7 @@ namespace rhino_zmq_poc
         public double Interval { get; set; }
     }
 
-    public class EditSliderRangeParams
+    internal class EditSliderRangeParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
@@ -200,7 +200,7 @@ namespace rhino_zmq_poc
         public double Interval { get; set; }
     }
 
-    public class SetPanelTextParams
+    internal class SetPanelTextParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
@@ -209,7 +209,7 @@ namespace rhino_zmq_poc
         public string Text { get; set; }
     }
 
-    public class CreatePanelParams
+    internal class CreatePanelParams
     {
         [JsonPropertyName("position")]
         public Position Position { get; set; }
@@ -233,7 +233,7 @@ namespace rhino_zmq_poc
         public string BgColor { get; set; }
     }
 
-    public class SetPanelParams
+    internal class SetPanelParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
@@ -251,7 +251,7 @@ namespace rhino_zmq_poc
         public string BgColor { get; set; }
     }
 
-    public class CreateToggleParams
+    internal class CreateToggleParams
     {
         [JsonPropertyName("position")]
         public Position Position { get; set; }
@@ -263,7 +263,7 @@ namespace rhino_zmq_poc
         public bool Value { get; set; }
     }
 
-    public class SetToggleValueParams
+    internal class SetToggleValueParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
@@ -272,7 +272,7 @@ namespace rhino_zmq_poc
         public bool Value { get; set; }
     }
 
-    public class CreateSwatchParams
+    internal class CreateSwatchParams
     {
         [JsonPropertyName("position")]
         public Position Position { get; set; }
@@ -284,7 +284,7 @@ namespace rhino_zmq_poc
         public string Color { get; set; }
     }
 
-    public class SetSwatchColorParams
+    internal class SetSwatchColorParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
@@ -293,7 +293,7 @@ namespace rhino_zmq_poc
         public string Color { get; set; }
     }
 
-    public class CreateScribbleParams
+    internal class CreateScribbleParams
     {
         [JsonPropertyName("position")]
         public Position Position { get; set; }
@@ -308,7 +308,7 @@ namespace rhino_zmq_poc
         public double? Size { get; set; }
     }
 
-    public class SetScribbleTextParams
+    internal class SetScribbleTextParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
@@ -317,7 +317,7 @@ namespace rhino_zmq_poc
         public string Text { get; set; }
     }
 
-    public class CreateValueListItem
+    internal class CreateValueListItem
     {
         [JsonPropertyName("name")]
         public string Name { get; set; }
@@ -326,7 +326,7 @@ namespace rhino_zmq_poc
         public string Value { get; set; }
     }
 
-    public class CreateValueListParams
+    internal class CreateValueListParams
     {
         [JsonPropertyName("position")]
         public Position Position { get; set; }
@@ -341,7 +341,7 @@ namespace rhino_zmq_poc
         public int? SelectedIndex { get; set; }
     }
 
-    public class SetValueListSelectedParams
+    internal class SetValueListSelectedParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
@@ -350,7 +350,7 @@ namespace rhino_zmq_poc
         public int SelectedIndex { get; set; }
     }
 
-    public class ScriptIOParam
+    internal class ScriptIOParam
     {
         [JsonPropertyName("name")]
         public string Name { get; set; }
@@ -374,7 +374,7 @@ namespace rhino_zmq_poc
         public string PreviousName { get; set; }
     }
 
-    public class CreateScriptNodeParams
+    internal class CreateScriptNodeParams
     {
         [JsonPropertyName("position")]
         public Position Position { get; set; }
@@ -395,7 +395,7 @@ namespace rhino_zmq_poc
         public List<ScriptIOParam> Outputs { get; set; }
     }
 
-    public class SetScriptCodeParams
+    internal class SetScriptCodeParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
@@ -410,7 +410,7 @@ namespace rhino_zmq_poc
         public List<ScriptIOParam> Outputs { get; set; }
     }
 
-    public class SyncScriptParamsParams
+    internal class SyncScriptParamsParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
@@ -422,82 +422,13 @@ namespace rhino_zmq_poc
         public List<ScriptIOParam> Outputs { get; set; }
     }
 
-    public class GetScriptCodeParams
+    internal class GetScriptCodeParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
     }
 
-    public class AddScriptInputParams
-    {
-        [JsonPropertyName("targetId")]
-        public string TargetId { get; set; }
-
-        [JsonPropertyName("name")]
-        public string Name { get; set; }
-
-        [JsonPropertyName("access")]
-        public string Access { get; set; }
-
-        [JsonPropertyName("dataMapping")]
-        public string DataMapping { get; set; }
-
-        [JsonPropertyName("simplify")]
-        public bool? Simplify { get; set; }
-
-        [JsonPropertyName("reverse")]
-        public bool? Reverse { get; set; }
-
-        [JsonPropertyName("typeHint")]
-        public string TypeHint { get; set; }
-    }
-
-    public class RemoveScriptInputParams
-    {
-        [JsonPropertyName("targetId")]
-        public string TargetId { get; set; }
-
-        [JsonPropertyName("name")]
-        public string Name { get; set; }
-    }
-
-    public class AddScriptOutputParams
-    {
-        [JsonPropertyName("targetId")]
-        public string TargetId { get; set; }
-
-        [JsonPropertyName("name")]
-        public string Name { get; set; }
-
-        [JsonPropertyName("dataMapping")]
-        public string DataMapping { get; set; }
-
-        [JsonPropertyName("simplify")]
-        public bool? Simplify { get; set; }
-
-        [JsonPropertyName("reverse")]
-        public bool? Reverse { get; set; }
-
-        [JsonPropertyName("typeHint")]
-        public string TypeHint { get; set; }
-    }
-
-    public class RemoveScriptOutputParams
-    {
-        [JsonPropertyName("targetId")]
-        public string TargetId { get; set; }
-
-        [JsonPropertyName("name")]
-        public string Name { get; set; }
-    }
-
-    public class ListScriptParamsParams
-    {
-        [JsonPropertyName("targetId")]
-        public string TargetId { get; set; }
-    }
-
-    public class EditParamPropsParams
+    internal class AddScriptInputParams
     {
         [JsonPropertyName("targetId")]
         public string TargetId { get; set; }
@@ -521,7 +452,76 @@ namespace rhino_zmq_poc
         public string TypeHint { get; set; }
     }
 
-    public class PortRef
+    internal class RemoveScriptInputParams
+    {
+        [JsonPropertyName("targetId")]
+        public string TargetId { get; set; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; }
+    }
+
+    internal class AddScriptOutputParams
+    {
+        [JsonPropertyName("targetId")]
+        public string TargetId { get; set; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; }
+
+        [JsonPropertyName("dataMapping")]
+        public string DataMapping { get; set; }
+
+        [JsonPropertyName("simplify")]
+        public bool? Simplify { get; set; }
+
+        [JsonPropertyName("reverse")]
+        public bool? Reverse { get; set; }
+
+        [JsonPropertyName("typeHint")]
+        public string TypeHint { get; set; }
+    }
+
+    internal class RemoveScriptOutputParams
+    {
+        [JsonPropertyName("targetId")]
+        public string TargetId { get; set; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; }
+    }
+
+    internal class ListScriptParamsParams
+    {
+        [JsonPropertyName("targetId")]
+        public string TargetId { get; set; }
+    }
+
+    internal class EditParamPropsParams
+    {
+        [JsonPropertyName("targetId")]
+        public string TargetId { get; set; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; }
+
+        [JsonPropertyName("access")]
+        public string Access { get; set; }
+
+        [JsonPropertyName("dataMapping")]
+        public string DataMapping { get; set; }
+
+        [JsonPropertyName("simplify")]
+        public bool? Simplify { get; set; }
+
+        [JsonPropertyName("reverse")]
+        public bool? Reverse { get; set; }
+
+        [JsonPropertyName("typeHint")]
+        public string TypeHint { get; set; }
+    }
+
+    internal class PortRef
     {
         [JsonPropertyName("componentId")]
         public string ComponentId { get; set; }
@@ -530,7 +530,7 @@ namespace rhino_zmq_poc
         public string Port { get; set; }
     }
 
-    public class GhCommand
+    internal class GhCommand
     {
         [JsonPropertyName("action")]
         public string Action { get; set; }
@@ -539,7 +539,7 @@ namespace rhino_zmq_poc
         public JsonElement Params { get; set; }
     }
 
-    public class SubmitJobRequest
+    internal class SubmitJobRequest
     {
         [JsonPropertyName("type")]
         public string Type { get; set; }
@@ -554,24 +554,9 @@ namespace rhino_zmq_poc
         public GhCommand Command { get; set; }
     }
 
-    public class BeginAgentTransactionParams
+    internal class BeginAgentTransactionParams
     {
         [JsonPropertyName("name")]
         public string Name { get; set; }
-    }
-
-    public class RunRhinoScriptRequest
-    {
-        [JsonPropertyName("type")]
-        public string Type { get; set; } = "runRhinoScript";
-
-        [JsonPropertyName("mode")]
-        public string Mode { get; set; }
-
-        [JsonPropertyName("source")]
-        public string Source { get; set; }
-
-        [JsonPropertyName("echo")]
-        public bool Echo { get; set; }
     }
 }

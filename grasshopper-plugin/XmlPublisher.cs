@@ -4,7 +4,7 @@ using Grasshopper.Kernel;
 
 namespace rhino_zmq_poc
 {
-    public class XmlPublisher
+    internal class XmlPublisher
     {
         private readonly Action<string, string> _publish;
 

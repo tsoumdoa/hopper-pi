@@ -5,7 +5,7 @@ using Grasshopper.Kernel.Special;
 
 namespace rhino_zmq_poc
 {
-    public static class CanvasSelection
+    internal static class CanvasSelection
     {
         public static List<string> GetSelectedInstanceGuids(GH_Document doc, bool expandGroups = true)
         {

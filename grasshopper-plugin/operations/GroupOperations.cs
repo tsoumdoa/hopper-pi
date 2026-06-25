@@ -6,7 +6,7 @@ using Grasshopper.Kernel.Special;
 
 namespace rhino_zmq_poc
 {
-    public static class GroupOperations
+    internal static class GroupOperations
     {
         public static string AddGroup(GH_Document doc, AddGroupParams param)
         {

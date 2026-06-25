@@ -14,7 +14,7 @@ using NetMQ.Sockets;
 
 namespace rhino_zmq_poc
 {
-    public class ZMqService : IDisposable
+    internal class ZMqService : IDisposable
     {
         private const string LoopbackHost = "127.0.0.1";
         private const int DefaultPubPort = 5555;
@@ -442,7 +442,7 @@ namespace rhino_zmq_poc
             _cts = null;
             Profile = null;
 
-            _ = Task.Run(() => DrainBackgroundTasks(commandTask, repTask, cts));
+            DrainBackgroundTasks(commandTask, repTask, cts);
         }
 
         private static void DrainBackgroundTasks(Task commandTask, Task repTask, CancellationTokenSource cts)

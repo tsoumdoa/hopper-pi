@@ -16,8 +16,8 @@
     <!-- Specifies information for Assembly and Yak -->
     <Version>1.0</Version>
     <Title>rhino-zmq-poc</Title>
-    <Company>rhino-zmq-poc Authors</Company>
-    <Description>Description of rhino-zmq-poc</Description>
+    <Company>hoppercode</Company>
+    <Description>Hopper Code Backend — ZMQ bridge for AI-driven Grasshopper/Rhino control</Description>
   </PropertyGroup>
   
   <ItemGroup>
@@ -29,9 +29,12 @@
   <ItemGroup>
     <PackageReference Include="Grasshopper" Version="8.0.23304.9001" ExcludeAssets="runtime" />
     <PackageReference Include="NetMQ" Version="4.0.1.9" />
-    <PackageReference Include="roslyn-language-server.linux-arm64" Version="5.8.0-1.26252.1" />
   </ItemGroup>
-  
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="rhino-zmq-poc.Tests" />
+  </ItemGroup>
+
   <!-- For Windows only builds -->
   <PropertyGroup Condition="$(TargetFramework.Contains('-windows')) or $(TargetFramework.StartsWith('net4'))">
     <UseWindowsForms>true</UseWindowsForms>

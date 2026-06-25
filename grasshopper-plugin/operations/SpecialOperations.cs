@@ -8,7 +8,7 @@ using Grasshopper.Kernel.Special;
 
 namespace rhino_zmq_poc
 {
-    public static class SpecialOperations
+    internal static class SpecialOperations
     {
         public static string CreateToggle(GH_Document doc, CreateToggleParams param)
         {
@@ -29,21 +29,14 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"createToggle CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"createToggle error: {ex.GetType().Name}: {ex.Message}";
             }
         }
 
         public static string SetToggleValue(GH_Document doc, SetToggleValueParams param)
         {
-            if (doc == null)
-                return "setToggleValue error: document is null";
-
-            if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                return $"setToggleValue error: invalid targetId '{param.TargetId}'";
-
-            IGH_DocumentObject obj = doc.FindObject(targetGuid, false);
-            if (obj == null)
-                return $"setToggleValue error: object not found '{param.TargetId}'";
+            if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"setToggleValue error: {err}";
 
             if (obj is GH_BooleanToggle toggle)
             {
@@ -76,21 +69,14 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"createSwatch CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"createSwatch error: {ex.GetType().Name}: {ex.Message}";
             }
         }
 
         public static string SetSwatchColor(GH_Document doc, SetSwatchColorParams param)
         {
-            if (doc == null)
-                return "setSwatchColor error: document is null";
-
-            if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                return $"setSwatchColor error: invalid targetId '{param.TargetId}'";
-
-            IGH_DocumentObject obj = doc.FindObject(targetGuid, false);
-            if (obj == null)
-                return $"setSwatchColor error: object not found '{param.TargetId}'";
+            if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"setSwatchColor error: {err}";
 
             if (obj is GH_ColourSwatch swatch)
             {
@@ -127,21 +113,14 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"createScribble CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"createScribble error: {ex.GetType().Name}: {ex.Message}";
             }
         }
 
         public static string SetScribbleText(GH_Document doc, SetScribbleTextParams param)
         {
-            if (doc == null)
-                return "setScribbleText error: document is null";
-
-            if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                return $"setScribbleText error: invalid targetId '{param.TargetId}'";
-
-            IGH_DocumentObject obj = doc.FindObject(targetGuid, false);
-            if (obj == null)
-                return $"setScribbleText error: object not found '{param.TargetId}'";
+            if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"setScribbleText error: {err}";
 
             if (obj is GH_Scribble scribble)
             {
@@ -184,21 +163,14 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"createValueList CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"createValueList error: {ex.GetType().Name}: {ex.Message}";
             }
         }
 
         public static string SetValueListSelected(GH_Document doc, SetValueListSelectedParams param)
         {
-            if (doc == null)
-                return "setValueListSelected error: document is null";
-
-            if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                return $"setValueListSelected error: invalid targetId '{param.TargetId}'";
-
-            IGH_DocumentObject obj = doc.FindObject(targetGuid, false);
-            if (obj == null)
-                return $"setValueListSelected error: object not found '{param.TargetId}'";
+            if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"setValueListSelected error: {err}";
 
             if (obj is GH_ValueList valueList)
             {

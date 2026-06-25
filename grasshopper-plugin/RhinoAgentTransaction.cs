@@ -2,7 +2,7 @@ using Rhino;
 
 namespace rhino_zmq_poc
 {
-    public static class RhinoAgentTransaction
+    internal static class RhinoAgentTransaction
     {
         private static RhinoDoc _doc;
         private static uint _undoSerial;

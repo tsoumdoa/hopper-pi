@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 
 namespace rhino_zmq_poc
 {
-    public class ConnectionProfile
+    internal class ConnectionProfile
     {
         [JsonPropertyName("protocolVersion")]
         public int ProtocolVersion { get; set; } = 1;
@@ -31,7 +31,7 @@ namespace rhino_zmq_poc
         public long StartedAt { get; set; }
     }
 
-    public static class ConnectionProfileStore
+    internal static class ConnectionProfileStore
     {
         private const string AppDirectoryName = "hopper-pi";
         private const string ProfileFileName = "connection.json";

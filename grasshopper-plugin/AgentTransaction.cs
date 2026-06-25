@@ -2,7 +2,7 @@ using Grasshopper.Kernel;
 
 namespace rhino_zmq_poc
 {
-    public static class AgentTransaction
+    internal static class AgentTransaction
     {
         private static GH_Document _doc;
         private static byte[] _beforeSnapshot;

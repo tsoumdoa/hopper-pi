@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace rhino_zmq_poc
 {
-    public class GhJobStatus
+    internal class GhJobStatus
     {
         [JsonPropertyName("type")]
         public string Type { get; set; } = "gh.job.status";
@@ -27,7 +27,7 @@ namespace rhino_zmq_poc
         public string Error { get; set; }
     }
 
-    public class GhEventXml
+    internal class GhEventXml
     {
         [JsonPropertyName("type")]
         public string Type { get; set; } = "gh.event.xml";

@@ -6,7 +6,7 @@ using Grasshopper.Kernel;
 
 namespace rhino_zmq_poc
 {
-    public static class ComponentLifecycleOps
+    internal static class ComponentLifecycleOps
     {
         public static string AddComponentToCanvas(GH_Document doc, AddComponentParams param)
         {
@@ -42,21 +42,14 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"addComponent CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"addComponent error: {ex.GetType().Name}: {ex.Message}";
             }
         }
 
         public static string DeleteComponent(GH_Document doc, DeleteComponentParams param)
         {
-            if (doc == null)
-                return "deleteComponent error: document is null";
-
-            if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                return $"deleteComponent error: invalid targetId '{param.TargetId}'";
-
-            IGH_DocumentObject obj = doc.FindObject(targetGuid, false);
-            if (obj == null)
-                return $"deleteComponent error: object not found '{param.TargetId}'";
+            if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"deleteComponent error: {err}";
 
             doc.RemoveObject(obj, false);
 
@@ -65,15 +58,8 @@ namespace rhino_zmq_poc
 
         public static string MoveComponent(GH_Document doc, MoveComponentParams param)
         {
-            if (doc == null)
-                return "moveComponent error: document is null";
-
-            if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                return $"moveComponent error: invalid targetId '{param.TargetId}'";
-
-            IGH_DocumentObject obj = doc.FindObject(targetGuid, false);
-            if (obj == null)
-                return $"moveComponent error: object not found '{param.TargetId}'";
+            if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"moveComponent error: {err}";
 
             obj.Attributes.Pivot = new System.Drawing.PointF(
                 (float)param.Position.X,
@@ -190,11 +176,8 @@ namespace rhino_zmq_poc
         {
             try
             {
-                if (doc == null) return "syncScriptParams error: document is null";
-                if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                    return $"syncScriptParams error: invalid targetId '{param.TargetId}'";
-                var obj = doc.FindObject(targetGuid, false);
-                if (obj == null) return $"syncScriptParams error: object not found '{param.TargetId}'";
+                if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"syncScriptParams error: {err}";
                 var comp = obj as GH_Component;
                 if (comp == null) return $"syncScriptParams error: '{param.TargetId}' is not a GH_Component";
                 if (param.Inputs == null && param.Outputs == null)
@@ -207,7 +190,7 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"syncScriptParams CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"syncScriptParams error: {ex.GetType().Name}: {ex.Message}";
             }
         }
 
@@ -396,11 +379,8 @@ namespace rhino_zmq_poc
         {
             try
             {
-                if (doc == null) return "editParamProps error: document is null";
-                if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                    return $"editParamProps error: invalid targetId '{param.TargetId}'";
-                var obj = doc.FindObject(targetGuid, false);
-                if (obj == null) return $"editParamProps error: object not found '{param.TargetId}'";
+                if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"editParamProps error: {err}";
                 var comp = obj as GH_Component;
                 if (comp == null) return $"editParamProps error: '{param.TargetId}' is not a GH_Component";
 
@@ -448,7 +428,7 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"editParamProps CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"editParamProps error: {ex.GetType().Name}: {ex.Message}";
             }
         }
 
@@ -456,11 +436,8 @@ namespace rhino_zmq_poc
         {
             try
             {
-                if (doc == null) return "listScriptParams error: document is null";
-                if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                    return $"listScriptParams error: invalid targetId '{param.TargetId}'";
-                var obj = doc.FindObject(targetGuid, false);
-                if (obj == null) return $"listScriptParams error: object not found '{param.TargetId}'";
+                if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
+                return $"listScriptParams error: {err}";
                 var comp = obj as GH_Component;
                 if (comp == null) return $"listScriptParams error: '{param.TargetId}' is not a GH_Component";
 
@@ -473,7 +450,7 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"listScriptParams CRASH: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
+                return $"listScriptParams error: {ex.GetType().Name}: {ex.Message}";
             }
         }
 

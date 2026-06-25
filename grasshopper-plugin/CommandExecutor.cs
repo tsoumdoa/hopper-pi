@@ -4,7 +4,7 @@ using Grasshopper.Kernel;
 
 namespace rhino_zmq_poc
 {
-    public partial class CommandExecutor
+    internal partial class CommandExecutor
     {
         private readonly Action<string> _log;
 
