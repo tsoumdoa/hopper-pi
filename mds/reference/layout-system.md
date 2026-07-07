@@ -13,10 +13,10 @@ All layout uses **bounds** (`x y w h` top-left + size), not pivot alone.
 
 ## Placement protocol (Tier 3)
 
-1. **Build first** — Compute gaps from size table; no `gh_get_canvas` between zones. `gh_get_canvas_errors` OK between zones for overlap checks.
-2. **State math** — Before each placement: source bounds, gap, resulting x/y.
-3. **One zone per step** — Place all components in one zone, then the next. Never span multiple horizontal zones in one step.
-4. **Read once** — After ALL zones placed: `gh_get_canvas` once for GUIDs, then wire.
+1. **Build first** — Compute gaps from the size table; avoid full `gh_get_canvas` between zones during a new build. `gh_get_canvas_errors` OK between zones for overlap checks.
+2. **Compute math internally** — Use source bounds, gap, and resulting x/y; summarize by zone only when helpful or when placement fails.
+3. **Batch zones when confident** — Place components by logical zones. Multiple zones may be placed in one tool call when coordinates are already computed.
+4. **Read once** — After all new components are placed: `gh_get_canvas` once for GUIDs, then wire.
 
 ## Horizontal zones
 
@@ -95,11 +95,11 @@ Center tall components on the feeding group's vertical midpoint — do not top-a
 
 ## Pivot vs bounds — negative space
 
-`gh_edit_components` x/y are **pivot** positions. Tall types (Rectangle, Script, Create Material, Boundary Surfaces) can extend 40–70px above/left of pivot.
+`gh_edit_components` x/y are **pivot** positions, not left/top bounds. Tall or center-pivot types (Rectangle, Script, Create Material, Boundary Surfaces, Plane Surface) can extend 30–70px above/left of pivot. When placing processing components after widgets, estimate the component's left bound as `pivot_x - left_offset` and keep that bound right of the previous component's right edge.
 
 - First row: pivot `y ≥ 45`; tall components `y ≥ 65`.
 - Horizontal: pivot `x ≥ 25`.
-- Verify with `gh_get_canvas_errors` if overflow suspected — avoid full canvas read between zones.
+- Verify with `gh_get_canvas_errors` if overflow suspected — avoid full canvas read between zones during new builds.
 
 **Worked example (Slider → Circle → Boundary → Area + lightweight preview):**
 

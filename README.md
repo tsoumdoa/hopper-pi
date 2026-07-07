@@ -10,6 +10,14 @@ AI inside their real workflow — not locked behind a black-box SaaS.
 
 ## What's new
 
+### 0.1.70 — Faster agent guidance & screenshot override
+
+- **Less overthinking in Grasshopper/Rhino skills:** tighten clarification rules so the agent proceeds with documented defaults unless ambiguity materially changes output, risks data loss, or could edit the wrong target.
+- **Faster Grasshopper build guidance:** make “read once” a new-build default rather than a hard rule, remove verbose Tier 3 placement-math narration, allow confident multi-zone batching, and scope cleanup to touched components only.
+- **Screenshot permission override:** `HOPPER_RHINO_CAPTURE_CONSENT=allow` pre-allows Rhino viewport screenshots for restricted or non-interactive UI sessions; `deny` forces capture off. Users can also explicitly ask to allow screenshots later in a session.
+- **Tool schema cleanup:** `gh_list_components.searchFrom` now matches its documented default, and `gh_edit_components` uses action-specific required fields so agents can make shorter, more reliable tool calls.
+- **Package cleanup:** remove stale Pi skill/prompt paths that pointed at missing directories.
+
 ### 0.1.6 — Undo history fix & security hardening
 
 - **Fix: Rhino undo history (#16)** — nested agent undo records broke Rhino's undo stack. Per-script `RecordDocumentUndo` is now disabled during agent turns so the single `RhinoAgentTransaction` owns the undo record, and `Cancel` no longer calls `doc.Undo()` (which could wipe unrelated user edits).
@@ -146,6 +154,7 @@ Bundled Pi **skills** and **prompts** live under `mds/` (e.g. `gh-modeling-exper
 | `GH_ZMQ_PUB` / `GH_ZMQ_PUSH` / `GH_ZMQ_REQ` | ZMQ endpoint overrides |
 | `GH_ZMQ_TOKEN` | Connection token override when manually setting endpoints |
 | `HOPPER_CONNECTION_PROFILE` | Connection profile path override |
+| `HOPPER_RHINO_CAPTURE_CONSENT=allow` | Pre-allow Rhino viewport screenshots for non-interactive/restricted UI sessions (`deny` forces off) |
 
 ## Troubleshooting
 

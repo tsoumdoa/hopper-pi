@@ -19,7 +19,7 @@ Build, modify, review, or validate Grasshopper definitions per the user's reques
 
 ## Complexity tiers
 
-Assess tier before building. When tier is ambiguous **and** the build would be Tier 2+, use `pick_option` to confirm scope before placing components.
+Assess tier before building. When tier is ambiguous **and** the choice materially changes geometry, data loss, or user-visible output, use `pick_option` to confirm scope before placing components. Otherwise proceed with the documented default and state the assumption briefly.
 
 | Tier | When | Placement | Read canvas |
 |------|------|-----------|-------------|
@@ -27,7 +27,7 @@ Assess tier before building. When tier is ambiguous **and** the build would be T
 | **2** | 10–25, branching | 2–3 stages; batch per stage | Once after **all** stages placed |
 | **3** | 25+, scripts, many paths | One zone per step; [Placement Protocol](../../reference/layout-system.md) | Once after **all** zones placed |
 
-**Workflow (all tiers):** place everything → `gh_get_canvas` once → wire everything → cleanup.
+**Default new-build workflow:** place everything → `gh_get_canvas` once → wire everything → cleanup touched components. For existing-canvas edits, targeted reads (`selectionOnly`, `subgraph`) are OK when they reduce work.
 
 ## Gaps and compact size table
 
@@ -49,9 +49,9 @@ Full table, bounds math, pivot safety, worked examples → [layout-system.md](..
 
 ## Core principles
 
-1. **Place first, read once, wire, done** — Add **all** components before `gh_get_canvas`. One read per build cycle for GUIDs, then batch all wiring. Exception: debug after wiring (`gh_get_canvas_errors` first, then read if needed). `selectionOnly` inspects user selection only — not a substitute for the post-placement read.
+1. **Place first, read once, wire, done** — For a new-build cycle, add all needed components before `gh_get_canvas`. One read gets GUIDs, then batch wiring. Exceptions: existing-canvas edits, user selection/subgraph inspection, and debugging after wiring (`gh_get_canvas_errors` first, then read if needed).
 
-2. **Batch by zone, wire after read** — Group placement logically (params, processing, output). Do **not** wire until after the single `gh_get_canvas` read.
+2. **Batch by zone, wire after read** — Group placement logically (params, processing, output). For new builds, wire after the post-placement read.
 
 3. **Tight, computed layout** — `next_x = prev_right_edge + gap`. Never guess x from round numbers. Minimize footprint; wide empty gaps mean over-spacing.
 
@@ -63,7 +63,7 @@ Full table, bounds math, pivot safety, worked examples → [layout-system.md](..
 
 - Left-to-right flow; no right-to-left wires; no recursive logic.
 - Do not touch components in negative canvas space.
-- Tier 3: state placement math; one zone per step; `gh_get_canvas_errors` OK between zones; **no** `gh_get_canvas` between zones.
+- Tier 3: compute placement math internally; summarize by zone only if useful. `gh_get_canvas_errors` OK between zones; avoid full `gh_get_canvas` between zones during new builds.
 - Stack numeric inputs top-left. Panels: default ~100×52; adjust to content.
 - `preview: false` on add; only Custom Preview in output zone uses `preview: true`.
 - Prefer C# for scripts; Python for simple list/tree utilities only.
@@ -94,12 +94,12 @@ Full table, bounds math, pivot safety, worked examples → [layout-system.md](..
 
 ## User clarification tools
 
-When the user's intent is ambiguous, ask before acting (do not guess):
+When the user's intent is ambiguous, prefer documented defaults and state assumptions. Ask only when the answer materially changes output, destructive edits, or repair strategy:
 
 | Situation | Tool |
 |-----------|------|
-| Vague scope ("fix this", "clean up", multiple interpretations) | `pick_option` |
-| 2+ plausible component types after `gh_list_components` | `pick_option` for the type to create (value = typeGuid) |
+| Vague scope with materially different outcomes ("fix this", "clean up", multiple interpretations) | `pick_option` |
+| 2+ plausible component types after `gh_list_components` and the choice changes the result | `pick_option` for the type to create (value = typeGuid) |
 | "This/that/the" refers to multiple canvas objects | `pick_option` after `gh_get_canvas` (value = targetId) |
 | Tier 2–3 build planning with unresolved scope, approach, or output choices | `pick_option` for the highest-impact choices only (max 2 calls total) |
 | Errors after wiring — repair strategy unclear | `pick_option` (surgical fix / rebuild / stop) |
@@ -111,8 +111,10 @@ Before `gh_param_rhino` **internalize** on >10 objects or a whole layer, use `pi
 
 ## Final checklist
 
-- Delete unused components; fix errors; no overlaps.
+For newly built or touched components only; do not reorganize unrelated canvas areas unless requested.
+
+- Delete unused touched components; fix errors; no overlaps.
 - Inputs (sliders, panels, toggles) on the left; logical left-to-right flow.
-- Group by function; name groups.
+- Group by function when it helps readability.
 - Hide intermediates; only final Custom Preview visible.
 - Swatch for preview color unless full material is required.

@@ -27,15 +27,15 @@ Shared reference docs live at `mds/reference/` (not under this skill).
 
 If both are needed in one request, use **both**: `rh_run_script` for the document, `gh_*` for the canvas.
 
-When the prompt is vague about Rhino vs Grasshopper scope (e.g. "fix the model", "clean this up"), use `pick_option` to ask whether to focus on the Rhino document, Grasshopper canvas, both, or current selection — **before** editing. An "Other" option is always shown for custom answers; do not add it to the options list.
+When the prompt is vague about Rhino vs Grasshopper scope (e.g. "fix the model", "clean this up"), ask only if the choice materially changes the result, risks data loss, or could edit the wrong target. Otherwise use the most relevant tool, proceed with a brief stated assumption, and avoid touching unrelated Rhino/GH content.
 
 ## Visual context and viewport control
 
-- `rh_capture_view` is optional and permission-gated per Pi session. If capture was not allowed, continue with text and geometry context.
+- `rh_capture_view` is optional and permission-gated per Pi session. If capture was not allowed, continue with text and geometry context. The user can explicitly ask to allow screenshots later, or start Pi with `HOPPER_RHINO_CAPTURE_CONSENT=allow` to override the UI gate.
 - Use visual capture for visual QA, composition, object visibility, display mode/material checks, or ambiguous viewport tasks where pixels materially help.
 - Use `rh_view_control` before capture when you need a standard view, existing named view, CPlane-aligned plan view, camera/target/lens change, or zoom.
 - Prefer non-persistent view changes. Only use `rh_view_control` `saveNamedView` when the user explicitly asked to create/update a named view.
-- Default workflow should still work without visual capture: query objects, inspect Grasshopper canvas/errors, and use `rh_run_script` to print structured RhinoDoc context.
+- Default workflow should still work without visual capture: use the minimal text/geometry tool relevant to the request. Combine Rhino object queries, GH canvas/errors, and RhinoDoc scripts only when the task crosses those boundaries.
 
 ## rh_run_script
 

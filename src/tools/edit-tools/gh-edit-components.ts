@@ -11,40 +11,41 @@ export const ghEditComponentsTool = defineTool({
 		"add, delete, move, rename, lock, or hide components.",
 	parameters: Type.Object({
 		items: Type.Array(
-			Type.Object({
-				action: Type.Union([
-					Type.Literal("add"),
-					Type.Literal("delete"),
-					Type.Literal("move"),
-					Type.Literal("rename"),
-					Type.Literal("set_locked"),
-					Type.Literal("set_hidden"),
-				]),
-				targetId: Type.Optional(
-					Type.String({ description: "Component GUID" })
-				),
-				componentType: Type.Optional(
-					Type.String({ description: "Type GUID for add action (from gh_list_components)" })
-				),
-				x: Type.Optional(
-					Type.Number({ description: "Canvas X (must be > 20)" })
-				),
-				y: Type.Optional(
-					Type.Number({ description: "Canvas Y (must be > 20)" })
-				),
-				nickName: Type.Optional(
-					Type.String({ description: "Display nickname" })
-				),
-				preview: Type.Optional(
-					Type.Boolean({ description: "Show geometry preview (default false)" })
-				),
-				locked: Type.Optional(
-					Type.Boolean({ description: "Lock state" })
-				),
-				hidden: Type.Optional(
-					Type.Boolean({ description: "Visibility state" })
-				),
-			})
+			Type.Union([
+				Type.Object({
+					action: Type.Literal("add"),
+					componentType: Type.String({ description: "Type GUID for add action (from gh_list_components)" }),
+					x: Type.Number({ description: "Canvas X (must be > 20)" }),
+					y: Type.Number({ description: "Canvas Y (must be > 20)" }),
+					nickName: Type.Optional(Type.String({ description: "Display nickname" })),
+					preview: Type.Optional(Type.Boolean({ description: "Show geometry preview (default false)" })),
+				}),
+				Type.Object({
+					action: Type.Literal("delete"),
+					targetId: Type.String({ description: "Component GUID" }),
+				}),
+				Type.Object({
+					action: Type.Literal("move"),
+					targetId: Type.String({ description: "Component GUID" }),
+					x: Type.Number({ description: "Canvas X (must be > 20)" }),
+					y: Type.Number({ description: "Canvas Y (must be > 20)" }),
+				}),
+				Type.Object({
+					action: Type.Literal("rename"),
+					targetId: Type.String({ description: "Component GUID" }),
+					nickName: Type.String({ description: "Display nickname" }),
+				}),
+				Type.Object({
+					action: Type.Literal("set_locked"),
+					targetId: Type.String({ description: "Component GUID" }),
+					locked: Type.Boolean({ description: "Lock state" }),
+				}),
+				Type.Object({
+					action: Type.Literal("set_hidden"),
+					targetId: Type.String({ description: "Component GUID" }),
+					hidden: Type.Boolean({ description: "Visibility state" }),
+				}),
+			]),
 		),
 	}),
 	execute: createExecute(

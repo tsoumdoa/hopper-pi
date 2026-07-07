@@ -12,10 +12,10 @@ Pattern library — each recipe is a self-contained build card (components, wiri
 ## How to use
 
 1. Match the user's goal to a recipe below.
-2. **Load that recipe file.**
+2. Load the recipe file when the table summary is not enough to build confidently.
 3. Layout and placement → [gh-modeling-expert](../gh-modeling-expert/SKILL.md) (tiers, gaps, read-once, preview).
 4. Place all components → `gh_get_canvas` once → wire everything.
-5. Follow the recipe's **Next Steps** to chain further recipes.
+5. Consult **Next Steps** only if the requested outcome requires recipe chaining or the user asks for it.
 
 **QA / benchmark prompts (humans):** [docs/gh-cookbook-benchmarks.md](../../../docs/gh-cookbook-benchmarks.md)
 

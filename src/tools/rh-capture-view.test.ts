@@ -5,6 +5,7 @@ import {
 	resetRhinoVisualCaptureConsent,
 	resetRhinoVisualCaptureState,
 	setRhinoVisualCaptureConsent,
+	VISUAL_CAPTURE_ENV_VAR,
 } from "../services/rhino-visual-consent.js";
 
 const mocks = vi.hoisted(() => ({
@@ -27,6 +28,7 @@ const textOnlyCtx = {
 } as any;
 
 beforeEach(() => {
+	delete process.env[VISUAL_CAPTURE_ENV_VAR];
 	resetRhinoVisualCaptureState();
 	mocks.request.mockReset();
 });
@@ -41,6 +43,15 @@ test("Rhino visual capture consent defaults to unknown and supports session rese
 	assert.equal(getRhinoVisualCaptureConsent(), "denied");
 });
 
+test("Rhino visual capture consent can be overridden by env", () => {
+	setRhinoVisualCaptureConsent(false);
+	process.env[VISUAL_CAPTURE_ENV_VAR] = "allow";
+	assert.equal(getRhinoVisualCaptureConsent(), "allowed");
+
+	process.env[VISUAL_CAPTURE_ENV_VAR] = "deny";
+	assert.equal(getRhinoVisualCaptureConsent(), "denied");
+});
+
 test("rh_capture_view refuses capture when consent is not allowed", async () => {
 	setRhinoVisualCaptureConsent(false);
 	const result = await rhCaptureViewTool.execute(
@@ -52,8 +63,35 @@ test("rh_capture_view refuses capture when consent is not allowed", async () => 
 	);
 
 	assert.equal(mocks.request.mock.calls.length, 0);
-	assert.match(result.content[0]?.type === "text" ? result.content[0].text : "", /not allowed/);
+	const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+	assert.match(text, /not allowed/);
+	assert.match(text, /HOPPER_RHINO_CAPTURE_CONSENT=allow/);
 	assert.deepEqual(result.details, { allowed: false });
+});
+
+test("rh_capture_view allows capture when env override is allowed", async () => {
+	setRhinoVisualCaptureConsent(false);
+	process.env[VISUAL_CAPTURE_ENV_VAR] = "allow";
+	mocks.request.mockResolvedValue({
+		type: "captureRhinoView.response",
+		timestamp: 1,
+		ok: true,
+		imageBase64: "iVBORw0KGgo=",
+		mediaType: "image/png",
+		error: "",
+		metadata: null,
+	});
+
+	const result = await rhCaptureViewTool.execute(
+		"tool-call",
+		{ view: "active" },
+		undefined,
+		undefined,
+		multimodalCtx,
+	);
+
+	assert.equal(mocks.request.mock.calls.length, 1);
+	assert.equal(result.content[1]?.type, "image");
 });
 
 test("rh_capture_view refuses capture when model does not support images", async () => {

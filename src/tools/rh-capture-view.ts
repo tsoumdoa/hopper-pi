@@ -2,7 +2,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { withRequester } from "../infra/request-helpers.js";
 import { describeModel, modelSupportsImages } from "../services/model-capabilities.js";
-import { isRhinoVisualCaptureAllowed } from "../services/rhino-visual-consent.js";
+import { isRhinoVisualCaptureAllowed, VISUAL_CAPTURE_ENV_VAR } from "../services/rhino-visual-consent.js";
 import type { CaptureRhinoViewResponse, RhinoViewMetadata } from "../types/messages.js";
 
 const DEFAULT_WIDTH = 1280;
@@ -33,12 +33,12 @@ export const rhCaptureViewTool = defineTool({
 	label: "Capture Rhino View",
 	description:
 		"Capture a Rhino viewport screenshot as PNG visual context. " +
-		"Permission-gated: this tool only works after the user allows Rhino viewport screenshots for the current Pi session and the selected model supports image input. " +
+		"Permission-gated: this tool works after the user allows Rhino viewport screenshots for the current Pi session, or when HOPPER_RHINO_CAPTURE_CONSENT=allow is set, and the selected model supports image input. " +
 		"Use sparingly for visual QA, composition, visibility, material/display checks, or ambiguous viewport tasks. " +
 		"Use rh_view_control first when a different viewpoint is needed.",
 	promptSnippet: "Capture a permission-gated Rhino viewport screenshot as visual context",
 	promptGuidelines: [
-		"Use rh_capture_view only after visual capture has been allowed for the current Pi session.",
+		"Use rh_capture_view only after visual capture has been allowed for the current Pi session, or an explicit environment override is configured.",
 		"Do not rely on rh_capture_view when the user chose to work without visual capture; use text and geometry tools instead.",
 		"Use rh_view_control before rh_capture_view when the screenshot needs a standard, named, CPlane-aligned, or camera-specific view.",
 	],
@@ -99,7 +99,9 @@ export const rhCaptureViewTool = defineTool({
 						type: "text" as const,
 						text:
 							"Rhino viewport screenshot capture was not allowed for this Pi session. " +
-							"Work without visual capture; use rh_query_objects, gh_get_canvas, gh_get_canvas_errors, or rh_run_script for text/geometry context.",
+							"The user can explicitly ask to allow Rhino screenshots for this session, or set " +
+							`${VISUAL_CAPTURE_ENV_VAR}=allow before starting Pi to override the UI gate. ` +
+							"Work without visual capture until then; use rh_query_objects, gh_get_canvas, gh_get_canvas_errors, or rh_run_script for text/geometry context.",
 					},
 				],
 				details: { allowed: false },

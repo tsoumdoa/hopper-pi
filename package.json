@@ -1,7 +1,7 @@
 {
 	"name": "hopper-pi",
 	"license": "MIT",
-	"version": "0.1.6",
+	"version": "0.1.70",
 	"keywords": [
 		"pi-package"
 	],
@@ -44,11 +44,7 @@
 		],
 		"skills": [
 			"./mds/skills",
-			"./mds/reference",
-			"./mds/agents"
-		],
-		"prompts": [
-			"./mds/prompts"
+			"./mds/reference"
 		]
 	}
 }

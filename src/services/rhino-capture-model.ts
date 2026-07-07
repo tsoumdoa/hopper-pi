@@ -14,6 +14,11 @@ export function promptWantsVisualCapture(prompt: string): boolean {
 	return /(?:^|[^\w])(screenshots?|captures?|visual\s+context|image|see\s+the\s+(?:model|view)|look\s+at\s+the\s+(?:model|view)|rh_capture_view)(?=[^\w]|$)/i.test(prompt);
 }
 
+export function promptOverridesVisualCaptureRestriction(prompt: string): boolean {
+	return /(?:^|[^\w])(?:allow|enable|override|turn\s+on|use)\b.{0,80}\b(?:screenshots?|captures?|visual\s+context|rh_capture_view)(?=[^\w]|$)/i.test(prompt) ||
+		/(?:^|[^\w])(?:screenshots?|captures?|visual\s+context|rh_capture_view)\b.{0,80}\b(?:allowed|enabled|ok|okay|yes|override)(?=[^\w]|$)/i.test(prompt);
+}
+
 export function rhinoCaptureUnavailableGuidance(model: ModelLike | null | undefined): string {
 	return `${describeModel(model)} does not support image input, so Rhino viewport screenshots are unavailable. ` +
 		"If visual context is needed, tell the user to choose a multimodal model in Pi. " +
@@ -24,8 +29,17 @@ export function shouldAskVisualCapturePermission(options: {
 	captureToolActive: boolean;
 	hasDecision: boolean;
 	hasUI: boolean;
+	requestingCapture?: boolean;
+	allowReconsider?: boolean;
+	overrideConfigured?: boolean;
 }): boolean {
-	return options.captureToolActive && !options.hasDecision && options.hasUI;
+	const requestingCapture = options.requestingCapture ?? true;
+	const allowReconsider = options.allowReconsider ?? false;
+	return options.captureToolActive &&
+		options.hasUI &&
+		requestingCapture &&
+		!options.overrideConfigured &&
+		(!options.hasDecision || allowReconsider);
 }
 
 export function createRhinoCaptureModelController(

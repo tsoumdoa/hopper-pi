@@ -28,6 +28,8 @@ import { ALL_TOOLS } from "./tools/index.js";
 import { withBackendGuard } from "./tools/with-backend-guard.js";
 import {
 	hasRhinoVisualCaptureDecision,
+	isRhinoVisualCaptureAllowed,
+	isRhinoVisualCaptureOverrideConfigured,
 	resetRhinoVisualCaptureState,
 	rhinoVisualCaptureGuidance,
 	setRhinoVisualCaptureConsent,
@@ -36,6 +38,7 @@ import {
 } from "./services/rhino-visual-consent.js";
 import {
 	createRhinoCaptureModelController,
+	promptOverridesVisualCaptureRestriction,
 	promptWantsVisualCapture,
 	rhinoCaptureUnavailableGuidance,
 	shouldAskVisualCapturePermission,
@@ -73,15 +76,21 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 		const prompt = event.prompt ?? "";
 		if (!RHINO_DOC_RE.test(prompt)) return;
 
-		if (promptWantsVisualCapture(prompt)) {
+		const wantsVisualCapture = promptWantsVisualCapture(prompt);
+		if (wantsVisualCapture) {
 			await captureModel.maybeSwitchToMultimodalFallback(ctx);
 		}
 
 		const captureToolActive = captureModel.isCaptureToolActive();
+		const shouldReconsiderDeniedCapture =
+			!isRhinoVisualCaptureAllowed() && promptOverridesVisualCaptureRestriction(prompt);
 		if (shouldAskVisualCapturePermission({
 			captureToolActive,
 			hasDecision: hasRhinoVisualCaptureDecision(),
 			hasUI: ctx.hasUI,
+			requestingCapture: wantsVisualCapture,
+			allowReconsider: shouldReconsiderDeniedCapture,
+			overrideConfigured: isRhinoVisualCaptureOverrideConfigured(),
 		})) {
 			const choice = await ctx.ui.select(
 				"Allow Hopper to capture Rhino viewport screenshots?",
@@ -89,13 +98,13 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 				{ signal: ctx.signal },
 			);
 			setRhinoVisualCaptureConsent(choice === VISUAL_CAPTURE_ALLOW_SESSION_LABEL);
-		} else if (captureToolActive && !hasRhinoVisualCaptureDecision()) {
-			setRhinoVisualCaptureConsent(false);
 		}
 
-		const visualCaptureGuidance = captureToolActive
-			? rhinoVisualCaptureGuidance()
-			: rhinoCaptureUnavailableGuidance(ctx.model);
+		const visualCaptureGuidance = wantsVisualCapture
+			? (captureToolActive
+				? rhinoVisualCaptureGuidance()
+				: rhinoCaptureUnavailableGuidance(ctx.model))
+			: "";
 		const both = GH_CANVAS_RE.test(prompt);
 		const content = both
 			? "This prompt may need both Rhino document and Grasshopper canvas changes. " +

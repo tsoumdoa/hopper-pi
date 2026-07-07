@@ -69,7 +69,7 @@ export const ghListComponentsTool = defineTool({
 					"Search terms for names, categories, or descriptions. Batch likely names and synonyms together.",
 			}),
 		),
-		searchFrom:
+		searchFrom: Type.Optional(
 			Type.Union(
 				[
 					Type.Literal("vanilla"),
@@ -78,9 +78,10 @@ export const ghListComponentsTool = defineTool({
 				],
 				{
 					description:
-						"Source: 'vanilla' only, 'plugin' only, or 'params' only.",
+						"Source: 'vanilla' only, 'plugin' only, or 'params' only. Defaults to 'vanilla'.",
 				},
 			),
+		),
 		limit: Type.Optional(
 			Type.Number({
 				description: "Max results per query. Default 10, max 100.",
