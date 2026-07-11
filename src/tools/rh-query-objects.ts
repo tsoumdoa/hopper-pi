@@ -7,6 +7,7 @@ import {
 	toShortRhinoGuid,
 } from "../services/guid-shortener.js";
 import type { QueryRhinoObjectsResponse } from "../types/messages.js";
+import { ResultLimitSchema, ResultOffsetSchema, RhinoObjectTypeSchema } from "./schemas.js";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -15,15 +16,17 @@ function paginate<T>(items: T[], limit?: number, offset?: number): {
 	slice: T[];
 	hasMore: boolean;
 	total: number;
+	offset: number;
 } {
 	const total = items.length;
-	const effectiveLimit = Math.min(limit ?? DEFAULT_LIMIT, MAX_LIMIT);
-	const effectiveOffset = Math.max(offset ?? 0, 0);
+	const effectiveLimit = Math.min(Math.max(Math.trunc(limit ?? DEFAULT_LIMIT), 1), MAX_LIMIT);
+	const effectiveOffset = Math.max(Math.trunc(offset ?? 0), 0);
 	const slice = items.slice(effectiveOffset, effectiveOffset + effectiveLimit);
 	return {
 		slice,
 		hasMore: effectiveOffset + slice.length < total,
 		total,
+		offset: effectiveOffset,
 	};
 }
 
@@ -32,9 +35,9 @@ export const rhQueryObjectsTool = defineTool({
 	label: "Query Rhino Objects",
 	description:
 		"List Rhino document objects with short objectId aliases for gh_param_rhino. " +
-		"Use selectionOnly, layer, objectType (curve|point|brep|surface|mesh), and/or objectIds filters. " +
-		"For bulk reference/internalize on a whole layer, use gh_param_rhino rhinoQuery instead of listing every ID. " +
-		"Use countOnly to get a match count without listing IDs; paginate large sets with limit/offset.",
+		"Filter by selection, exact layer, geometry kind, and/or IDs. Use countOnly before large operations. " +
+		"For a whole layer or large set, pass the same filters directly to gh_param_rhino.rhinoQuery instead of listing IDs.",
+	promptSnippet: "List or count filtered Rhino document objects and return short IDs",
 	parameters: Type.Object({
 		selectionOnly: Type.Optional(
 			Type.Boolean({ description: "Only objects currently selected in Rhino" }),
@@ -42,23 +45,18 @@ export const rhQueryObjectsTool = defineTool({
 		layer: Type.Optional(
 			Type.String({ description: "Filter by layer name (exact match)" }),
 		),
-		objectType: Type.Optional(
-			Type.String({
-				description: "Filter by geometry kind: curve, point, brep, surface, mesh",
-			}),
-		),
+		objectType: Type.Optional(RhinoObjectTypeSchema),
 		objectIds: Type.Optional(
-			Type.Array(Type.String({ description: "Return only these Rhino object IDs (short or full)" })),
+			Type.Array(
+				Type.String({ description: "Rhino object ID (short or full)" }),
+				{ minItems: 1, description: "Return only these Rhino object IDs" },
+			),
 		),
 		countOnly: Type.Optional(
 			Type.Boolean({ description: "Return match count only, no object list" }),
 		),
-		limit: Type.Optional(
-			Type.Number({ description: `Max objects to list (default ${DEFAULT_LIMIT}, max ${MAX_LIMIT})` }),
-		),
-		offset: Type.Optional(
-			Type.Number({ description: "Skip this many objects when listing (for pagination)" }),
-		),
+		limit: Type.Optional(ResultLimitSchema),
+		offset: Type.Optional(ResultOffsetSchema),
 	}),
 
 	async execute(_toolCallId, params) {
@@ -110,8 +108,7 @@ export const rhQueryObjectsTool = defineTool({
 			};
 		}
 
-		const { slice, hasMore, total } = paginate(objects, params.limit, params.offset);
-		const offset = params.offset ?? 0;
+		const { slice, hasMore, total, offset } = paginate(objects, params.limit, params.offset);
 
 		const lines = slice.map((o) => {
 			const shortId = toShortRhinoGuid(o.objectId);

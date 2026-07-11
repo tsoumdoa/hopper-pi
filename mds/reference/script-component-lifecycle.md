@@ -4,7 +4,7 @@ Shared steps for Grasshopper **Python** and **C#** script components. Language t
 
 ## Create
 
-1. `gh_edit_script` action `"create"`: `language` (`"python"` | `"csharp"`), `source`, `inputs`, `outputs`.
+1. `gh_edit_script` action `"create"`: set `language`, then pass Python `code` or C# `scriptParts`, plus desired `inputs` and `outputs`.
 2. Each input: `name`, optional `typeHint` (`object` default, `double`, `string`, …).
 
 ## Update code
@@ -15,15 +15,12 @@ Shared steps for Grasshopper **Python** and **C#** script components. Language t
 
 ## Ports only
 
-6. `gh_edit_param` `"syncParams"` — port changes without code changes.
-7. Add/remove/edit params via `gh_edit_param` after creation.
+6. Use `gh_edit_param` for add/remove, access, type hint, mapping, simplify, or reverse changes that do not rename variables used by code.
+7. Use `syncParams` when the full desired port list is clearer than several one-off edits.
 
-## Rename ports (keep wires)
+## Rename ports atomically
 
-8. Same-order renames in a full `inputs`/`outputs` list apply in place.
-9. Order change or name swap: `{ "name": "radius", "previousName": "r", "typeHint": "double" }`.
-10. Omit `previousName` when only changing `typeHint` or access on an existing name.
-
-## Critical
-
-11. **Renaming a port requires updating the script in the same `setCode` call** — match `RunScript`/body variable names to new port names. Canvas-only renames break the solution.
+8. Rename with `gh_edit_script` `setCode`, updating both code and the complete `inputs`/`outputs` list in the same call. A canvas-only rename can break the solution.
+9. Same-order renames update ports in place and preserve wires.
+10. For an order change or name swap, map identity explicitly: `{ "name": "radius", "previousName": "r", "typeHint": "double" }`.
+11. Omit `previousName` when only changing properties on an existing name.

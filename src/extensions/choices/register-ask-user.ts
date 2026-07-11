@@ -10,8 +10,8 @@ export function registerAskUserTool(pi: ExtensionAPI): void {
 		description: "Ask the user a free-text question and wait for their answer.",
 		promptSnippet: "Ask the user a clarifying question and wait for their answer",
 		promptGuidelines: [
-			"Use ask_user when requirements are ambiguous and you need clarification before proceeding.",
-			"Prefer pick_option over ask_user when you can list 2–6 informed options after reading the canvas.",
+			"Use ask_user only when missing information materially affects the result and cannot be expressed as informed options.",
+			"Prefer pick_option over ask_user when you can list 2–6 informed choices.",
 		],
 		parameters: Type.Object({
 			question: Type.String({ description: "The question to ask, with brief context" }),

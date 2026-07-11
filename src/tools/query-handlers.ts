@@ -88,11 +88,12 @@ export function formatComponentsMultiQuery(
 			return VANILLA_CATEGORIES.has(c.category) && c.category !== "Params";
 		});
 	const sorted = sortedComponents(all);
+	const normalizedOffset = Math.max(Math.trunc(offset ?? 0), 0);
 
 	if (!queries || queries.length === 0) {
-		const { slice, hasMore, totalMatched } = paginate(sorted, limit, offset);
+		const { slice, hasMore, totalMatched } = paginate(sorted, limit, normalizedOffset);
 		const body = formatComponentLines(slice);
-		const footer = hasMore ? `\n  ... ${totalMatched - (offset ?? 0) - slice.length} more (call with offset=${(offset ?? 0) + slice.length})` : "";
+		const footer = hasMore ? `\n  ... ${totalMatched - normalizedOffset - slice.length} more (call with offset=${normalizedOffset + slice.length})` : "";
 		return {
 			content: [{ type: "text" as const, text: `All components (${totalMatched}, showing ${slice.length}):${footer}\n${body}` }],
 			details: { results: [], totalAvailable: all.length, hasMore },
@@ -104,14 +105,14 @@ export function formatComponentsMultiQuery(
 
 	for (const q of queries) {
 		const matched = searchMatchedComponents(all, q);
-		const { slice, hasMore, totalMatched } = paginate(matched, limit, offset);
+		const { slice, hasMore, totalMatched } = paginate(matched, limit, normalizedOffset);
 		results.push({ queryKeyword: q, result: slice.map(pickComponentSummary), hasMore, totalMatched });
 
 		if (matched.length === 0) {
 			sections.push(`"${q}" — no matches`);
 		} else {
-			const showRange = `showing ${(offset ?? 0) + 1}-${(offset ?? 0) + slice.length}`;
-			const footer = hasMore ? `\n  ... ${totalMatched - (offset ?? 0) - slice.length} more (call with offset=${(offset ?? 0) + slice.length})` : "";
+			const showRange = `showing ${normalizedOffset + 1}-${normalizedOffset + slice.length}`;
+			const footer = hasMore ? `\n  ... ${totalMatched - normalizedOffset - slice.length} more (call with offset=${normalizedOffset + slice.length})` : "";
 			const body = formatComponentLines(slice);
 			sections.push(`"${q}" (${totalMatched} matches, ${showRange}):${footer}\n${body}`);
 		}

@@ -21,8 +21,8 @@ const OptionSchema = Type.Object({
 
 const PROMPT_GUIDELINES = [
 	"Use pick_option when multiple valid approaches exist and the user's prompt does not specify which.",
-	"Use pick_option after gh_list_components when 2+ component matches are plausible — pass typeGuid as each option's value.",
-	"Prefer pick_option over ask_user when you can list 2–6 informed options after reading the canvas.",
+	"Use pick_option after gh_list_components only when 2+ matches remain genuinely plausible — pass typeGuid as each option's value.",
+	"Prefer pick_option over ask_user when you can list 2–6 informed options.",
 	"Do not include an Other option in pick_option — it is added automatically.",
 ];
 
@@ -45,16 +45,16 @@ export function registerPickOptionTool(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "pick_option",
 		label: "Pick Option",
-		description: "Present options to the user and return their selection.",
+		description: "Ask the user to choose among 2–6 informed options; an Other choice is appended automatically.",
 		promptSnippet: "Present options to the user and wait for their selection",
 		promptGuidelines: PROMPT_GUIDELINES,
 		parameters: Type.Object({
 			question: Type.String({ description: "The question to ask, with brief context" }),
 			options: Type.Array(OptionSchema, {
 				minItems: 2,
-				maxItems: 7,
+				maxItems: 6,
 				description:
-					"Options to present (2–7; Other is appended automatically). value is returned to the agent.",
+					"Options to present (2–6; Other is appended automatically). value is returned to the agent.",
 			}),
 		}),
 

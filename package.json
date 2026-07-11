@@ -9,7 +9,6 @@
 	"files": [
 		"src",
 		"mds",
-		"guids.json",
 		"grasshopper-plugin",
 		"scripts"
 	],

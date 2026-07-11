@@ -5,9 +5,8 @@ import { formatToolFailed } from "./result-formatters.js";
 import { runRhinoScript } from "./rhino-script-handlers.js";
 
 const ROUTING_PREFIX =
-	"USE rh_run_script for Rhino document / viewport work (geometry, layers, selection, blocks, bake, materials). " +
-	"USE rh_query_objects to list Rhino object GUIDs for gh_param_rhino. " +
-	"USE gh_* tools for Grasshopper canvas (components, wires, sliders, GH script nodes). ";
+	"Use rh_run_script for Rhino document work (geometry, layers, selection, blocks, direct bake, materials). " +
+	"Use rh_view_control for normal viewport/camera changes, rh_query_objects for object IDs, and gh_* tools for the Grasshopper canvas. ";
 
 export const rhRunScriptTool = defineTool({
 	name: "rh_run_script",
@@ -15,9 +14,9 @@ export const rhRunScriptTool = defineTool({
 	description:
 		ROUTING_PREFIX +
 		"Runs Rhino command macros or Python/C# scripts on the active RhinoDoc (Rhino 8 RhinoCode). " +
-		"Prefer mode=python for multi-step geometry; mode=command for one-liners (_Circle, _SelLayer). " +
-		"For script modes, use print() in Python and Console.WriteLine() in C# so stdout is returned to the agent. " +
-		"Changes group into one Rhino Undo step per agent turn when the extension lifecycle hooks run.",
+		"Prefer Python for multi-step work and command mode for one-liners. Use print() / Console.WriteLine() for returned output. " +
+		"Items run sequentially; a failure does not roll back earlier items. Changes share one Rhino Undo record per agent turn.",
+	promptSnippet: "Run command, Python, or C# against the active Rhino document",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Object({
@@ -36,6 +35,7 @@ export const rhRunScriptTool = defineTool({
 					}),
 				),
 			}),
+			{ minItems: 1 },
 		),
 	}),
 

@@ -43,6 +43,11 @@ import {
 	rhinoCaptureUnavailableGuidance,
 	shouldAskVisualCapturePermission,
 } from "./services/rhino-capture-model.js";
+import {
+	promptTargetsGrasshopper,
+	promptTargetsRhino,
+	rhinoRoutingGuidance,
+} from "./services/prompt-routing.js";
 
 export default function hopperPiExtension(pi: ExtensionAPI) {
 	// ── Register all Grasshopper canvas tools ───────────────────────
@@ -67,14 +72,9 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 		);
 	});
 
-	const RHINO_DOC_RE =
-		/(?:^|[^\w])(rhino\s+doc(?:ument)?s?|viewports?|views?|cameras?|screenshots?|captures?|visual\s+context|bakes?|layers?|selections?|select\s+|named\s*views?|cplanes?|construction\s+planes?|blocks?|materials?|rhinoscript|scriptcontext|rh_run_script|rh_capture_view|rh_view_control|_circle|_line|_extrude)(?=[^\w]|$)/i;
-	const GH_CANVAS_RE =
-		/(?:^|[^\w])(grasshopper|gh\s|canvases?|canvas|components?|wires?|sliders?|gh_edit|gh_get_canvas)(?=[^\w]|$)/i;
-
 	pi.on("before_agent_start", async (event, ctx) => {
 		const prompt = event.prompt ?? "";
-		if (!RHINO_DOC_RE.test(prompt)) return;
+		if (!promptTargetsRhino(prompt)) return;
 
 		const wantsVisualCapture = promptWantsVisualCapture(prompt);
 		if (wantsVisualCapture) {
@@ -100,28 +100,19 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 			setRhinoVisualCaptureConsent(choice === VISUAL_CAPTURE_ALLOW_SESSION_LABEL);
 		}
 
-		const visualCaptureGuidance = wantsVisualCapture
+		const captureGuidance = wantsVisualCapture
 			? (captureToolActive
 				? rhinoVisualCaptureGuidance()
 				: rhinoCaptureUnavailableGuidance(ctx.model))
 			: "";
-		const both = GH_CANVAS_RE.test(prompt);
-		const content = both
-			? "This prompt may need both Rhino document and Grasshopper canvas changes. " +
-				"Use rh_run_script or rh_view_control for RhinoDoc/viewport; use gh_* for canvas wiring and components. " +
-				visualCaptureGuidance
-			: "This prompt targets the Rhino document. Use rh_run_script (command/python/csharp). " +
-				"Prefer rh_view_control for viewport/camera manipulation. " +
-				"Do not use gh_edit_* unless you also need Grasshopper canvas changes. " +
-				visualCaptureGuidance;
+		const guidance = [
+			rhinoRoutingGuidance(promptTargetsGrasshopper(prompt)),
+			captureGuidance,
+		].filter(Boolean).join(" ");
 
-		return {
-			message: {
-				customType: "hopper-rhino-routing",
-				display: false,
-				content,
-			},
-		};
+		// Keep per-request routing out of conversation history; otherwise every Rhino
+		// turn adds another hidden message that persists for the rest of the session.
+		return { systemPrompt: `${event.systemPrompt}\n\n${guidance}` };
 	});
 
 	pi.on("model_select", async (event) => {

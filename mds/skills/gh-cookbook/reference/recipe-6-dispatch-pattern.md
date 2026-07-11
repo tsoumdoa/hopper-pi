@@ -11,8 +11,9 @@
 ## Pipeline
 
 ```
-[Input List]        [Pattern: "true;false" panel]
-(e.g. SubSrf.S)        (alternating toggle)
+[Input List]        [Pattern panel: oneItemPerLine]
+(e.g. SubSrf.S)          true
+                         false
        │                     │
        └─────────────────────┤
                              ▼
@@ -27,7 +28,7 @@
           (A)                              (B)
 ```
 
-**Common patterns:** `true;false` = ABAB · `true;true;false;false` = AABB pairs · `true;false;false;false` = every 4th
+Set the Panel's `textOutput` to `oneItemPerLine`; put one Boolean on each line. Common repeating lists: `true`/`false` = ABAB · `true`/`true`/`false`/`false` = AABB · `true`/`false`/`false`/`false` = every fourth item in A.
 
 ## Output
 Two lists partitioned by the pattern.

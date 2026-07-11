@@ -93,7 +93,6 @@ export type CreateSliderParams = {
 	max: number;
 	value: number;
 	digits: number;
-	interval: number;
 };
 
 export type EditSliderRangeParams = {
@@ -101,7 +100,6 @@ export type EditSliderRangeParams = {
 	min: number;
 	max: number;
 	digits: number;
-	interval: number;
 };
 
 export type SetPanelTextParams = {

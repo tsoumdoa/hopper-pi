@@ -60,7 +60,10 @@ export const ghEditScriptTool = defineTool({
 	name: "gh_edit_script",
 	label: "Edit Script",
 	description:
-		"C#/Python script nodes. C#: prefer scriptParts (references + RunScript — wrapper assembled server-side). Python: use full code (no wrapper); tree ports require ghpythonlib.treehelpers — see mds/reference/python-boilerplate.md. Both: patchCode for line edits (C# default scope runScriptBody, Python full). getCodeParts is C#-only; use getCode for Python.",
+		"Create, inspect, or edit Grasshopper C# and Python script components. For C#, prefer scriptParts (references + RunScript; wrapper assembled server-side). " +
+		"For Python, pass full code without a wrapper. Use patchCode for small edits; getCodeParts is C#-only and getCode works for both. " +
+		"Include full inputs/outputs when code and port signatures must change atomically.",
+	promptSnippet: "Create, inspect, patch, or replace Grasshopper C#/Python script nodes",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([
@@ -109,7 +112,7 @@ export const ghEditScriptTool = defineTool({
 				Type.Object({
 					action: Type.Literal("patchCode"),
 					targetId: Type.String({ description: "Script component GUID" }),
-					patches: Type.Array(LinePatchType),
+					patches: Type.Array(LinePatchType, { minItems: 1 }),
 					scope: Type.Optional(PatchScopeType),
 					inputs: Type.Optional(Type.Array(ScriptIOFields)),
 					outputs: Type.Optional(Type.Array(ScriptIOFields)),
@@ -123,6 +126,7 @@ export const ghEditScriptTool = defineTool({
 					targetId: Type.String({ description: "Script component GUID" }),
 				}),
 			]),
+			{ minItems: 1 },
 		),
 	}),
 	execute: async (_toolCallId, params, _signal, onUpdate) => {

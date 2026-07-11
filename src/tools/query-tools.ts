@@ -17,14 +17,16 @@ import {
 	formatCanvasErrorsResponse,
 } from "./query-handlers.js";
 import { checkCanvasOverlaps } from "./canvas-checks.js";
+import { MAX_LIMIT as COMPONENT_MAX_LIMIT } from "../services/component-search.js";
+import { ResultOffsetSchema } from "./schemas.js";
 
 export const ghGetCanvasTool = defineTool({
 	name: "gh_get_canvas",
 	label: "Get Canvas",
 	description:
-		"Fetches the live Grasshopper canvas. With no params, returns a sub-graph index summary. " +
-		"Use 'subgraph' to inspect a specific sub-graph. " +
-		"Use selectionOnly when the user has selected objects on the canvas and you need GUIDs or structure for only that subset (does not replace the single full read after placing all components in a new build).",
+		"Fetch the live Grasshopper canvas. With no filters, returns a subgraph index summary; pass subgraph for one cluster or selectionOnly for the user's current selection. " +
+		"After placing a new build, make one unfiltered call to obtain all component and port GUIDs before wiring.",
+	promptSnippet: "Inspect Grasshopper canvas structure, selection, IDs, ports, and wires",
 	parameters: Type.Object({
 		subgraph: Type.Optional(
 			Type.String({
@@ -58,16 +60,16 @@ export const ghListComponentsTool = defineTool({
 	name: "gh_list_components",
 	label: "List Components",
 	description:
-		"Search Grasshopper components by keyword. Returns ranked matches grouped by category/subcategory with typeGuids for gh_edit_components. " +
-		"Prefer one component per query string (e.g. queries: ['Divide Surface', 'Isotrim']). Multi-word within one query disambiguates (e.g. 'trim brep'). " +
-		"Defaults to vanilla components excluding Params. Use searchFrom: 'plugin' or 'params' for other sources. " +
-		"Batch separate component names in one call. Paginate with limit/offset if the target is not in the first page.",
+		"Search the Grasshopper component registry and return ranked typeGuids for gh_edit_components. Put each desired component in its own query string; use multi-word queries to disambiguate. " +
+		"Defaults to vanilla components excluding Params; choose plugin or params explicitly when needed. Widgets are created with gh_create_widget, not a searched typeGuid.",
+	promptSnippet: "Search Grasshopper component types and return typeGuids for creation",
 	parameters: Type.Object({
 		queries: Type.Array(
 			Type.String({
 				description:
-					"Search terms for names, categories, or descriptions. Batch likely names and synonyms together.",
+					"One desired component per query string; use multiple words as disambiguating terms.",
 			}),
+			{ minItems: 1 },
 		),
 		searchFrom: Type.Optional(
 			Type.Union(
@@ -83,15 +85,13 @@ export const ghListComponentsTool = defineTool({
 			),
 		),
 		limit: Type.Optional(
-			Type.Number({
-				description: "Max results per query. Default 10, max 100.",
+			Type.Integer({
+				minimum: 1,
+				maximum: COMPONENT_MAX_LIMIT,
+				description: `Results per query (default 10, max ${COMPONENT_MAX_LIMIT})`,
 			}),
 		),
-		offset: Type.Optional(
-			Type.Number({
-				description: "Pagination start index. Default 0.",
-			}),
-		),
+		offset: Type.Optional(ResultOffsetSchema),
 	}),
 
 	async execute(_toolCallId, params, _signal, onUpdate, _ctx) {
@@ -114,7 +114,8 @@ export const ghGetCanvasErrorsTool = defineTool({
 	name: "gh_get_canvas_errors",
 	label: "Get Canvas Errors",
 	description:
-		"Retrieve all runtime errors, warnings, and messages from the Grasshopper canvas. Surfaces Python tree/list hints when Goo conversion errors appear (e.g. missing list_to_tree).",
+		"Retrieve Grasshopper runtime errors, warnings, messages, and component-overlap checks. Call after wiring or layout changes; Goo conversion errors include Python tree/list repair hints.",
+	promptSnippet: "Validate Grasshopper runtime messages and detect component overlaps",
 	parameters: Type.Object({}),
 
 	async execute(_toolCallId, _params, _signal, onUpdate) {

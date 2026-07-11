@@ -113,8 +113,8 @@ export function paginate<T>(
 	limit?: number,
 	offset?: number,
 ): { slice: T[]; hasMore: boolean; totalMatched: number } {
-	const effectiveLimit = Math.min(limit ?? DEFAULT_LIMIT, MAX_LIMIT);
-	const effectiveOffset = Math.max(offset ?? 0, 0);
+	const effectiveLimit = Math.min(Math.max(Math.trunc(limit ?? DEFAULT_LIMIT), 1), MAX_LIMIT);
+	const effectiveOffset = Math.max(Math.trunc(offset ?? 0), 0);
 	const slice = items.slice(effectiveOffset, effectiveOffset + effectiveLimit);
 	return { slice, hasMore: effectiveOffset + slice.length < items.length, totalMatched: items.length };
 }

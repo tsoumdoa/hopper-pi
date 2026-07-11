@@ -20,13 +20,14 @@
 
 **Tips:** Curves must be in order (**Shift List** to fix). All should point same direction — **Flip Curve** if twisted. Closed profiles → solid-like brep.
 
-### ⚠️ Data Matching Heuristic — Flatten when sources differ
+### Data matching
 
-When profile curves come from **different components** (e.g. original curve + offset curve, or edge extraction + drawn curve), each source produces its own data-tree branch. Loft receives **N separate lists** instead of **one list of N curves** → loft fails or produces garbage.
+Choose tree handling from the intended loft sets, not from the number of upstream components:
 
-**Fix:** Set `Loft.C` to **Flatten** — merges branches into one list of profiles in sequence.
+- **One loft through all profiles:** flatten `Loft.C` only when the incoming tree separates curves that should form one ordered list.
+- **One loft per profile set:** preserve or graft branches so each branch contains one complete ordered set.
 
-**Rule:** Profiles from **≥2 different components** → flatten `C`. Single source (e.g. one Isotrim output) → default Item/List.
+Inspect the incoming structure when unsure; unconditional flattening can merge independent lofts.
 
 ## Output
 A lofted surface through all profiles.

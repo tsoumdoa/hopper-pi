@@ -1,21 +1,21 @@
 ---
 name: gh-cookbook
-description: Repeatable recipe cards for Grasshopper patterns — rectangle surface, UV subdivision, edges, loft, extrude, pipe/sweep, dispatch, populate points, projection, bake. Use when the user asks to build these workflows.
+description: Supplemental pattern cards for gh-modeling-expert — rectangle surfaces, subdivision, edges, loft, extrude, pipe/sweep, dispatch, points, projection, and parametric bake pipelines. Load only the one recipe matching a Grasshopper build task.
 ---
 
 # Grasshopper Cookbook
 
 ## Role
 
-Pattern library — each recipe is a self-contained build card (components, wiring, zone map, next steps). Load one recipe file per task.
+Supplement to `gh-modeling-expert`. Each recipe gives a compact component pattern, wiring sketch, output shape, and next steps. Load at most the recipe(s) directly needed for the requested result.
 
 ## How to use
 
 1. Match the user's goal to a recipe below.
 2. Load the recipe file when the table summary is not enough to build confidently.
 3. Layout and placement → [gh-modeling-expert](../gh-modeling-expert/SKILL.md) (tiers, gaps, read-once, preview).
-4. Place all components → `gh_get_canvas` once → wire everything.
-5. Consult **Next Steps** only if the requested outcome requires recipe chaining or the user asks for it.
+4. Follow the primary skill's new-build workflow: place all components → `gh_get_canvas` once → wire.
+5. Load a second recipe only when the requested output explicitly requires chaining.
 
 **QA / benchmark prompts (humans):** [docs/gh-cookbook-benchmarks.md](../../../docs/gh-cookbook-benchmarks.md)
 

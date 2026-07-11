@@ -11,9 +11,12 @@ import type { CommandAction } from "../../types/commands.js";
 
 export const ghEditParamTool = defineTool({
 	name: "gh_edit_param",
-	label: "Edit Params",
+	label: "Edit Script Ports",
 	description:
-		"manage script I/O: syncParams reconciles full input/output lists (same-order renames keep wires; use previousName when reordering/swapping names). add/remove/editAccessType for one-off changes; listParams to inspect.",
+		"Manage input/output ports on Grasshopper C# or Python script components only. syncParams reconciles complete port lists; listParams inspects them. " +
+		"Use add/remove/editAccessType for one-off property changes (access, type hint, mapping, simplify, reverse). " +
+		"For a rename, update code and ports atomically with gh_edit_script setCode; use previousName when reordering or swapping names.",
+	promptSnippet: "Inspect or edit Grasshopper script-component input/output ports",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([
@@ -88,7 +91,8 @@ export const ghEditParamTool = defineTool({
 						Type.Boolean({ description: "Reverse item order" })
 					),
 				}),
-			])
+			]),
+			{ minItems: 1 },
 		),
 	}),
 	execute: createHybridExecute(

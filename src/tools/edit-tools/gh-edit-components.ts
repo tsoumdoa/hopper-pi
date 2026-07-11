@@ -8,7 +8,9 @@ export const ghEditComponentsTool = defineTool({
 	name: "gh_edit_components",
 	label: "Edit Components",
 	description:
-		"add, delete, move, rename, lock, or hide components.",
+		"Add standard Grasshopper components by typeGuid, or delete, move, rename, lock, and hide any canvas object (including widgets). " +
+		"Create widgets with gh_create_widget and change widget-specific properties with gh_mutate_widget.",
+	promptSnippet: "Add or manage Grasshopper canvas components and shared object properties",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([
@@ -46,6 +48,7 @@ export const ghEditComponentsTool = defineTool({
 					hidden: Type.Boolean({ description: "Visibility state" }),
 				}),
 			]),
+			{ minItems: 1 },
 		),
 	}),
 	execute: createExecute(

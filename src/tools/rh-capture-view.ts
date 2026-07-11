@@ -32,15 +32,12 @@ export const rhCaptureViewTool = defineTool({
 	name: "rh_capture_view",
 	label: "Capture Rhino View",
 	description:
-		"Capture a Rhino viewport screenshot as PNG visual context. " +
-		"Permission-gated: this tool works after the user allows Rhino viewport screenshots for the current Pi session, or when HOPPER_RHINO_CAPTURE_CONSENT=allow is set, and the selected model supports image input. " +
-		"Use sparingly for visual QA, composition, visibility, material/display checks, or ambiguous viewport tasks. " +
-		"Use rh_view_control first when a different viewpoint is needed.",
-	promptSnippet: "Capture a permission-gated Rhino viewport screenshot as visual context",
+		"Capture a Rhino viewport screenshot as PNG visual context when the selected model supports images and session consent (or HOPPER_RHINO_CAPTURE_CONSENT=allow) permits it. " +
+		"Use view for a one-off active, standard, or named-view capture; restoreView defaults to true. Use rh_view_control first only for a custom camera/CPlane setup or an intentionally persistent view change.",
+	promptSnippet: "Capture a consent-gated Rhino viewport screenshot for visual QA",
 	promptGuidelines: [
-		"Use rh_capture_view only after visual capture has been allowed for the current Pi session, or an explicit environment override is configured.",
-		"Do not rely on rh_capture_view when the user chose to work without visual capture; use text and geometry tools instead.",
-		"Use rh_view_control before rh_capture_view when the screenshot needs a standard, named, CPlane-aligned, or camera-specific view.",
+		"Use rh_capture_view only when pixels materially help visual QA and Rhino screenshot consent is allowed.",
+		"If rh_capture_view is unavailable or denied, continue with text and geometry tools instead of blocking the task.",
 	],
 	parameters: Type.Object({
 		view: Type.Optional(
@@ -85,7 +82,7 @@ export const rhCaptureViewTool = defineTool({
 						text:
 							`${describeModel(_ctx.model)} does not support image input, so Rhino viewport screenshots are unavailable. ` +
 							"Tell the user they need to choose a multimodal model in Pi before viewport screenshots can be used. " +
-							"Until then, work without visual capture using rh_query_objects, gh_get_canvas, gh_get_canvas_errors, or rh_run_script.",
+							"Until then, continue with rh_view_control, rh_query_objects, gh_get_canvas, gh_get_canvas_errors, or rh_run_script.",
 					},
 				],
 				details: { allowed: false, reason: "model_not_multimodal" },
@@ -101,7 +98,7 @@ export const rhCaptureViewTool = defineTool({
 							"Rhino viewport screenshot capture was not allowed for this Pi session. " +
 							"The user can explicitly ask to allow Rhino screenshots for this session, or set " +
 							`${VISUAL_CAPTURE_ENV_VAR}=allow before starting Pi to override the UI gate. ` +
-							"Work without visual capture until then; use rh_query_objects, gh_get_canvas, gh_get_canvas_errors, or rh_run_script for text/geometry context.",
+							"Continue without visual capture using rh_view_control, rh_query_objects, gh_get_canvas, gh_get_canvas_errors, or rh_run_script.",
 					},
 				],
 				details: { allowed: false },

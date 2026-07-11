@@ -1,6 +1,6 @@
 # Recipe 9 — Bake Geometry
 
-**What:** Bakes Grasshopper geometry into the Rhino document on a named, colored layer using Model Object + Model Layer (Rhino 8+).
+**What:** Builds a reusable Grasshopper-to-Rhino bake pipeline on a named, coloured layer using Model Object + Model Layer (Rhino 8+). For a one-off direct bake of current geometry, use `rh_run_script` instead.
 
 **Zone Map:** `[Layer_Panel][Color_Swatch] → [Model Layer] → [Model Object] ← [Geometry] → [Cache]`
 

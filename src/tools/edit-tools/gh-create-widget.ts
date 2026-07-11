@@ -21,7 +21,9 @@ export const ghCreateWidgetTool = defineTool({
 	name: "gh_create_widget",
 	label: "Create Widget",
 	description:
-		"create UI widgets (number slider, panel, toggle, swatch, scribble, valueList) at a canvas position.",
+		"Create Grasshopper UI widgets: number sliders, panels, toggles, colour swatches, scribbles, or value lists. " +
+		"Use gh_edit_components for standard components and for shared object operations such as moving or deleting a widget.",
+	promptSnippet: "Create Grasshopper sliders, panels, toggles, swatches, scribbles, or value lists",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([
@@ -55,7 +57,8 @@ export const ghCreateWidgetTool = defineTool({
 					CreateBase,
 					ValueListCreateFields,
 				]),
-			])
+			]),
+			{ minItems: 1 },
 		),
 	}),
 	execute: createExecute(

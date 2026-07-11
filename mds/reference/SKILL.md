@@ -18,5 +18,3 @@ Load only what the task needs. Workflow rules → [gh-modeling-expert](../skills
 | [rhino-script-boilerplate.md](./rhino-script-boilerplate.md) | `mds/reference/rhino-script-boilerplate.md` | `rh_run_script` (Rhino document, not GH canvas) |
 
 Recipes → [gh-cookbook](../skills/gh-cookbook/SKILL.md). Benchmarks → [docs/gh-cookbook-benchmarks.md](../../docs/gh-cookbook-benchmarks.md).
-
-Also reachable via skill symlinks: `mds/skills/gh-modeling-expert/reference/` and `mds/skills/rhino-document/reference/`.

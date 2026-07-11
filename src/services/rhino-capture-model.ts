@@ -22,7 +22,7 @@ export function promptOverridesVisualCaptureRestriction(prompt: string): boolean
 export function rhinoCaptureUnavailableGuidance(model: ModelLike | null | undefined): string {
 	return `${describeModel(model)} does not support image input, so Rhino viewport screenshots are unavailable. ` +
 		"If visual context is needed, tell the user to choose a multimodal model in Pi. " +
-		"Otherwise work without visual capture using rh_query_objects, gh_get_canvas, gh_get_canvas_errors, and rh_run_script.";
+		"Otherwise continue with rh_view_control, rh_query_objects, gh_get_canvas, gh_get_canvas_errors, or rh_run_script.";
 }
 
 export function shouldAskVisualCapturePermission(options: {

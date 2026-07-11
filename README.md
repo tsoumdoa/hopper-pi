@@ -110,14 +110,16 @@ The token is generated once and reused across backend/frontend restarts, so norm
 | Tool | Role |
 | ---- | ---- |
 | `rh_run_script` | Rhino commands, Python, or C# on the active document |
-| `rh_query_objects` | List objects (short IDs for GH params) |
+| `rh_query_objects` | List/count objects (short IDs for GH params) |
+| `rh_view_control` | Viewport, projection, camera, CPlane view, and zoom |
+| `rh_capture_view` | Optional consent-gated viewport screenshot for multimodal models |
 
 **Grasshopper canvas — edit**
 
 | Tool | Role |
 | ---- | ---- |
 | `gh_edit_components` | Add, move, delete components |
-| `gh_edit_param` | Parameter values and expressions |
+| `gh_edit_param` | Inspect and edit GH script-component input/output ports |
 | `gh_edit_wire` | Connect / disconnect wires |
 | `gh_edit_group` | Groups |
 | `gh_edit_script` | Script component source |
@@ -130,9 +132,16 @@ The token is generated once and reused across backend/frontend restarts, so norm
 | ---- | ---- |
 | `gh_get_canvas` | Canvas layout and component snapshot |
 | `gh_list_components` | Search component library by keyword |
-| `gh_get_canvas_errors` | Runtime errors on the canvas |
+| `gh_get_canvas_errors` | Runtime messages plus component-overlap checks |
 
-Bundled Pi **skills** and **prompts** live under `mds/` (e.g. `gh-modeling-expert`, `rhino-document`, `gh-cookbook`).
+**User clarification**
+
+| Tool | Role |
+| ---- | ---- |
+| `pick_option` | Ask the user to choose among informed options |
+| `ask_user` | Ask a free-text question when options are not practical |
+
+Bundled Pi skills and progressive reference docs live under `mds/` (`gh-modeling-expert`, `rhino-document`, `gh-cookbook`, and `gh-reference`).
 
 ## Repo layout
 
@@ -141,7 +150,7 @@ Bundled Pi **skills** and **prompts** live under `mds/` (e.g. `gh-modeling-exper
 | `src/` | Pi extension: ZMQ client, tools, XML parsing |
 | `grasshopper-plugin/` | C# Grasshopper plugin (`rhino-zmq-poc.gha`) |
 | `scripts/install-grasshopper-plugin.mjs` | Build + install plugin to Libraries |
-| `mds/` | Skills, prompts, and reference docs for the agent |
+| `mds/` | Skills and progressive reference docs for the agent |
 
 ## Environment variables
 

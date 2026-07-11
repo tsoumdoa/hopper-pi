@@ -108,14 +108,11 @@ export const rhViewControlTool = defineTool({
 	name: "rh_view_control",
 	label: "Control Rhino View",
 	description:
-		"Change the active Rhino viewport/camera in constrained ways before visual inspection or viewport work. " +
-		"Supports active viewport selection, standard views, existing named views, CPlane-aligned plan views, camera/target/lens/projection updates, zoom, and explicit named-view saves. " +
-		"This can change the user's viewport state; use rh_capture_view separately if a screenshot is needed and allowed.",
-	promptSnippet: "Set Rhino viewport/camera using constrained view operations",
+		"Change the active Rhino viewport or camera using constrained operations: activate a viewport, restore a standard/named/CPlane view, set camera properties, zoom, or explicitly save a named view. " +
+		"Prefer this over rh_run_script for normal view changes. For a one-off screenshot from a standard or named view, rh_capture_view.view can switch temporarily and restore automatically.",
+	promptSnippet: "Change Rhino viewport, projection, camera, zoom, or named view",
 	promptGuidelines: [
-		"Use rh_view_control instead of rh_run_script for normal Rhino viewport and camera changes.",
 		"Use rh_view_control saveNamedView only when the user explicitly asked to create or update a named view.",
-		"Use rh_capture_view after rh_view_control only when visual capture is allowed and useful.",
 	],
 	parameters: Type.Object({
 		action: Type.Union([

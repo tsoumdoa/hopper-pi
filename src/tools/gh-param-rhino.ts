@@ -12,21 +12,28 @@ import type { CommandAction, RhinoObjectQueryParams, SetParamRhinoGeometryParams
 import type { GetParamRhinoGeometryResponse } from "../types/messages.js";
 
 import { MAX_RHINO_OBJECT_IDS } from "../config.js";
+import { RhinoObjectTypeSchema } from "./schemas.js";
 
 export { MAX_RHINO_OBJECT_IDS };
 
-const rhinoQuerySchema = Type.Object({
-	selectionOnly: Type.Optional(
-		Type.Boolean({ description: "Only objects currently selected in Rhino" }),
-	),
-	layer: Type.Optional(
-		Type.String({ description: "Filter by layer name (exact match)" }),
-	),
-	objectType: Type.Optional(
-		Type.String({
-			description: "Filter by geometry kind: curve, point, brep, surface, mesh",
-		}),
-	),
+const rhinoQuerySchema = Type.Union([
+	Type.Object({
+		selectionOnly: Type.Literal(true, { description: "Only objects currently selected in Rhino" }),
+		layer: Type.Optional(Type.String({ minLength: 1, description: "Exact layer name" })),
+		objectType: Type.Optional(RhinoObjectTypeSchema),
+	}, { additionalProperties: false }),
+	Type.Object({
+		layer: Type.String({ minLength: 1, description: "Exact layer name" }),
+		selectionOnly: Type.Optional(Type.Boolean()),
+		objectType: Type.Optional(RhinoObjectTypeSchema),
+	}, { additionalProperties: false }),
+	Type.Object({
+		objectType: RhinoObjectTypeSchema,
+		selectionOnly: Type.Optional(Type.Boolean()),
+		layer: Type.Optional(Type.String({ minLength: 1, description: "Exact layer name" })),
+	}, { additionalProperties: false }),
+], {
+	description: "Filtered Rhino query; requires layer, objectType, or selectionOnly: true.",
 });
 
 function formatGetResponse(res: GetParamRhinoGeometryResponse): string {
@@ -126,43 +133,47 @@ export const ghParamRhinoTool = defineTool({
 	name: "gh_param_rhino",
 	label: "Param Rhino Geometry",
 	description:
-		"Get, reference, or internalize Rhino geometry on Grasshopper params (Curve, Point, Brep, etc.). " +
-		"reference keeps a live Rhino link; internalize copies geometry into the param. " +
-		"targetId from gh_get_canvas (short instance ID). " +
-		`rhinoObjectIds: at most ${MAX_RHINO_OBJECT_IDS} short IDs from rh_query_objects (small sets). ` +
-		"rhinoQuery: bulk by layer/selection/type without listing IDs (required for more than 30 objects).",
+		"Get, reference, or internalize Rhino geometry on a Grasshopper geometry param. " +
+		"reference keeps live Rhino links; internalize stores copies. Use a targetId from gh_get_canvas and exactly one source: " +
+		`rhinoObjectIds for up to ${MAX_RHINO_OBJECT_IDS} objects, or a filtered rhinoQuery for bulk sets.`,
+	promptSnippet: "Get, reference, or internalize Rhino geometry on a Grasshopper param",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([
 				Type.Object({
 					action: Type.Literal("get"),
 					targetId: Type.String({ description: "Geometry param instance GUID (short or full)" }),
-				}),
+				}, { additionalProperties: false }),
 				Type.Object({
 					action: Type.Literal("reference"),
 					targetId: Type.String({ description: "Geometry param instance GUID (short or full)" }),
-					rhinoObjectIds: Type.Optional(
-						Type.Array(Type.String(), {
-							minItems: 1,
-							maxItems: MAX_RHINO_OBJECT_IDS,
-							description: `Rhino object IDs (short or full), max ${MAX_RHINO_OBJECT_IDS}`,
-						}),
-					),
-					rhinoQuery: Type.Optional(rhinoQuerySchema),
-				}),
+					rhinoObjectIds: Type.Array(Type.String(), {
+						minItems: 1,
+						maxItems: MAX_RHINO_OBJECT_IDS,
+						description: `Rhino object IDs (short or full), max ${MAX_RHINO_OBJECT_IDS}`,
+					}),
+				}, { additionalProperties: false }),
+				Type.Object({
+					action: Type.Literal("reference"),
+					targetId: Type.String({ description: "Geometry param instance GUID (short or full)" }),
+					rhinoQuery: rhinoQuerySchema,
+				}, { additionalProperties: false }),
 				Type.Object({
 					action: Type.Literal("internalize"),
 					targetId: Type.String({ description: "Geometry param instance GUID (short or full)" }),
-					rhinoObjectIds: Type.Optional(
-						Type.Array(Type.String(), {
-							minItems: 1,
-							maxItems: MAX_RHINO_OBJECT_IDS,
-							description: `Rhino object IDs (short or full), max ${MAX_RHINO_OBJECT_IDS}`,
-						}),
-					),
-					rhinoQuery: Type.Optional(rhinoQuerySchema),
-				}),
+					rhinoObjectIds: Type.Array(Type.String(), {
+						minItems: 1,
+						maxItems: MAX_RHINO_OBJECT_IDS,
+						description: `Rhino object IDs (short or full), max ${MAX_RHINO_OBJECT_IDS}`,
+					}),
+				}, { additionalProperties: false }),
+				Type.Object({
+					action: Type.Literal("internalize"),
+					targetId: Type.String({ description: "Geometry param instance GUID (short or full)" }),
+					rhinoQuery: rhinoQuerySchema,
+				}, { additionalProperties: false }),
 			]),
+			{ minItems: 1 },
 		),
 	}),
 	execute: createHybridExecute(

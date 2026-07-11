@@ -42,8 +42,7 @@ export const SliderCreateFields = Type.Object({
 	min: Type.Number(),
 	max: Type.Number(),
 	value: Type.Number(),
-	digits: Type.Number(),
-	interval: Type.Optional(Type.Number({ description: "Not yet processed by backend" })),
+	digits: Type.Integer({ minimum: 0, maximum: 12, description: "Decimal places" }),
 });
 
 export const SliderSetFields = Type.Object({
@@ -53,8 +52,7 @@ export const SliderSetFields = Type.Object({
 export const SliderRangeFields = Type.Object({
 	min: Type.Number(),
 	max: Type.Number(),
-	digits: Type.Number(),
-	interval: Type.Optional(Type.Number({ description: "Not yet processed by backend" })),
+	digits: Type.Integer({ minimum: 0, maximum: 12, description: "Decimal places" }),
 });
 
 export const PanelTextOutputType = Type.Union([
@@ -107,10 +105,10 @@ export const ValueListItemFields = Type.Object({
 });
 
 export const ValueListCreateFields = Type.Object({
-	items: Type.Array(ValueListItemFields),
+	items: Type.Array(ValueListItemFields, { minItems: 1 }),
 	selectedIndex: Type.Optional(Type.Number()),
 });
 
 export const ValueListSelectFields = Type.Object({
-	selectedIndex: Type.Number(),
+	selectedIndex: Type.Integer({ minimum: 0 }),
 });

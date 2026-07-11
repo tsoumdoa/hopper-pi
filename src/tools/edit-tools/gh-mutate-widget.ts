@@ -22,7 +22,9 @@ export const ghMutateWidgetTool = defineTool({
 	name: "gh_mutate_widget",
 	label: "Mutate Widget",
 	description:
-		"modify widgets: set slider value/range, panel text/props, toggle, swatch color, scribble text, or value-list selection.",
+		"Change widget-specific values and properties: slider value/range, panel text/display, toggle, swatch colour, scribble text, or value-list selection. " +
+		"Use gh_edit_components to move, rename, hide, lock, or delete widgets.",
+	promptSnippet: "Change Grasshopper widget values and widget-specific properties",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([
@@ -66,7 +68,8 @@ export const ghMutateWidgetTool = defineTool({
 					MutateBase,
 					ValueListSelectFields,
 				]),
-			])
+			]),
+			{ minItems: 1 },
 		),
 	}),
 	execute: createExecute(

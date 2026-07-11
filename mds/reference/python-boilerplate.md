@@ -11,7 +11,7 @@ Grasshopper Python component — not a standalone script. No `main()`, CLI, or p
 - Use component I/O variables (`x`, `a`, …) directly; assign outputs to output vars.
 - Minimal code; suitable for repeated recomputation.
 - `ghpythonlib.treehelpers` for tree ↔ list conversion; prefer plain Python lists only for **list-access** outputs (not tree-access).
-- Port changes: `gh_edit_param`.
+- Port properties/add/remove: `gh_edit_param`. Port renames: update code and full port lists together with `gh_edit_script setCode`.
 
 ## Agent workflow (preferred)
 

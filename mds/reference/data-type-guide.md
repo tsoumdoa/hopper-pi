@@ -20,28 +20,12 @@ Remember: a line is two points; a plane needs origin + orientation (not three ar
 
 | `textOutput` | Downstream data | Use when |
 |--------------|-----------------|----------|
-| `singleString` | One string; line breaks stay inside it | Domains (`0 to 1`), paths, labels, any single text value |
-| `oneItemPerLine` | One list item **per line** | Several numbers, points, or pattern tokens — one value per row |
+| `singleString` | One string; line breaks stay inside it (e.g. `"1\n2\n3"`) | Domains (`0 to 1`), paths, labels, any single text value |
+| `oneItemPerLine` | One list item **per line** (e.g. `{1, 2, 3}`) | Several numbers, points, or pattern tokens — one value per row |
 
-Examples (same panel text, different mode):
+## Python tree/list ports
 
-```
-1
-2
-3
-```
-
-- `oneItemPerLine` → list `{1, 2, 3}`
-- `singleString` → one string `"1\n2\n3"`
-
-## Python script tree/list ports
-
-When a Python script port uses **tree** access, convert at the boundary with `ghpythonlib.treehelpers`:
-
-- **Tree input** → `th.tree_to_list(x)` before list-style Python work
-- **Tree output** → `a = th.list_to_tree(result)` before assigning to the output
-
-List-access ports use plain Python lists; item-access ports use single values. Full recipes and anti-patterns → [python-boilerplate.md](./python-boilerplate.md#list-vs-tree-access-types). If you see `Data conversion failed from Goo to …` on the canvas, run `gh_get_canvas_errors` for an inline treehelpers hint.
+For tree-access inputs/outputs, conversion recipes, and anti-patterns, use [python-boilerplate.md](./python-boilerplate.md#list-vs-tree-access-types). On `Data conversion failed from Goo to …`, run `gh_get_canvas_errors` first for the targeted hint.
 
 ## Input construction tips
 
