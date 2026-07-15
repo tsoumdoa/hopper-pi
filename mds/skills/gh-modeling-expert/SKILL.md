@@ -41,17 +41,6 @@ Assess tier before building. When tier is ambiguous **and** the choice materiall
 
 Full table, bounds math, pivot safety, worked examples → [layout-system.md](../../reference/layout-system.md) (load for Tier 3 or layout bugs).
 
-## Core principles
-
-1. **Place first, read once, wire, done** — For a new-build cycle, add all needed components before `gh_get_canvas`. One read gets GUIDs, then batch wiring. Exceptions: existing-canvas edits, user selection/subgraph inspection, and debugging after wiring (`gh_get_canvas_errors` first, then read if needed).
-
-2. **Batch by zone, wire after read** — Group placement logically (params, processing, output). For new builds, wire after the post-placement read.
-
-3. **Tight, computed layout** — `next_x = prev_right_edge + gap`. Never guess x from round numbers. Minimize footprint; wide empty gaps mean over-spacing.
-
-4. **Preview default (lightweight)** — Output zone, right of last processing component: geometry → Custom Preview `G`; Colour Swatch → `M` with `H_GAP_TIGHT` between swatch and preview. Skip Create Material unless material properties beyond diffuse color are required. Spatial details → [layout-system.md](../../reference/layout-system.md).
-
-5. **Data discipline** — Item access by default; list/tree when needed. Graft/simplify/flatten intentionally. Use `gh_edit_param` `editAccessType` for access and mapping. Casts and panel tricks → [data-type-guide.md](../../reference/data-type-guide.md).
 
 ## Conventions (checklist)
 
