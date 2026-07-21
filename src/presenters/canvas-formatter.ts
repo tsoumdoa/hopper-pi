@@ -10,6 +10,7 @@ import type { Component, SubGraph, Wire } from "../types/gh.js";
 import {
 	applyCanvasExclusions,
 	applySelectionFilter,
+	filterCanvasByComponentIds,
 	type CanvasFilters,
 } from "../services/canvas-filter.js";
 
@@ -212,6 +213,7 @@ function formatCanvasDetail(
 	const filterDesc: string[] = [];
 	if (filters.selectionOnly) filterDesc.push("selectionOnly=true");
 	if (filters.subgraph) filterDesc.push(`subgraph=${filters.subgraph}`);
+	if (filters.componentIds?.length) filterDesc.push(`componentIds=${filters.componentIds.length}`);
 	if (filterDesc.length > 0) {
 		lines.push(`Filter: ${filterDesc.join(", ")}`);
 		lines.push("");
@@ -275,10 +277,38 @@ function formatCanvasDetail(
 	};
 }
 
+function formatDocHeader(response: GetCurrentCanvasResponse): string {
+	const extras: string[] = [];
+	if (response.units) extras.push(`units=${response.units}`);
+	if (response.absoluteTolerance != null) extras.push(`tol=${response.absoluteTolerance}`);
+	return extras.length > 0 ? `${response.docName} · ${extras.join(", ")}` : response.docName;
+}
+
 export function formatCanvasResponse(response: GetCurrentCanvasResponse, filters?: CanvasFilters) {
 	const parsed = buildGhJson(response.xml);
 
 	let { components: filteredComponents, wires: filteredWires } = applyCanvasExclusions(parsed);
+
+	if (filters?.componentIds?.length) {
+		const filtered = filterCanvasByComponentIds(
+			{ components: filteredComponents, wires: filteredWires },
+			filters.componentIds,
+		);
+		filteredComponents = filtered.components;
+		filteredWires = filtered.wires;
+
+		if (Object.keys(filteredComponents).length === 0) {
+			return {
+				content: [
+					{
+						type: "text" as const,
+						text: "No components matched the given componentIds. Check the IDs or call gh_get_canvas without filters.",
+					},
+				],
+				details: { docName: response.docName, componentCount: 0, wireCount: 0, subGraphCount: 0, components: {}, wires: [], subGraphs: [] },
+			};
+		}
+	}
 
 	if (filters?.selectionOnly) {
 		const selected = applySelectionFilter(filteredComponents, filteredWires, response);
@@ -302,10 +332,12 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse, filters
 	const wireCount = filteredWires.length;
 	const subGraphCount = filteredSubGraphs.length;
 
+	const docLabel = formatDocHeader(response);
+
 	if (!filters) {
 		if (subGraphCount === 0) {
 			return formatCanvasDetail(
-				response.docName,
+				docLabel,
 				compCount,
 				wireCount,
 				subGraphCount,
@@ -316,7 +348,7 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse, filters
 			);
 		}
 		return formatCanvasIndex(
-			response.docName,
+			docLabel,
 			compCount,
 			wireCount,
 			subGraphCount,
@@ -326,7 +358,7 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse, filters
 	}
 
 	return formatCanvasDetail(
-		response.docName,
+		docLabel,
 		compCount,
 		wireCount,
 		subGraphCount,

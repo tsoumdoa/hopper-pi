@@ -13,8 +13,9 @@ export const ghEditParamTool = defineTool({
 	name: "gh_edit_param",
 	label: "Edit Script Ports",
 	description:
-		"Manage input/output ports on Grasshopper C# or Python script components only. syncParams reconciles complete port lists; listParams inspects them. " +
-		"Use add/remove/editAccessType for one-off property changes (access, type hint, mapping, simplify, reverse). " +
+		"Manage Grasshopper component ports. syncParams/addInput/addOutput/removeInput/removeOutput reconcile ports on C#/Python script components; listParams inspects any component. " +
+		"editAccessType sets dataMapping (graft/flatten), simplify, and reverse on ANY component's input — use it for tree matching instead of inserting Graft/Flatten components. " +
+		"access and typeHint remain script-component-only. " +
 		"For a rename, update code and ports atomically with gh_edit_script setCode; use previousName when reordering or swapping names.",
 	promptSnippet: "Inspect or edit Grasshopper script-component input/output ports",
 	parameters: Type.Object({
@@ -79,8 +80,8 @@ export const ghEditParamTool = defineTool({
 				}),
 				Type.Object({
 					action: Type.Literal("editAccessType"),
-					targetId: Type.String({ description: "Component GUID" }),
-					name: Type.String({ description: "Parameter name" }),
+					targetId: Type.String({ description: "Component GUID (script or standard component)" }),
+					name: Type.String({ description: "Parameter name or nickname" }),
 					typeHint: Type.Optional(TypeHintType),
 					access: Type.Optional(AccessType),
 					dataMapping: Type.Optional(DataMappingType),

@@ -24,4 +24,12 @@ export async function submitCommand(
 	return { jobId: request.jobId };
 }
 
-export type SubmitResult = { jobId: string };
+export type SubmitResult = {
+	jobId: string;
+	/** Terminal job state when the result was observed in time ("completed" | "failed" | "cancelled"). */
+	state?: string;
+	/** Operation result string from the plugin (e.g. instance/port GUIDs for add operations). */
+	result?: string;
+	/** Error text when the job failed. */
+	error?: string;
+};

@@ -1,6 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { createExecute, formatDefaultResult, defaultProgressMsg } from "../edit-handlers.js";
+import { shortenGuidsInText } from "../result-formatters.js";
 import { resolveInstanceGuid, resolveTypeGuid } from "../../services/guid-shortener.js";
 import type { CommandAction } from "../../types/commands.js";
 
@@ -9,6 +10,7 @@ export const ghEditComponentsTool = defineTool({
 	label: "Edit Components",
 	description:
 		"Add standard Grasshopper components by typeGuid, or delete, move, rename, lock, and hide any canvas object (including widgets). " +
+		"add returns the new componentId and its input/output port GUIDs — wire immediately with gh_edit_wire without a canvas read. " +
 		"Create widgets with gh_create_widget and change widget-specific properties with gh_mutate_widget.",
 	promptSnippet: "Add or manage Grasshopper canvas components and shared object properties",
 	parameters: Type.Object({
@@ -92,6 +94,12 @@ export const ghEditComponentsTool = defineTool({
 		},
 		(item, result) => {
 			if (item.action === "add") {
+				if (result.state === "failed" || result.state === "cancelled") {
+					return `add FAILED: ${result.error ?? "unknown error"}`;
+				}
+				if (result.result) {
+					return `add completed → ${shortenGuidsInText(result.result)}`;
+				}
 				return `${item.action} completed. type=${item.componentType}, jobId=${result.jobId}`;
 			}
 			return formatDefaultResult(item, result);

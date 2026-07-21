@@ -110,6 +110,12 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("selectedInstanceGuids")]
         public List<string> SelectedInstanceGuids { get; set; }
+
+        [JsonPropertyName("units")]
+        public string Units { get; set; }
+
+        [JsonPropertyName("absoluteTolerance")]
+        public double? AbsoluteTolerance { get; set; }
     }
 
     internal class CanvasError

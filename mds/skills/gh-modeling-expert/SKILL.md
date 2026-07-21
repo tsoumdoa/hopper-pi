@@ -17,11 +17,11 @@ Assess tier before building. When tier is ambiguous **and** the choice materiall
 
 | Tier | When | Placement | Read canvas |
 |------|------|-----------|-------------|
-| **1** | ≤10 components, linear | Batch create in 1–2 calls | Once after **all** placed |
-| **2** | 10–25, branching | 2–3 stages; batch per stage | Once after **all** stages placed |
-| **3** | 25+, scripts, many paths | One zone per step; [Placement Protocol](../../reference/layout-system.md) | Once after **all** zones placed |
+| **1** | ≤10 components, linear | Batch create in 1–2 calls | Only if add GUIDs were lost |
+| **2** | 10–25, branching | 2–3 stages; batch per stage | Only if add GUIDs were lost |
+| **3** | 25+, scripts, many paths | One zone per step; [Placement Protocol](../../reference/layout-system.md) | Only if add GUIDs were lost |
 
-**Default new-build workflow:** place everything → `gh_get_canvas` once → wire everything → cleanup touched components. For existing-canvas edits, targeted reads (`selectionOnly`, `subgraph`) are OK when they reduce work.
+**Default new-build workflow:** place everything (`add` returns each `componentId` plus input/output port GUIDs) → wire everything directly from those GUIDs → cleanup touched components. Call `gh_get_canvas` only when add results did not include GUIDs (older plugin) or you lost track of them. For existing-canvas edits, targeted reads (`componentIds`, `selectionOnly`, `subgraph`) are OK when they reduce work — `componentIds` is the cheapest for looking up a few known components.
 
 ## Gaps and compact size table
 
@@ -44,6 +44,8 @@ Full table, bounds math, pivot safety, worked examples → [layout-system.md](..
 
 ## Conventions (checklist)
 
+- The `gh_get_canvas` header reports Rhino document units and tolerance — no script round-trip needed for units.
+- Tree matching (graft/flatten/simplify/reverse) on any component input: `gh_edit_param` `editAccessType`. Do not insert Graft Tree / Flatten Tree components just to fix tree paths.
 - Left-to-right flow; no right-to-left wires; no recursive logic.
 - Do not touch components in negative canvas space.
 - Tier 3: compute placement math internally; summarize by zone only if useful. `gh_get_canvas_errors` OK between zones; avoid full `gh_get_canvas` between zones during new builds.

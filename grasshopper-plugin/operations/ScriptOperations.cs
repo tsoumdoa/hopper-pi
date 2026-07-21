@@ -73,7 +73,7 @@ namespace rhino_zmq_poc
 
                 obj.ExpireSolution(true);
 
-                return $"createScriptNode: added {param.Language} script ({obj.InstanceGuid}) at ({param.Position.X}, {param.Position.Y})";
+                return $"createScriptNode: added {param.Language} script {ComponentLifecycleOps.DescribeObjectPorts(obj)} at ({param.Position.X}, {param.Position.Y})";
             }
             catch (Exception ex)
             {

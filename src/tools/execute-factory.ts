@@ -3,6 +3,16 @@ import type { TextContent } from "@earendil-works/pi-ai";
 import type { CommandAction } from "../types/commands.js";
 import { submitCommand, type SubmitResult } from "../infra/command-dispatch.js";
 import { formatDefaultResult, formatToolError } from "./result-formatters.js";
+import { ensureJobListenerStarted, waitForJobResults } from "../infra/job-status-listener.js";
+
+const DEFAULT_JOB_RESULT_TIMEOUT_MS = 10_000;
+
+function jobResultTimeoutMs(): number {
+	const raw = process.env.HOPPER_JOB_RESULT_TIMEOUT_MS;
+	if (!raw) return DEFAULT_JOB_RESULT_TIMEOUT_MS;
+	const parsed = Number.parseInt(raw, 10);
+	return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_JOB_RESULT_TIMEOUT_MS;
+}
 
 type ProgressFn = (msg: { content: TextContent[]; details: unknown }) => void;
 
@@ -29,6 +39,12 @@ export function createExecute<P>(
 			: undefined;
 
 		const results: string[] = [];
+		type Submitted = { item: P; jobId?: string; submitError?: string };
+		const submitted: Submitted[] = [];
+
+		// Start listening for job-status events before publishing so results
+		// (instance/port GUIDs, failures) can be reported inline.
+		const listening = await ensureJobListenerStarted();
 
 		for (const p of params.items) {
 			const actions = normalizeMapped(mapParams(p));
@@ -49,12 +65,32 @@ export function createExecute<P>(
 
 				try {
 					const job = await submitCommand(mapped.action, mapped.params);
-					results.push(formatMessage(p, job));
+					submitted.push({ item: p, jobId: job.jobId });
 				} catch (err) {
-					results.push(`${summary} → ERROR: ${err instanceof Error ? err.message : String(err)}`);
-					results.push(formatMessage(p, { jobId: `failed: ${err instanceof Error ? err.message : String(err)}` }));
+					const message = err instanceof Error ? err.message : String(err);
+					submitted.push({ item: p, submitError: `${summary} → ERROR: ${message}` });
 				}
 			}
+		}
+
+		const jobIds = submitted.flatMap((s) => (s.jobId ? [s.jobId] : []));
+		const statuses = listening
+			? await waitForJobResults(jobIds, jobResultTimeoutMs())
+			: new Map<string, import("../types/messages.js").GhJobStatus>();
+
+		for (const s of submitted) {
+			if (!s.jobId) {
+				results.push(s.submitError ?? "ERROR: submit failed");
+				continue;
+			}
+			const status = statuses.get(s.jobId);
+			const enriched: SubmitResult = {
+				jobId: s.jobId,
+				...(status?.state ? { state: status.state } : {}),
+				...(status?.result ? { result: status.result } : {}),
+				...(status?.error ? { error: status.error } : {}),
+			};
+			results.push(formatMessage(s.item, enriched));
 		}
 
 		return {

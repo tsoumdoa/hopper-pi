@@ -116,11 +116,14 @@ namespace rhino_zmq_poc
             var selectionOnly = root.TryGetProperty("selectionOnly", out var selProp)
                 && selProp.ValueKind == JsonValueKind.True;
 
+            var rhinoDoc = Rhino.RhinoDoc.ActiveDoc;
             var canvasResponse = new GetCurrentCanvasResponse
             {
                 Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 DocName = docName,
-                Xml = xml
+                Xml = xml,
+                Units = rhinoDoc?.ModelUnitSystem.ToString(),
+                AbsoluteTolerance = rhinoDoc?.ModelAbsoluteTolerance
             };
 
             if (selectionOnly)

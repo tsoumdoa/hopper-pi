@@ -17,15 +17,16 @@ import {
 	formatCanvasErrorsResponse,
 } from "./query-handlers.js";
 import { checkCanvasOverlaps } from "./canvas-checks.js";
-import { MAX_LIMIT as COMPONENT_MAX_LIMIT } from "../services/component-search.js";
+import { MAX_LIMIT as COMPONENT_MAX_LIMIT, DEFAULT_LIMIT as COMPONENT_DEFAULT_LIMIT } from "../services/component-search.js";
 import { ResultOffsetSchema } from "./schemas.js";
+import { resolveInstanceGuid } from "../services/guid-shortener.js";
 
 export const ghGetCanvasTool = defineTool({
 	name: "gh_get_canvas",
 	label: "Get Canvas",
 	description:
-		"Fetch the live Grasshopper canvas. With no filters, returns a subgraph index summary; pass subgraph for one cluster or selectionOnly for the user's current selection. " +
-		"After placing a new build, make one unfiltered call to obtain all component and port GUIDs before wiring.",
+		"Fetch the live Grasshopper canvas. With no filters, returns a subgraph index summary; pass subgraph for one cluster, selectionOnly for the user's current selection, or componentIds for specific components (detail view, cheapest targeted read). " +
+		"The header reports Rhino document units and tolerance. add operations already return component and port GUIDs, so a canvas read before wiring is only needed when those were lost.",
 	promptSnippet: "Inspect Grasshopper canvas structure, selection, IDs, ports, and wires",
 	parameters: Type.Object({
 		subgraph: Type.Optional(
@@ -40,6 +41,17 @@ export const ghGetCanvasTool = defineTool({
 					"Includes internal wires between selected components only. Always returns detail view.",
 			}),
 		),
+		componentIds: Type.Optional(
+			Type.Array(
+				Type.String({ description: "Component instance GUID (short or full)" }),
+				{
+					minItems: 1,
+					maxItems: 50,
+					description:
+						"Return only these components (detail view with ports). Use for targeted lookups instead of dumping a whole subgraph.",
+				},
+			),
+		),
 	}),
 
 	execute: createQueryExecute(
@@ -50,8 +62,17 @@ export const ghGetCanvasTool = defineTool({
 			const response = await withRequester<GetCurrentCanvasResponse>((req) =>
 				fetchCurrentCanvas(req, { selectionOnly: params.selectionOnly === true }),
 			);
-			const hasFilters = !!params.subgraph || params.selectionOnly === true;
-			return formatCanvasResponse(response, hasFilters ? params : undefined);
+			const hasFilters = !!params.subgraph || params.selectionOnly === true || !!params.componentIds?.length;
+			return formatCanvasResponse(
+				response,
+				hasFilters
+					? {
+							subgraph: params.subgraph,
+							selectionOnly: params.selectionOnly,
+							componentIds: params.componentIds?.map(resolveInstanceGuid),
+						}
+					: undefined,
+			);
 		},
 	),
 });
@@ -88,7 +109,7 @@ export const ghListComponentsTool = defineTool({
 			Type.Integer({
 				minimum: 1,
 				maximum: COMPONENT_MAX_LIMIT,
-				description: `Results per query (default 10, max ${COMPONENT_MAX_LIMIT})`,
+				description: `Results per query (default ${COMPONENT_DEFAULT_LIMIT}, max ${COMPONENT_MAX_LIMIT})`,
 			}),
 		),
 		offset: Type.Optional(ResultOffsetSchema),

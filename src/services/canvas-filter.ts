@@ -5,6 +5,8 @@ import { EXCLUDED_TYPE_GUIDS } from "../tools/constants.js";
 export type CanvasFilters = {
 	subgraph?: string;
 	selectionOnly?: boolean;
+	/** Resolved full instance GUIDs to keep (detail view). */
+	componentIds?: string[];
 };
 
 export function expandExcludedIds(
@@ -100,6 +102,31 @@ export function filterCanvasBySelection(
 		const fromId = w.from.split(".")[0];
 		const toId = w.to.split(".")[0];
 		return expandedIds.has(fromId) && expandedIds.has(toId);
+	});
+
+	return { components, wires };
+}
+
+export function filterCanvasByComponentIds(
+	parsed: Pick<ParsedGrasshopper, "components" | "wires">,
+	instanceGuids: Iterable<string>,
+): Pick<ParsedGrasshopper, "components" | "wires"> {
+	const wanted = normalizeGuidSet(instanceGuids);
+	const keptIds = new Set<string>();
+	for (const [id, component] of Object.entries(parsed.components)) {
+		if (wanted.has(component.instanceGuid.toLowerCase())) {
+			keptIds.add(id);
+		}
+	}
+
+	const components = Object.fromEntries(
+		Object.entries(parsed.components).filter(([id]) => keptIds.has(id)),
+	);
+
+	const wires = parsed.wires.filter((w) => {
+		const fromId = w.from.split(".")[0];
+		const toId = w.to.split(".")[0];
+		return keptIds.has(fromId) && keptIds.has(toId);
 	});
 
 	return { components, wires };

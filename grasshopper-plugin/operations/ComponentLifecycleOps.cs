@@ -38,12 +38,29 @@ namespace rhino_zmq_poc
                         hiddenProp.SetValue(obj, true);
                 }
 
-                return $"addComponent: added ({obj.InstanceGuid}) at ({param.Position.X}, {param.Position.Y}) preview={param.Preview}";
+                return $"addComponent: added {DescribeObjectPorts(obj)} at ({param.Position.X}, {param.Position.Y}) preview={param.Preview}";
             }
             catch (Exception ex)
             {
                 return $"addComponent error: {ex.GetType().Name}: {ex.Message}";
             }
+        }
+
+        internal static string DescribeObjectPorts(IGH_DocumentObject obj)
+        {
+            var header = $"{obj.Name} '{obj.NickName}' componentId={obj.InstanceGuid}";
+
+            if (obj is GH_Component comp)
+            {
+                string Ports(IEnumerable<IGH_Param> ps) =>
+                    string.Join(" ", ps.Select(p => $"{p.NickName}={p.InstanceGuid}"));
+                return $"{header} inputs[{Ports(comp.Params.Input)}] outputs[{Ports(comp.Params.Output)}]";
+            }
+
+            if (obj is IGH_Param)
+                return $"{header} outputs[{obj.NickName}={obj.InstanceGuid}]";
+
+            return header;
         }
 
         public static string DeleteComponent(GH_Document doc, DeleteComponentParams param)
@@ -388,6 +405,11 @@ namespace rhino_zmq_poc
                     .FirstOrDefault(x => string.Equals(x.Name, param.Name, StringComparison.OrdinalIgnoreCase)
                                         || string.Equals(x.NickName, param.Name, StringComparison.OrdinalIgnoreCase));
                 if (target == null) return $"editParamProps error: param '{param.Name}' not found on inputs or outputs";
+
+                bool isScriptComponent = comp is IGH_VariableParameterComponent;
+                if (!isScriptComponent && (param.Access != null || param.TypeHint != null))
+                    return $"editParamProps error: access and typeHint can only be changed on script components; " +
+                           $"'{comp.Name}' is a standard component (dataMapping, simplify, and reverse are supported)";
 
                 if (param.Access != null)
                 {

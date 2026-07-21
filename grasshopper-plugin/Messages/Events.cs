@@ -25,6 +25,9 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("error")]
         public string Error { get; set; }
+
+        [JsonPropertyName("result")]
+        public string Result { get; set; }
     }
 
     internal class GhEventXml

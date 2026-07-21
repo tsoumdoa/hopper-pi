@@ -22,6 +22,7 @@ namespace rhino_zmq_poc
         public JobState State { get; set; }
         public int Progress { get; set; }
         public string Error { get; set; }
+        public string Result { get; set; }
         public long QueuedAt { get; set; }
         public long StartedAt { get; set; }
         public long CompletedAt { get; set; }
@@ -132,6 +133,7 @@ namespace rhino_zmq_poc
                     {
                         job.Progress = 100;
                         job.State = JobState.Completed;
+                        job.Result = result;
                     }
                 }
                 catch (Exception ex)
@@ -154,6 +156,7 @@ namespace rhino_zmq_poc
                 State = job.State.ToString().ToLower(),
                 Progress = job.Progress,
                 Error = job.Error,
+                Result = job.Result,
                 Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
             });
         }

@@ -1,6 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { createExecute } from "../edit-handlers.js";
+import { shortenGuidsInText } from "../result-formatters.js";
 import {
 	SliderCreateFields,
 	PanelCreateFields,
@@ -79,6 +80,12 @@ export const ghCreateWidgetTool = defineTool({
 		},
 		(item, result) => {
 			const i = item as typeof item & { x: number; y: number };
+			if (result.state === "failed" || result.state === "cancelled") {
+				return `create ${i.widgetType} FAILED: ${result.error ?? "unknown error"}`;
+			}
+			if (result.result) {
+				return `create ${i.widgetType} → ${shortenGuidsInText(result.result)}`;
+			}
 			return `create ${i.widgetType} at (${i.x},${i.y}), jobId=${result.jobId}`;
 		},
 		(item) => {

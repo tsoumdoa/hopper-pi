@@ -8,6 +8,7 @@ export type GhJobStatus = {
 	state: JobState;
 	progress: number;
 	error: string | null;
+	result?: string | null;
 };
 
 export type GhEventXml = {
@@ -41,6 +42,8 @@ export type GetCurrentCanvasResponse = {
 	docName: string;
 	xml: string;
 	selectedInstanceGuids?: string[];
+	units?: string | null;
+	absoluteTolerance?: number | null;
 };
 
 export type CanvasError = {

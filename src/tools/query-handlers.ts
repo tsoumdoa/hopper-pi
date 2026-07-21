@@ -102,9 +102,11 @@ export function formatComponentsMultiQuery(
 
 	const sections: string[] = [];
 	const results: Array<{ queryKeyword: string; result: Array<Record<string, unknown>>; hasMore: boolean; totalMatched: number }> = [];
+	const unmatchedQueries: string[] = [];
 
 	for (const q of queries) {
 		const matched = searchMatchedComponents(all, q);
+		if (matched.length === 0) unmatchedQueries.push(q);
 		const { slice, hasMore, totalMatched } = paginate(matched, limit, normalizedOffset);
 		results.push({ queryKeyword: q, result: slice.map(pickComponentSummary), hasMore, totalMatched });
 
@@ -134,8 +136,10 @@ export function formatComponentsMultiQuery(
 		);
 	}
 
-	if (searchFrom === "vanilla") {
-		const ql = queries.map((q) => q.toLowerCase());
+	// Only surface the params-source hint when a query actually failed to match;
+	// successful searches should stay compact.
+	if (searchFrom === "vanilla" && unmatchedQueries.length > 0) {
+		const ql = unmatchedQueries.map((q) => q.toLowerCase());
 		const matchedParams = [...PARAMS_KEYWORDS].filter((k) => ql.some((q) => q.includes(k)));
 		if (matchedParams.length > 0) {
 			hints.push(

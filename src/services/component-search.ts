@@ -5,7 +5,7 @@ const MULTI_TOKEN_BONUS = 50;
 const MIN_TOKEN_LENGTH = 2;
 const DESCRIPTION_TRUNCATE_MAX = 90;
 
-export const DEFAULT_LIMIT = 10;
+export const DEFAULT_LIMIT = 5;
 export const MAX_LIMIT = 50;
 
 function isSubsequence(word: string, token: string): boolean {
