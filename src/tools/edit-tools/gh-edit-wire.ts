@@ -2,13 +2,17 @@ import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { createExecute } from "../edit-handlers.js";
 import { resolveInstanceGuid } from "../../services/guid-shortener.js";
+import { withRequester } from "../../infra/request-helpers.js";
+import { fetchCanvasErrors } from "../canvas-fetch.js";
+import { formatSolutionSummary } from "../../services/solution-summary.js";
 import type { CommandAction } from "../../types/commands.js";
 
 export const ghEditWireTool = defineTool({
 	name: "gh_edit_wire",
 	label: "Edit Wire",
 	description:
-		"Connect or disconnect Grasshopper wires using component and port GUIDs returned by gh_get_canvas. Batch independent wire edits in one call.",
+		"Connect or disconnect Grasshopper wires using component and port GUIDs returned by gh_get_canvas. Batch independent wire edits in one call. " +
+		"The result ends with a post-wiring solution status (error/warning summary); call gh_get_canvas_errors only when that summary reports problems needing detail.",
 	promptSnippet: "Connect or disconnect Grasshopper component ports by GUID",
 	parameters: Type.Object({
 		items: Type.Array(
@@ -51,6 +55,10 @@ export const ghEditWireTool = defineTool({
 			return `${item.action === "connect" ? "Connecting" : "Disconnecting"} wire ` +
 				`from=${item.fromComponent}->${resolvedFromComp}:${item.fromPort}->${resolvedFromPort} ` +
 				`to=${item.toComponent}->${resolvedToComp}:${item.toPort}->${resolvedToPort}...`;
+		},
+		async () => {
+			const response = await withRequester(fetchCanvasErrors);
+			return formatSolutionSummary(response);
 		},
 	),
 });

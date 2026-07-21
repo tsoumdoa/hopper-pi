@@ -157,7 +157,11 @@ export function formatComponentsMultiQuery(
 	};
 }
 
-export function formatCanvasErrorsResponse(response: GetCanvasErrorsResponse, overlapResult?: CanvasOverlapResult) {
+export function formatCanvasErrorsResponse(
+	response: GetCanvasErrorsResponse,
+	overlapResult?: CanvasOverlapResult,
+	patchHints?: Map<number, string>,
+) {
 	const errors = response.errors;
 	const errorCount = errors.length;
 
@@ -171,10 +175,13 @@ export function formatCanvasErrorsResponse(response: GetCanvasErrorsResponse, ov
 			"",
 		);
 
-		for (const err of errors) {
+		for (let i = 0; i < errors.length; i++) {
+			const err = errors[i];
 			const levelIcon = err.level === "error" ? "❌" : err.level === "warning" ? "⚠️" : "ℹ️";
 			lines.push(`${levelIcon} [${err.level}] ${err.componentNickName} (${err.componentId})`);
 			lines.push(`   ${err.text}`);
+			const hint = patchHints?.get(i);
+			if (hint) lines.push(`   ↳ ${hint}`);
 			lines.push("");
 		}
 

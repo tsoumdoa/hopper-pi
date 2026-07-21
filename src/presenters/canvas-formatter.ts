@@ -6,6 +6,7 @@ import {
 } from "../services/guid-shortener.js";
 import { truncateDescription } from "../services/component-search.js";
 import type { GetCurrentCanvasResponse } from "../types/messages.js";
+import { getRhinoVisualCaptureConsent } from "../services/rhino-visual-consent.js";
 import type { Component, SubGraph, Wire } from "../types/gh.js";
 import {
 	applyCanvasExclusions,
@@ -277,11 +278,17 @@ function formatCanvasDetail(
 	};
 }
 
-function formatDocHeader(response: GetCurrentCanvasResponse): string {
+function captureConsentLabel(): string {
+	const consent = getRhinoVisualCaptureConsent();
+	return consent === "unknown" ? "unset" : consent;
+}
+
+export function formatDocHeader(response: GetCurrentCanvasResponse): string {
 	const extras: string[] = [];
 	if (response.units) extras.push(`units=${response.units}`);
 	if (response.absoluteTolerance != null) extras.push(`tol=${response.absoluteTolerance}`);
-	return extras.length > 0 ? `${response.docName} · ${extras.join(", ")}` : response.docName;
+	extras.push(`capture=${captureConsentLabel()}`);
+	return `${response.docName} · ${extras.join(", ")}`;
 }
 
 export function formatCanvasResponse(response: GetCurrentCanvasResponse, filters?: CanvasFilters) {

@@ -27,6 +27,12 @@ export function createExecute<P>(
 	mapParams: (item: P) => MappedAction | MappedAction[] | null,
 	formatMessage: (item: P, result: SubmitResult) => string,
 	progressMsg?: (item: P) => string,
+	/**
+	 * Optional post-mutation summary (e.g. solution error status). Only invoked
+	 * when every submitted job reached a terminal state, so old-plugin timeout
+	 * fallbacks never produce a stale summary. Failures are swallowed.
+	 */
+	postSummary?: () => Promise<string | null>,
 ) {
 	return async (
 		_toolCallId: string,
@@ -91,6 +97,16 @@ export function createExecute<P>(
 				...(status?.error ? { error: status.error } : {}),
 			};
 			results.push(formatMessage(s.item, enriched));
+		}
+
+		const allTerminal = jobIds.length > 0 && jobIds.every((id) => statuses.has(id));
+		if (postSummary && allTerminal) {
+			try {
+				const summary = await postSummary();
+				if (summary) results.push(summary);
+			} catch {
+				// Summary is best-effort; never fail the mutation result over it.
+			}
 		}
 
 		return {

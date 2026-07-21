@@ -9,6 +9,7 @@ import type {
 import {
 	fetchCurrentCanvas,
 	fetchCanvasErrors,
+	fetchScriptCode,
 	getCachedOrFetchComponents,
 } from "./canvas-fetch.js";
 import { formatCanvasResponse } from "./canvas-formatters.js";
@@ -17,6 +18,7 @@ import {
 	formatCanvasErrorsResponse,
 } from "./query-handlers.js";
 import { checkCanvasOverlaps } from "./canvas-checks.js";
+import { buildCompileErrorHints } from "../services/csharp-error-mapper.js";
 import { MAX_LIMIT as COMPONENT_MAX_LIMIT, DEFAULT_LIMIT as COMPONENT_DEFAULT_LIMIT } from "../services/component-search.js";
 import { ResultOffsetSchema } from "./schemas.js";
 import { resolveInstanceGuid } from "../services/guid-shortener.js";
@@ -26,7 +28,7 @@ export const ghGetCanvasTool = defineTool({
 	label: "Get Canvas",
 	description:
 		"Fetch the live Grasshopper canvas. With no filters, returns a subgraph index summary; pass subgraph for one cluster, selectionOnly for the user's current selection, or componentIds for specific components (detail view, cheapest targeted read). " +
-		"The header reports Rhino document units and tolerance. add operations already return component and port GUIDs, so a canvas read before wiring is only needed when those were lost.",
+		"The header reports Rhino document units, tolerance, and screenshot-consent state (capture=allowed/denied/unset). add operations already return component and port GUIDs, so a canvas read before wiring is only needed when those were lost.",
 	promptSnippet: "Inspect Grasshopper canvas structure, selection, IDs, ports, and wires",
 	parameters: Type.Object({
 		subgraph: Type.Optional(
@@ -135,7 +137,8 @@ export const ghGetCanvasErrorsTool = defineTool({
 	name: "gh_get_canvas_errors",
 	label: "Get Canvas Errors",
 	description:
-		"Retrieve Grasshopper runtime errors, warnings, messages, and component-overlap checks. Call after wiring or layout changes; Goo conversion errors include Python tree/list repair hints.",
+		"Retrieve Grasshopper runtime errors, warnings, messages, and component-overlap checks. Call after wiring or layout changes; Goo conversion errors include Python tree/list repair hints. " +
+		"Script compile errors include a patch hint with scope-relative line and source text — patch directly with gh_edit_script patchCode instead of re-reading the code.",
 	promptSnippet: "Validate Grasshopper runtime messages and detect component overlaps",
 	parameters: Type.Object({}),
 
@@ -159,6 +162,9 @@ export const ghGetCanvasErrorsTool = defineTool({
 			},
 		);
 		const overlapResult = checkCanvasOverlaps(canvasResponse.xml);
-		return formatCanvasErrorsResponse(errorsResponse, overlapResult);
+		const patchHints = await buildCompileErrorHints(errorsResponse.errors, (componentId) =>
+			withRequester((req) => fetchScriptCode(req, componentId)).then((res) => res.code),
+		);
+		return formatCanvasErrorsResponse(errorsResponse, overlapResult, patchHints);
 	},
 });

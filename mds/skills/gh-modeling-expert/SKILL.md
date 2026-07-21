@@ -44,7 +44,9 @@ Full table, bounds math, pivot safety, worked examples → [layout-system.md](..
 
 ## Conventions (checklist)
 
-- The `gh_get_canvas` header reports Rhino document units and tolerance — no script round-trip needed for units.
+- The `gh_get_canvas` header reports Rhino document units, tolerance, and screenshot-consent state (`capture=allowed/denied/unset`) — no script round-trip for units, no probing `rh_capture_view` to discover consent.
+- `gh_edit_wire` results end with a `solution:` status line (error/warning summary). If it says `no errors or warnings`, skip the separate `gh_get_canvas_errors` call; call it only when the summary reports problems needing detail.
+- Script compile errors in `gh_get_canvas_errors` include a `patch hint` with scope-relative line and source text — fix with `gh_edit_script` `patchCode` directly; do not re-read the code with `getCode`/`getCodeParts`.
 - Tree matching (graft/flatten/simplify/reverse) on any component input: `gh_edit_param` `editAccessType`. Do not insert Graft Tree / Flatten Tree components just to fix tree paths.
 - Left-to-right flow; no right-to-left wires; no recursive logic.
 - Do not touch components in negative canvas space.
