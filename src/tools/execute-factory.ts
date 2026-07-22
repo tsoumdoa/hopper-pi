@@ -2,6 +2,7 @@ import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import type { TextContent } from "@earendil-works/pi-ai";
 import type { CommandAction } from "../types/commands.js";
 import { submitCommand, type SubmitResult } from "../infra/command-dispatch.js";
+import { errorMessage } from "../lib/error-message.js";
 import { formatDefaultResult, formatToolError } from "./result-formatters.js";
 
 type ProgressFn = (msg: { content: TextContent[]; details: unknown }) => void;
@@ -11,6 +12,10 @@ type MappedAction = { action: CommandAction; params: unknown };
 function normalizeMapped(mapped: MappedAction | MappedAction[] | null): MappedAction[] {
 	if (mapped == null) return [];
 	return Array.isArray(mapped) ? mapped : [mapped];
+}
+
+function toProgressFn(onUpdate: unknown): ProgressFn | undefined {
+	return typeof onUpdate === "function" ? (onUpdate as ProgressFn) : undefined;
 }
 
 export function createExecute<P>(
@@ -24,9 +29,7 @@ export function createExecute<P>(
 		_signal: unknown,
 		onUpdate: unknown,
 	): Promise<AgentToolResult<unknown>> => {
-		const progressFn = typeof onUpdate === "function"
-			? (onUpdate as ProgressFn)
-			: undefined;
+		const progressFn = toProgressFn(onUpdate);
 
 		const results: string[] = [];
 
@@ -51,8 +54,9 @@ export function createExecute<P>(
 					const job = await submitCommand(mapped.action, mapped.params);
 					results.push(formatMessage(p, job));
 				} catch (err) {
-					results.push(`${summary} → ERROR: ${err instanceof Error ? err.message : String(err)}`);
-					results.push(formatMessage(p, { jobId: `failed: ${err instanceof Error ? err.message : String(err)}` }));
+					const message = errorMessage(err);
+					results.push(`${summary} → ERROR: ${message}`);
+					results.push(formatMessage(p, { jobId: `failed: ${message}` }));
 				}
 			}
 		}
@@ -85,9 +89,7 @@ export function createHybridExecute<P extends { action: string; targetId?: strin
 		_signal: unknown,
 		onUpdate: unknown,
 	): Promise<AgentToolResult<unknown>> => {
-		const progressFn = typeof onUpdate === "function"
-			? (onUpdate as ProgressFn)
-			: undefined;
+		const progressFn = toProgressFn(onUpdate);
 
 		const queryItems = params.items.filter((item) => item.action === queryAction);
 		const mutationItems = params.items.filter((item) => item.action !== queryAction);
@@ -135,9 +137,7 @@ export function createQueryExecute<P>(
 		_signal: unknown,
 		onUpdate: unknown,
 	): Promise<AgentToolResult<unknown>> => {
-		const progressFn = typeof onUpdate === "function"
-			? (onUpdate as ProgressFn)
-			: undefined;
+		const progressFn = toProgressFn(onUpdate);
 		const text = typeof progressText === "function" ? progressText(params) : progressText;
 		progressFn?.({
 			content: [{ type: "text" as const, text }],

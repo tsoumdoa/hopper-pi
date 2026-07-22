@@ -4,6 +4,7 @@ import type {
 	GhComponentInfo,
 	ListAllComponentsResponse,
 	ListScriptParamsResponse,
+	ScriptParamInfo,
 } from "../types/messages.js";
 import {
 	formatComponentLines,
@@ -39,19 +40,16 @@ const PARAMS_KEYWORDS: ReadonlySet<string> = new Set([
 export function formatScriptParamsResponse(response: ListScriptParamsResponse) {
 	const lines: string[] = [];
 
-	if (response.inputs.length > 0) {
-		lines.push("INPUTS:");
-		for (const p of response.inputs) {
+	const appendSection = (label: string, params: ScriptParamInfo[]) => {
+		if (params.length === 0) return;
+		lines.push(`${label}:`);
+		for (const p of params) {
 			lines.push(`  ${p.name} [typeHint=${p.typeHint}, ${p.access}, ${p.dataMapping}, simplify=${p.simplify}, reverse=${p.reverse}]`);
 		}
-	}
+	};
 
-	if (response.outputs.length > 0) {
-		lines.push("OUTPUTS:");
-		for (const p of response.outputs) {
-			lines.push(`  ${p.name} [typeHint=${p.typeHint}, ${p.access}, ${p.dataMapping}, simplify=${p.simplify}, reverse=${p.reverse}]`);
-		}
-	}
+	appendSection("INPUTS", response.inputs);
+	appendSection("OUTPUTS", response.outputs);
 
 	return {
 		content: [{ type: "text" as const, text: lines.join("\n") }],

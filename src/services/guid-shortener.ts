@@ -14,22 +14,18 @@ type GuidStore = {
 	normalizedToShort: Map<string, string>;
 };
 
+function createStore(): GuidStore {
+	return {
+		shortToFull: new Map(),
+		normalizedToFull: new Map(),
+		normalizedToShort: new Map(),
+	};
+}
+
 const stores: Record<GuidKind, GuidStore> = {
-	type: {
-		shortToFull: new Map(),
-		normalizedToFull: new Map(),
-		normalizedToShort: new Map(),
-	},
-	instance: {
-		shortToFull: new Map(),
-		normalizedToFull: new Map(),
-		normalizedToShort: new Map(),
-	},
-	rhino: {
-		shortToFull: new Map(),
-		normalizedToFull: new Map(),
-		normalizedToShort: new Map(),
-	},
+	type: createStore(),
+	instance: createStore(),
+	rhino: createStore(),
 };
 
 function normalizeGuid(guid: string): string {
@@ -99,12 +95,7 @@ function resolveGuid(value: string, kind: GuidKind): string {
 	}
 
 	if (looksLikeGuid(value)) {
-		const normalized = normalizeGuid(value);
-		const knownFull = store.normalizedToFull.get(normalized);
-		if (knownFull) {
-			return knownFull;
-		}
-		return value;
+		return store.normalizedToFull.get(normalizeGuid(value)) ?? value;
 	}
 
 	return value;

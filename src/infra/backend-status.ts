@@ -1,4 +1,5 @@
 import { PROBE_TIMEOUT_MS } from "../config.js";
+import { errorMessage } from "../lib/error-message.js";
 import type { AuthErrorResponse, PingResponse } from "../types/messages.js";
 import { clearConnectionCache } from "./connection.js";
 import {
@@ -62,8 +63,7 @@ export async function probeBackend(): Promise<BackendStatus> {
 		}
 		status = { online: true };
 	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
-		status = { online: false, error: message };
+		status = { online: false, error: errorMessage(err) };
 	}
 	setCachedBackendStatus(status);
 	return status;

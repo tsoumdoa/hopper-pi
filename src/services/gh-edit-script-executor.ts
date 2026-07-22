@@ -2,6 +2,7 @@ import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import type { TextContent } from "@earendil-works/pi-ai";
 import { submitCommand } from "../infra/command-dispatch.js";
 import { withRequester } from "../infra/request-helpers.js";
+import { errorMessage } from "../lib/error-message.js";
 import { lineCount } from "../lib/line-count.js";
 import { fetchScriptCode } from "../tools/canvas-fetch.js";
 import { formatDefaultResult, formatToolError } from "../tools/result-formatters.js";
@@ -118,7 +119,7 @@ export function validateScriptItem(item: GhEditScriptItem, resolvedCode?: string
 	try {
 		code = resolveCsharpCode(item);
 	} catch (err) {
-		return err instanceof Error ? err.message : String(err);
+		return errorMessage(err);
 	}
 
 	const result = validateCsharpScript(code, {
@@ -236,7 +237,7 @@ export async function executeGhEditScript(
 	try {
 		preparedMutations = await prepareMutationItems(items);
 	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
+		const message = errorMessage(err);
 		return {
 			content: [{ type: "text" as const, text: message }],
 			details: {

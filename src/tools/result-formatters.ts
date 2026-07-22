@@ -1,4 +1,5 @@
 import { resolveInstanceGuid } from "../services/guid-shortener.js";
+import { errorMessage } from "../lib/error-message.js";
 import type { SubmitResult } from "../infra/command-dispatch.js";
 
 export function formatDefaultResult<T extends { targetId?: string; action: string }>(
@@ -16,11 +17,9 @@ export function defaultProgressMsg<T extends { targetId?: string; action: string
 }
 
 export function formatToolError(action: string, err: unknown): string {
-	const message = err instanceof Error ? err.message : String(err);
-	return `${action} error: ${message}`;
+	return `${action} error: ${errorMessage(err)}`;
 }
 
 export function formatToolFailed(err: unknown): string {
-	const message = err instanceof Error ? err.message : String(err);
-	return `FAILED: ${message}`;
+	return `FAILED: ${errorMessage(err)}`;
 }
