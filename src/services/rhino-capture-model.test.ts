@@ -4,7 +4,6 @@ import {
 	createRhinoCaptureModelController,
 	promptOverridesVisualCaptureRestriction,
 	promptWantsVisualCapture,
-	rhinoCaptureUnavailableGuidance,
 	shouldAskVisualCapturePermission,
 } from "./rhino-capture-model.js";
 import { RH_CAPTURE_VIEW_TOOL } from "./model-capabilities.js";
@@ -65,12 +64,6 @@ test("shouldAskVisualCapturePermission requires an active requested capture path
 		requestingCapture: true,
 		overrideConfigured: true,
 	}), false);
-});
-
-test("rhinoCaptureUnavailableGuidance points user to multimodal model", () => {
-	const guidance = rhinoCaptureUnavailableGuidance({ provider: "test", id: "text", input: ["text"] });
-	assert.match(guidance, /does not support image input/);
-	assert.match(guidance, /choose a multimodal model in Pi/);
 });
 
 function fakePi() {

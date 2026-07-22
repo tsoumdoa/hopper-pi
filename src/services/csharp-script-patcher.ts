@@ -1,5 +1,4 @@
 import type { LinePatch, ParsedCsharpScript, PatchScope } from "../types/csharp-script.js";
-import { applyScopedPatches } from "../lib/scoped-patcher.js";
 import {
 	assembleCsharpScript,
 	getRunScriptBody,
@@ -112,15 +111,20 @@ export function applyPatchesToScript(
 	patches: LinePatch[],
 	scope: PatchScope = "runScriptBody",
 ): string {
-	return applyScopedPatches(code, patches, scope, {
-		parse: parseCsharpScript,
-		parseError: "Script must be a Grasshopper C# script with Script_Instance and RunScript.",
-		assemble: assembleCsharpScript,
-		patchers: {
-			references: patchReferences,
-			runScript: patchRunScript,
-			runScriptBody: patchRunScriptBody,
-			helpers: patchHelpers,
-		},
-	});
+	if (scope === "full") {
+		return applyLinePatches(code, patches);
+	}
+
+	const parts = parseCsharpScript(code);
+	if (!parts) {
+		throw new Error("Script must be a Grasshopper C# script with Script_Instance and RunScript.");
+	}
+
+	const patchers = {
+		references: patchReferences,
+		runScript: patchRunScript,
+		runScriptBody: patchRunScriptBody,
+		helpers: patchHelpers,
+	};
+	return assembleCsharpScript(patchers[scope](parts, patches));
 }

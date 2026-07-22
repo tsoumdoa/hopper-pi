@@ -5,7 +5,6 @@ export interface PickOption {
 }
 
 export const OTHER_OPTION_LABEL = "Other";
-export const OTHER_OPTION_VALUE = "__other__";
 
 export interface PickOptionResult {
 	question: string;

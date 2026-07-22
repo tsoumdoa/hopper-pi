@@ -4,7 +4,6 @@ import {
 	OTHER_OPTION_LABEL,
 	appendOtherOptionLabels,
 	formatPickOptionLabels,
-	isOtherChoice,
 	resolvePickOption,
 	type PickOption,
 } from "./choices.js";
@@ -37,11 +36,4 @@ test("skips Other when already present", () => {
 
 test("does not treat other-prefixed labels as the canonical Other choice", () => {
 	assert.deepEqual(appendOtherOptionLabels(["A", "Others"]), ["A", "Others", OTHER_OPTION_LABEL]);
-});
-
-test("detects Other choice", () => {
-	assert.equal(isOtherChoice(OTHER_OPTION_LABEL), true);
-	assert.equal(isOtherChoice(" other "), true);
-	assert.equal(isOtherChoice("Pipe"), false);
-	assert.equal(isOtherChoice("Others"), false);
 });

@@ -64,30 +64,20 @@ export function createRhinoCaptureModelController(
 		const isActive = active.includes(RH_CAPTURE_VIEW_TOOL);
 		const supportsImages = modelSupportsImages(model);
 
-		if (supportsImages) {
-			const didRegister = ensureCaptureToolRegistered();
-			if (didRegister) {
-				const nextActive = pi.getActiveTools();
-				if (!nextActive.includes(RH_CAPTURE_VIEW_TOOL)) {
-					pi.setActiveTools([...nextActive, RH_CAPTURE_VIEW_TOOL]);
-				}
-				return;
+		if (!supportsImages) {
+			if (isActive) {
+				pi.setActiveTools(active.filter((name) => name !== RH_CAPTURE_VIEW_TOOL));
+				captureToolHiddenForModel = true;
 			}
-		}
-
-		if (!supportsImages && isActive) {
-			pi.setActiveTools(active.filter((name) => name !== RH_CAPTURE_VIEW_TOOL));
-			captureToolHiddenForModel = true;
 			return;
 		}
 
-		if (supportsImages && captureToolHiddenForModel && !isActive) {
-			const allToolNames = pi.getAllTools().map((tool) => tool.name);
-			if (allToolNames.includes(RH_CAPTURE_VIEW_TOOL)) {
-				pi.setActiveTools([...active, RH_CAPTURE_VIEW_TOOL]);
-			}
-			captureToolHiddenForModel = false;
+		const didRegister = ensureCaptureToolRegistered();
+		const nextActive = pi.getActiveTools();
+		if ((didRegister || captureToolHiddenForModel) && !nextActive.includes(RH_CAPTURE_VIEW_TOOL)) {
+			pi.setActiveTools([...nextActive, RH_CAPTURE_VIEW_TOOL]);
 		}
+		captureToolHiddenForModel = false;
 	}
 
 	function isCaptureToolActive(): boolean {
