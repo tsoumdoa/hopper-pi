@@ -32,9 +32,7 @@ export const rhCaptureViewTool = defineTool({
 	name: "rh_capture_view",
 	label: "Capture Rhino View",
 	description:
-		"Capture a Rhino viewport screenshot as PNG visual context when the selected model supports images and session consent (or HOPPER_RHINO_CAPTURE_CONSENT=allow) permits it. " +
-		"Use view for a one-off active, standard, or named-view capture; restoreView defaults to true. Use rh_view_control first only for a custom camera/CPlane setup or an intentionally persistent view change.",
-	promptSnippet: "Capture a consent-gated Rhino viewport screenshot for visual QA",
+		"Capture a consent-gated Rhino viewport PNG when the selected model supports images.",
 	promptGuidelines: [
 		"Use rh_capture_view only when pixels materially help visual QA and Rhino screenshot consent is allowed.",
 		"If rh_capture_view is unavailable or denied, continue with text and geometry tools instead of blocking the task.",

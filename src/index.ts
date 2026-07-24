@@ -48,6 +48,8 @@ import {
 	promptTargetsRhino,
 	rhinoRoutingGuidance,
 } from "./services/prompt-routing.js";
+import { createHopperLoadToolsTool } from "./tools/hopper-load-tools.js";
+import { registerHopperToolRouting } from "./services/hopper-tool-routing.js";
 
 export default function hopperPiExtension(pi: ExtensionAPI) {
 	// ── Register all Grasshopper canvas tools ───────────────────────
@@ -55,10 +57,12 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 	for (const tool of ALL_TOOLS) {
 		pi.registerTool(withBackendGuard(tool));
 	}
+	pi.registerTool(createHopperLoadToolsTool(pi));
 
 	registerBackendStatusUI(pi);
 
 	const captureModel = createRhinoCaptureModelController(pi);
+	registerHopperToolRouting(pi);
 
 	// ── Lifecycle: notify on load ──────────────────────────────────
 

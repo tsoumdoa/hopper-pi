@@ -16,120 +16,114 @@ const PatchScopeType = Type.Union([
 	Type.Literal("helpers"),
 	Type.Literal("references"),
 	Type.Literal("full"),
-], {
-	description:
-		"Patch target. C# default runScriptBody (scopes: runScriptBody/runScript/helpers/references). Python uses full only (default). full patches the entire script for both.",
-});
+], { description: "C# default runScriptBody; Python default full." });
 
 const LinePatchType = Type.Union([
 	Type.Object({
 		op: Type.Literal("insert"),
-		afterLine: Type.Number({ description: "0 inserts before first line; N inserts after line N" }),
+		afterLine: Type.Number({ description: "0 inserts before line 1." }),
 		lines: Type.Array(Type.String()),
 	}),
 	Type.Object({
 		op: Type.Literal("replace"),
-		startLine: Type.Number({ description: "1-based inclusive start line in scope" }),
-		endLine: Type.Number({ description: "1-based inclusive end line in scope" }),
+		startLine: Type.Number(),
+		endLine: Type.Number(),
 		lines: Type.Array(Type.String()),
 	}),
 	Type.Object({
 		op: Type.Literal("delete"),
-		startLine: Type.Number({ description: "1-based inclusive start line in scope" }),
-		endLine: Type.Number({ description: "1-based inclusive end line in scope" }),
+		startLine: Type.Number(),
+		endLine: Type.Number(),
 	}),
 ]);
 
 const CsharpScriptPartsFields = Type.Object({
-	references: Type.Optional(
-		Type.Array(Type.String(), {
-			description: "Namespaces without using/semicolon (e.g. System, Rhino.Geometry). Defaults to standard GH set.",
-		}),
-	),
-	runScript: Type.String({
-		description: "private void RunScript(...) method only — no class wrapper or using lines",
-	}),
-	helpers: Type.Optional(
-		Type.String({
-			description: "Optional helper methods inside Script_Instance, below RunScript",
-		}),
-	),
+	references: Type.Optional(Type.Array(Type.String())),
+	runScript: Type.String({ description: "Complete RunScript method, without class wrapper." }),
+	helpers: Type.Optional(Type.String()),
 });
+
+function validateRequiredFields(items: Array<Record<string, unknown>>): string[] {
+	const errors: string[] = [];
+	for (const [index, item] of items.entries()) {
+		if (item.action === "create") {
+			if (typeof item.x !== "number" || typeof item.y !== "number" || !item.language) {
+				errors.push(`items[${index}]: create requires x, y, and language`);
+			}
+		} else if (
+			item.action === "setCode" ||
+			item.action === "patchCode" ||
+			item.action === "getCode" ||
+			item.action === "getCodeParts"
+		) {
+			if (typeof item.targetId !== "string" || !item.targetId) {
+				errors.push(`items[${index}]: ${item.action} requires targetId`);
+			}
+		}
+		if (
+			item.action === "patchCode" &&
+			(!Array.isArray(item.patches) || item.patches.length === 0)
+		) {
+			errors.push(`items[${index}]: patchCode requires patches`);
+		}
+	}
+	return errors;
+}
 
 export const ghEditScriptTool = defineTool({
 	name: "gh_edit_script",
 	label: "Edit Script",
 	description:
-		"Create, inspect, or edit Grasshopper C# and Python script components. For C#, prefer scriptParts (references + RunScript; wrapper assembled server-side). " +
-		"For Python, pass full code without a wrapper. Use patchCode for small edits; getCodeParts is C#-only and getCode works for both. " +
-		"Include full inputs/outputs when code and port signatures must change atomically.",
-	promptSnippet: "Create, inspect, patch, or replace Grasshopper C#/Python script nodes",
+		"Surgically create, inspect, or edit Grasshopper C#/Python scripts; C# prefers scriptParts and Python uses full code.",
 	parameters: Type.Object({
 		items: Type.Array(
-			Type.Union([
-				Type.Object({
-					action: Type.Literal("create"),
-					x: Type.Number({ description: "Canvas X" }),
-					y: Type.Number({ description: "Canvas Y" }),
-					language: Type.Union([
-						Type.Literal("python"),
-						Type.Literal("csharp"),
-					], { description: "Script language (immutable after creation)" }),
-					code: Type.Optional(Type.String({ description: "Full script source (Python or legacy C#)" })),
-					scriptParts: Type.Optional(CsharpScriptPartsFields),
-					nickName: Type.Optional(
-						Type.String({ description: "Script nickname" }),
-					),
-					inputs: Type.Optional(
-						Type.Array(ScriptIOFields, {
-							description: "Desired input ports (full list for create)",
-						}),
-					),
-					outputs: Type.Optional(
-						Type.Array(ScriptIOFields, {
-							description: "Desired output ports (full list for create)",
-						}),
-					),
-				}),
-				Type.Object({
-					action: Type.Literal("setCode"),
-					targetId: Type.String({ description: "Script component GUID" }),
-					code: Type.Optional(Type.String({ description: "Full script source" })),
-					scriptParts: Type.Optional(CsharpScriptPartsFields),
-					inputs: Type.Optional(
-						Type.Array(ScriptIOFields, {
-							description:
-								"Full desired input list — reconciles ports. Omit to leave unchanged; [] removes all inputs.",
-						}),
-					),
-					outputs: Type.Optional(
-						Type.Array(ScriptIOFields, {
-							description:
-								"Full desired output list — reconciles ports. Omit to leave unchanged; [] removes all outputs.",
-						}),
-					),
-				}),
-				Type.Object({
-					action: Type.Literal("patchCode"),
-					targetId: Type.String({ description: "Script component GUID" }),
-					patches: Type.Array(LinePatchType, { minItems: 1 }),
-					scope: Type.Optional(PatchScopeType),
-					inputs: Type.Optional(Type.Array(ScriptIOFields)),
-					outputs: Type.Optional(Type.Array(ScriptIOFields)),
-				}),
-				Type.Object({
-					action: Type.Literal("getCode"),
-					targetId: Type.String({ description: "Script component GUID" }),
-				}),
-				Type.Object({
-					action: Type.Literal("getCodeParts"),
-					targetId: Type.String({ description: "Script component GUID" }),
-				}),
-			]),
+			Type.Object({
+				action: Type.Union([
+					Type.Literal("create"),
+					Type.Literal("setCode"),
+					Type.Literal("patchCode"),
+					Type.Literal("getCode"),
+					Type.Literal("getCodeParts"),
+				]),
+				targetId: Type.Optional(Type.String()),
+				x: Type.Optional(Type.Number()),
+				y: Type.Optional(Type.Number()),
+				language: Type.Optional(Type.Union([
+					Type.Literal("python"),
+					Type.Literal("csharp"),
+				])),
+				code: Type.Optional(Type.String()),
+				scriptParts: Type.Optional(CsharpScriptPartsFields),
+				nickName: Type.Optional(Type.String()),
+				inputs: Type.Optional(Type.Array(ScriptIOFields, {
+					description: "Full desired list; omit to preserve, [] to remove all.",
+				})),
+				outputs: Type.Optional(Type.Array(ScriptIOFields, {
+					description: "Full desired list; omit to preserve, [] to remove all.",
+				})),
+				patches: Type.Optional(Type.Array(LinePatchType, { minItems: 1 })),
+				scope: Type.Optional(PatchScopeType),
+			}),
 			{ minItems: 1 },
 		),
 	}),
 	execute: async (_toolCallId, params, _signal, onUpdate) => {
+		const requiredErrors = validateRequiredFields(
+			params.items as Array<Record<string, unknown>>,
+		);
+		if (requiredErrors.length > 0) {
+			return {
+				content: [{ type: "text" as const, text: requiredErrors.join("\n") }],
+				details: {
+					summaries: [],
+					results: requiredErrors,
+					items: params.items,
+					queryCount: 0,
+					mutationCount: 0,
+					validationErrors: requiredErrors,
+				} satisfies GhEditScriptDetails,
+			};
+		}
 		const items = params.items as GhEditScriptItem[];
 		const progressFn = typeof onUpdate === "function"
 			? onUpdate as (msg: { content: import("@earendil-works/pi-ai").TextContent[]; details: unknown }) => void

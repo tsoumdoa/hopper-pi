@@ -146,6 +146,8 @@ Bundled Pi skills and progressive reference docs live under `mds/` (`gh-modeling
 
 For new Grasshopper builds, the canonical workflow is: resolve unusual or ambiguous types if needed, call `gh_apply_graph` once, inspect its integrated runtime/overlap validation, then use legacy tools only for surgical repair. `gh_get_canvas` remains for existing canvases, selections, and subgraphs.
 
+Hopper registers every compatibility tool but sends only the relevant subset to the model. The default surface contains `gh_apply_graph`, the three GH query tools, and `hopper_load_tools`; edit, script, Rhino-document, and Rhino-reference groups are activated from the incoming prompt or loaded additively on demand. Current schema totals are tracked in [docs/hopper-schema-sizes.md](docs/hopper-schema-sizes.md).
+
 ## Repo layout
 
 | Path | Role |

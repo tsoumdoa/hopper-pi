@@ -27,35 +27,31 @@ const Component = Type.Object({
 	preview: Type.Optional(Type.Boolean()),
 });
 
-const Slider = Type.Object({
+const Widget = Type.Object({
 	...Position,
-	kind: Type.Literal("slider"),
-	min: Type.Number(),
-	max: Type.Number(),
-	value: Type.Number(),
+	kind: Type.Union([
+		Type.Literal("slider"),
+		Type.Literal("panel"),
+		Type.Literal("toggle"),
+		Type.Literal("swatch"),
+		Type.Literal("scribble"),
+		Type.Literal("valueList"),
+	]),
+	min: Type.Optional(Type.Number()),
+	max: Type.Optional(Type.Number()),
+	value: Type.Optional(Type.Union([Type.Number(), Type.Boolean()])),
 	digits: Type.Optional(Type.Integer({ minimum: 0, maximum: 12 })),
-});
-const Panel = Type.Object({
-	...Position,
-	kind: Type.Literal("panel"),
-	text: Type.String(),
+	text: Type.Optional(Type.String()),
 	textOutput: Type.Optional(PanelTextOutputType),
 	width: Type.Optional(Type.Number({ minimum: 1 })),
 	height: Type.Optional(Type.Number({ minimum: 1 })),
 	bgColor: Type.Optional(Type.String()),
-});
-const Toggle = Type.Object({ ...Position, kind: Type.Literal("toggle"), value: Type.Boolean() });
-const Swatch = Type.Object({ ...Position, kind: Type.Literal("swatch"), color: Type.String() });
-const Scribble = Type.Object({
-	...Position,
-	kind: Type.Literal("scribble"),
-	text: Type.String(),
+	color: Type.Optional(Type.String()),
 	size: Type.Optional(Type.Number({ minimum: 1 })),
-});
-const ValueList = Type.Object({
-	...Position,
-	kind: Type.Literal("valueList"),
-	items: Type.Array(Type.Object({ name: Type.String(), value: Type.String() }), { minItems: 1 }),
+	items: Type.Optional(Type.Array(
+		Type.Object({ name: Type.String(), value: Type.String() }),
+		{ minItems: 1 },
+	)),
 	selectedIndex: Type.Optional(Type.Integer({ minimum: 0 })),
 });
 
@@ -87,10 +83,9 @@ export const ghApplyGraphTool = defineTool({
 	label: "Apply Graph",
 	description:
 		"Atomically create a new Grasshopper subgraph with local refs, including components, widgets, scripts, wires, and groups; validation is included.",
-	promptSnippet: "Create and validate a complete Grasshopper subgraph in one call",
 	parameters: Type.Object({
 		components: Type.Optional(Type.Array(Component)),
-		widgets: Type.Optional(Type.Array(Type.Union([Slider, Panel, Toggle, Swatch, Scribble, ValueList]))),
+		widgets: Type.Optional(Type.Array(Widget)),
 		scripts: Type.Optional(Type.Array(Script)),
 		wires: Type.Optional(Type.Array(Type.Object({ from: Endpoint, to: Endpoint }))),
 		groups: Type.Optional(Type.Array(Type.Object({

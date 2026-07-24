@@ -33,27 +33,23 @@ function paginate<T>(items: T[], limit?: number, offset?: number): {
 export const rhQueryObjectsTool = defineTool({
 	name: "rh_query_objects",
 	label: "Query Rhino Objects",
-	description:
-		"List Rhino document objects with short objectId aliases for gh_param_rhino. " +
-		"Filter by selection, exact layer, geometry kind, and/or IDs. Use countOnly before large operations. " +
-		"For a whole layer or large set, pass the same filters directly to gh_param_rhino.rhinoQuery instead of listing IDs.",
-	promptSnippet: "List or count filtered Rhino document objects and return short IDs",
+	description: "List or count filtered Rhino document objects and return short object IDs.",
 	parameters: Type.Object({
 		selectionOnly: Type.Optional(
-			Type.Boolean({ description: "Only objects currently selected in Rhino" }),
+			Type.Boolean(),
 		),
 		layer: Type.Optional(
-			Type.String({ description: "Filter by layer name (exact match)" }),
+			Type.String(),
 		),
 		objectType: Type.Optional(RhinoObjectTypeSchema),
 		objectIds: Type.Optional(
 			Type.Array(
-				Type.String({ description: "Rhino object ID (short or full)" }),
-				{ minItems: 1, description: "Return only these Rhino object IDs" },
+				Type.String(),
+				{ minItems: 1 },
 			),
 		),
 		countOnly: Type.Optional(
-			Type.Boolean({ description: "Return match count only, no object list" }),
+			Type.Boolean(),
 		),
 		limit: Type.Optional(ResultLimitSchema),
 		offset: Type.Optional(ResultOffsetSchema),

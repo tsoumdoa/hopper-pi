@@ -11,7 +11,6 @@ const BorderType = Type.Union([
 
 const ComponentIds = Type.Array(Type.String(), {
 	minItems: 1,
-	description: "Component instance GUIDs from gh_get_canvas",
 });
 
 function resolvedIds(ids: readonly string[]): string[] {
@@ -38,59 +37,48 @@ export function normalizeGroupArguments(args: unknown): any {
 export const ghEditGroupTool = defineTool({
 	name: "gh_edit_group",
 	label: "Edit Group",
-	description:
-		"Create groups, add/remove members, or delete, rename, recolour, and restyle existing Grasshopper groups. " +
-		"Use component instance GUIDs from gh_get_canvas; groupName identifies the target group.",
-	promptSnippet: "Create or edit Grasshopper canvas groups",
+	description: "Surgically create or edit Grasshopper groups using existing object IDs and group names.",
 	parameters: Type.Object({
 		items: Type.Array(
-			Type.Union([
-				Type.Object({
-					operation: Type.Literal("add"),
-					componentIds: ComponentIds,
-					groupName: Type.String({ description: "New or existing group name" }),
-					color: Type.Optional(Type.String({ description: "RGBA, e.g. rgba(255,255,255,150)" })),
-					border: Type.Optional(BorderType),
-				}),
-				Type.Object({
-					operation: Type.Literal("remove"),
-					componentIds: ComponentIds,
-					groupName: Type.String({ description: "Target group name" }),
-				}),
-				Type.Object({
-					operation: Type.Literal("delete"),
-					groupName: Type.String({ description: "Target group name" }),
-				}),
-				Type.Object({
-					operation: Type.Literal("changeColor"),
-					groupName: Type.String({ description: "Target group name" }),
-					color: Type.String({ description: "RGBA, e.g. rgba(255,255,255,150)" }),
-				}),
-				Type.Object({
-					operation: Type.Literal("rename"),
-					groupName: Type.String({ description: "Current group name" }),
-					name: Type.String({ description: "New group name" }),
-				}),
-				Type.Object({
-					operation: Type.Literal("changeStyle"),
-					groupName: Type.String({ description: "Target group name" }),
-					border: BorderType,
-					color: Type.Optional(Type.String({ description: "Optional RGBA colour update" })),
-					name: Type.Optional(Type.String({ description: "Optional group rename" })),
-				}),
-			]),
+			Type.Object({
+				operation: Type.Union([
+					Type.Literal("add"),
+					Type.Literal("remove"),
+					Type.Literal("delete"),
+					Type.Literal("changeColor"),
+					Type.Literal("rename"),
+					Type.Literal("changeStyle"),
+				]),
+				groupName: Type.String(),
+				componentIds: Type.Optional(ComponentIds),
+				color: Type.Optional(Type.String()),
+				border: Type.Optional(BorderType),
+				name: Type.Optional(Type.String()),
+			}),
 			{ minItems: 1 },
 		),
 	}),
 	prepareArguments: normalizeGroupArguments,
 	execute: createExecute(
 		(item) => {
+			const required: Record<string, string[]> = {
+				add: ["componentIds"],
+				remove: ["componentIds"],
+				delete: [],
+				changeColor: ["color"],
+				rename: ["name"],
+				changeStyle: ["border"],
+			};
+			const missing = required[item.operation].filter(
+				(field) => (item as Record<string, unknown>)[field] == null,
+			);
+			if (missing.length > 0) throw new Error(`${item.operation} requires ${missing.join(", ")}`);
 			switch (item.operation) {
 				case "add":
 					return {
 						action: "addGroup",
 						params: {
-							componentIds: resolvedIds(item.componentIds),
+							componentIds: resolvedIds(item.componentIds!),
 							groupName: item.groupName,
 							color: item.color ?? "rgba(255,255,255,150)",
 							border: item.border,
@@ -100,7 +88,7 @@ export const ghEditGroupTool = defineTool({
 					return {
 						action: "removeFromGroup",
 						params: {
-							componentIds: resolvedIds(item.componentIds),
+							componentIds: resolvedIds(item.componentIds!),
 							groupName: item.groupName,
 						},
 					};
@@ -116,10 +104,6 @@ export const ghEditGroupTool = defineTool({
 						params: { groupName: item.groupName, color: item.color, name: item.name, border: item.border },
 					};
 			}
-		},
-		(item, result) => {
-			const ids = "componentIds" in item ? item.componentIds.join(",") : "N/A";
-			return `${item.operation} on "${item.groupName}". ids=[${ids}], jobId=${result.jobId}`;
 		},
 		(item) => `${item.operation} on group "${item.groupName}"...`,
 	),

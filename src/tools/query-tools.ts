@@ -23,21 +23,16 @@ import { ResultOffsetSchema } from "./schemas.js";
 export const ghGetCanvasTool = defineTool({
 	name: "gh_get_canvas",
 	label: "Get Canvas",
-	description:
-		"Fetch the live Grasshopper canvas. With no filters, returns a subgraph index summary; pass subgraph for one cluster or selectionOnly for the user's current selection. " +
-		"After placing a new build, make one unfiltered call to obtain all component and port GUIDs before wiring.",
-	promptSnippet: "Inspect Grasshopper canvas structure, selection, IDs, ports, and wires",
+	description: "Inspect an existing Grasshopper canvas, subgraph, or current selection.",
 	parameters: Type.Object({
 		subgraph: Type.Optional(
 			Type.String({
-				description: 'Show only this sub-graph (e.g. "subgraph_0"). Applied after selectionOnly when both are set.',
+				description: 'Subgraph ID such as "subgraph_0".',
 			}),
 		),
 		selectionOnly: Type.Optional(
 			Type.Boolean({
-				description:
-					"Return only canvas objects currently selected in Grasshopper (groups expand to members). " +
-					"Includes internal wires between selected components only. Always returns detail view.",
+				description: "Groups expand to members; returns internal wires.",
 			}),
 		),
 	}),
@@ -59,16 +54,10 @@ export const ghGetCanvasTool = defineTool({
 export const ghListComponentsTool = defineTool({
 	name: "gh_list_components",
 	label: "List Components",
-	description:
-		"Search the Grasshopper component registry and return ranked typeGuids for gh_edit_components. Put each desired component in its own query string; use multi-word queries to disambiguate. " +
-		"Defaults to vanilla components excluding Params; choose plugin or params explicitly when needed. Widgets are created with gh_create_widget, not a searched typeGuid.",
-	promptSnippet: "Search Grasshopper component types and return typeGuids for creation",
+	description: "Search exact Grasshopper component types when a graph type is unusual, missing, or ambiguous.",
 	parameters: Type.Object({
 		queries: Type.Array(
-			Type.String({
-				description:
-					"One desired component per query string; use multiple words as disambiguating terms.",
-			}),
+			Type.String(),
 			{ minItems: 1 },
 		),
 		searchFrom: Type.Optional(
@@ -79,8 +68,7 @@ export const ghListComponentsTool = defineTool({
 					Type.Literal("params"),
 				],
 				{
-					description:
-						"Source: 'vanilla' only, 'plugin' only, or 'params' only. Defaults to 'vanilla'.",
+					description: "Default vanilla.",
 				},
 			),
 		),
@@ -113,9 +101,7 @@ export const ghListComponentsTool = defineTool({
 export const ghGetCanvasErrorsTool = defineTool({
 	name: "gh_get_canvas_errors",
 	label: "Get Canvas Errors",
-	description:
-		"Retrieve Grasshopper runtime errors, warnings, messages, and component-overlap checks. Call after wiring or layout changes; Goo conversion errors include Python tree/list repair hints.",
-	promptSnippet: "Validate Grasshopper runtime messages and detect component overlaps",
+	description: "Inspect runtime messages and overlap checks on the current Grasshopper canvas.",
 	parameters: Type.Object({}),
 
 	async execute(_toolCallId, _params, _signal, onUpdate) {

@@ -1,74 +1,52 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { createExecute, formatDefaultResult } from "../edit-handlers.js";
+import { createExecute } from "../edit-handlers.js";
 import { resolveInstanceGuid } from "../../services/guid-shortener.js";
 import {
-	SliderSetFields,
 	SliderRangeFields,
 	PanelTextFields,
 	PanelPropertyFields,
-	ToggleFields,
 	SwatchFields,
-	ScribbleTextFields,
 	ValueListSelectFields,
 } from "./shared-types.js";
 import type { CommandAction } from "../../types/commands.js";
 
-const MutateBase = Type.Object({
-	targetId: Type.String({ description: "Widget GUID" }),
-});
-
 export const ghMutateWidgetTool = defineTool({
 	name: "gh_mutate_widget",
 	label: "Mutate Widget",
-	description:
-		"Change widget-specific values and properties: slider value/range, panel text/display, toggle, swatch colour, scribble text, or value-list selection. " +
-		"Use gh_edit_components to move, rename, hide, lock, or delete widgets.",
-	promptSnippet: "Change Grasshopper widget values and widget-specific properties",
+	description: "Surgically change an existing Grasshopper widget's value or widget-specific properties.",
 	parameters: Type.Object({
 		items: Type.Array(
-			Type.Union([
-				Type.Intersect([
-					Type.Object({ widgetType: Type.Literal("slider"), action: Type.Literal("setValue") }),
-					MutateBase,
-					SliderSetFields,
+			Type.Object({
+				widgetType: Type.Union([
+					Type.Literal("slider"),
+					Type.Literal("panel"),
+					Type.Literal("toggle"),
+					Type.Literal("swatch"),
+					Type.Literal("scribble"),
+					Type.Literal("valueList"),
 				]),
-				Type.Intersect([
-					Type.Object({ widgetType: Type.Literal("slider"), action: Type.Literal("setRange") }),
-					MutateBase,
-					SliderRangeFields,
+				action: Type.Union([
+					Type.Literal("setValue"),
+					Type.Literal("setRange"),
+					Type.Literal("setText"),
+					Type.Literal("setProperty"),
+					Type.Literal("setColor"),
+					Type.Literal("setSelected"),
 				]),
-				Type.Intersect([
-					Type.Object({ widgetType: Type.Literal("panel"), action: Type.Literal("setText") }),
-					MutateBase,
-					PanelTextFields,
-				]),
-				Type.Intersect([
-					Type.Object({ widgetType: Type.Literal("panel"), action: Type.Literal("setProperty") }),
-					MutateBase,
-					PanelPropertyFields,
-				]),
-				Type.Intersect([
-					Type.Object({ widgetType: Type.Literal("toggle"), action: Type.Literal("setValue") }),
-					MutateBase,
-					ToggleFields,
-				]),
-				Type.Intersect([
-					Type.Object({ widgetType: Type.Literal("swatch"), action: Type.Literal("setColor") }),
-					MutateBase,
-					SwatchFields,
-				]),
-				Type.Intersect([
-					Type.Object({ widgetType: Type.Literal("scribble"), action: Type.Literal("setText") }),
-					MutateBase,
-					ScribbleTextFields,
-				]),
-				Type.Intersect([
-					Type.Object({ widgetType: Type.Literal("valueList"), action: Type.Literal("setSelected") }),
-					MutateBase,
-					ValueListSelectFields,
-				]),
-			]),
+				targetId: Type.String(),
+				value: Type.Optional(Type.Union([Type.Number(), Type.Boolean()])),
+				min: Type.Optional(SliderRangeFields.properties.min),
+				max: Type.Optional(SliderRangeFields.properties.max),
+				digits: Type.Optional(SliderRangeFields.properties.digits),
+				text: Type.Optional(PanelTextFields.properties.text),
+				textOutput: Type.Optional(PanelPropertyFields.properties.textOutput),
+				width: Type.Optional(PanelPropertyFields.properties.width),
+				height: Type.Optional(PanelPropertyFields.properties.height),
+				bgColor: Type.Optional(PanelPropertyFields.properties.bgColor),
+				color: Type.Optional(SwatchFields.properties.color),
+				selectedIndex: Type.Optional(ValueListSelectFields.properties.selectedIndex),
+			}),
 			{ minItems: 1 },
 		),
 	}),
@@ -77,6 +55,21 @@ export const ghMutateWidgetTool = defineTool({
 			const i = item as typeof item & { targetId: string; action: string; widgetType: string };
 			const { widgetType, action, targetId, ...fields } = i;
 			const key = `${widgetType}:${action}` as const;
+			const required: Record<string, string[]> = {
+				"slider:setValue": ["value"],
+				"slider:setRange": ["min", "max", "digits"],
+				"panel:setText": ["text"],
+				"panel:setProperty": ["textOutput"],
+				"toggle:setValue": ["value"],
+				"swatch:setColor": ["color"],
+				"scribble:setText": ["text"],
+				"valueList:setSelected": ["selectedIndex"],
+			};
+			const missing = (required[key] ?? []).filter(
+				(field) => (item as Record<string, unknown>)[field] == null,
+			);
+			if (!required[key]) throw new Error(`unsupported widget mutation ${key}`);
+			if (missing.length > 0) throw new Error(`${key} requires ${missing.join(", ")}`);
 			const actionMap: Record<string, CommandAction> = {
 				"slider:setValue": "setSliderValue",
 				"slider:setRange": "editSliderRange",
@@ -92,7 +85,6 @@ export const ghMutateWidgetTool = defineTool({
 				? { action: mapped, params: { targetId: resolveInstanceGuid(targetId), ...fields } }
 				: null;
 		},
-		formatDefaultResult,
 		(item) => {
 			const i = item as typeof item & { targetId: string; action: string; widgetType: string };
 			return `${i.action} ${i.widgetType} on ${i.targetId}...`;

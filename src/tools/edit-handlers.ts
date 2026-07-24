@@ -7,7 +7,6 @@ export {
 } from "./execute-factory.js";
 
 export {
-	formatDefaultResult,
 	defaultProgressMsg,
 	formatToolError,
 	formatToolFailed,

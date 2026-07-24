@@ -7,9 +7,7 @@ import type { CommandAction } from "../../types/commands.js";
 export const ghEditWireTool = defineTool({
 	name: "gh_edit_wire",
 	label: "Edit Wire",
-	description:
-		"Connect or disconnect Grasshopper wires using component and port GUIDs returned by gh_get_canvas. Batch independent wire edits in one call.",
-	promptSnippet: "Connect or disconnect Grasshopper component ports by GUID",
+	description: "Surgically connect or disconnect existing Grasshopper ports by component and port IDs.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Object({
@@ -17,18 +15,10 @@ export const ghEditWireTool = defineTool({
 					Type.Literal("connect"),
 					Type.Literal("disconnect"),
 				]),
-				fromComponent: Type.String({
-					description: "Source component GUID",
-				}),
-				fromPort: Type.String({
-					description: "Source output port GUID",
-				}),
-				toComponent: Type.String({
-					description: "Target component GUID",
-				}),
-				toPort: Type.String({
-					description: "Target input port GUID",
-				}),
+				fromComponent: Type.String(),
+				fromPort: Type.String(),
+				toComponent: Type.String(),
+				toPort: Type.String(),
 			}),
 			{ minItems: 1 },
 		),
@@ -41,8 +31,6 @@ export const ghEditWireTool = defineTool({
 				to: { componentId: resolveInstanceGuid(item.toComponent), port: resolveInstanceGuid(item.toPort) },
 			},
 		}),
-		(item, result) =>
-			`Wire ${item.action === "connect" ? "connected" : "disconnected"}. jobId=${result.jobId}`,
 		(item) => {
 			const resolvedFromComp = resolveInstanceGuid(item.fromComponent);
 			const resolvedFromPort = resolveInstanceGuid(item.fromPort);

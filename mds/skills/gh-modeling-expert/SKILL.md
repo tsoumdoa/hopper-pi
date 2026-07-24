@@ -23,6 +23,8 @@ Assess tier before building. When tier is ambiguous **and** the choice materiall
 
 **Default new-build workflow:** resolve unusual/ambiguous types if necessary → call `gh_apply_graph` once → inspect its integrated validation → use legacy tools only for surgical repair. Local refs replace the old placement readback. For existing-canvas edits, targeted reads (`selectionOnly`, `subgraph`) are appropriate.
 
+If a required compatibility edit tool is not active, call `hopper_load_tools` for the relevant semantic group; do not replace the graph workflow with multiple legacy creation calls.
+
 ## Gaps and compact size table
 
 | Constant | Value | Use |

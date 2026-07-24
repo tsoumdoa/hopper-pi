@@ -81,3 +81,5 @@ It does not emit a job ID or success line for every object.
 ## Surgical follow-up
 
 Use returned short IDs directly with legacy edit tools when a small repair is needed. Rebuild with `gh_apply_graph` only when replacing the whole new subgraph is clearer than a surgical edit.
+
+Legacy edit tools may be deferred from the active model surface. Prompt routing normally activates the needed group; if it misses, call `hopper_load_tools` with `canvas_edits`, `script_edits`, `rhino_document`, or `rhino_references`. Loading is additive for the current turn.

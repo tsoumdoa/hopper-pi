@@ -125,4 +125,39 @@ public class ApplyGraphContractTests
         Assert.Equal(2, result.Counts.Wires);
         Assert.Equal(1, solutionCount);
     }
+
+    [Fact]
+    public void Port_names_and_nicknames_are_exact_and_case_sensitive()
+    {
+        const string exactJson = """
+        {
+          "widgets":[
+            {"ref":"source","kind":"slider","name":"Source","x":100,"y":100,"min":0,"max":10,"value":2},
+            {"ref":"target","kind":"panel","name":"Target","x":300,"y":100,"text":""}
+          ],
+          "wires":[{"from":["source","Source"],"to":["target","Target"]}]
+        }
+        """;
+        const string wrongCaseJson = """
+        {
+          "widgets":[
+            {"ref":"source","kind":"slider","name":"Source","x":100,"y":100,"min":0,"max":10,"value":2},
+            {"ref":"target","kind":"panel","name":"Target","x":300,"y":100,"text":""}
+          ],
+          "wires":[{"from":["source","source"],"to":["target","Target"]}]
+        }
+        """;
+
+        var exact = GraphOperations.Apply(
+            new GH_Document(),
+            JsonSerializer.Deserialize<ApplyGraphRequest>(exactJson)!);
+        var wrongCase = GraphOperations.Apply(
+            new GH_Document(),
+            JsonSerializer.Deserialize<ApplyGraphRequest>(wrongCaseJson)!);
+
+        Assert.True(exact.Ok);
+        Assert.False(wrongCase.Ok);
+        Assert.True(wrongCase.RolledBack);
+        Assert.Contains(wrongCase.StructuralErrors, error => error.Code == "WIRE_FAILED");
+    }
 }

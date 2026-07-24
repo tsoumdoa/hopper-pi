@@ -53,6 +53,24 @@ export function validateApplyGraphInput(input: ApplyGraphInput): StructuralError
 	}
 
 	for (const [index, widget] of (input.widgets ?? []).entries()) {
+		const required: Record<string, string[]> = {
+			slider: ["min", "max", "value"],
+			panel: ["text"],
+			toggle: ["value"],
+			swatch: ["color"],
+			scribble: ["text"],
+			valueList: ["items"],
+		};
+		const missing = required[widget.kind].filter(
+			(field) => (widget as unknown as Record<string, unknown>)[field] == null,
+		);
+		if (missing.length > 0) {
+			errors.push({
+				path: `widgets[${index}]`,
+				code: "INVALID_WIDGET",
+				message: `${widget.kind} requires ${missing.join(", ")}.`,
+			});
+		}
 		if (widget.kind === "slider") {
 			if (
 				!Number.isFinite(widget.min) ||
@@ -77,7 +95,7 @@ export function validateApplyGraphInput(input: ApplyGraphInput): StructuralError
 		if (
 			widget.kind === "valueList" &&
 			widget.selectedIndex != null &&
-			(widget.selectedIndex < 0 || widget.selectedIndex >= widget.items.length)
+			(widget.selectedIndex < 0 || !widget.items || widget.selectedIndex >= widget.items.length)
 		) {
 			errors.push({
 				path: `widgets[${index}].selectedIndex`,

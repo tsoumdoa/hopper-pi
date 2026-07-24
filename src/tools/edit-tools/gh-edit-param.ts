@@ -1,6 +1,6 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { createHybridExecute, formatDefaultResult } from "../edit-handlers.js";
+import { createHybridExecute } from "../edit-handlers.js";
 import { withRequester } from "../../infra/request-helpers.js";
 import { fetchScriptParams } from "../canvas-fetch.js";
 import { formatScriptParamsResponse } from "../query-handlers.js";
@@ -13,85 +13,33 @@ export const ghEditParamTool = defineTool({
 	name: "gh_edit_param",
 	label: "Edit Script Ports",
 	description:
-		"Manage input/output ports on Grasshopper C# or Python script components only. syncParams reconciles complete port lists; listParams inspects them. " +
-		"Use add/remove/editAccessType for one-off property changes (access, type hint, mapping, simplify, reverse). " +
-		"For a rename, update code and ports atomically with gh_edit_script setCode; use previousName when reordering or swapping names.",
-	promptSnippet: "Inspect or edit Grasshopper script-component input/output ports",
+		"Inspect or surgically edit existing Grasshopper script ports; syncParams reconciles complete lists.",
 	parameters: Type.Object({
 		items: Type.Array(
-			Type.Union([
-				Type.Object({
-					action: Type.Literal("syncParams"),
-					targetId: Type.String({ description: "Script component GUID" }),
-					inputs: Type.Optional(
-						Type.Array(ScriptIOFields, {
-							description:
-								"Full desired inputs — updates in place, adds missing, removes extras. Omit (undefined) to leave unchanged; [] removes all inputs.",
-						})
-					),
-					outputs: Type.Optional(
-						Type.Array(ScriptIOFields, {
-							description:
-								"Full desired outputs. Omit to leave unchanged; [] removes all outputs.",
-						})
-					),
-				}),
-				Type.Object({
-					action: Type.Literal("listParams"),
-					targetId: Type.String({ description: "Component GUID" }),
-				}),
-				Type.Object({
-					action: Type.Literal("removeInput"),
-					targetId: Type.String({ description: "Component GUID" }),
-					name: Type.String({ description: "Parameter name" }),
-				}),
-				Type.Object({
-					action: Type.Literal("removeOutput"),
-					targetId: Type.String({ description: "Component GUID" }),
-					name: Type.String({ description: "Parameter name" }),
-				}),
-				Type.Object({
-					action: Type.Literal("addInput"),
-					targetId: Type.String({ description: "Component GUID" }),
-					name: Type.String({ description: "Parameter name" }),
-					typeHint: Type.Optional(TypeHintType),
-					access: Type.Optional(AccessType),
-					dataMapping: Type.Optional(DataMappingType),
-					simplify: Type.Optional(
-						Type.Boolean({ description: "Simplify data paths" })
-					),
-					reverse: Type.Optional(
-						Type.Boolean({ description: "Reverse item order" })
-					),
-				}),
-				Type.Object({
-					action: Type.Literal("addOutput"),
-					targetId: Type.String({ description: "Component GUID" }),
-					name: Type.String({ description: "Parameter name" }),
-					typeHint: Type.Optional(TypeHintType),
-					dataMapping: Type.Optional(DataMappingType),
-					simplify: Type.Optional(
-						Type.Boolean({ description: "Simplify data paths" })
-					),
-					reverse: Type.Optional(
-						Type.Boolean({ description: "Reverse item order" })
-					),
-				}),
-				Type.Object({
-					action: Type.Literal("editAccessType"),
-					targetId: Type.String({ description: "Component GUID" }),
-					name: Type.String({ description: "Parameter name" }),
-					typeHint: Type.Optional(TypeHintType),
-					access: Type.Optional(AccessType),
-					dataMapping: Type.Optional(DataMappingType),
-					simplify: Type.Optional(
-						Type.Boolean({ description: "Simplify data paths" })
-					),
-					reverse: Type.Optional(
-						Type.Boolean({ description: "Reverse item order" })
-					),
-				}),
-			]),
+			Type.Object({
+				action: Type.Union([
+					Type.Literal("syncParams"),
+					Type.Literal("listParams"),
+					Type.Literal("removeInput"),
+					Type.Literal("removeOutput"),
+					Type.Literal("addInput"),
+					Type.Literal("addOutput"),
+					Type.Literal("editAccessType"),
+				]),
+				targetId: Type.String(),
+				name: Type.Optional(Type.String()),
+				inputs: Type.Optional(Type.Array(ScriptIOFields, {
+					description: "Full desired inputs; omit to preserve, [] to remove all.",
+				})),
+				outputs: Type.Optional(Type.Array(ScriptIOFields, {
+					description: "Full desired outputs; omit to preserve, [] to remove all.",
+				})),
+				typeHint: Type.Optional(TypeHintType),
+				access: Type.Optional(AccessType),
+				dataMapping: Type.Optional(DataMappingType),
+				simplify: Type.Optional(Type.Boolean()),
+				reverse: Type.Optional(Type.Boolean()),
+			}),
 			{ minItems: 1 },
 		),
 	}),
@@ -103,6 +51,13 @@ export const ghEditParamTool = defineTool({
 			return formatted.content[0].text;
 		},
 		(item) => {
+			if (
+				item.action !== "syncParams" &&
+				item.action !== "listParams" &&
+				!item.name
+			) {
+				throw new Error(`${item.action} requires name`);
+			}
 			switch (item.action) {
 				case "syncParams":
 					return {
@@ -127,7 +82,6 @@ export const ghEditParamTool = defineTool({
 					return null;
 			}
 		},
-		formatDefaultResult,
-		(item) => `${item.action} on ${item.targetId} ${'name' in item ? `'${item.name}'` : ""}...`,
+		(item) => `${item.action} on ${item.targetId}${item.name ? ` '${item.name}'` : ""}...`,
 	),
 });

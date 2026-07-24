@@ -99,18 +99,15 @@ function responseText(res: ControlRhinoViewResponse): string {
 }
 
 const PointSchema = Type.Object({
-	x: Type.Number({ description: "X coordinate" }),
-	y: Type.Number({ description: "Y coordinate" }),
-	z: Type.Number({ description: "Z coordinate" }),
+	x: Type.Number(),
+	y: Type.Number(),
+	z: Type.Number(),
 });
 
 export const rhViewControlTool = defineTool({
 	name: "rh_view_control",
 	label: "Control Rhino View",
-	description:
-		"Change the active Rhino viewport or camera using constrained operations: activate a viewport, restore a standard/named/CPlane view, set camera properties, zoom, or explicitly save a named view. " +
-		"Prefer this over rh_run_script for normal view changes. For a one-off screenshot from a standard or named view, rh_capture_view.view can switch temporarily and restore automatically.",
-	promptSnippet: "Change Rhino viewport, projection, camera, zoom, or named view",
+	description: "Change Rhino viewport, projection, camera, CPlane view, zoom, or named views.",
 	promptGuidelines: [
 		"Use rh_view_control saveNamedView only when the user explicitly asked to create or update a named view.",
 	],

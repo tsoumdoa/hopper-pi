@@ -4,7 +4,7 @@ import { submitCommand } from "../infra/command-dispatch.js";
 import { withRequester } from "../infra/request-helpers.js";
 import { lineCount } from "../lib/line-count.js";
 import { fetchScriptCode } from "../tools/canvas-fetch.js";
-import { formatDefaultResult, formatToolError } from "../tools/result-formatters.js";
+import { formatToolError } from "../tools/result-formatters.js";
 import { resolveInstanceGuid } from "./guid-shortener.js";
 import {
 	assembleCsharpScript,
@@ -282,6 +282,8 @@ export async function executeGhEditScript(
 
 	const outcomeResults: string[] = [];
 	const results: string[] = [];
+	let submittedMutations = 0;
+	const mutationFailures: string[] = [];
 
 	for (const item of queryItems) {
 		if (item.action !== "getCode" && item.action !== "getCodeParts") continue;
@@ -312,12 +314,24 @@ export async function executeGhEditScript(
 			const mapped = mapGhEditScriptMutation(item);
 			if (!mapped) continue;
 
-			const job = await submitCommand(mapped.action, mapped.params);
-			outcomeResults.push(`${summary} → ${job.jobId}`);
-			results.push(formatDefaultResult(
-				{ action: item.action, targetId: "targetId" in item ? item.targetId : undefined },
-				job,
-			));
+			try {
+				await submitCommand(mapped.action, mapped.params);
+				submittedMutations++;
+				outcomeResults.push(`${summary} → submitted`);
+			} catch (err) {
+				const message = formatToolError(item.action, err);
+				mutationFailures.push(message);
+				outcomeResults.push(`${summary} → failed`);
+			}
+		}
+		results.push(
+			`Submitted ${submittedMutations} script mutation${submittedMutations === 1 ? "" : "s"}.`,
+		);
+		if (mutationFailures.length > 0) {
+			results.push(
+				`${mutationFailures.length} failure${mutationFailures.length === 1 ? "" : "s"}:`,
+				...mutationFailures,
+			);
 		}
 	}
 

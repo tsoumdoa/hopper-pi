@@ -4,19 +4,11 @@ import { validateRhinoScriptItem } from "../services/rhino-script-validator.js";
 import { formatToolFailed } from "./result-formatters.js";
 import { runRhinoScript } from "./rhino-script-handlers.js";
 
-const ROUTING_PREFIX =
-	"Use rh_run_script for Rhino document work (geometry, layers, selection, blocks, direct bake, materials). " +
-	"Use rh_view_control for normal viewport/camera changes, rh_query_objects for object IDs, and gh_* tools for the Grasshopper canvas. ";
-
 export const rhRunScriptTool = defineTool({
 	name: "rh_run_script",
 	label: "Run Rhino Script",
 	description:
-		ROUTING_PREFIX +
-		"Runs Rhino command macros or Python/C# scripts on the active RhinoDoc (Rhino 8 RhinoCode). " +
-		"Prefer Python for multi-step work and command mode for one-liners. Use print() / Console.WriteLine() for returned output. " +
-		"Items run sequentially; a failure does not roll back earlier items. Changes share one Rhino Undo record per agent turn.",
-	promptSnippet: "Run command, Python, or C# against the active Rhino document",
+		"Run sequential command, Python, or C# items against the active Rhino document; failures do not roll back earlier items.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Object({
@@ -28,7 +20,7 @@ export const rhRunScriptTool = defineTool({
 					description:
 						"command = Rhino macro string; python = Rhino Python (scriptcontext/rs); csharp = Rhino C# script editor body",
 				}),
-				source: Type.String({ description: "Command macro or script source" }),
+				source: Type.String(),
 				echo: Type.Optional(
 					Type.Boolean({
 						description: "Echo command to history (command mode only, default false)",

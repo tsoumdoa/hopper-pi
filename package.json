@@ -16,6 +16,7 @@
 		"dev": "tsx src/index.ts",
 		"build": "tsc -p tsconfig.json",
 		"test": "vitest run",
+		"report:tool-schemas": "tsx src/scripts/report-tool-schemas.ts",
 		"pi": "pi -e .",
 		"dump:components": "tsx src/scripts/dump-components.ts",
 		"postinstall": "node scripts/install-grasshopper-plugin.mjs",

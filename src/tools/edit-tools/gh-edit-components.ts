@@ -1,58 +1,50 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { createExecute, formatDefaultResult, defaultProgressMsg } from "../edit-handlers.js";
+import { createExecute, defaultProgressMsg } from "../edit-handlers.js";
 import { resolveInstanceGuid, resolveTypeGuid } from "../../services/guid-shortener.js";
 import type { CommandAction } from "../../types/commands.js";
 
 export const ghEditComponentsTool = defineTool({
 	name: "gh_edit_components",
 	label: "Edit Components",
-	description:
-		"Add standard Grasshopper components by typeGuid, or delete, move, rename, lock, and hide any canvas object (including widgets). " +
-		"Create widgets with gh_create_widget and change widget-specific properties with gh_mutate_widget.",
-	promptSnippet: "Add or manage Grasshopper canvas components and shared object properties",
+	description: "Surgically add, delete, move, rename, lock, or hide Grasshopper canvas objects.",
 	parameters: Type.Object({
 		items: Type.Array(
-			Type.Union([
-				Type.Object({
-					action: Type.Literal("add"),
-					componentType: Type.String({ description: "Type GUID for add action (from gh_list_components)" }),
-					x: Type.Number({ description: "Canvas X (must be > 20)" }),
-					y: Type.Number({ description: "Canvas Y (must be > 20)" }),
-					nickName: Type.Optional(Type.String({ description: "Display nickname" })),
-					preview: Type.Optional(Type.Boolean({ description: "Show geometry preview (default false)" })),
-				}),
-				Type.Object({
-					action: Type.Literal("delete"),
-					targetId: Type.String({ description: "Component GUID" }),
-				}),
-				Type.Object({
-					action: Type.Literal("move"),
-					targetId: Type.String({ description: "Component GUID" }),
-					x: Type.Number({ description: "Canvas X (must be > 20)" }),
-					y: Type.Number({ description: "Canvas Y (must be > 20)" }),
-				}),
-				Type.Object({
-					action: Type.Literal("rename"),
-					targetId: Type.String({ description: "Component GUID" }),
-					nickName: Type.String({ description: "Display nickname" }),
-				}),
-				Type.Object({
-					action: Type.Literal("set_locked"),
-					targetId: Type.String({ description: "Component GUID" }),
-					locked: Type.Boolean({ description: "Lock state" }),
-				}),
-				Type.Object({
-					action: Type.Literal("set_hidden"),
-					targetId: Type.String({ description: "Component GUID" }),
-					hidden: Type.Boolean({ description: "Visibility state" }),
-				}),
-			]),
+			Type.Object({
+				action: Type.Union([
+					Type.Literal("add"),
+					Type.Literal("delete"),
+					Type.Literal("move"),
+					Type.Literal("rename"),
+					Type.Literal("set_locked"),
+					Type.Literal("set_hidden"),
+				]),
+				componentType: Type.Optional(Type.String()),
+				targetId: Type.Optional(Type.String()),
+				x: Type.Optional(Type.Number()),
+				y: Type.Optional(Type.Number()),
+				nickName: Type.Optional(Type.String()),
+				preview: Type.Optional(Type.Boolean({ description: "Default false." })),
+				locked: Type.Optional(Type.Boolean()),
+				hidden: Type.Optional(Type.Boolean()),
+			}),
 			{ minItems: 1 },
 		),
 	}),
 	execute: createExecute(
 		(item) => {
+			const required: Record<string, string[]> = {
+				add: ["componentType", "x", "y"],
+				delete: ["targetId"],
+				move: ["targetId", "x", "y"],
+				rename: ["targetId", "nickName"],
+				set_locked: ["targetId", "locked"],
+				set_hidden: ["targetId", "hidden"],
+			};
+			const missing = required[item.action].filter(
+				(field) => (item as Record<string, unknown>)[field] == null,
+			);
+			if (missing.length > 0) throw new Error(`${item.action} requires ${missing.join(", ")}`);
 			switch (item.action) {
 				case "add":
 					return {
@@ -89,12 +81,6 @@ export const ghEditComponentsTool = defineTool({
 				default:
 					return null;
 			}
-		},
-		(item, result) => {
-			if (item.action === "add") {
-				return `${item.action} completed. type=${item.componentType}, jobId=${result.jobId}`;
-			}
-			return formatDefaultResult(item, result);
 		},
 		defaultProgressMsg,
 	),

@@ -1,8 +1,8 @@
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import type { TextContent } from "@earendil-works/pi-ai";
 import type { CommandAction } from "../types/commands.js";
-import { submitCommand, type SubmitResult } from "../infra/command-dispatch.js";
-import { formatDefaultResult, formatToolError } from "./result-formatters.js";
+import { submitCommand } from "../infra/command-dispatch.js";
+import { formatToolError } from "./result-formatters.js";
 
 type ProgressFn = (msg: { content: TextContent[]; details: unknown }) => void;
 
@@ -13,9 +13,17 @@ function normalizeMapped(mapped: MappedAction | MappedAction[] | null): MappedAc
 	return Array.isArray(mapped) ? mapped : [mapped];
 }
 
+export function formatMutationSummary(submitted: number, failures: string[]): string {
+	const lines = [`Submitted ${submitted} mutation${submitted === 1 ? "" : "s"}.`];
+	if (failures.length > 0) {
+		lines.push(`${failures.length} failure${failures.length === 1 ? "" : "s"}:`);
+		lines.push(...failures);
+	}
+	return lines.join("\n");
+}
+
 export function createExecute<P>(
 	mapParams: (item: P) => MappedAction | MappedAction[] | null,
-	formatMessage: (item: P, result: SubmitResult) => string,
 	progressMsg?: (item: P) => string,
 ) {
 	return async (
@@ -28,10 +36,17 @@ export function createExecute<P>(
 			? (onUpdate as ProgressFn)
 			: undefined;
 
-		const results: string[] = [];
+		let submitted = 0;
+		const failures: string[] = [];
 
 		for (const p of params.items) {
-			const actions = normalizeMapped(mapParams(p));
+			let actions: MappedAction[];
+			try {
+				actions = normalizeMapped(mapParams(p));
+			} catch (err) {
+				failures.push(err instanceof Error ? err.message : String(err));
+				continue;
+			}
 
 			if (actions.length === 0) {
 				continue;
@@ -48,18 +63,17 @@ export function createExecute<P>(
 				}
 
 				try {
-					const job = await submitCommand(mapped.action, mapped.params);
-					results.push(formatMessage(p, job));
+					await submitCommand(mapped.action, mapped.params);
+					submitted++;
 				} catch (err) {
-					results.push(`${summary} → ERROR: ${err instanceof Error ? err.message : String(err)}`);
-					results.push(formatMessage(p, { jobId: `failed: ${err instanceof Error ? err.message : String(err)}` }));
+					failures.push(`${mapped.action}: ${err instanceof Error ? err.message : String(err)}`);
 				}
 			}
 		}
 
 		return {
-			content: [{ type: "text" as const, text: results.length > 0 ? results.join("\n") : "OK" }],
-			details: {},
+			content: [{ type: "text" as const, text: formatMutationSummary(submitted, failures) }],
+			details: { submitted, failures },
 		};
 	};
 }
@@ -70,12 +84,10 @@ export function createHybridExecute<P extends { action: string; targetId?: strin
 	queryAction: string,
 	queryHandler: QueryHandler<P>,
 	mapMutation: (item: P) => MappedAction | MappedAction[] | null,
-	formatMessage?: (item: P, result: SubmitResult) => string,
 	progressMsg?: (item: P) => string,
 ) {
 	const execute = createExecute(
 		mapMutation,
-		formatMessage ?? formatDefaultResult as (item: P, result: SubmitResult) => string,
 		progressMsg,
 	);
 
