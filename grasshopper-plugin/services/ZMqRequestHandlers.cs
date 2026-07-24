@@ -152,6 +152,27 @@ namespace rhino_zmq_poc
         }
     }
 
+    internal class ApplyGraphHandler : IUiRequestHandler
+    {
+        public string Handle(GH_Document doc, JsonElement root)
+        {
+            return Utilities.RunOnUiThread(() =>
+            {
+                try
+                {
+                    var request = JsonSerializer.Deserialize<ApplyGraphRequest>(root.GetRawText());
+                    if (request == null)
+                        return JsonSerializer.Serialize(new { error = "Invalid applyGraph request" });
+                    return JsonSerializer.Serialize(GraphOperations.Apply(doc, request));
+                }
+                catch (Exception ex)
+                {
+                    return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
+                }
+            }, TimeSpan.FromSeconds(30));
+        }
+    }
+
     internal class ListScriptParamsHandler : IUiRequestHandler
     {
         public string Handle(GH_Document doc, JsonElement root)

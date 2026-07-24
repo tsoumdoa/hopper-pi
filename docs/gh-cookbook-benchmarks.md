@@ -15,7 +15,7 @@ For each prompt, check:
 | ✅ **Correct values** | Sliders/panels set to reasonable defaults matching the prompt |
 | ✅ **Clean layout** | Left-to-right flow, inputs on left, tight spacing, grouped |
 | ✅ **Preview** | Final output has Custom Preview + Swatch, intermediates hidden |
-| ✅ **No re-read abuse** | `gh_get_canvas` called only ONCE after all placement |
+| ✅ **Atomic build** | New graph normally uses one `gh_apply_graph` call and no canvas reread |
 
 ---
 
@@ -277,17 +277,46 @@ These test whether the agent handles underspecified requests gracefully.
 
 1. **Progressive depth:** T1 tests single recipes, T2 chains two, T3 builds full compositions, T4 throws curveballs.
 2. **Real language:** Prompts are written how a user actually talks ("chop it into pieces", "make it look like raindrops"), not in API-speak.
-3. **Cross-cutting concerns:** Every prompt implicitly tests layout discipline, preview hygiene, and the place-then-read-once rule — not just component correctness.
+3. **Cross-cutting concerns:** Every prompt implicitly tests layout discipline, preview hygiene, and the one-call graph workflow — not just component correctness.
 4. **Composition overlap:** T3-01/02/03 are literally the cookbook examples — if the agent can't build those, the cookbook isn't working. T3-04/05/06 go beyond to test generalization.
 
 ### Running a benchmark session
 
+Compare a baseline commit with the compact-tool-surface commit using the same model, reasoning level, and blank-canvas setup. Randomize prompt order and run each prompt at least five times.
+
+For every run record:
+
+- end-to-end and provider/model duration;
+- output and reasoning tokens;
+- active schema characters;
+- assistant turns and Hopper tool calls;
+- tool argument/result characters;
+- runtime errors, overlaps, undo behavior, and correctness.
+
+Targets:
+
+- Tier 1–2 new builds normally use one `gh_apply_graph` call and no canvas reread;
+- at least 30% fewer median assistant turns;
+- at least 25% fewer median output tokens;
+- default active Hopper schemas at most 12,000 characters;
+- no regression in correctness, runtime messages, overlaps, undo, or surgical edits.
+
+Latency and token targets are reports, not flaky CI gates. Schema budgets and correctness are hard gates.
+
+Before signing off a release, also run these manual Rhino/Grasshopper checks:
+
+- Tier 1, Tier 2, and Tier 3 cookbook definitions;
+- an exact plugin-qualified component type;
+- C# and Python nodes with custom ports;
+- a deliberately invalid mid-graph port, confirming byte-equivalent rollback;
+- one Grasshopper Undo after a successful build, confirming the whole agent turn is restored.
+
 1. **Clear the canvas** (or start fresh).
-2. **Paste one prompt.**
-3. **Let the agent run to completion.**
-4. **Score against the checklist** (right components? wiring? layout? preview? re-read count?).
-5. **Note failures** — which recipe did it miss? Which wiring was wrong? Did it read canvas too early?
-6. **Repeat** with next prompt. Track which tier the agent passes consistently.
+2. **Paste one randomized prompt.**
+3. **Let the agent run to completion and capture the metrics above.**
+4. **Score against the checklist** (right components? wiring? layout? preview? atomic graph call?).
+5. **Note failures** — which recipe did it miss? Which wiring was wrong? Did it make unnecessary canvas reads or surgical calls?
+6. **Repeat** until each selected prompt has at least five runs per comparison commit.
 
 ### Expected progression for a well-tuned agent
 

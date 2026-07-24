@@ -40,7 +40,7 @@ namespace rhino_zmq_poc
             {
                 "box" => GH_GroupBorder.Box,
                 "blob" => GH_GroupBorder.Blob,
-                "rectangle" => GH_GroupBorder.Rectangles,
+                "rectangle" or "rectangles" => GH_GroupBorder.Rectangles,
                 _ => fallback
             };
         }

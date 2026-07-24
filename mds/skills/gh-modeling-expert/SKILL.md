@@ -15,13 +15,13 @@ Build, modify, review, or validate Grasshopper definitions per the user's reques
 
 Assess tier before building. When tier is ambiguous **and** the choice materially changes geometry, data loss, or user-visible output, use `pick_option` to confirm scope before placing components. Otherwise proceed with the documented default and state the assumption briefly.
 
-| Tier | When | Placement | Read canvas |
-|------|------|-----------|-------------|
-| **1** | ≤10 components, linear | Batch create in 1–2 calls | Once after **all** placed |
-| **2** | 10–25, branching | 2–3 stages; batch per stage | Once after **all** stages placed |
-| **3** | 25+, scripts, many paths | One zone per step; [Placement Protocol](../../reference/layout-system.md) | Once after **all** zones placed |
+| Tier | When | New-build action | Read canvas |
+|------|------|------------------|-------------|
+| **1** | ≤10 components, linear | One `gh_apply_graph` call | Not normally needed |
+| **2** | 10–25, branching | One `gh_apply_graph` call | Not normally needed |
+| **3** | 25+, scripts, many paths | Plan by zone, then one `gh_apply_graph` call | Only for unresolved existing context |
 
-**Default new-build workflow:** place everything → `gh_get_canvas` once → wire everything → cleanup touched components. For existing-canvas edits, targeted reads (`selectionOnly`, `subgraph`) are OK when they reduce work.
+**Default new-build workflow:** resolve unusual/ambiguous types if necessary → call `gh_apply_graph` once → inspect its integrated validation → use legacy tools only for surgical repair. Local refs replace the old placement readback. For existing-canvas edits, targeted reads (`selectionOnly`, `subgraph`) are appropriate.
 
 ## Gaps and compact size table
 
@@ -46,7 +46,7 @@ Full table, bounds math, pivot safety, worked examples → [layout-system.md](..
 
 - Left-to-right flow; no right-to-left wires; no recursive logic.
 - Do not touch components in negative canvas space.
-- Tier 3: compute placement math internally; summarize by zone only if useful. `gh_get_canvas_errors` OK between zones; avoid full `gh_get_canvas` between zones during new builds.
+- Tier 3: compute placement math internally and submit all zones together. Summarize by zone only if useful.
 - Stack numeric inputs top-left. Panels: default ~100×52; adjust to content.
 - `preview: false` on add; only Custom Preview in output zone uses `preview: true`.
 - Prefer C# for scripts; Python for simple list/tree utilities only.
@@ -56,6 +56,7 @@ Full table, bounds math, pivot safety, worked examples → [layout-system.md](..
 
 | Need | File | Path |
 |------|------|------|
+| Atomic new-subgraph API and validation | [apply-graph.md](../../reference/apply-graph.md) | `mds/reference/apply-graph.md` |
 | Tier 3 layout, preview placement, bounds | [layout-system.md](../../reference/layout-system.md) | `mds/reference/layout-system.md` |
 | Sub-graph filters (`subgraph`, `selectionOnly`) | [canvas-navigation.md](../../reference/canvas-navigation.md) | `mds/reference/canvas-navigation.md` |
 | C# script node | [csharp-boilerplate.md](../../reference/csharp-boilerplate.md) | `mds/reference/csharp-boilerplate.md` |
@@ -71,7 +72,7 @@ Full table, bounds math, pivot safety, worked examples → [layout-system.md](..
 - Solids: prefer extrude, pipe, sweep, loft over heavy booleans.
 
 ## Common problems
-- **Python tree/list boundary** — for `Data conversion failed from Goo to …`, run `gh_get_canvas_errors`, then follow [python-boilerplate.md](../../reference/python-boilerplate.md#list-vs-tree-access-types).
+- **Python tree/list boundary** — inspect the integrated `gh_apply_graph` runtime messages for a new graph, or run `gh_get_canvas_errors` for existing nodes, then follow [python-boilerplate.md](../../reference/python-boilerplate.md#list-vs-tree-access-types).
 - Extruded crvs result in open breps, you need to extrude them as srf or cap
   them.
 

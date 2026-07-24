@@ -54,6 +54,7 @@ namespace rhino_zmq_poc
             _requestDispatcher.Register("listAllComponents", new ListAllComponentsHandler());
             _requestDispatcher.Register("getCurrentCanvas", new GetCurrentCanvasHandler());
             _requestDispatcher.Register("getCanvasErrors", new GetCanvasErrorsHandler());
+            _requestDispatcher.Register("applyGraph", new ApplyGraphHandler());
             _requestDispatcher.Register("listScriptParams", new ListScriptParamsHandler());
             _requestDispatcher.Register("getScriptCode", new GetScriptCodeHandler());
             _requestDispatcher.Register("runRhinoScript", new RunRhinoScriptHandler());

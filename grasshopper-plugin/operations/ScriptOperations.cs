@@ -9,76 +9,10 @@ namespace rhino_zmq_poc
     {
         public static string CreateScriptNode(GH_Document doc, CreateScriptNodeParams param)
         {
-            try
-            {
-                if (doc == null)
-                    return "createScriptNode error: document is null";
-
-                var reflector = GhScriptReflector.Get();
-                var guid = reflector.ResolveLanguageGuid(param.Language);
-
-                if (guid == Guid.Empty)
-                    return $"createScriptNode error: unknown language '{param.Language}' (supported: {string.Join(", ", reflector.SupportedLanguages)})";
-
-                var obj = Instances.ComponentServer.EmitObject(guid);
-                if (obj == null)
-                    return $"createScriptNode error: failed to emit script component for language '{param.Language}' (guid={guid})";
-
-                doc.AddObject(obj, false);
-
-                if (obj.Attributes == null)
-                    return "createScriptNode error: Attributes is null after AddObject()";
-
-                obj.Attributes.Pivot = new System.Drawing.PointF(
-                    (float)param.Position.X,
-                    (float)param.Position.Y);
-
-                var hiddenProp = obj.GetType().GetProperty("Hidden");
-                if (hiddenProp != null)
-                    hiddenProp.SetValue(obj, true);
-
-                var comp = obj as GH_Component;
-                if (comp != null)
-                {
-                    ComponentLifecycleOps.ClearAllParams(comp);
-
-                    if (param.Inputs != null && param.Inputs.Count > 0)
-                    {
-                        foreach (var input in param.Inputs)
-                        {
-                            ComponentLifecycleOps.AddScriptInputParam(comp, input.Name, access: input.Access, dataMapping: input.DataMapping, simplify: input.Simplify, reverse: input.Reverse, typeHint: input.TypeHint);
-                        }
-                    }
-
-                    if (param.Outputs != null && param.Outputs.Count > 0)
-                    {
-                        foreach (var output in param.Outputs)
-                            ComponentLifecycleOps.AddScriptOutputParam(comp, output.Name, dataMapping: output.DataMapping, simplify: output.Simplify, reverse: output.Reverse, typeHint: output.TypeHint);
-                    }
-                }
-                obj.ExpireSolution(true);
-                if (!string.IsNullOrWhiteSpace(param.Code))
-                {
-                    reflector.SetSource(obj, param.Code);
-                }
-
-                if (!string.IsNullOrWhiteSpace(param.NickName))
-                {
-                    obj.NickName = param.NickName;
-                }
-                else
-                {
-                    obj.NickName = param.Language == "python" ? "Py3" : "C#";
-                }
-
-                obj.ExpireSolution(true);
-
-                return $"createScriptNode: added {param.Language} script ({obj.InstanceGuid}) at ({param.Position.X}, {param.Position.Y})";
-            }
-            catch (Exception ex)
-            {
-                return $"createScriptNode error: {ex.GetType().Name}: {ex.Message}";
-            }
+            if (!GraphObjectFactory.TryCreateScript(doc, param, out var created, out var error))
+                return $"createScriptNode error: {error}";
+            created.ExpireSolution(true);
+            return $"createScriptNode: added {param.Language} script ({created.InstanceGuid}) at ({param.Position.X}, {param.Position.Y})";
         }
 
         public static string SetScriptCode(GH_Document doc, SetScriptCodeParams param)

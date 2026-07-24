@@ -13,10 +13,10 @@ All layout uses **bounds** (`x y w h` top-left + size), not pivot alone.
 
 ## Placement protocol (Tier 3)
 
-1. **Build first** — Compute gaps from the size table; avoid full `gh_get_canvas` between zones during a new build. `gh_get_canvas_errors` OK between zones for overlap checks.
+1. **Plan the complete graph** — Compute gaps from the size table and assign local refs.
 2. **Compute math internally** — Use source bounds, gap, and resulting x/y; summarize by zone only when helpful or when placement fails.
-3. **Batch zones when confident** — Place components by logical zones. Multiple zones may be placed in one tool call when coordinates are already computed.
-4. **Read once** — After all new components are placed: `gh_get_canvas` once for GUIDs, then wire.
+3. **Apply once** — Submit every zone, wire, and group in one `gh_apply_graph` call.
+4. **Validate in the result** — Use the returned runtime messages and overlaps; no canvas reread is needed for new IDs.
 
 ## Horizontal zones
 
@@ -99,7 +99,7 @@ Center tall components on the feeding group's vertical midpoint — do not top-a
 
 - First row: pivot `y ≥ 45`; tall components `y ≥ 65`.
 - Horizontal: pivot `x ≥ 25`.
-- Verify with `gh_get_canvas_errors` if overflow suspected — avoid full canvas read between zones during new builds.
+- Use `gh_apply_graph` overlap validation for new builds. Use `gh_get_canvas_errors` when checking an existing canvas.
 
 **Worked example (Slider → Circle → Boundary → Area + lightweight preview):**
 

@@ -1,6 +1,6 @@
 # Rhino Document Scripting (rh_run_script)
 
-Use this for **Rhino document** work via `rh_run_script`. For Grasshopper script **components**, use `gh_edit_script` and [python-boilerplate.md](./python-boilerplate.md) / [csharp-boilerplate.md](./csharp-boilerplate.md).
+Use this for **Rhino document** work via `rh_run_script`. For a new Grasshopper script component use `gh_apply_graph.scripts`; for an existing component use `gh_edit_script` and [python-boilerplate.md](./python-boilerplate.md) / [csharp-boilerplate.md](./csharp-boilerplate.md).
 
 ## Modes
 
@@ -72,4 +72,5 @@ When Hopper Pi lifecycle hooks run, all `rh_run_script` calls in one agent turn 
 ## Do not use rh_run_script for
 
 - Adding GH components, wires, sliders → `gh_*` tools
-- Editing a GH Python/C# **script node** → `gh_edit_script`
+- Creating a GH Python/C# **script node** in a new graph → `gh_apply_graph.scripts`
+- Editing an existing GH Python/C# **script node** → `gh_edit_script`

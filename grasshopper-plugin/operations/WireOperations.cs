@@ -1,11 +1,78 @@
 using System;
 using System.Linq;
+using System.Text.Json;
 using Grasshopper.Kernel;
 
 namespace rhino_zmq_poc
 {
     internal static class WireOperations
     {
+        private static bool PortNameMatches(IGH_Param param, string name) =>
+            string.Equals(param.Name, name, StringComparison.Ordinal) ||
+            string.Equals(param.NickName, name, StringComparison.Ordinal);
+
+        private static bool TrySelectPort(
+            IGH_DocumentObject obj,
+            JsonElement selector,
+            bool output,
+            out IGH_Param port,
+            out string error)
+        {
+            port = null;
+            error = null;
+            var ports = obj is GH_Component component
+                ? (output ? component.Params.Output : component.Params.Input).ToList()
+                : obj is IGH_Param parameter
+                    ? new[] { parameter }.ToList()
+                    : new System.Collections.Generic.List<IGH_Param>();
+
+            if (selector.ValueKind == JsonValueKind.Number && selector.TryGetInt32(out var index))
+            {
+                if (index >= 0 && index < ports.Count)
+                {
+                    port = ports[index];
+                    return true;
+                }
+                error = $"{(output ? "output" : "input")} index {index} is out of range (count={ports.Count})";
+                return false;
+            }
+
+            if (selector.ValueKind == JsonValueKind.String)
+            {
+                var name = selector.GetString();
+                var matches = ports.Where(candidate => PortNameMatches(candidate, name)).ToList();
+                if (matches.Count == 1)
+                {
+                    port = matches[0];
+                    return true;
+                }
+                error = matches.Count == 0
+                    ? $"{(output ? "output" : "input")} port '{name}' was not found"
+                    : $"{(output ? "output" : "input")} port '{name}' is ambiguous";
+                return false;
+            }
+
+            error = "port selector must be a name or zero-based index";
+            return false;
+        }
+
+        public static bool TryConnectBySelector(
+            IGH_DocumentObject source,
+            JsonElement sourceSelector,
+            IGH_DocumentObject target,
+            JsonElement targetSelector,
+            out string error)
+        {
+            error = null;
+            if (!TrySelectPort(source, sourceSelector, true, out var sourcePort, out error))
+                return false;
+            if (!TrySelectPort(target, targetSelector, false, out var targetPort, out error))
+                return false;
+            targetPort.AddSource(sourcePort);
+            target.ExpireSolution(false);
+            return true;
+        }
+
         private static IGH_DocumentObject FindByInstanceId(GH_Document doc, string id)
         {
             if (!Guid.TryParse(id, out var guid)) return null;

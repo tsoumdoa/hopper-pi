@@ -13,8 +13,8 @@ Supplement to `gh-modeling-expert`. Each recipe gives a compact component patter
 
 1. Match the user's goal to a recipe below.
 2. Load the recipe file when the table summary is not enough to build confidently.
-3. Layout and placement → [gh-modeling-expert](../gh-modeling-expert/SKILL.md) (tiers, gaps, read-once, preview).
-4. Follow the primary skill's new-build workflow: place all components → `gh_get_canvas` once → wire.
+3. Layout and placement → [gh-modeling-expert](../gh-modeling-expert/SKILL.md) (tiers, gaps, preview).
+4. Build the recipe as one `gh_apply_graph` request and inspect its integrated validation.
 5. Load a second recipe only when the requested output explicitly requires chaining.
 
 **QA / benchmark prompts (humans):** [docs/gh-cookbook-benchmarks.md](../../../docs/gh-cookbook-benchmarks.md)
