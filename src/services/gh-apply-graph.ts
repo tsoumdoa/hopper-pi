@@ -262,34 +262,27 @@ export async function executeApplyGraph(input: ApplyGraphInput): Promise<ApplyGr
 		}
 
 		const refs = shortenApplyGraphRefs(backend.refs);
-
-		if (!backend.ok) {
-			return {
-				ok: backend.ok,
-				rolledBack: backend.rolledBack,
-				timedOut: backend.timedOut,
-				counts: backend.counts,
-				refs,
-				structuralErrors: backend.structuralErrors,
-				runtimeMessages: [],
-				overlaps: null,
-				elapsedMs: backend.elapsedMs,
-			};
-		}
-
-		const errorsResponse = await fetchCanvasErrors(requester);
-		const canvasResponse = await fetchCurrentCanvas(requester);
-
-		return {
+		const base = {
 			ok: backend.ok,
 			rolledBack: backend.rolledBack,
 			timedOut: backend.timedOut,
 			counts: backend.counts,
 			refs,
 			structuralErrors: backend.structuralErrors,
+			elapsedMs: backend.elapsedMs,
+		};
+
+		if (!backend.ok) {
+			return { ...base, runtimeMessages: [], overlaps: null };
+		}
+
+		const errorsResponse = await fetchCanvasErrors(requester);
+		const canvasResponse = await fetchCurrentCanvas(requester);
+
+		return {
+			...base,
 			runtimeMessages: errorsResponse.errors,
 			overlaps: checkCanvasOverlaps(canvasResponse.xml),
-			elapsedMs: backend.elapsedMs,
 		};
 	});
 }
