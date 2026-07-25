@@ -119,10 +119,32 @@ test("rejects empty graphs before fetching a component registry", async () => {
 	assert.equal(result.request, undefined);
 });
 
+test("formats a timeout as an unknown outcome that discourages a blind retry", () => {
+	const text = formatApplyGraphResult({
+		ok: false,
+		rolledBack: false,
+		timedOut: true,
+		counts: { components: 0, widgets: 0, scripts: 0, wires: 0, groups: 0 },
+		refs: {},
+		structuralErrors: [{ path: "$", code: "UI_TIMEOUT", message: "exceeded 30s window" }],
+		runtimeMessages: [],
+		overlaps: null,
+		elapsedMs: 0,
+	});
+
+	assert.match(text, /timed out/i);
+	assert.match(text, /unknown/i);
+	// Must not read as a clean, safely-retriable failure.
+	assert.doesNotMatch(text, /Graph not applied/);
+	// Must steer the caller to verify before retrying.
+	assert.match(text, /inspect the canvas/i);
+});
+
 test("formats compact counts, refs, runtime messages, and overlaps", () => {
 	const text = formatApplyGraphResult({
 		ok: true,
 		rolledBack: false,
+		timedOut: false,
 		counts: { components: 2, widgets: 1, scripts: 0, wires: 2, groups: 1 },
 		refs: { source: "a1B2", result: "c3D4" },
 		structuralErrors: [],

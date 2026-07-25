@@ -156,20 +156,52 @@ namespace rhino_zmq_poc
     {
         public string Handle(GH_Document doc, JsonElement root)
         {
-            return Utilities.RunOnUiThread(() =>
+            try
             {
-                try
+                return Utilities.RunOnUiThread(() =>
                 {
-                    var request = JsonSerializer.Deserialize<ApplyGraphRequest>(root.GetRawText());
-                    if (request == null)
-                        return JsonSerializer.Serialize(new { error = "Invalid applyGraph request" });
-                    return JsonSerializer.Serialize(GraphOperations.Apply(doc, request));
-                }
-                catch (Exception ex)
+                    try
+                    {
+                        var request = JsonSerializer.Deserialize<ApplyGraphRequest>(root.GetRawText());
+                        if (request == null)
+                            return JsonSerializer.Serialize(new { error = "Invalid applyGraph request" });
+                        return JsonSerializer.Serialize(GraphOperations.Apply(doc, request));
+                    }
+                    catch (Exception ex)
+                    {
+                        return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
+                    }
+                }, TimeSpan.FromSeconds(30));
+            }
+            catch (TimeoutException)
+            {
+                // The apply did not finish within the 30s UI-thread window. The work
+                // may still complete on the UI thread after we return, so the canvas
+                // outcome is genuinely UNKNOWN — it is neither a clean failure nor a
+                // safe rollback. Surface this distinctly (ok=false, timedOut=true) so
+                // callers do not mistake it for a retriable failure that would
+                // duplicate the graph. (A plain { error } would map to BACKEND_ERROR
+                // and invite a blind retry.)
+                return JsonSerializer.Serialize(new ApplyGraphResponse
                 {
-                    return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
-                }
-            }, TimeSpan.FromSeconds(30));
+                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    Ok = false,
+                    RolledBack = false,
+                    TimedOut = true,
+                    Counts = new ApplyGraphCounts(),
+                    Refs = new Dictionary<string, string>(),
+                    StructuralErrors = new List<ApplyGraphStructuralError>
+                    {
+                        new ApplyGraphStructuralError
+                        {
+                            Path = "$",
+                            Code = "UI_TIMEOUT",
+                            Message = "Apply did not complete within the 30s UI-thread window; the canvas outcome is unknown. Inspect the canvas before retrying to avoid duplicating the graph.",
+                        },
+                    },
+                    ElapsedMs = 0,
+                });
+            }
         }
     }
 

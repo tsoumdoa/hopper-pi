@@ -433,6 +433,15 @@ namespace rhino_zmq_poc
 
                 doc.NewSolution(false);
                 timer.Stop();
+
+                // Record a single Grasshopper undo step that restores this build, but
+                // only when no outer agent-turn transaction owns the undo stack. The
+                // turn transaction (begun on agent_start) already captures the whole
+                // turn as one undo, and recording here too would nest undo records —
+                // the regression fixed in 0.1.6. Mirrors the !IsActive guard used for
+                // per-script RecordDocumentUndo in RhinoCodeRunner.
+                RecordStandaloneUndo(doc, snapshot);
+
                 return new ApplyGraphResponse
                 {
                     Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
@@ -457,6 +466,32 @@ namespace rhino_zmq_poc
             created = null;
             error = $"unknown widget kind '{kind}'";
             return false;
+        }
+
+        /// <summary>
+        /// Best-effort single Grasshopper undo step for a standalone apply. Deferred
+        /// to the surrounding agent-turn transaction when one is active (see Apply).
+        /// Undo recording must never fail a successful apply.
+        /// </summary>
+        private static void RecordStandaloneUndo(GH_Document doc, byte[] beforeSnapshot)
+        {
+            if (AgentTransaction.IsActive)
+                return;
+
+            try
+            {
+                var afterSnapshot = DocumentSnapshots.Serialize(doc);
+                if (afterSnapshot == null || DocumentSnapshots.AreEqual(beforeSnapshot, afterSnapshot))
+                    return;
+
+                var action = new DocumentSnapshotUndoAction(beforeSnapshot, afterSnapshot);
+                doc.UndoUtil.RecordEvent("Apply graph", action);
+            }
+            catch
+            {
+                // Best effort: a missing/empty undo record is preferable to failing
+                // an otherwise-successful apply.
+            }
         }
     }
 }

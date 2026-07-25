@@ -108,6 +108,8 @@ export type ApplyGraphBackendResponse = {
 	timestamp: number;
 	ok: boolean;
 	rolledBack: boolean;
+	/** True when the apply exceeded the UI-thread window; the canvas outcome is unknown. */
+	timedOut: boolean;
 	counts: {
 		components: number;
 		widgets: number;

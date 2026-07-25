@@ -309,7 +309,7 @@ Before signing off a release, also run these manual Rhino/Grasshopper checks:
 - an exact plugin-qualified component type;
 - C# and Python nodes with custom ports;
 - a deliberately invalid mid-graph port, confirming byte-equivalent rollback;
-- one Grasshopper Undo after a successful build, confirming the whole agent turn is restored.
+- one Grasshopper Undo after a successful build, confirming the build is restored (standalone applies record one undo step; applies inside a turn share the turn's single undo step — Undo must not require multiple steps and must not duplicate records).
 
 1. **Clear the canvas** (or start fresh).
 2. **Paste one randomized prompt.**

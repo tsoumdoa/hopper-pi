@@ -63,13 +63,17 @@ For C#, `scriptParts` contains namespace `references`, the complete `runScript` 
 
 Hopper resolves all component types and validates refs, coordinates, sources, and graph references before sending the request. On the Grasshopper UI thread it snapshots the document, creates all objects, resolves ports, connects without per-wire solutions, creates groups, then runs one solution.
 
-Invalid types, refs, ports, groups, or exceptions leave the starting canvas unchanged. Runtime component messages do not roll back a structurally valid graph; they are returned with overlap data for repair. One Grasshopper undo restores the successful graph build as one agent turn.
+Invalid types, refs, ports, groups, or exceptions leave the starting canvas unchanged — the document is snapshotted before any mutation, and a mid-graph failure restores it (best-effort restoring the original if the restore itself is interrupted, so the canvas is not left empty). Runtime component messages do not roll back a structurally valid graph; they are returned with overlap data for repair.
+
+A successful **standalone** apply records one Grasshopper undo step, so a single Undo restores the canvas to before the build. When the apply runs **inside an agent turn**, the turn-level transaction already owns the single undo step for the whole turn, so the apply does not record a nested step (one Undo still restores the entire turn). The apply never emits more than one undo record.
+
+If the apply does not finish within the 30-second Grasshopper UI-thread window, the result is `ok: false, timedOut: true` — the canvas outcome is **unknown**, because the work may still complete on the UI thread after the response is sent. Treat this as unknown, not as a clean failure: inspect the canvas (`gh_get_canvas`) and remove any partial result before re-applying, otherwise a retry can duplicate the graph.
 
 ## Result
 
 The compact result reports:
 
-- `ok` and `rolledBack`;
+- `ok`, `rolledBack`, and `timedOut`;
 - created counts by kind;
 - local ref → short instance ID mappings;
 - structural failures;

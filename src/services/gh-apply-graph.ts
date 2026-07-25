@@ -229,6 +229,7 @@ function failedResult(errors: StructuralError[]): ApplyGraphResult {
 	return {
 		ok: false,
 		rolledBack: false,
+		timedOut: false,
 		counts: emptyCounts(),
 		refs: {},
 		structuralErrors: errors,
@@ -266,6 +267,7 @@ export async function executeApplyGraph(input: ApplyGraphInput): Promise<ApplyGr
 			return {
 				ok: backend.ok,
 				rolledBack: backend.rolledBack,
+				timedOut: backend.timedOut,
 				counts: backend.counts,
 				refs,
 				structuralErrors: backend.structuralErrors,
@@ -281,6 +283,7 @@ export async function executeApplyGraph(input: ApplyGraphInput): Promise<ApplyGr
 		return {
 			ok: backend.ok,
 			rolledBack: backend.rolledBack,
+			timedOut: backend.timedOut,
 			counts: backend.counts,
 			refs,
 			structuralErrors: backend.structuralErrors,
@@ -292,6 +295,18 @@ export async function executeApplyGraph(input: ApplyGraphInput): Promise<ApplyGr
 }
 
 export function formatApplyGraphResult(result: ApplyGraphResult): string {
+	if (result.timedOut) {
+		// Distinct from a normal failure: the apply exceeded the 30s UI-thread
+		// window, so the canvas outcome is genuinely unknown (it may have partially
+		// or fully applied). Do NOT report this as a clean failure — a blind retry
+		// would duplicate the graph. Guide the caller to verify first.
+		return [
+			"Graph apply timed out: outcome UNKNOWN.",
+			"The apply exceeded the 30-second Grasshopper UI-thread window, so the graph may have been partially or fully applied. Do not retry gh_apply_graph blindly — first inspect the canvas (gh_get_canvas) and remove any partial result before re-applying.",
+			...result.structuralErrors.map((error) => `${error.path}: ${error.message}`),
+		].join("\n");
+	}
+
 	if (!result.ok) {
 		const lines = [
 			`Graph not applied${result.rolledBack ? " (rolled back)" : ""}.`,

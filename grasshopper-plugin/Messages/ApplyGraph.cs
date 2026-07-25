@@ -208,6 +208,12 @@ namespace rhino_zmq_poc
         [JsonPropertyName("rolledBack")]
         public bool RolledBack { get; set; }
 
+        // True when the apply did not finish within the UI-thread window. The canvas
+        // outcome is genuinely unknown in that case (work may still complete on the UI
+        // thread after we return), so callers must verify before retrying.
+        [JsonPropertyName("timedOut")]
+        public bool TimedOut { get; set; }
+
         [JsonPropertyName("counts")]
         public ApplyGraphCounts Counts { get; set; } = new ApplyGraphCounts();
 
