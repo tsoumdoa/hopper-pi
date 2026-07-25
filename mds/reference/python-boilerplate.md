@@ -53,7 +53,7 @@ Python lists are what you code against; Grasshopper DataTrees are what tree-acce
 
 Set access on ports via `gh_edit_param` `editAccessType`. Default is `item`.
 
-If a downstream component shows `Data conversion failed from Goo to …`, the Python script likely returned a plain list on a tree-access output — run `gh_get_canvas_errors` for an inline fix hint.
+If a downstream component shows `Data conversion failed from Goo to …`, run `gh_get_canvas_errors` and apply its inline `list_to_tree` fix **literally and first** — wrap the output with `th.list_to_tree(...)` and switch that port to `tree` access. Do this even when the port is currently declared **list** access carrying RhinoCommon geometry (`Curve`, `Brep`, etc.) into a strictly-typed downstream input: this component host can still fail a Goo→typed cast on a plain list of geometry, so "my port is list-access, the hint must not apply" is not a valid reason to skip it. Try the literal suggested fix before investigating alternate theories (casting, marshalling, IronPython vs CPython differences) — it is cheap (one `setCode` call) and resolves this failure signature in practice.
 
 ### Recipe 1 — Flatten tree input → flat list work → tree output
 
@@ -95,3 +95,4 @@ a = x  # x is already a DataTree; output port must be tree access
 - `a = result` when output port is **tree** access (missing `list_to_tree`)
 - `for item in x:` when input port is **tree** access (use `tree_to_list` first)
 - `tree_to_list` / `list_to_tree` without `import ghpythonlib.treehelpers as th`
+- Seeing the `gh_get_canvas_errors` "Python tree/list hint" and reasoning your way past it (e.g. "my output is list-access, this doesn't apply to me") instead of trying its literal `list_to_tree` + tree-access fix first

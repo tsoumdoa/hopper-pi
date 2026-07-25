@@ -72,7 +72,7 @@ Full table, bounds math, pivot safety, worked examples → [layout-system.md](..
 - Solids: prefer extrude, pipe, sweep, loft over heavy booleans.
 
 ## Common problems
-- **Python tree/list boundary** — inspect the integrated `gh_apply_graph` runtime messages for a new graph, or run `gh_get_canvas_errors` for existing nodes, then follow [python-boilerplate.md](../../reference/python-boilerplate.md#list-vs-tree-access-types).
+- **Python tree/list boundary** — inspect the integrated `gh_apply_graph` runtime messages for a new graph, or run `gh_get_canvas_errors` for existing nodes. When the result includes the "Python tree/list hint" block, apply its suggested `list_to_tree` + tree-access fix literally and first — even if the port's declared access is currently `list` — before investigating alternate causes. See [python-boilerplate.md](../../reference/python-boilerplate.md#list-vs-tree-access-types).
 - Extruded crvs result in open breps, you need to extrude them as srf or cap
   them.
 

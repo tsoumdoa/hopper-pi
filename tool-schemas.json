@@ -44,7 +44,10 @@
           "description": "Timeout in seconds (optional, no default timeout)"
         }
       }
-    }
+    },
+    "promptGuidelines": [
+      "Inspect PI_* environment variables for current model and session details."
+    ]
   },
   {
     "name": "edit",
@@ -197,7 +200,7 @@
   },
   {
     "name": "rh_run_script",
-    "description": "Use rh_run_script for Rhino document work (geometry, layers, selection, blocks, direct bake, materials). Use rh_view_control for normal viewport/camera changes, rh_query_objects for object IDs, and gh_* tools for the Grasshopper canvas. Runs Rhino command macros or Python/C# scripts on the active RhinoDoc (Rhino 8 RhinoCode). Prefer Python for multi-step work and command mode for one-liners. Use print() / Console.WriteLine() for returned output. Items run sequentially; a failure does not roll back earlier items. Changes share one Rhino Undo record per agent turn.",
+    "description": "Use rh_run_script for Rhino document work (geometry, layers, selection, blocks, direct bake, materials). Use hopper_search_tools when you need viewport control, Grasshopper edits, or other inactive Hopper specialists. Runs Rhino command macros or Python/C# scripts on the active RhinoDoc (Rhino 8 RhinoCode). Prefer Python for multi-step work and command mode for one-liners. Use print() / Console.WriteLine() for returned output. Items run sequentially; a failure does not roll back earlier items. Changes share one Rhino Undo record per agent turn.",
     "parameters": {
       "type": "object",
       "required": [
@@ -243,11 +246,14 @@
           "minItems": 1
         }
       }
-    }
+    },
+    "promptGuidelines": [
+      "Use rh_run_script for RhinoDoc work; use hopper_search_tools to activate rh_view_control, gh_* edit/script tools, or other Hopper specialists when needed."
+    ]
   },
   {
     "name": "rh_query_objects",
-    "description": "List Rhino document objects with short objectId aliases for gh_param_rhino. Filter by selection, exact layer, geometry kind, and/or IDs. Use countOnly before large operations. For a whole layer or large set, pass the same filters directly to gh_param_rhino.rhinoQuery instead of listing IDs.",
+    "description": "List Rhino document objects with short objectId aliases for gh_param_rhino. Filter by selection, exact layer, geometry kind, and/or IDs. Use countOnly before large operations. For a whole layer or large set, pass the same filters to gh_param_rhino.rhinoQuery (activate via hopper_search_tools if needed).",
     "parameters": {
       "type": "object",
       "properties": {
@@ -313,7 +319,7 @@
   },
   {
     "name": "rh_view_control",
-    "description": "Change the active Rhino viewport or camera using constrained operations: activate a viewport, restore a standard/named/CPlane view, set camera properties, zoom, or explicitly save a named view. Prefer this over rh_run_script for normal view changes. For a one-off screenshot from a standard or named view, rh_capture_view.view can switch temporarily and restore automatically.",
+    "description": "Change the active Rhino viewport or camera: setActiveView, standardView, namedView, cplaneView, camera, zoom, or saveNamedView. Prefer over rh_run_script for normal view changes. saveNamedView only when the user explicitly asked to create/update a named view. One-off screenshots: prefer rh_capture_view.view (temporary switch + restore).",
     "parameters": {
       "type": "object",
       "required": [
@@ -395,7 +401,7 @@
         },
         "namedView": {
           "type": "string",
-          "description": "Existing named view to restore, or named view to save."
+          "description": "Named view to restore (namedView) or create/update (saveNamedView; only when explicitly requested)."
         },
         "cplaneName": {
           "type": "string",
@@ -468,7 +474,8 @@
                 }
               ]
             }
-          }
+          },
+          "additionalProperties": false
         },
         "zoom": {
           "type": "object",
@@ -533,17 +540,678 @@
                 }
               }
             }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "gh_apply_graph",
+    "description": "Atomically create a new Grasshopper subgraph with local refs (components, widgets, scripts, wires, groups) and built-in validation.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "ref",
+              "x",
+              "y",
+              "type"
+            ],
+            "properties": {
+              "ref": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$"
+              },
+              "x": {
+                "type": "number",
+                "minimum": 20
+              },
+              "y": {
+                "type": "number",
+                "minimum": 20
+              },
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "minLength": 1
+              },
+              "preview": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "widgets": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "ref",
+                  "x",
+                  "y",
+                  "kind",
+                  "min",
+                  "max",
+                  "value"
+                ],
+                "properties": {
+                  "ref": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$"
+                  },
+                  "x": {
+                    "type": "number",
+                    "minimum": 20
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": 20
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "slider"
+                  },
+                  "min": {
+                    "type": "number"
+                  },
+                  "max": {
+                    "type": "number"
+                  },
+                  "value": {
+                    "type": "number"
+                  },
+                  "digits": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 12
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "ref",
+                  "x",
+                  "y",
+                  "kind",
+                  "text"
+                ],
+                "properties": {
+                  "ref": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$"
+                  },
+                  "x": {
+                    "type": "number",
+                    "minimum": 20
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": 20
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "panel"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "textOutput": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "singleString"
+                      },
+                      {
+                        "type": "string",
+                        "const": "oneItemPerLine"
+                      }
+                    ],
+                    "description": "How panel text becomes downstream data. singleString: entire text is one string (newlines preserved). oneItemPerLine: each line is a separate list item."
+                  },
+                  "width": {
+                    "type": "number",
+                    "minimum": 1
+                  },
+                  "height": {
+                    "type": "number",
+                    "minimum": 1
+                  },
+                  "bgColor": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "ref",
+                  "x",
+                  "y",
+                  "kind",
+                  "value"
+                ],
+                "properties": {
+                  "ref": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$"
+                  },
+                  "x": {
+                    "type": "number",
+                    "minimum": 20
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": 20
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "toggle"
+                  },
+                  "value": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "ref",
+                  "x",
+                  "y",
+                  "kind",
+                  "color"
+                ],
+                "properties": {
+                  "ref": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$"
+                  },
+                  "x": {
+                    "type": "number",
+                    "minimum": 20
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": 20
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "swatch"
+                  },
+                  "color": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "ref",
+                  "x",
+                  "y",
+                  "kind",
+                  "text"
+                ],
+                "properties": {
+                  "ref": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$"
+                  },
+                  "x": {
+                    "type": "number",
+                    "minimum": 20
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": 20
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "scribble"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "size": {
+                    "type": "number",
+                    "minimum": 1
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "ref",
+                  "x",
+                  "y",
+                  "kind",
+                  "items"
+                ],
+                "properties": {
+                  "ref": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$"
+                  },
+                  "x": {
+                    "type": "number",
+                    "minimum": 20
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": 20
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "valueList"
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "name",
+                        "value"
+                      ],
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "minItems": 1
+                  },
+                  "selectedIndex": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "scripts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "ref",
+              "x",
+              "y",
+              "language"
+            ],
+            "properties": {
+              "ref": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$"
+              },
+              "x": {
+                "type": "number",
+                "minimum": 20
+              },
+              "y": {
+                "type": "number",
+                "minimum": 20
+              },
+              "name": {
+                "type": "string"
+              },
+              "language": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "csharp"
+                  },
+                  {
+                    "type": "string",
+                    "const": "python"
+                  }
+                ]
+              },
+              "code": {
+                "type": "string"
+              },
+              "scriptParts": {
+                "type": "object",
+                "required": [
+                  "runScript"
+                ],
+                "properties": {
+                  "references": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "runScript": {
+                    "type": "string"
+                  },
+                  "helpers": {
+                    "type": "string"
+                  }
+                }
+              },
+              "inputs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "previousName": {
+                      "type": "string"
+                    },
+                    "typeHint": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "object"
+                        },
+                        {
+                          "type": "string",
+                          "const": "double"
+                        },
+                        {
+                          "type": "string",
+                          "const": "int"
+                        },
+                        {
+                          "type": "string",
+                          "const": "integer"
+                        },
+                        {
+                          "type": "string",
+                          "const": "string"
+                        },
+                        {
+                          "type": "string",
+                          "const": "bool"
+                        },
+                        {
+                          "type": "string",
+                          "const": "boolean"
+                        }
+                      ],
+                      "description": "Script param type hint (default: object). Use double for floating-point numbers, int for integers, string for text, bool for booleans."
+                    },
+                    "access": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "item"
+                        },
+                        {
+                          "type": "string",
+                          "const": "list"
+                        },
+                        {
+                          "type": "string",
+                          "const": "tree"
+                        }
+                      ],
+                      "description": "Access type (default: item)"
+                    },
+                    "dataMapping": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "none"
+                        },
+                        {
+                          "type": "string",
+                          "const": "flatten"
+                        },
+                        {
+                          "type": "string",
+                          "const": "graft"
+                        }
+                      ],
+                      "description": "Data mapping mode"
+                    },
+                    "simplify": {
+                      "type": "boolean"
+                    },
+                    "reverse": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              },
+              "outputs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "previousName": {
+                      "type": "string"
+                    },
+                    "typeHint": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "object"
+                        },
+                        {
+                          "type": "string",
+                          "const": "double"
+                        },
+                        {
+                          "type": "string",
+                          "const": "int"
+                        },
+                        {
+                          "type": "string",
+                          "const": "integer"
+                        },
+                        {
+                          "type": "string",
+                          "const": "string"
+                        },
+                        {
+                          "type": "string",
+                          "const": "bool"
+                        },
+                        {
+                          "type": "string",
+                          "const": "boolean"
+                        }
+                      ],
+                      "description": "Script param type hint (default: object). Use double for floating-point numbers, int for integers, string for text, bool for booleans."
+                    },
+                    "access": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "item"
+                        },
+                        {
+                          "type": "string",
+                          "const": "list"
+                        },
+                        {
+                          "type": "string",
+                          "const": "tree"
+                        }
+                      ],
+                      "description": "Access type (default: item)"
+                    },
+                    "dataMapping": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "none"
+                        },
+                        {
+                          "type": "string",
+                          "const": "flatten"
+                        },
+                        {
+                          "type": "string",
+                          "const": "graft"
+                        }
+                      ],
+                      "description": "Data mapping mode"
+                    },
+                    "simplify": {
+                      "type": "boolean"
+                    },
+                    "reverse": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "wires": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "from",
+              "to"
+            ],
+            "properties": {
+              "from": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$"
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    ]
+                  }
+                ],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "to": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$"
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    ]
+                  }
+                ],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          }
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "refs"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "refs": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$"
+                },
+                "minItems": 1
+              },
+              "color": {
+                "type": "string"
+              },
+              "border": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "Box"
+                  },
+                  {
+                    "type": "string",
+                    "const": "Blob"
+                  },
+                  {
+                    "type": "string",
+                    "const": "Rectangles"
+                  }
+                ]
+              }
+            }
           }
         }
       }
-    },
-    "promptGuidelines": [
-      "Use rh_view_control saveNamedView only when the user explicitly asked to create or update a named view."
-    ]
+    }
   },
   {
     "name": "gh_param_rhino",
-    "description": "Get, reference, or internalize Rhino geometry on a Grasshopper geometry param. reference keeps live Rhino links; internalize stores copies. Use a targetId from gh_get_canvas and exactly one source: rhinoObjectIds for up to 30 objects, or a filtered rhinoQuery for bulk sets.",
+    "description": "Get, reference, or internalize Rhino geometry on a Grasshopper geometry param (targetId from canvas/apply-graph). reference keeps live links; internalize stores copies. Provide exactly one source: rhinoObjectIds (max 30) or a filtered rhinoQuery for bulk sets.",
     "parameters": {
       "type": "object",
       "required": [
@@ -941,7 +1609,7 @@
   },
   {
     "name": "gh_create_widget",
-    "description": "Create Grasshopper UI widgets: number sliders, panels, toggles, colour swatches, scribbles, or value lists. Use gh_edit_components for standard components and for shared object operations such as moving or deleting a widget.",
+    "description": "Create Grasshopper UI widgets: number sliders, panels, toggles, colour swatches, scribbles, or value lists. Use gh_edit_components for standard components and shared object ops (move/delete).",
     "parameters": {
       "type": "object",
       "required": [
@@ -1710,7 +2378,7 @@
   },
   {
     "name": "gh_edit_components",
-    "description": "Add standard Grasshopper components by typeGuid, or delete, move, rename, lock, and hide any canvas object (including widgets). Create widgets with gh_create_widget and change widget-specific properties with gh_mutate_widget.",
+    "description": "Add standard Grasshopper components by typeGuid, or delete, move, rename, lock, and hide any canvas object (including widgets). Create widgets with gh_create_widget; change widget-specific properties with gh_mutate_widget.",
     "parameters": {
       "type": "object",
       "required": [
@@ -1875,7 +2543,7 @@
   },
   {
     "name": "gh_edit_param",
-    "description": "Manage input/output ports on Grasshopper C# or Python script components only. syncParams reconciles complete port lists; listParams inspects them. Use add/remove/editAccessType for one-off property changes (access, type hint, mapping, simplify, reverse). For a rename, update code and ports atomically with gh_edit_script setCode; use previousName when reordering or swapping names.",
+    "description": "Inspect or edit input/output ports on Grasshopper C#/Python script components only (listParams, syncParams, add/remove, editAccessType). For renames that also change code variables, use gh_edit_script setCode with full inputs/outputs instead. Port lifecycle: mds/reference/script-component-lifecycle.md.",
     "parameters": {
       "type": "object",
       "required": [
@@ -2437,7 +3105,7 @@
   },
   {
     "name": "gh_edit_wire",
-    "description": "Connect or disconnect Grasshopper wires using component and port GUIDs returned by gh_get_canvas. Batch independent wire edits in one call.",
+    "description": "Connect or disconnect Grasshopper wires using component and port GUIDs from gh_get_canvas. Batch independent wire edits in one call.",
     "parameters": {
       "type": "object",
       "required": [
@@ -2688,7 +3356,7 @@
   },
   {
     "name": "gh_edit_script",
-    "description": "Create, inspect, or edit Grasshopper C# and Python script components. For C#, prefer scriptParts (references + RunScript; wrapper assembled server-side). For Python, pass full code without a wrapper. Use patchCode for small edits; getCodeParts is C#-only and getCode works for both. Include full inputs/outputs when code and port signatures must change atomically.",
+    "description": "Create, inspect, or edit Grasshopper C#/Python script components (create, setCode, patchCode, getCode, getCodeParts). Prefer C# scriptParts; Python uses full code. Include full inputs/outputs when code and port signatures must change together. Workflow details: mds/reference/script-component-lifecycle.md.",
     "parameters": {
       "type": "object",
       "required": [
@@ -3547,7 +4215,7 @@
   },
   {
     "name": "gh_get_canvas",
-    "description": "Fetch the live Grasshopper canvas. With no filters, returns a subgraph index summary; pass subgraph for one cluster or selectionOnly for the user's current selection. After placing a new build, make one unfiltered call to obtain all component and port GUIDs before wiring.",
+    "description": "Fetch the live Grasshopper canvas. With no filters, returns a subgraph index summary; pass subgraph for one cluster or selectionOnly for the user's current selection. After placing a new build, make one unfiltered call to obtain component and port GUIDs before wiring. Use hopper_search_tools to activate edit/script specialists when the core cannot complete the task.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -3560,11 +4228,14 @@
           "description": "Return only canvas objects currently selected in Grasshopper (groups expand to members). Includes internal wires between selected components only. Always returns detail view."
         }
       }
-    }
+    },
+    "promptGuidelines": [
+      "Use gh_get_canvas to inspect structure and IDs; use hopper_search_tools before calling inactive gh_edit_* / gh_apply_graph / gh_param_rhino tools."
+    ]
   },
   {
     "name": "gh_list_components",
-    "description": "Search the Grasshopper component registry and return ranked typeGuids for gh_edit_components. Put each desired component in its own query string; use multi-word queries to disambiguate. Defaults to vanilla components excluding Params; choose plugin or params explicitly when needed. Widgets are created with gh_create_widget, not a searched typeGuid.",
+    "description": "Search the Grasshopper component registry and return ranked typeGuids for gh_edit_components. One desired component per query string; multi-word queries disambiguate. Defaults to vanilla excluding Params.",
     "parameters": {
       "type": "object",
       "required": [
@@ -3612,11 +4283,76 @@
   },
   {
     "name": "gh_get_canvas_errors",
-    "description": "Retrieve Grasshopper runtime errors, warnings, messages, and component-overlap checks. Call after wiring or layout changes; Goo conversion errors include Python tree/list repair hints.",
+    "description": "Retrieve Grasshopper runtime errors, warnings, messages, and component-overlap checks. Call after wiring or layout changes.",
     "parameters": {
       "type": "object",
       "properties": {}
     }
+  },
+  {
+    "name": "hopper_search_tools",
+    "description": "Find and activate additional Hopper tools by capability or task (not only by exact tool name). Use when the active core cannot perform a Grasshopper edit, script, view, geometry-param, or related task. Activates matches additively for the rest of the session; does not deactivate tools.",
+    "parameters": {
+      "type": "object",
+      "required": [
+        "query"
+      ],
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Capability or task to find tools for (e.g. \"edit script ports\", \"viewport camera\", \"reference rhino geometry\").",
+          "minLength": 1
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Max tools to activate from matches (default 5, max 10)."
+        }
+      }
+    },
+    "promptGuidelines": [
+      "Use hopper_search_tools when you need a Hopper capability that is not in the active core (for example script editing, wiring, widgets, view control, canvas errors, or Rhino→GH geometry params).",
+      "After hopper_search_tools activates tools, call those tools on the next request; do not assume they were callable in the same turn.",
+      "Prefer hopper_search_tools with a short capability phrase over guessing inactive tool names."
+    ]
+  },
+  {
+    "name": "rh_capture_view",
+    "description": "Capture a Rhino viewport screenshot as PNG visual context when the selected model supports images and session consent (or HOPPER_RHINO_CAPTURE_CONSENT=allow) permits it. Use view for a one-off active, standard, or named-view capture; restoreView defaults to true. Use rh_view_control first only for a custom camera/CPlane setup or an intentionally persistent view change.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "view": {
+          "type": "string",
+          "description": "Viewport to capture: \"active\" (default), a standard view (top/front/right/perspective/etc.), or an existing named view name."
+        },
+        "width": {
+          "type": "number",
+          "description": "Capture width in pixels. Default 1280, clamped to 2000."
+        },
+        "height": {
+          "type": "number",
+          "description": "Capture height in pixels. Default 720, clamped to 2000."
+        },
+        "displayMode": {
+          "type": "string",
+          "description": "Optional display mode name such as \"Shaded\", \"Rendered\", \"Wireframe\", or \"Ghosted\"."
+        },
+        "transparentBackground": {
+          "type": "boolean",
+          "description": "Use a transparent PNG background when Rhino supports it. Default false."
+        },
+        "restoreView": {
+          "type": "boolean",
+          "description": "Restore the previous view after temporarily switching to another view. Default true."
+        }
+      }
+    },
+    "promptGuidelines": [
+      "Use rh_capture_view only when pixels materially help visual QA and Rhino screenshot consent is allowed.",
+      "If rh_capture_view is unavailable or denied, continue with text and geometry tools instead of blocking the task."
+    ]
   },
   {
     "name": "pick_option",
