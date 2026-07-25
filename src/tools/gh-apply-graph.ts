@@ -13,7 +13,14 @@ const Ref = Type.String({ pattern: "^[A-Za-z][A-Za-z0-9_-]{0,31}$" });
 const Coordinate = Type.Number({ minimum: 20 });
 const Name = Type.Optional(Type.String());
 const Port = Type.Union([Type.String(), Type.Integer({ minimum: 0 })]);
-const Endpoint = Type.Tuple([Ref, Port]);
+// draft 2020-12 tuple (Type.Tuple emits draft-07 items[]/additionalItems; Anthropic rejects that)
+const Endpoint = Type.Unsafe({
+	type: "array",
+	prefixItems: [Ref, Port],
+	items: false,
+	minItems: 2,
+	maxItems: 2,
+});
 const Position = {
 	ref: Ref,
 	x: Coordinate,
