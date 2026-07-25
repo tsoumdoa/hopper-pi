@@ -79,3 +79,38 @@ test("script schemas advertise canonical type hints only", () => {
 	assert.doesNotMatch(schema, /"const":"integer"/);
 	assert.doesNotMatch(schema, /"const":"boolean"/);
 });
+
+function collectDraft07TupleIssues(schema: unknown, path = ""): string[] {
+	if (!schema || typeof schema !== "object") return [];
+	if (Array.isArray(schema)) {
+		return schema.flatMap((value, index) =>
+			collectDraft07TupleIssues(value, `${path}[${index}]`),
+		);
+	}
+	const record = schema as Record<string, unknown>;
+	const issues: string[] = [];
+	if (Array.isArray(record.items)) {
+		issues.push(`${path || "<root>"} uses draft-07 tuple items`);
+	}
+	if ("additionalItems" in record) {
+		issues.push(`${path || "<root>"} uses draft-07 additionalItems`);
+	}
+	for (const [key, value] of Object.entries(record)) {
+		issues.push(...collectDraft07TupleIssues(value, path ? `${path}.${key}` : key));
+	}
+	return issues;
+}
+
+test("Hopper tool schemas avoid draft-07 tuple syntax rejected by Anthropic", () => {
+	for (const tool of HOPPER_SCHEMA_TOOLS) {
+		const issues = collectDraft07TupleIssues(tool.parameters);
+		assert.deepEqual(issues, [], `${tool.name}: ${issues.join("; ")}`);
+	}
+	const apply = HOPPER_SCHEMA_TOOLS.find((tool) => tool.name === "gh_apply_graph");
+	assert.ok(apply);
+	const from = (apply.parameters as {
+		properties: { wires: { items: { properties: { from: Record<string, unknown> } } } };
+	}).properties.wires.items.properties.from;
+	assert.ok(Array.isArray(from.prefixItems));
+	assert.equal(from.items, false);
+});

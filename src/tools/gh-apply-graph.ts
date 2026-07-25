@@ -7,13 +7,21 @@ import {
 	PanelTextOutputType,
 	TypeHintType,
 } from "./edit-tools/shared-types.js";
-import type { ApplyGraphInput } from "../types/gh-apply-graph.js";
+import type { ApplyGraphInput, GraphEndpoint } from "../types/gh-apply-graph.js";
 
 const Ref = Type.String({ pattern: "^[A-Za-z][A-Za-z0-9_-]{0,31}$" });
 const Coordinate = Type.Number({ minimum: 20 });
 const Name = Type.Optional(Type.String());
 const Port = Type.Union([Type.String(), Type.Integer({ minimum: 0 })]);
-const Endpoint = Type.Tuple([Ref, Port]);
+// Type.Tuple emits draft-07 `items: [...]` + `additionalItems`, which Anthropic
+// rejects (requires draft 2020-12 `prefixItems`). Keep the `[ref, port]` wire shape.
+const Endpoint = Type.Unsafe<GraphEndpoint>({
+	type: "array",
+	prefixItems: [Ref, Port],
+	minItems: 2,
+	maxItems: 2,
+	items: false,
+});
 const Position = {
 	ref: Ref,
 	x: Coordinate,
