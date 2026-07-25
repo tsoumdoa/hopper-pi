@@ -24,6 +24,7 @@ import {
 } from "./services/transaction-lifecycle.js";
 import { probeBackend } from "./infra/backend-status.js";
 import { registerBackendStatusUI } from "./ui/backend-status.js";
+import { registerToolSchemasUI } from "./ui/tool-schemas.js";
 import { ALL_TOOLS } from "./tools/index.js";
 import { withBackendGuard } from "./tools/with-backend-guard.js";
 import {
@@ -57,6 +58,7 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 	}
 
 	registerBackendStatusUI(pi);
+	registerToolSchemasUI(pi);
 
 	const captureModel = createRhinoCaptureModelController(pi);
 
