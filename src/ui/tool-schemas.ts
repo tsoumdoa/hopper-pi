@@ -1,5 +1,5 @@
 import { writeFile } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { resolve } from "node:path";
 import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@earendil-works/pi-coding-agent";
 
 /** Agent-facing tool surface: name, description, JSON Schema parameters, optional guidelines. */
@@ -34,13 +34,12 @@ export function formatAllToolSchemasJson(tools: ToolInfo[], space: string | numb
 	return JSON.stringify(tools.map(toAgentToolSchema), null, space);
 }
 
-export function resolveDumpPath(pathArg?: string): string {
-	const raw = pathArg?.trim() || DEFAULT_DUMP_FILENAME;
-	return isAbsolute(raw) ? raw : resolve(process.cwd(), raw);
+export function resolveDumpPath(): string {
+	return resolve(process.cwd(), DEFAULT_DUMP_FILENAME);
 }
 
-export async function writeToolSchemasFile(tools: ToolInfo[], pathArg?: string): Promise<string> {
-	const outPath = resolveDumpPath(pathArg);
+export async function writeToolSchemasFile(tools: ToolInfo[]): Promise<string> {
+	const outPath = resolveDumpPath();
 	await writeFile(outPath, `${formatAllToolSchemasJson(tools)}\n`, "utf-8");
 	return outPath;
 }
@@ -80,13 +79,9 @@ async function showToolSchema(ctx: ExtensionContext, tools: ToolInfo[], selectio
 	await ctx.ui.editor(resolved.title, resolved.json);
 }
 
-async function dumpToolSchemas(
-	ctx: ExtensionContext,
-	tools: ToolInfo[],
-	pathArg?: string,
-): Promise<void> {
+async function dumpToolSchemas(ctx: ExtensionContext, tools: ToolInfo[]): Promise<void> {
 	try {
-		const outPath = await writeToolSchemasFile(tools, pathArg);
+		const outPath = await writeToolSchemasFile(tools);
 		ctx.ui.notify(`Wrote ${tools.length} tool schemas → ${outPath}`, "info");
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
@@ -97,7 +92,7 @@ async function dumpToolSchemas(
 export function registerToolSchemasUI(pi: ExtensionAPI): void {
 	pi.registerCommand("hopper-schemas", {
 		description:
-			"Browse or dump JSON schemas exposed to the agent for registered tools (/hopper-schemas dump [path])",
+			"Browse or dump JSON schemas exposed to the agent for registered tools (/hopper-schemas dump → tool-schemas.json)",
 		handler: async (args, ctx) => {
 			const tools = pi.getAllTools();
 			if (tools.length === 0) {
@@ -107,7 +102,7 @@ export function registerToolSchemasUI(pi: ExtensionAPI): void {
 
 			const tokens = args.trim().split(/\s+/).filter(Boolean);
 			if (tokens[0] === "dump") {
-				await dumpToolSchemas(ctx, tools, tokens[1]);
+				await dumpToolSchemas(ctx, tools);
 				return;
 			}
 
@@ -130,13 +125,7 @@ export function registerToolSchemasUI(pi: ExtensionAPI): void {
 			if (!choice) return;
 
 			if (choice === DUMP_ALL_LABEL) {
-				const pathInput = await ctx.ui.input(
-					"Output path",
-					DEFAULT_DUMP_FILENAME,
-					{ signal: ctx.signal },
-				);
-				if (pathInput === undefined) return;
-				await dumpToolSchemas(ctx, tools, pathInput.trim() || DEFAULT_DUMP_FILENAME);
+				await dumpToolSchemas(ctx, tools);
 				return;
 			}
 
