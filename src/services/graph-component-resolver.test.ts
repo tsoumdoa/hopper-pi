@@ -61,3 +61,14 @@ test("returns candidates for ambiguous exact names and rejects fuzzy names", () 
 	assert.equal(missing.ok, false);
 	if (!missing.ok) assert.equal(missing.error.code, "TYPE_NOT_FOUND");
 });
+
+test("resolves uppercase ASCII names via locale-independent matching", () => {
+	assert.deepEqual(resolveGraphComponentType(REGISTRY, "ADDITION", "type"), {
+		ok: true,
+		typeGuid: ADD_GUID,
+	});
+	assert.deepEqual(resolveGraphComponentType(REGISTRY, "GRASSHOPPER/ADDITION", "type"), {
+		ok: true,
+		typeGuid: ADD_GUID,
+	});
+});

@@ -156,3 +156,15 @@ test("registers backend instance GUIDs and returns compact ref IDs", () => {
 	assert.match(refs.output, /^[0-9A-Za-z]{4,}$/);
 	assert.equal(resolveInstanceGuid(refs.output), full);
 });
+
+test("rejects groups whose refs array is empty", () => {
+	const errors = validateApplyGraphInput({
+		components: [{ ref: "a", type: "Addition", x: 100, y: 100 }],
+		groups: [{ name: "Empty", refs: [] }],
+	});
+	const groupError = errors.find(
+		(error) => error.path === "groups[0].refs" && error.code === "INVALID_GROUP",
+	);
+	assert.ok(groupError, "expected an INVALID_GROUP error for empty refs");
+	assert.match(groupError?.message ?? "", /at least one ref/);
+});

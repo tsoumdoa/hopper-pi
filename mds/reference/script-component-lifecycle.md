@@ -4,7 +4,7 @@ Shared steps for Grasshopper **Python** and **C#** script components. Language t
 
 ## Create inside a new graph
 
-1. Add the node to `gh_apply_graph.scripts` with its local `ref`, language, position, source, inputs, and outputs.
+1. Add the node to `gh_apply_graph.scripts` with its local `ref`, language, position, `code` or `scriptParts`, inputs, and outputs.
 2. Pass Python full `code`; prefer C# `scriptParts`.
 3. Wire the node using its local ref in the same graph request.
 

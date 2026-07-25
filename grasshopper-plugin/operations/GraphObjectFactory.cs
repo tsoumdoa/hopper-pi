@@ -23,37 +23,45 @@ namespace rhino_zmq_poc
                 error = "document is null";
                 return false;
             }
-            if (!Guid.TryParse(param.TypeGuid, out var componentGuid))
+            try
             {
-                error = $"invalid typeGuid '{param.TypeGuid}'";
+                if (!Guid.TryParse(param.TypeGuid, out var componentGuid))
+                {
+                    error = $"invalid typeGuid '{param.TypeGuid}'";
+                    return false;
+                }
+
+                var obj = Instances.ComponentServer.EmitObject(componentGuid);
+                if (obj == null)
+                {
+                    error = $"failed to emit object for typeGuid '{param.TypeGuid}'";
+                    return false;
+                }
+
+                doc.AddObject(obj, false);
+                if (obj.Attributes == null)
+                {
+                    error = "Attributes is null after AddObject()";
+                    return false;
+                }
+
+                obj.Attributes.Pivot = new PointF((float)param.Position.X, (float)param.Position.Y);
+                if (!string.IsNullOrWhiteSpace(nickName))
+                    obj.NickName = nickName;
+                if (!param.Preview)
+                {
+                    var hiddenProp = obj.GetType().GetProperty("Hidden");
+                    hiddenProp?.SetValue(obj, true);
+                }
+
+                created = obj;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = $"{ex.GetType().Name}: {ex.Message}";
                 return false;
             }
-
-            var obj = Instances.ComponentServer.EmitObject(componentGuid);
-            if (obj == null)
-            {
-                error = $"failed to emit object for typeGuid '{param.TypeGuid}'";
-                return false;
-            }
-
-            doc.AddObject(obj, false);
-            if (obj.Attributes == null)
-            {
-                error = "Attributes is null after AddObject()";
-                return false;
-            }
-
-            obj.Attributes.Pivot = new PointF((float)param.Position.X, (float)param.Position.Y);
-            if (!string.IsNullOrWhiteSpace(nickName))
-                obj.NickName = nickName;
-            if (!param.Preview)
-            {
-                var hiddenProp = obj.GetType().GetProperty("Hidden");
-                hiddenProp?.SetValue(obj, true);
-            }
-
-            created = obj;
-            return true;
         }
 
         public static bool TryCreateSlider(

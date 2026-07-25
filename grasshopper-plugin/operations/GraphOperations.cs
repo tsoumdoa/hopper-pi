@@ -30,6 +30,11 @@ namespace rhino_zmq_poc
                 error = "endpoint must be [ref, port]";
                 return false;
             }
+            if (tuple[0].ValueKind != JsonValueKind.String)
+            {
+                error = "endpoint ref must be a string";
+                return false;
+            }
             reference = tuple[0].GetString();
             port = tuple[1];
             if (string.IsNullOrWhiteSpace(reference))

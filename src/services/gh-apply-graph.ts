@@ -112,6 +112,13 @@ export function validateApplyGraphInput(input: ApplyGraphInput): StructuralError
 				message: "Group name is required.",
 			});
 		}
+		if (group.refs.length === 0) {
+			errors.push({
+				path: `groups[${index}].refs`,
+				code: "INVALID_GROUP",
+				message: `Group "${group.name}" must reference at least one ref.`,
+			});
+		}
 		for (const ref of group.refs) {
 			if (!seen.has(ref)) {
 				errors.push({

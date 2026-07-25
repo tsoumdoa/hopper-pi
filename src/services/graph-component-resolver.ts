@@ -13,7 +13,7 @@ function candidateLabel(component: GhComponentInfo): string {
 }
 
 function exactCaseInsensitive(left: string, right: string): boolean {
-	return left.toLocaleLowerCase() === right.toLocaleLowerCase();
+	return left.toLowerCase() === right.toLowerCase();
 }
 
 export type ComponentResolution =

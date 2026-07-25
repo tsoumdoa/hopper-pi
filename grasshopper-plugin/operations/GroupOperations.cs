@@ -13,9 +13,16 @@ namespace rhino_zmq_poc
             if (doc == null)
                 return "addGroup error: document is null";
             var members = new System.Collections.Generic.List<IGH_DocumentObject>();
+            var missing = new System.Collections.Generic.List<string>();
             foreach (var idStr in param.ComponentIds)
+            {
                 if (Guid.TryParse(idStr, out var guid) && doc.FindObject(guid, false) is { } obj)
                     members.Add(obj);
+                else
+                    missing.Add(idStr);
+            }
+            if (missing.Count > 0)
+                return $"addGroup error: component(s) not found: {string.Join(", ", missing)}";
             if (!GraphObjectFactory.TryCreateGroup(
                 doc, param.GroupName, members, param.Color, param.Border,
                 out _, out var error))
