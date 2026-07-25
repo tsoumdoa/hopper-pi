@@ -9,7 +9,7 @@ export const ENV = {
 	HOPPER_CONNECTION_PROFILE: "HOPPER_CONNECTION_PROFILE",
 	HOPPER_MULTIMODAL_FALLBACK: "HOPPER_MULTIMODAL_FALLBACK",
 	HOPPER_RHINO_CAPTURE_CONSENT: "HOPPER_RHINO_CAPTURE_CONSENT",
-	/** When enabled (`1`/`true`/`yes`/`on`), start with a small Hopper core and load specialists via hopper_search_tools. Off by default (today's all-tools-active behavior). */
+	/** Progressive tool loading is on by default (small Hopper core + hopper_search_tools). Set to `0`/`false`/`no`/`off` to restore the legacy all-tools-active behavior. */
 	HOPPER_PROGRESSIVE_TOOLS: "HOPPER_PROGRESSIVE_TOOLS",
 } as const;
 
@@ -40,8 +40,10 @@ export function readEnvBoolFlag(name: string): boolean | undefined {
 
 /**
  * Progressive Hopper tool loading (small always-on core + hopper_search_tools).
- * Default false — restores today's all-tools-active behavior unless opted in.
+ * Defaults to true; set HOPPER_PROGRESSIVE_TOOLS=0 (or false/no/off) to opt back
+ * into the legacy all-tools-active behavior.
  */
 export function isProgressiveToolsEnvEnabled(): boolean {
-	return readEnvBoolFlag(ENV.HOPPER_PROGRESSIVE_TOOLS) === true;
+	const explicit = readEnvBoolFlag(ENV.HOPPER_PROGRESSIVE_TOOLS);
+	return explicit ?? true;
 }

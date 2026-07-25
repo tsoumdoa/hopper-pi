@@ -145,11 +145,12 @@ export function createHopperSearchToolsTool(
 		label: "Search Hopper Tools",
 		description:
 			"Find and activate additional Hopper tools by capability or task (not only by exact tool name). " +
-			"Use when the active core cannot perform a Grasshopper edit, script, view, geometry-param, or related task. " +
+			"Only needed when the Hopper tool you want is not already among your active tools; " +
+			"if the gh_*/rh_* tool you need is already active, call it directly. " +
 			"Activates matches additively for the rest of the session; does not deactivate tools.",
 		promptSnippet: "Search and activate specialized Hopper tools by capability",
 		promptGuidelines: [
-			"Use hopper_search_tools when you need a Hopper capability that is not in the active core (for example script editing, wiring, widgets, view control, canvas errors, or Rhino→GH geometry params).",
+			"Use hopper_search_tools only when a Hopper capability you need (script editing, wiring, widgets, view control, canvas errors, Rhino→GH geometry params) has no active tool; skip it when that tool is already active.",
 			"After hopper_search_tools activates tools, call those tools on the next request; do not assume they were callable in the same turn.",
 			"Prefer hopper_search_tools with a short capability phrase over guessing inactive tool names.",
 		],

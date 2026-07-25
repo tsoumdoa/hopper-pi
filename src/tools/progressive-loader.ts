@@ -15,8 +15,10 @@ export function shouldResetProgressiveTools(reason: ProgressiveResetReason): boo
 		case "fork":
 			return false;
 		default: {
+			// Unknown/future reason: keep whatever the model already activated.
 			const _exhaustive: never = reason;
-			return _exhaustive;
+			void _exhaustive;
+			return false;
 		}
 	}
 }

@@ -77,7 +77,7 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 		default: isProgressiveToolsEnvEnabled(),
 		description:
 			"Start with a small Hopper core and activate specialists via hopper_search_tools. " +
-			`Off by default (all Hopper tools active). Also set ${ENV.HOPPER_PROGRESSIVE_TOOLS}=1.`,
+			`On by default. Set ${ENV.HOPPER_PROGRESSIVE_TOOLS}=0 to fall back to all Hopper tools active.`,
 	});
 
 	// ── Register Grasshopper/Rhino tools + progressive loader ───────
@@ -118,7 +118,9 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 		resetRhinoVisualCaptureState();
 
 		const progressive = isProgressiveToolsEnabled(pi);
-		const reason = (event.reason ?? "startup") as ProgressiveResetReason;
+		// No cast: a new upstream session_start reason should fail the build here
+		// so the reset policy is an explicit decision, not a silent default.
+		const reason: ProgressiveResetReason = event.reason ?? "startup";
 		if (progressive && shouldResetProgressiveTools(reason)) {
 			resetProgressiveActiveTools(pi, catalog);
 		}

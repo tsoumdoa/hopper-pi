@@ -106,6 +106,21 @@ test("capture tool is only registered for multimodal models", () => {
 	assert.equal(pi._activeTools().includes(RH_CAPTURE_VIEW_TOOL), true);
 });
 
+test("capture tool is restored after an external deactivation (progressive reset)", () => {
+	const pi = fakePi();
+	const controller = createRhinoCaptureModelController(pi as any);
+	const vision = { provider: "test", id: "vision", input: ["text", "image"] };
+
+	controller.syncCaptureToolForModel(vision);
+	assert.equal(pi._activeTools().includes(RH_CAPTURE_VIEW_TOOL), true);
+
+	// Progressive loader resets the active set to the Hopper core, dropping the
+	// already-registered capture tool. The next sync must put it back.
+	pi.setActiveTools(pi._activeTools().filter((name) => name !== RH_CAPTURE_VIEW_TOOL));
+	controller.syncCaptureToolForModel(vision);
+	assert.equal(pi._activeTools().includes(RH_CAPTURE_VIEW_TOOL), true);
+});
+
 test("capture tool is hidden and restored across model changes", () => {
 	const pi = fakePi();
 	const controller = createRhinoCaptureModelController(pi as any);

@@ -3,9 +3,7 @@ import {
 	HOPPER_REGISTERED_CATALOG,
 	RH_CAPTURE_VIEW_CATALOG_ENTRY,
 	getAlwaysActiveToolNames,
-	getCatalogEntryByName,
 	getManagedHopperToolNames,
-	groupCatalogEntries,
 } from "./catalog.js";
 import type { HopperToolCatalogEntry, HopperToolGroup, HopperToolRequires } from "./catalog-types.js";
 
@@ -15,7 +13,5 @@ export {
 	HOPPER_REGISTERED_CATALOG,
 	RH_CAPTURE_VIEW_CATALOG_ENTRY,
 	getAlwaysActiveToolNames,
-	getCatalogEntryByName,
 	getManagedHopperToolNames,
-	groupCatalogEntries,
 };

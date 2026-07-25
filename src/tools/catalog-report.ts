@@ -1,6 +1,5 @@
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { HopperToolCatalogEntry, HopperToolGroup } from "./catalog-types.js";
-import { groupCatalogEntries } from "./catalog.js";
 
 export type ToolSchemaSize = {
 	name: string;
@@ -64,7 +63,6 @@ export function buildCatalogSizeReport(
 		if (b.totalBytes !== a.totalBytes) return b.totalBytes - a.totalBytes;
 		return a.name.localeCompare(b.name);
 	});
-	const grouped = groupCatalogEntries(catalog);
 	const byGroup = {
 		rhino: { count: 0, totalBytes: 0 },
 		"gh-read": { count: 0, totalBytes: 0 },
@@ -73,14 +71,10 @@ export function buildCatalogSizeReport(
 		interaction: { count: 0, totalBytes: 0 },
 	} satisfies Record<HopperToolGroup, { count: number; totalBytes: number }>;
 
-	for (const group of Object.keys(byGroup) as HopperToolGroup[]) {
-		const entries = grouped[group];
-		byGroup[group] = {
-			count: entries.length,
-			totalBytes: entries
-				.map(measureToolSchemaSize)
-				.reduce((sum, row) => sum + row.totalBytes, 0),
-		};
+	for (const tool of tools) {
+		const row = byGroup[tool.group];
+		row.count += 1;
+		row.totalBytes += tool.totalBytes;
 	}
 
 	return {

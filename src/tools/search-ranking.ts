@@ -36,8 +36,10 @@ function keywordMatchesToken(keyword: string, token: string): "exact" | "fuzzy" 
 	const parts = keyword.split(/\s+/).filter(Boolean);
 	for (const part of parts) {
 		if (part === token) return "exact";
-		// Require a meaningful token length so "port" does not match inside "viewport".
-		if (token.length >= 4 && (part.startsWith(token) || part.includes(token))) return "fuzzy";
+		// Substring hits only for tokens long enough to be meaningful, so "id" does
+		// not match inside "widget". Longer tokens may still match mid-word
+		// ("port" inside "viewport"); exact keyword hits outscore those.
+		if (token.length >= 4 && part.includes(token)) return "fuzzy";
 		if (part.length >= 4 && token.startsWith(part)) return "fuzzy";
 	}
 
@@ -145,11 +147,12 @@ export function rankHopperTools(
 		return { matches };
 	}
 
+	// Nothing cleared MIN_MATCH_SCORE (so `scored` is empty): fall back to raw
+	// sub-threshold scores to point at the closest groups.
 	const groupHits = new Map<HopperToolGroup, number>();
-	for (const row of scored.length > 0
-		? scored
-		: catalog.map((entry) => ({ entry, score: scoreEntry(entry, tokens).score }))) {
-		groupHits.set(row.entry.group, (groupHits.get(row.entry.group) ?? 0) + row.score);
+	for (const entry of catalog) {
+		const { score } = scoreEntry(entry, tokens);
+		groupHits.set(entry.group, (groupHits.get(entry.group) ?? 0) + score);
 	}
 	const nearestGroups = [...groupHits.entries()]
 		.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))

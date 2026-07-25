@@ -181,31 +181,8 @@ export function getAlwaysActiveToolNames(
 	return catalog.filter((entry) => entry.alwaysActive).map((entry) => entry.tool.name);
 }
 
-export function getCatalogEntryByName(
-	catalog: readonly HopperToolCatalogEntry[],
-	name: string,
-): HopperToolCatalogEntry | undefined {
-	return catalog.find((entry) => entry.tool.name === name);
-}
-
 export function getManagedHopperToolNames(
 	catalog: readonly HopperToolCatalogEntry[],
 ): ReadonlySet<string> {
 	return new Set(catalog.map((entry) => entry.tool.name));
-}
-
-export function groupCatalogEntries(
-	catalog: readonly HopperToolCatalogEntry[],
-): Record<HopperToolGroup, HopperToolCatalogEntry[]> {
-	const groups: Record<HopperToolGroup, HopperToolCatalogEntry[]> = {
-		rhino: [],
-		"gh-read": [],
-		"gh-edit": [],
-		"gh-script": [],
-		interaction: [],
-	};
-	for (const entry of catalog) {
-		groups[entry.group].push(entry);
-	}
-	return groups;
 }
