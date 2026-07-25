@@ -5,8 +5,8 @@ import { formatToolFailed } from "./result-formatters.js";
 import { runRhinoScript } from "./rhino-script-handlers.js";
 
 const ROUTING_PREFIX =
-	"Use rh_run_script for Rhino document work (geometry, layers, selection, blocks, direct bake, materials). " +
-	"Use rh_view_control for normal viewport/camera changes, rh_query_objects for object IDs, and gh_* tools for the Grasshopper canvas. ";
+	"Rhino document work (geometry, layers, selection, blocks, bake, materials). " +
+	"Prefer rh_query_objects for IDs and gh_* tools for the Grasshopper canvas. ";
 
 export const rhRunScriptTool = defineTool({
 	name: "rh_run_script",

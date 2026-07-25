@@ -17,5 +17,6 @@ Load only what the task needs. Workflow rules → [gh-modeling-expert](../skills
 | [csharp-boilerplate.md](./csharp-boilerplate.md) | `mds/reference/csharp-boilerplate.md` | C# script node code template |
 | [python-boilerplate.md](./python-boilerplate.md) | `mds/reference/python-boilerplate.md` | Python script node code template |
 | [rhino-script-boilerplate.md](./rhino-script-boilerplate.md) | `mds/reference/rhino-script-boilerplate.md` | `rh_run_script` (Rhino document, not GH canvas) |
+| [progressive-tools.md](./progressive-tools.md) | `mds/reference/progressive-tools.md` | Progressive tool loading (`HOPPER_PROGRESSIVE_TOOLS`) |
 
 Recipes → [gh-cookbook](../skills/gh-cookbook/SKILL.md). Benchmarks → [docs/gh-cookbook-benchmarks.md](../../docs/gh-cookbook-benchmarks.md).

@@ -18,6 +18,7 @@
 		"test": "vitest run",
 		"pi": "pi -e .",
 		"dump:components": "tsx src/scripts/dump-components.ts",
+		"report:tool-schemas": "tsx src/scripts/report-tool-schema-sizes.ts",
 		"postinstall": "node scripts/install-grasshopper-plugin.mjs",
 		"build:gh-plugin": "node scripts/install-grasshopper-plugin.mjs --build-only"
 	},

@@ -62,7 +62,6 @@ export const ghListComponentsTool = defineTool({
 	description:
 		"Search the Grasshopper component registry and return ranked typeGuids for gh_edit_components. Put each desired component in its own query string; use multi-word queries to disambiguate. " +
 		"Defaults to vanilla components excluding Params; choose plugin or params explicitly when needed. Widgets are created with gh_create_widget, not a searched typeGuid.",
-	promptSnippet: "Search Grasshopper component types and return typeGuids for creation",
 	parameters: Type.Object({
 		queries: Type.Array(
 			Type.String({
@@ -115,7 +114,6 @@ export const ghGetCanvasErrorsTool = defineTool({
 	label: "Get Canvas Errors",
 	description:
 		"Retrieve Grasshopper runtime errors, warnings, messages, and component-overlap checks. Call after wiring or layout changes; Goo conversion errors include Python tree/list repair hints.",
-	promptSnippet: "Validate Grasshopper runtime messages and detect component overlaps",
 	parameters: Type.Object({}),
 
 	async execute(_toolCallId, _params, _signal, onUpdate) {

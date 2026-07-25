@@ -17,6 +17,7 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { PROGRESSIVE_TOOLS_ENABLED } from "./config.js";
 import {
 	beginTransactionPair,
 	cancelTransactionPair,
@@ -25,8 +26,13 @@ import {
 import { probeBackend } from "./infra/backend-status.js";
 import { registerBackendStatusUI } from "./ui/backend-status.js";
 import { registerToolSchemasUI } from "./ui/tool-schemas.js";
+import {
+	registerProgressiveSearchTool,
+	registerToolSchemaMetricsUI,
+} from "./ui/tool-schema-metrics.js";
 import { ALL_TOOLS } from "./tools/index.js";
 import { withBackendGuard } from "./tools/with-backend-guard.js";
+import { applyProgressiveCoreTools } from "./services/progressive-tools.js";
 import {
 	hasRhinoVisualCaptureDecision,
 	isRhinoVisualCaptureAllowed,
@@ -57,8 +63,10 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 		pi.registerTool(withBackendGuard(tool));
 	}
 
+	registerProgressiveSearchTool(pi);
 	registerBackendStatusUI(pi);
 	registerToolSchemasUI(pi);
+	registerToolSchemaMetricsUI(pi);
 
 	const captureModel = createRhinoCaptureModelController(pi);
 
@@ -66,10 +74,16 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 
 	pi.on("session_start", async (_event, ctx) => {
 		resetRhinoVisualCaptureState();
+		// Progressive core first so capture sync can add rh_capture_view additively.
+		if (PROGRESSIVE_TOOLS_ENABLED) {
+			applyProgressiveCoreTools(pi);
+		}
 		captureModel.syncCaptureToolForModel(ctx.model);
 		void probeBackend();
 		ctx.ui.notify(
-			"\u{1F998} Hopper Pi: rh_run_script (Rhino doc) + Grasshopper canvas tools loaded",
+			PROGRESSIVE_TOOLS_ENABLED
+				? "\u{1F998} Hopper Pi: progressive tools on (core + hopper_search_tools); specialists load on demand"
+				: "\u{1F998} Hopper Pi: rh_run_script (Rhino doc) + Grasshopper canvas tools loaded",
 			"info"
 		);
 	});

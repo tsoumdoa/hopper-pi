@@ -93,8 +93,8 @@ export const ghApplyGraphTool = defineTool({
 	name: "gh_apply_graph",
 	label: "Apply Graph",
 	description:
-		"Atomically create a new Grasshopper subgraph with local refs, including components, widgets, scripts, wires, and groups; validation is included.",
-	promptSnippet: "Create and validate a complete Grasshopper subgraph in one call",
+		"Atomically create a new Grasshopper subgraph with local refs, including components, widgets, scripts, wires, and groups; validation is included. " +
+		"See mds/reference/apply-graph.md for workflow detail.",
 	parameters: Type.Object({
 		components: Type.Optional(Type.Array(Component)),
 		widgets: Type.Optional(Type.Array(Type.Union([Slider, Panel, Toggle, Swatch, Scribble, ValueList]))),

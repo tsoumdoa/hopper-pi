@@ -24,7 +24,6 @@ export const ghMutateWidgetTool = defineTool({
 	description:
 		"Change widget-specific values and properties: slider value/range, panel text/display, toggle, swatch colour, scribble text, or value-list selection. " +
 		"Use gh_edit_components to move, rename, hide, lock, or delete widgets.",
-	promptSnippet: "Change Grasshopper widget values and widget-specific properties",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([

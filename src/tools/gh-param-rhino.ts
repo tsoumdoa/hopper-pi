@@ -133,10 +133,9 @@ export const ghParamRhinoTool = defineTool({
 	name: "gh_param_rhino",
 	label: "Param Rhino Geometry",
 	description:
-		"Get, reference, or internalize Rhino geometry on a Grasshopper geometry param. " +
-		"reference keeps live Rhino links; internalize stores copies. Use a targetId from gh_get_canvas and exactly one source: " +
-		`rhinoObjectIds for up to ${MAX_RHINO_OBJECT_IDS} objects, or a filtered rhinoQuery for bulk sets.`,
-	promptSnippet: "Get, reference, or internalize Rhino geometry on a Grasshopper param",
+		"Get, reference, or internalize Rhino geometry on a Grasshopper geometry param (targetId from gh_get_canvas). " +
+		"reference keeps live links; internalize stores copies. Provide exactly one source: " +
+		`rhinoObjectIds (max ${MAX_RHINO_OBJECT_IDS}) or a filtered rhinoQuery for bulk sets.`,
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([
