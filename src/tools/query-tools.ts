@@ -25,8 +25,12 @@ export const ghGetCanvasTool = defineTool({
 	label: "Get Canvas",
 	description:
 		"Fetch the live Grasshopper canvas. With no filters, returns a subgraph index summary; pass subgraph for one cluster or selectionOnly for the user's current selection. " +
-		"After placing a new build, make one unfiltered call to obtain all component and port GUIDs before wiring.",
+		"After placing a new build, make one unfiltered call to obtain component and port GUIDs before wiring. " +
+		"Use hopper_search_tools to activate edit/script specialists when the core cannot complete the task.",
 	promptSnippet: "Inspect Grasshopper canvas structure, selection, IDs, ports, and wires",
+	promptGuidelines: [
+		"Use gh_get_canvas to inspect structure and IDs; use hopper_search_tools before calling inactive gh_edit_* / gh_apply_graph / gh_param_rhino tools.",
+	],
 	parameters: Type.Object({
 		subgraph: Type.Optional(
 			Type.String({
@@ -60,9 +64,8 @@ export const ghListComponentsTool = defineTool({
 	name: "gh_list_components",
 	label: "List Components",
 	description:
-		"Search the Grasshopper component registry and return ranked typeGuids for gh_edit_components. Put each desired component in its own query string; use multi-word queries to disambiguate. " +
-		"Defaults to vanilla components excluding Params; choose plugin or params explicitly when needed. Widgets are created with gh_create_widget, not a searched typeGuid.",
-	promptSnippet: "Search Grasshopper component types and return typeGuids for creation",
+		"Search the Grasshopper component registry and return ranked typeGuids for gh_edit_components. " +
+		"One desired component per query string; multi-word queries disambiguate. Defaults to vanilla excluding Params.",
 	parameters: Type.Object({
 		queries: Type.Array(
 			Type.String({
@@ -114,8 +117,7 @@ export const ghGetCanvasErrorsTool = defineTool({
 	name: "gh_get_canvas_errors",
 	label: "Get Canvas Errors",
 	description:
-		"Retrieve Grasshopper runtime errors, warnings, messages, and component-overlap checks. Call after wiring or layout changes; Goo conversion errors include Python tree/list repair hints.",
-	promptSnippet: "Validate Grasshopper runtime messages and detect component overlaps",
+		"Retrieve Grasshopper runtime errors, warnings, messages, and component-overlap checks. Call after wiring or layout changes.",
 	parameters: Type.Object({}),
 
 	async execute(_toolCallId, _params, _signal, onUpdate) {

@@ -36,7 +36,7 @@ export const rhQueryObjectsTool = defineTool({
 	description:
 		"List Rhino document objects with short objectId aliases for gh_param_rhino. " +
 		"Filter by selection, exact layer, geometry kind, and/or IDs. Use countOnly before large operations. " +
-		"For a whole layer or large set, pass the same filters directly to gh_param_rhino.rhinoQuery instead of listing IDs.",
+		"For a whole layer or large set, pass the same filters to gh_param_rhino.rhinoQuery (activate via hopper_search_tools if needed).",
 	promptSnippet: "List or count filtered Rhino document objects and return short IDs",
 	parameters: Type.Object({
 		selectionOnly: Type.Optional(

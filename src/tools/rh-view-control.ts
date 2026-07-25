@@ -108,12 +108,9 @@ export const rhViewControlTool = defineTool({
 	name: "rh_view_control",
 	label: "Control Rhino View",
 	description:
-		"Change the active Rhino viewport or camera using constrained operations: activate a viewport, restore a standard/named/CPlane view, set camera properties, zoom, or explicitly save a named view. " +
-		"Prefer this over rh_run_script for normal view changes. For a one-off screenshot from a standard or named view, rh_capture_view.view can switch temporarily and restore automatically.",
-	promptSnippet: "Change Rhino viewport, projection, camera, zoom, or named view",
-	promptGuidelines: [
-		"Use rh_view_control saveNamedView only when the user explicitly asked to create or update a named view.",
-	],
+		"Change the active Rhino viewport or camera: setActiveView, standardView, namedView, cplaneView, camera, zoom, or saveNamedView. " +
+		"Prefer over rh_run_script for normal view changes. saveNamedView only when the user explicitly asked to create/update a named view. " +
+		"One-off screenshots: prefer rh_capture_view.view (temporary switch + restore).",
 	parameters: Type.Object({
 		action: Type.Union([
 			Type.Literal("setActiveView"),
@@ -139,7 +136,9 @@ export const rhViewControlTool = defineTool({
 				description: "Standard Rhino projection for action=standardView.",
 			}),
 		),
-		namedView: Type.Optional(Type.String({ description: "Existing named view to restore, or named view to save." })),
+		namedView: Type.Optional(Type.String({
+			description: "Named view to restore (namedView) or create/update (saveNamedView; only when explicitly requested).",
+		})),
 		cplaneName: Type.Optional(Type.String({ description: "Named construction plane. Omit to align to the active view CPlane." })),
 		camera: Type.Optional(
 			Type.Object({
@@ -153,7 +152,7 @@ export const rhViewControlTool = defineTool({
 						Type.Literal("twoPointPerspective"),
 					]),
 				),
-			}),
+			}, { additionalProperties: false }),
 		),
 		zoom: Type.Optional(
 			Type.Object({
@@ -166,9 +165,9 @@ export const rhViewControlTool = defineTool({
 				),
 				min: Type.Optional(PointSchema),
 				max: Type.Optional(PointSchema),
-			}),
+			}, { additionalProperties: false }),
 		),
-	}),
+	}, { additionalProperties: false }),
 
 	async execute(_toolCallId, params, _signal, onUpdate) {
 		const validationError = validateRhViewControlParams(params as RhViewControlParams);

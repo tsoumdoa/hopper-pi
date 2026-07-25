@@ -41,7 +41,6 @@ export const ghEditGroupTool = defineTool({
 	description:
 		"Create groups, add/remove members, or delete, rename, recolour, and restyle existing Grasshopper groups. " +
 		"Use component instance GUIDs from gh_get_canvas; groupName identifies the target group.",
-	promptSnippet: "Create or edit Grasshopper canvas groups",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([

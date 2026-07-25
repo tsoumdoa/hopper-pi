@@ -6,7 +6,7 @@ import { runRhinoScript } from "./rhino-script-handlers.js";
 
 const ROUTING_PREFIX =
 	"Use rh_run_script for Rhino document work (geometry, layers, selection, blocks, direct bake, materials). " +
-	"Use rh_view_control for normal viewport/camera changes, rh_query_objects for object IDs, and gh_* tools for the Grasshopper canvas. ";
+	"Use hopper_search_tools when you need viewport control, Grasshopper edits, or other inactive Hopper specialists. ";
 
 export const rhRunScriptTool = defineTool({
 	name: "rh_run_script",
@@ -17,6 +17,9 @@ export const rhRunScriptTool = defineTool({
 		"Prefer Python for multi-step work and command mode for one-liners. Use print() / Console.WriteLine() for returned output. " +
 		"Items run sequentially; a failure does not roll back earlier items. Changes share one Rhino Undo record per agent turn.",
 	promptSnippet: "Run command, Python, or C# against the active Rhino document",
+	promptGuidelines: [
+		"Use rh_run_script for RhinoDoc work; use hopper_search_tools to activate rh_view_control, gh_* edit/script tools, or other Hopper specialists when needed.",
+	],
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Object({
