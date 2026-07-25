@@ -41,8 +41,8 @@ Use `print()` in Python or `Console.WriteLine()` in C# for values the agent must
 ## Rhino → Grasshopper geometry params
 
 1. Use `rh_query_objects` to filter/count objects and obtain short IDs when the set is small.
-2. Create the correct GH geometry param (`gh_list_components` with `searchFrom: "params"`, then `gh_edit_components`).
-3. Get its instance `targetId` from `gh_get_canvas`.
+2. Create the correct GH geometry param with `gh_apply_graph` (use `gh_list_components` with `searchFrom: "params"` only if its type is uncertain).
+3. Use the short ID returned for that local ref as `targetId`; no canvas reread is required.
 4. Call `gh_param_rhino` with exactly one source:
    - `rhinoObjectIds` for up to 30 objects.
    - `rhinoQuery` for a layer/selection/type bulk set.

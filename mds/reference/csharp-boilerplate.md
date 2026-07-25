@@ -16,7 +16,7 @@ Grasshopper C# script component inside Rhino — not a standalone app.
 
 ## Agent workflow (preferred)
 
-Do **not** emit the class wrapper or `using` lines. Use `gh_edit_script` with `scriptParts` — the server assembles the full Grasshopper script.
+Do **not** emit the class wrapper or `using` lines. For a new node use `gh_apply_graph.scripts[].scriptParts`; for an existing node use `gh_edit_script` with `scriptParts`. Hopper assembles the full Grasshopper script.
 
 ```json
 {

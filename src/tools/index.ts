@@ -14,6 +14,7 @@ import { ghEditGroupTool } from "./edit-tools/gh-edit-group.js";
 import { ghCreateWidgetTool } from "./edit-tools/gh-create-widget.js";
 import { ghMutateWidgetTool } from "./edit-tools/gh-mutate-widget.js";
 import { ghEditScriptTool } from "./edit-tools/gh-edit-script.js";
+import { ghApplyGraphTool } from "./gh-apply-graph.js";
 
 /** All tool definitions in registration order (Rhino doc first, then GH edit/query tools) */
 export const ALL_TOOLS = [
@@ -21,6 +22,7 @@ export const ALL_TOOLS = [
 	rhQueryObjectsTool,
 	rhViewControlTool,
 	// ── Edit tools ──
+	ghApplyGraphTool,
 	ghParamRhinoTool,
 	ghCreateWidgetTool,
 	ghMutateWidgetTool,

@@ -12,30 +12,22 @@ namespace rhino_zmq_poc
         {
             if (doc == null)
                 return "addGroup error: document is null";
-
-            var group = new GH_Group();
-            group.NickName = param.GroupName;
-            group.Colour = Utilities.ParseRgbaColor(param.Color, Color.FromArgb(150, 255, 255, 255));
-            if (!string.IsNullOrEmpty(param.Border))
-                group.Border = Utilities.ParseGroupBorder(param.Border, group.Border);
-
-            int addedCount = 0;
+            var members = new System.Collections.Generic.List<IGH_DocumentObject>();
+            var missing = new System.Collections.Generic.List<string>();
             foreach (var idStr in param.ComponentIds)
             {
-                if (Guid.TryParse(idStr, out var guid))
-                {
-                    var obj = doc.FindObject(guid, false);
-                    if (obj != null)
-                    {
-                        group.AddObject(obj.InstanceGuid);
-                        addedCount++;
-                    }
-                }
+                if (Guid.TryParse(idStr, out var guid) && doc.FindObject(guid, false) is { } obj)
+                    members.Add(obj);
+                else
+                    missing.Add(idStr);
             }
-
-            doc.AddObject(group, false);
-
-            return $"addGroup: created group '{param.GroupName}' with {addedCount} objects";
+            if (missing.Count > 0)
+                return $"addGroup error: component(s) not found: {string.Join(", ", missing)}";
+            if (!GraphObjectFactory.TryCreateGroup(
+                doc, param.GroupName, members, param.Color, param.Border,
+                out _, out var error))
+                return $"addGroup error: {error}";
+            return $"addGroup: created group '{param.GroupName}' with {members.Count} objects";
         }
 
         public static string RemoveFromGroup(GH_Document doc, RemoveFromGroupParams param)

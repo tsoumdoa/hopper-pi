@@ -93,7 +93,7 @@ Pi agent  →  hopper-pi (Node/TS)  →  ZMQ  →  Hopper Code Backend (Grasshop
 | ---- | ------- | ------- |
 | `5555` | PUB/SUB | Events: job status, canvas XML snapshots |
 | `5556` | PUSH/PULL | Commands: edits, scripts, widgets |
-| `5557` | REQ/REP | Queries: canvas state, component search, errors |
+| `5557` | REQ/REP | Queries plus synchronous atomic graph application |
 
 The backend tries the legacy `5555`-`5557` ports first. If any are already in use, it automatically binds a free loopback port triplet and writes the live endpoints plus a local connection token to a user-local connection profile:
 
@@ -118,12 +118,13 @@ The token is generated once and reused across backend/frontend restarts, so norm
 
 | Tool | Role |
 | ---- | ---- |
-| `gh_edit_components` | Add, move, delete components |
+| `gh_apply_graph` | Atomically create and validate a complete new subgraph |
+| `gh_edit_components` | Surgical add, move, or delete operations |
 | `gh_edit_param` | Inspect and edit GH script-component input/output ports |
 | `gh_edit_wire` | Connect / disconnect wires |
 | `gh_edit_group` | Groups |
 | `gh_edit_script` | Script component source |
-| `gh_create_widget` / `gh_mutate_widget` | Sliders, panels, toggles, etc. |
+| `gh_create_widget` / `gh_mutate_widget` | Surgical widget creation or changes |
 | `gh_param_rhino` | Reference or internalize Rhino geometry on params |
 
 **Grasshopper canvas — query**
@@ -142,6 +143,8 @@ The token is generated once and reused across backend/frontend restarts, so norm
 | `ask_user` | Ask a free-text question when options are not practical |
 
 Bundled Pi skills and progressive reference docs live under `mds/` (`gh-modeling-expert`, `rhino-document`, `gh-cookbook`, and `gh-reference`).
+
+For new Grasshopper builds, the canonical workflow is: resolve unusual or ambiguous types if needed, call `gh_apply_graph` once, inspect its integrated runtime/overlap validation, then use legacy tools only for surgical repair. `gh_get_canvas` remains for existing canvases, selections, and subgraphs.
 
 ## Repo layout
 

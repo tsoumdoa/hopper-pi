@@ -11,11 +11,11 @@ Grasshopper Python component — not a standalone script. No `main()`, CLI, or p
 - Use component I/O variables (`x`, `a`, …) directly; assign outputs to output vars.
 - Minimal code; suitable for repeated recomputation.
 - `ghpythonlib.treehelpers` for tree ↔ list conversion; prefer plain Python lists only for **list-access** outputs (not tree-access).
-- Port properties/add/remove: `gh_edit_param`. Port renames: update code and full port lists together with `gh_edit_script setCode`.
+- New graph node: `gh_apply_graph.scripts` with full `code`. Existing code: `gh_edit_script`. Existing port-only changes: `gh_edit_param`. Port renames: update code and full port lists together with `gh_edit_script setCode`.
 
 ## Agent workflow (preferred)
 
-Unlike C#, there is no class wrapper — emit the full script via `code` on `create` / `setCode`.
+Unlike C#, there is no class wrapper — emit the full script via `code` in `gh_apply_graph` or `gh_edit_script setCode`.
 
 ```json
 {

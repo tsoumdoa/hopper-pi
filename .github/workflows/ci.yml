@@ -14,6 +14,17 @@ jobs:
     name: TypeScript typecheck & tests
     runs-on: ubuntu-latest
 
+    # The Grasshopper plugin (grasshopper-plugin/**.cs) and its C# contract tests
+    # (grasshopper-plugin.Tests/ApplyGraphContractTests.cs) require the Rhino/Grasshopper
+    # runtime, which is Windows/macOS-only and not available on Linux runners. We
+    # therefore do NOT build or run the .NET project here. Instead, the TypeScript
+    # contract test (src/services/gh-apply-graph.contract.test.ts) statically asserts the
+    # C# source contract (atomicity, failure-safe restore, timeout-as-unknown-outcome,
+    # single-undo guard) so structural regressions are caught in CI.
+    #
+    # To run the C# contract tests locally on a Rhino-equipped machine:
+    #   dotnet test grasshopper-plugin.Tests/grasshopper-plugin.Tests.csproj
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,5 +49,5 @@ jobs:
       - name: Typecheck
         run: pnpm build
 
-      - name: Test
+      - name: Test (incl. C# source contract checks)
         run: pnpm test

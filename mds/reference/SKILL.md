@@ -9,6 +9,7 @@ Load only what the task needs. Workflow rules → [gh-modeling-expert](../skills
 
 | File | Path | Load when |
 |------|------|-----------|
+| [apply-graph.md](./apply-graph.md) | `mds/reference/apply-graph.md` | Creating a complete new subgraph with `gh_apply_graph` |
 | [layout-system.md](./layout-system.md) | `mds/reference/layout-system.md` | Tier 3 builds, bounds/preview placement, layout bugs |
 | [canvas-navigation.md](./canvas-navigation.md) | `mds/reference/canvas-navigation.md` | Sub-graph or `selectionOnly` filters on existing canvas |
 | [data-type-guide.md](./data-type-guide.md) | `mds/reference/data-type-guide.md` | Type mismatches, panel input formats |

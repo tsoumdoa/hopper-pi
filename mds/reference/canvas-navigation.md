@@ -1,6 +1,6 @@
 # Canvas Navigation — Sub-graphs & Filtering
 
-> **When to use:** Query or inspect existing canvas structure. For placement workflow and `gh_get_canvas` discipline, see [gh-modeling-expert](../skills/gh-modeling-expert/SKILL.md).
+> **When to use:** Query or inspect an existing canvas, selection, or subgraph. New graphs should use [`gh_apply_graph`](./apply-graph.md) local refs and integrated validation.
 
 ## Sub-graphs
 
@@ -11,11 +11,11 @@ The canvas is partitioned into **sub-graphs** — wired clusters. Unwired compon
 | Param | Purpose |
 |-------|---------|
 | `subgraph` | Detail for one cluster, e.g. `"subgraph_0"` |
-| `selectionOnly` | Detail for current canvas selection only (groups expand to members). For inspecting user selection — **not** a substitute for the single full read after placing all components in a new build. |
+| `selectionOnly` | Detail for current canvas selection only (groups expand to members). |
 
 **Examples:**
 
 - `gh_get_canvas({ subgraph: "subgraph_0" })`
 - `gh_get_canvas({ selectionOnly: true })`
 
-Use one unfiltered `gh_get_canvas` after placement when you need all GUIDs. Filter only when isolating a known subgraph or selection.
+Do not use `gh_get_canvas` to recover IDs after a new graph build; `gh_apply_graph` returns ref-to-short-ID mappings. Filter only when isolating existing structure or a user selection.

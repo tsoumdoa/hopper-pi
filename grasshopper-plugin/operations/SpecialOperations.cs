@@ -12,25 +12,9 @@ namespace rhino_zmq_poc
     {
         public static string CreateToggle(GH_Document doc, CreateToggleParams param)
         {
-            if (doc == null)
-                return "createToggle error: document is null";
-
-            try
-            {
-                var toggle = new GH_BooleanToggle();
-                toggle.CreateAttributes();
-                toggle.Attributes.Pivot = new PointF((float)param.Position.X, (float)param.Position.Y);
-                toggle.NickName = param.NickName ?? "Toggle";
-                toggle.Value = param.Value;
-
-                doc.AddObject(toggle, false);
-
-                return $"createToggle: created ({toggle.InstanceGuid}) at ({param.Position.X}, {param.Position.Y}) value={param.Value}";
-            }
-            catch (Exception ex)
-            {
-                return $"createToggle error: {ex.GetType().Name}: {ex.Message}";
-            }
+            if (!GraphObjectFactory.TryCreateToggle(doc, param, out var created, out var error))
+                return $"createToggle error: {error}";
+            return $"createToggle: created ({created.InstanceGuid}) at ({param.Position.X}, {param.Position.Y}) value={param.Value}";
         }
 
         public static string SetToggleValue(GH_Document doc, SetToggleValueParams param)
@@ -53,24 +37,9 @@ namespace rhino_zmq_poc
 
         public static string CreateSwatch(GH_Document doc, CreateSwatchParams param)
         {
-            if (doc == null)
-                return "createSwatch error: document is null";
-
-            try
-            {
-                var swatch = new GH_ColourSwatch();
-                swatch.CreateAttributes();
-                swatch.Attributes.Pivot = new PointF((float)param.Position.X, (float)param.Position.Y);
-                swatch.NickName = param.NickName ?? "Colour Swatch";
-                swatch.SwatchColour = Utilities.ParseRgbaColor(param.Color);
-                doc.AddObject(swatch, false);
-
-                return $"createSwatch: created ({swatch.InstanceGuid}) at ({param.Position.X}, {param.Position.Y}) color={param.Color}";
-            }
-            catch (Exception ex)
-            {
-                return $"createSwatch error: {ex.GetType().Name}: {ex.Message}";
-            }
+            if (!GraphObjectFactory.TryCreateSwatch(doc, param, out var created, out var error))
+                return $"createSwatch error: {error}";
+            return $"createSwatch: created ({created.InstanceGuid}) at ({param.Position.X}, {param.Position.Y}) color={param.Color}";
         }
 
         public static string SetSwatchColor(GH_Document doc, SetSwatchColorParams param)
@@ -93,28 +62,9 @@ namespace rhino_zmq_poc
 
         public static string CreateScribble(GH_Document doc, CreateScribbleParams param)
         {
-            if (doc == null)
-                return "createScribble error: document is null";
-
-            try
-            {
-                var scribble = new GH_Scribble();
-                scribble.CreateAttributes();
-                scribble.Attributes.Pivot = new PointF((float)param.Position.X, (float)param.Position.Y);
-                scribble.Text = param.Text;
-                scribble.NickName = param.NickName ?? "Scribble";
-
-                var style = FontStyle.Regular;
-                scribble.Font = new Font(new FontFamily("Arial"), (float)(param.Size ?? 10f), style);
-
-                doc.AddObject(scribble, false);
-
-                return $"createScribble: created ({scribble.InstanceGuid}) at ({param.Position.X}, {param.Position.Y})";
-            }
-            catch (Exception ex)
-            {
-                return $"createScribble error: {ex.GetType().Name}: {ex.Message}";
-            }
+            if (!GraphObjectFactory.TryCreateScribble(doc, param, out var created, out var error))
+                return $"createScribble error: {error}";
+            return $"createScribble: created ({created.InstanceGuid}) at ({param.Position.X}, {param.Position.Y})";
         }
 
         public static string SetScribbleText(GH_Document doc, SetScribbleTextParams param)
@@ -137,34 +87,10 @@ namespace rhino_zmq_poc
 
         public static string CreateValueList(GH_Document doc, CreateValueListParams param)
         {
-            if (doc == null)
-                return "createValueList error: document is null";
-
-            try
-            {
-                var valueList = new GH_ValueList();
-                valueList.CreateAttributes();
-                valueList.Attributes.Pivot = new PointF((float)param.Position.X, (float)param.Position.Y);
-                valueList.NickName = param.NickName ?? "Value List";
-
-                valueList.ListItems.Clear();
-                if (param.Items != null)
-                {
-                    foreach (var item in param.Items)
-                        valueList.ListItems.Add(new GH_ValueListItem(item.Name, item.Value));
-                }
-
-                if (param.SelectedIndex.HasValue && param.SelectedIndex.Value >= 0 && param.SelectedIndex.Value < valueList.ListItems.Count)
-                    valueList.ListItems[param.SelectedIndex.Value].Selected = true;
-
-                doc.AddObject(valueList, false);
-
-                return $"createValueList: created ({valueList.InstanceGuid}) at ({param.Position.X}, {param.Position.Y}) with {valueList.ListItems.Count} items";
-            }
-            catch (Exception ex)
-            {
-                return $"createValueList error: {ex.GetType().Name}: {ex.Message}";
-            }
+            if (!GraphObjectFactory.TryCreateValueList(doc, param, out var created, out var error))
+                return $"createValueList error: {error}";
+            var count = created is GH_ValueList valueList ? valueList.ListItems.Count : 0;
+            return $"createValueList: created ({created.InstanceGuid}) at ({param.Position.X}, {param.Position.Y}) with {count} items";
         }
 
         public static string SetValueListSelected(GH_Document doc, SetValueListSelectedParams param)

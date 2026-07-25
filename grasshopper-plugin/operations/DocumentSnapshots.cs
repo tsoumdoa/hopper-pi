@@ -63,6 +63,13 @@ namespace rhino_zmq_poc
             return true;
         }
 
+        /// <summary>
+        /// Restores <paramref name="target"/> to the canvas captured in
+        /// <paramref name="snapshot"/>. Failure-safe: the replacement document is
+        /// fully deserialized and validated BEFORE the live canvas is mutated, and a
+        /// fallback snapshot of the current target is captured so a mid-merge failure
+        /// restores the original instead of leaving the canvas empty/corrupted.
+        /// </summary>
         public static void Apply(GH_Document target, byte[] snapshot)
         {
             if (target == null)
@@ -70,22 +77,67 @@ namespace rhino_zmq_poc
             if (snapshot == null || snapshot.Length == 0)
                 throw new ArgumentException("Snapshot is empty", nameof(snapshot));
 
+            // 1. Build the replacement document fully, before touching the target.
+            //    Any deserialization/extraction failure throws here and leaves the
+            //    live canvas completely intact.
+            var incoming = ExtractDocument(snapshot);
+
+            // 2. Capture the current target state so the destructive swap below can
+            //    be rolled back if it fails partway. If we cannot capture a fallback
+            //    we still proceed; the merge operates on already-validated data, and
+            //    the more common failure mode (bad snapshot) is already excluded.
+            var fallback = TrySerialize(target);
+
+            try
+            {
+                Swap(target, incoming);
+            }
+            catch (Exception)
+            {
+                // Removal and/or merge failed after mutating the target. Best-effort
+                // restore the original canvas from the fallback so we never leave the
+                // target empty or half-merged; the original exception then propagates.
+                if (fallback != null)
+                {
+                    try { Swap(target, ExtractDocument(fallback)); }
+                    catch { /* last resort; the original exception is rethrown below */ }
+                }
+                throw;
+            }
+        }
+
+        /// <summary>Deserializes a snapshot into a fresh document, or throws if invalid.</summary>
+        private static GH_Document ExtractDocument(byte[] snapshot)
+        {
             var archive = new GH_Archive();
-            archive.Deserialize_Binary(snapshot);
+            if (!archive.Deserialize_Binary(snapshot))
+                throw new InvalidOperationException("Failed to deserialize snapshot");
 
-            var incoming = new GH_Document();
-            if (!archive.ExtractObject(incoming, ArchiveKey))
+            var doc = new GH_Document();
+            if (!archive.ExtractObject(doc, ArchiveKey))
                 throw new InvalidOperationException("Failed to extract document from snapshot");
+            return doc;
+        }
 
+        private static byte[] TrySerialize(GH_Document doc)
+        {
+            try { return Serialize(doc); }
+            catch { return null; }
+        }
+
+        /// <summary>
+        /// Destructive swap: clears non-infrastructure objects from the target and
+        /// moves the snapshot's objects (with their internal wire graph) onto it.
+        /// Per-object RemoveObject/AddObject breaks IGH_Param source links, so the
+        /// whole incoming document is merged at once.
+        /// </summary>
+        private static void Swap(GH_Document target, GH_Document incoming)
+        {
             RemoveNonInfrastructure(target);
             PrepareIncomingForMerge(target, incoming);
 
             if (incoming.ObjectCount > 0)
-            {
-                // Move objects (and their internal wire graph) from the snapshot document.
-                // Per-object RemoveObject/AddObject breaks IGH_Param source links.
                 target.MergeDocument(incoming, resolveProxies: true);
-            }
 
             target.NewSolution(true);
         }

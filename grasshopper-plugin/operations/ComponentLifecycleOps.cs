@@ -12,32 +12,9 @@ namespace rhino_zmq_poc
         {
             try
             {
-                if (doc == null)
-                    return "addComponent error: document is null";
-
-                if (!Guid.TryParse(param.TypeGuid, out var componentGuid))
-                    return $"addComponent error: invalid typeGuid '{param.TypeGuid}'";
-
-                var obj = Instances.ComponentServer.EmitObject(componentGuid);
-                if (obj == null)
-                    return $"addComponent error: failed to emit object for typeGuid '{param.TypeGuid}'";
-
-                doc.AddObject(obj, false);
-
-                if (obj.Attributes == null)
-                    return "addComponent error: Attributes is null after AddObject()";
-
-                obj.Attributes.Pivot = new System.Drawing.PointF(
-                    (float)param.Position.X,
-                    (float)param.Position.Y);
-
-                if (!param.Preview)
-                {
-                    var hiddenProp = obj.GetType().GetProperty("Hidden");
-                    if (hiddenProp != null)
-                        hiddenProp.SetValue(obj, true);
-                }
-
+                if (!GraphObjectFactory.TryCreateComponent(
+                    doc, param, null, out var obj, out var error))
+                    return $"addComponent error: {error}";
                 return $"addComponent: added ({obj.InstanceGuid}) at ({param.Position.X}, {param.Position.Y}) preview={param.Preview}";
             }
             catch (Exception ex)
