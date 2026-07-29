@@ -10,6 +10,14 @@ AI inside their real workflow — not locked behind a black-box SaaS.
 
 ## What's new
 
+### 0.1.80 — Atomic graph apply & tool schema browser
+
+- **`gh_apply_graph`:** create a complete new Grasshopper subgraph in one synchronous call — components, widgets, scripts, wires, and groups — then run one solution and return short IDs plus runtime/overlap validation. New builds default to one apply; legacy edit tools stay for surgical repair.
+- **`/hopper-schemas`:** browse the exact agent-facing JSON schemas (name, description, parameters, guidelines) for every registered tool; `/hopper-schemas dump` writes `tool-schemas.json` in the cwd.
+- **Anthropic schema fix:** `gh_apply_graph` wire endpoints now emit draft 2020-12 `prefixItems` tuples so Claude no longer rejects the tool `input_schema`.
+- **Skill guidance:** modeling/cookbook/Rhino skills and reference docs point at the apply-once workflow; trim stale “core principles” from `gh-modeling-expert`.
+- **Prompt examples:** add pavilion / attractor plan prompts under `prompt-examples/`.
+
 ### 0.1.70 — Faster agent guidance & screenshot override
 
 - **Less overthinking in Grasshopper/Rhino skills:** tighten clarification rules so the agent proceeds with documented defaults unless ambiguity materially changes output, risks data loss, or could edit the wrong target.
