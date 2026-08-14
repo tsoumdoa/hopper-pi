@@ -10,6 +10,12 @@ AI inside their real workflow — not locked behind a black-box SaaS.
 
 ## What's new
 
+### 0.1.90 — Slim progressive tool catalog
+
+- **Opt-in progressive tools:** start with a small always-on Hopper core and activate specialists on demand. Enable with `HOPPER_PROGRESSIVE_TOOLS=1` or `--hopper-progressive-tools`. Off by default, so the current all-tools-active behavior stays.
+- **`hopper_search_tools`:** keyword search over the typed Hopper catalog; matching specialists activate for the rest of the session and reset on new/reload sessions.
+- **Catalog + size diagnostics:** tools carry group, keywords, and core flags. `/hopper-schemas sizes` reports compact schema bytes by group and tool. Discoverable tools omit prompt snippets so the active set stays lean.
+
 ### 0.1.80 — Atomic graph apply & tool schema browser
 
 - **`gh_apply_graph`:** create a complete new Grasshopper subgraph in one synchronous call — components, widgets, scripts, wires, and groups — then run one solution and return short IDs plus runtime/overlap validation. New builds default to one apply; legacy edit tools stay for surgical repair.
@@ -149,6 +155,12 @@ The token is generated once and reused across backend/frontend restarts, so norm
 | ---- | ---- |
 | `pick_option` | Ask the user to choose among informed options |
 | `ask_user` | Ask a free-text question when options are not practical |
+
+**Progressive loading (opt-in)**
+
+| Tool | Role |
+| ---- | ---- |
+| `hopper_search_tools` | Search the Hopper catalog and activate specialists (`HOPPER_PROGRESSIVE_TOOLS=1` / `--hopper-progressive-tools`) |
 
 Bundled Pi skills and progressive reference docs live under `mds/` (`gh-modeling-expert`, `rhino-document`, `gh-cookbook`, and `gh-reference`).
 
