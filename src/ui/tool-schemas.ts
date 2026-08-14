@@ -1,6 +1,11 @@
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@earendil-works/pi-coding-agent";
+import {
+	buildCatalogSizeReport,
+	formatCatalogSizeReport,
+	type HopperToolCatalogEntry,
+} from "../tools/catalog.js";
 
 /** Agent-facing tool surface: name, description, JSON Schema parameters, optional guidelines. */
 export type AgentToolSchema = {
@@ -89,10 +94,25 @@ async function dumpToolSchemas(ctx: ExtensionContext, tools: ToolInfo[]): Promis
 	}
 }
 
-export function registerToolSchemasUI(pi: ExtensionAPI): void {
+async function showCatalogSizes(
+	ctx: ExtensionContext,
+	getCatalog: () => readonly HopperToolCatalogEntry[],
+): Promise<void> {
+	const text = formatCatalogSizeReport(buildCatalogSizeReport(getCatalog()));
+	if (ctx.hasUI) {
+		await ctx.ui.editor("Hopper tool catalog sizes", text);
+		return;
+	}
+	ctx.ui.notify(text, "info");
+}
+
+export function registerToolSchemasUI(
+	pi: ExtensionAPI,
+	getCatalog: () => readonly HopperToolCatalogEntry[],
+): void {
 	pi.registerCommand("hopper-schemas", {
 		description:
-			"Browse or dump JSON schemas exposed to the agent for registered tools (/hopper-schemas dump → tool-schemas.json)",
+			"Browse or dump JSON schemas exposed to the agent (/hopper-schemas dump → tool-schemas.json; /hopper-schemas sizes → catalog byte report)",
 		handler: async (args, ctx) => {
 			const tools = pi.getAllTools();
 			if (tools.length === 0) {
@@ -105,9 +125,13 @@ export function registerToolSchemasUI(pi: ExtensionAPI): void {
 				await dumpToolSchemas(ctx, tools);
 				return;
 			}
+			if (tokens[0] === "sizes") {
+				await showCatalogSizes(ctx, getCatalog);
+				return;
+			}
 
 			if (!ctx.hasUI) {
-				ctx.ui.notify("/hopper-schemas browse requires an interactive UI (use dump)", "error");
+				ctx.ui.notify("/hopper-schemas browse requires an interactive UI (use dump or sizes)", "error");
 				return;
 			}
 

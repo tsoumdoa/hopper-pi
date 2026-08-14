@@ -8,8 +8,7 @@ export const ghEditWireTool = defineTool({
 	name: "gh_edit_wire",
 	label: "Edit Wire",
 	description:
-		"Connect or disconnect Grasshopper wires using component and port GUIDs returned by gh_get_canvas. Batch independent wire edits in one call.",
-	promptSnippet: "Connect or disconnect Grasshopper component ports by GUID",
+		"Connect or disconnect Grasshopper wires using component and port GUIDs from gh_get_canvas. Batch independent wire edits in one call.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Object({
