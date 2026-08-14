@@ -25,8 +25,19 @@ import {
 import { probeBackend } from "./infra/backend-status.js";
 import { registerBackendStatusUI } from "./ui/backend-status.js";
 import { registerToolSchemasUI } from "./ui/tool-schemas.js";
-import { ALL_TOOLS } from "./tools/index.js";
+import {
+	ALL_TOOLS,
+	HOPPER_REGISTERED_CATALOG,
+	RH_CAPTURE_VIEW_CATALOG_ENTRY,
+	type HopperToolCatalogEntry,
+} from "./tools/index.js";
+import {
+	createHopperSearchToolsTool,
+	resetProgressiveActiveTools,
+	shouldResetProgressiveTools,
+} from "./tools/hopper-search-tools.js";
 import { withBackendGuard } from "./tools/with-backend-guard.js";
+import { ENV, isProgressiveToolsEnvEnabled } from "./config.js";
 import {
 	hasRhinoVisualCaptureDecision,
 	isRhinoVisualCaptureAllowed,
@@ -50,27 +61,72 @@ import {
 	rhinoRoutingGuidance,
 } from "./services/prompt-routing.js";
 
+const PROGRESSIVE_TOOLS_FLAG = "hopper-progressive-tools";
+
+function isProgressiveToolsEnabled(pi: ExtensionAPI): boolean {
+	const flag = pi.getFlag(PROGRESSIVE_TOOLS_FLAG);
+	if (typeof flag === "boolean") return flag;
+	return isProgressiveToolsEnvEnabled();
+}
+
 export default function hopperPiExtension(pi: ExtensionAPI) {
-	// ── Register all Grasshopper canvas tools ───────────────────────
+	pi.registerFlag(PROGRESSIVE_TOOLS_FLAG, {
+		type: "boolean",
+		default: isProgressiveToolsEnvEnabled(),
+		description:
+			"Start with a small Hopper core and activate specialists via hopper_search_tools. " +
+			`Off by default (all Hopper tools active). Also set ${ENV.HOPPER_PROGRESSIVE_TOOLS}=1.`,
+	});
+
+	// ── Register Grasshopper/Rhino tools + progressive loader ───────
 
 	for (const tool of ALL_TOOLS) {
 		pi.registerTool(withBackendGuard(tool));
 	}
 
+	let catalog: readonly HopperToolCatalogEntry[] = HOPPER_REGISTERED_CATALOG;
+	const getCatalog = () => catalog;
+	const progressive = isProgressiveToolsEnabled(pi);
+
+	const searchTool = createHopperSearchToolsTool(pi, getCatalog);
+	if (progressive) {
+		pi.registerTool(searchTool);
+	}
+
+	catalog = [
+		...HOPPER_REGISTERED_CATALOG,
+		{
+			tool: searchTool,
+			group: "interaction",
+			keywords: ["search tools", "activate", "discover"],
+			alwaysActive: true,
+		},
+		RH_CAPTURE_VIEW_CATALOG_ENTRY,
+	];
+
 	registerBackendStatusUI(pi);
-	registerToolSchemasUI(pi);
+	registerToolSchemasUI(pi, getCatalog);
 
 	const captureModel = createRhinoCaptureModelController(pi);
 
 	// ── Lifecycle: notify on load ──────────────────────────────────
 
-	pi.on("session_start", async (_event, ctx) => {
+	pi.on("session_start", async (event, ctx) => {
 		resetRhinoVisualCaptureState();
+
+		const progressive = isProgressiveToolsEnabled(pi);
+		if (progressive && shouldResetProgressiveTools(event.reason)) {
+			resetProgressiveActiveTools(pi, catalog);
+		}
+
+		// Compose with rh_capture_view after core reset so image gating stays authoritative.
 		captureModel.syncCaptureToolForModel(ctx.model);
 		void probeBackend();
 		ctx.ui.notify(
-			"\u{1F998} Hopper Pi: rh_run_script (Rhino doc) + Grasshopper canvas tools loaded",
-			"info"
+			progressive
+				? "🦘 Hopper Pi: progressive tools on (core + hopper_search_tools); specialists load on demand"
+				: "🦘 Hopper Pi: rh_run_script (Rhino doc) + Grasshopper canvas tools loaded",
+			"info",
 		);
 	});
 

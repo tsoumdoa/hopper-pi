@@ -47,47 +47,38 @@ export function createRhinoCaptureModelController(
 	fallbackModelId = MULTIMODAL_FALLBACK_MODEL,
 ) {
 	let captureToolRegistered = false;
-	let captureToolHiddenForModel = false;
 
-	function ensureCaptureToolRegistered(): boolean {
+	function ensureCaptureToolRegistered(): void {
 		if (captureToolRegistered || pi.getAllTools().some((tool) => tool.name === RH_CAPTURE_VIEW_TOOL)) {
 			captureToolRegistered = true;
-			return false;
+			return;
 		}
 		pi.registerTool(withBackendGuard(rhCaptureViewTool));
 		captureToolRegistered = true;
-		return true;
 	}
 
+	/**
+	 * Drive rh_capture_view activation from the current model, not from a
+	 * one-shot "we hid it" latch: the progressive loader also resets the active
+	 * set on session start, so this must re-activate any registered capture tool
+	 * whenever the model supports images.
+	 */
 	function syncCaptureToolForModel(model: ModelLike | null | undefined): void {
-		const active = pi.getActiveTools();
-		const isActive = active.includes(RH_CAPTURE_VIEW_TOOL);
 		const supportsImages = modelSupportsImages(model);
 
-		if (supportsImages) {
-			const didRegister = ensureCaptureToolRegistered();
-			if (didRegister) {
-				const nextActive = pi.getActiveTools();
-				if (!nextActive.includes(RH_CAPTURE_VIEW_TOOL)) {
-					pi.setActiveTools([...nextActive, RH_CAPTURE_VIEW_TOOL]);
-				}
-				return;
+		if (!supportsImages) {
+			const active = pi.getActiveTools();
+			if (active.includes(RH_CAPTURE_VIEW_TOOL)) {
+				pi.setActiveTools(active.filter((name) => name !== RH_CAPTURE_VIEW_TOOL));
 			}
-		}
-
-		if (!supportsImages && isActive) {
-			pi.setActiveTools(active.filter((name) => name !== RH_CAPTURE_VIEW_TOOL));
-			captureToolHiddenForModel = true;
 			return;
 		}
 
-		if (supportsImages && captureToolHiddenForModel && !isActive) {
-			const allToolNames = pi.getAllTools().map((tool) => tool.name);
-			if (allToolNames.includes(RH_CAPTURE_VIEW_TOOL)) {
-				pi.setActiveTools([...active, RH_CAPTURE_VIEW_TOOL]);
-			}
-			captureToolHiddenForModel = false;
-		}
+		ensureCaptureToolRegistered();
+		const active = pi.getActiveTools();
+		if (active.includes(RH_CAPTURE_VIEW_TOOL)) return;
+		if (!pi.getAllTools().some((tool) => tool.name === RH_CAPTURE_VIEW_TOOL)) return;
+		pi.setActiveTools([...active, RH_CAPTURE_VIEW_TOOL]);
 	}
 
 	function isCaptureToolActive(): boolean {

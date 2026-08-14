@@ -22,8 +22,7 @@ export const ghCreateWidgetTool = defineTool({
 	label: "Create Widget",
 	description:
 		"Create Grasshopper UI widgets: number sliders, panels, toggles, colour swatches, scribbles, or value lists. " +
-		"Use gh_edit_components for standard components and for shared object operations such as moving or deleting a widget.",
-	promptSnippet: "Create Grasshopper sliders, panels, toggles, swatches, scribbles, or value lists",
+		"Use gh_edit_components for standard components and shared object ops (move/delete).",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([

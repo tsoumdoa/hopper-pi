@@ -13,10 +13,9 @@ export const ghEditParamTool = defineTool({
 	name: "gh_edit_param",
 	label: "Edit Script Ports",
 	description:
-		"Manage input/output ports on Grasshopper C# or Python script components only. syncParams reconciles complete port lists; listParams inspects them. " +
-		"Use add/remove/editAccessType for one-off property changes (access, type hint, mapping, simplify, reverse). " +
-		"For a rename, update code and ports atomically with gh_edit_script setCode; use previousName when reordering or swapping names.",
-	promptSnippet: "Inspect or edit Grasshopper script-component input/output ports",
+		"Inspect or edit input/output ports on Grasshopper C#/Python script components only (listParams, syncParams, add/remove, editAccessType). " +
+		"For renames that also change code variables, use gh_edit_script setCode with full inputs/outputs instead. " +
+		"Port lifecycle: mds/reference/script-component-lifecycle.md.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([

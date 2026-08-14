@@ -60,10 +60,9 @@ export const ghEditScriptTool = defineTool({
 	name: "gh_edit_script",
 	label: "Edit Script",
 	description:
-		"Create, inspect, or edit Grasshopper C# and Python script components. For C#, prefer scriptParts (references + RunScript; wrapper assembled server-side). " +
-		"For Python, pass full code without a wrapper. Use patchCode for small edits; getCodeParts is C#-only and getCode works for both. " +
-		"Include full inputs/outputs when code and port signatures must change atomically.",
-	promptSnippet: "Create, inspect, patch, or replace Grasshopper C#/Python script nodes",
+		"Create, inspect, or edit Grasshopper C#/Python script components (create, setCode, patchCode, getCode, getCodeParts). " +
+		"Prefer C# scriptParts; Python uses full code. Include full inputs/outputs when code and port signatures must change together. " +
+		"Workflow details: mds/reference/script-component-lifecycle.md.",
 	parameters: Type.Object({
 		items: Type.Array(
 			Type.Union([

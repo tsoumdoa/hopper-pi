@@ -60,9 +60,8 @@ export const ghListComponentsTool = defineTool({
 	name: "gh_list_components",
 	label: "List Components",
 	description:
-		"Search the Grasshopper component registry and return ranked typeGuids for gh_edit_components. Put each desired component in its own query string; use multi-word queries to disambiguate. " +
-		"Defaults to vanilla components excluding Params; choose plugin or params explicitly when needed. Widgets are created with gh_create_widget, not a searched typeGuid.",
-	promptSnippet: "Search Grasshopper component types and return typeGuids for creation",
+		"Search the Grasshopper component registry and return ranked typeGuids for gh_edit_components. " +
+		"One desired component per query string; multi-word queries disambiguate. Defaults to vanilla excluding Params.",
 	parameters: Type.Object({
 		queries: Type.Array(
 			Type.String({

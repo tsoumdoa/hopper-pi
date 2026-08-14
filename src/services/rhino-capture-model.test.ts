@@ -102,7 +102,19 @@ test("capture tool is only registered for multimodal models", () => {
 	assert.equal(pi._tools.some((tool) => tool.name === RH_CAPTURE_VIEW_TOOL), false);
 
 	controller.syncCaptureToolForModel({ provider: "test", id: "vision", input: ["text", "image"] });
-	assert.equal(pi._tools.some((tool) => tool.name === RH_CAPTURE_VIEW_TOOL), true);
+	assert.equal(pi._activeTools().includes(RH_CAPTURE_VIEW_TOOL), true);
+});
+
+test("capture tool is restored after an external deactivation (progressive reset)", () => {
+	const pi = fakePi();
+	const controller = createRhinoCaptureModelController(pi as never);
+	const vision = { provider: "test", id: "vision", input: ["text", "image"] };
+
+	controller.syncCaptureToolForModel(vision);
+	assert.equal(pi._activeTools().includes(RH_CAPTURE_VIEW_TOOL), true);
+
+	pi.setActiveTools(pi._activeTools().filter((name) => name !== RH_CAPTURE_VIEW_TOOL));
+	controller.syncCaptureToolForModel(vision);
 	assert.equal(pi._activeTools().includes(RH_CAPTURE_VIEW_TOOL), true);
 });
 
