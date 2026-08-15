@@ -7,7 +7,7 @@
 	],
 	"type": "module",
 	"files": [
-		"src",
+		"dist",
 		"mds",
 		"grasshopper-plugin",
 		"scripts"
@@ -19,7 +19,8 @@
 		"pi": "pi -e .",
 		"dump:components": "tsx src/scripts/dump-components.ts",
 		"postinstall": "node scripts/install-grasshopper-plugin.mjs",
-		"build:gh-plugin": "node scripts/install-grasshopper-plugin.mjs --build-only"
+		"build:gh-plugin": "node scripts/install-grasshopper-plugin.mjs --build-only",
+		"prepack": "npm run build"
 	},
 	"devDependencies": {
 		"@types/node": "^20.19.43",
@@ -46,5 +47,8 @@
 			"./mds/skills",
 			"./mds/reference"
 		]
+	},
+	"bin": {
+		"hopper": "./dist/cli/main.js"
 	}
 }

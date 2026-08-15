@@ -1,7 +1,5 @@
-import { createHash, randomBytes } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { randomBytes } from "node:crypto";
+import { join } from "node:path";
 import type {
 	ArtifactRecord,
 	ArtifactWriter,
@@ -12,6 +10,7 @@ import type {
 	RequestId,
 } from "../../core/contracts.js";
 import type { OperationContext } from "../../core/operations.js";
+import { DEFAULT_ARTIFACT_ROOT, createArtifactWriter } from "../../infra/artifact-writer.js";
 import { submitCommand } from "../../infra/command-dispatch.js";
 import { withRequester } from "../../infra/request-helpers.js";
 import { executeApplyGraph } from "../../services/gh-apply-graph.js";
@@ -21,7 +20,6 @@ import type { CommandAction } from "../../types/commands.js";
 import type { PiOperationContextFactoryArgs } from "./operation-adapter.js";
 
 const CROCKFORD_BASE32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-const DEFAULT_ARTIFACT_ROOT = join(tmpdir(), "hopper", "artifacts");
 
 type LegacyContextDependencies = {
 	query<T extends JsonValue>(request: JsonObject): Promise<T>;
@@ -56,33 +54,10 @@ export function createLegacyRequestId(now: Date = new Date()): RequestId {
 	return `req_${encodeTimestamp(now.getTime())}${randomPart}`;
 }
 
-function safeSuggestedName(suggestedName: string | undefined): string {
-	const leaf = basename(suggestedName?.trim() || "artifact.bin");
-	const sanitized = leaf.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^\.+/, "");
-	return sanitized || "artifact.bin";
-}
-
 export function createTemporaryArtifactWriter(
 	rootDirectory: string = DEFAULT_ARTIFACT_ROOT,
 ): ArtifactWriter {
-	return {
-		async write(options): Promise<ArtifactRecord> {
-			const bytes = Buffer.from(options.bytes);
-			const sha256 = createHash("sha256").update(bytes).digest("hex");
-			const artifactId = `artifact_${randomBytes(12).toString("hex")}`;
-			const path = join(rootDirectory, `${artifactId}-${safeSuggestedName(options.suggestedName)}`);
-			await mkdir(rootDirectory, { recursive: true, mode: 0o700 });
-			await writeFile(path, bytes, { flag: "wx", mode: 0o600 });
-			return {
-				artifactId,
-				kind: options.kind,
-				path,
-				mediaType: options.mediaType,
-				byteLength: bytes.byteLength,
-				sha256,
-			};
-		},
-	};
+	return createArtifactWriter(rootDirectory);
 }
 
 function operationFailure(message: string): ExecuteActionsResponse {
