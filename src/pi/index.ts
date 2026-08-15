@@ -124,9 +124,9 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 		void probeBackend();
 		ctx.ui.notify(
 			progressive
-				? "🦘 Hopper Pi: progressive tools on (core + hopper_search_tools); specialists load on demand"
-				: "🦘 Hopper Pi: rh_run_script (Rhino doc) + Grasshopper canvas tools loaded",
-			"info",
+				? "Hopper Pi compatibility mode is deprecated; progressive tools are on. Migrate to the hopper-mcp executable."
+				: "Hopper Pi compatibility mode is deprecated. Migrate to the hopper-mcp executable.",
+			"warning",
 		);
 	});
 

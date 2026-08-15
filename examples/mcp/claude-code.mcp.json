@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "hopper": {
+      "type": "stdio",
+      "command": "hopper-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
+}

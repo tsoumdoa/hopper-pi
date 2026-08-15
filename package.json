@@ -1,21 +1,42 @@
 {
 	"name": "hopper-pi",
+	"description": "Rhino and Grasshopper MCP server with a temporary Pi compatibility adapter",
 	"license": "MIT",
 	"version": "0.1.90",
 	"keywords": [
-		"pi-package"
+		"pi-package",
+		"mcp-server",
+		"model-context-protocol",
+		"rhino",
+		"grasshopper"
 	],
 	"type": "module",
+	"bin": {
+		"hopper-mcp": "dist/mcp/stdio.js"
+	},
+	"engines": {
+		"node": ">=22.19.0"
+	},
 	"files": [
+		"dist",
+		"!dist/**/*.test.js",
+		"!dist/**/*.test.js.map",
 		"src",
+		"!src/**/*.test.ts",
 		"mds",
 		"grasshopper-plugin",
-		"scripts"
+		"scripts/install-grasshopper-plugin.mjs",
+		"docs/mcp-migration.md",
+		"examples/mcp"
 	],
 	"scripts": {
 		"dev": "tsx src/pi/index.ts",
+		"clean": "node scripts/clean-dist.mjs",
 		"build": "tsc -p tsconfig.json",
 		"test": "vitest run",
+		"test:mcp:inspector": "node scripts/test-mcp-inspector.mjs",
+		"test:pack": "node scripts/test-package.mjs",
+		"prepack": "npm run clean && npm run build",
 		"pi": "pi -e .",
 		"dump:components": "tsx src/scripts/dump-components.ts",
 		"postinstall": "node scripts/install-grasshopper-plugin.mjs",
@@ -23,6 +44,7 @@
 	},
 	"devDependencies": {
 		"@modelcontextprotocol/client": "2.0.0",
+		"@modelcontextprotocol/inspector": "2.2.0",
 		"@types/node": "^20.19.43",
 		"tsx": "^4.23.1",
 		"typescript": "^5.9.3",

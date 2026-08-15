@@ -5,10 +5,16 @@ AI inside their real workflow — not locked behind a black-box SaaS.
 
 > **Heads up:** This project was heavily vibe-coded and is super early in its own development. APIs, tools, and behavior will change without notice. **Use it at your own risk.**
 
-**hoppercode** (published as [`hopper-pi`](https://www.npmjs.com/package/hopper-pi)) is a [Pi](https://github.com/earendil-works/pi) extension plus a Grasshopper plugin that lets an AI agent inspect and edit a Grasshopper canvas—and run scripts against the Rhino document—over ZeroMQ while Rhino is open.
+**hoppercode** (published as [`hopper-pi`](https://www.npmjs.com/package/hopper-pi)) is an MCP server and Grasshopper plugin that lets Codex, Claude Code, and other MCP hosts inspect and edit a Grasshopper canvas and run scripts against the Rhino document while Rhino is open. The package installs the `hopper-mcp` stdio executable and keeps the Pi extension as a deprecated compatibility adapter for this bridge release.
 
 
 ## What's new
+
+### MCP bridge
+
+- **Standard MCP server:** `hopper-mcp` exposes a deterministic 16-tool catalog plus Hopper resources and prompts.
+- **Broad stdio compatibility:** legacy and modern MCP protocol eras work by default. `--modern-only` is available for confirmed modern hosts.
+- **Temporary Pi compatibility:** existing Pi installations keep working, but new integrations should use MCP. See the [migration guide](docs/mcp-migration.md).
 
 ### 0.1.90 — Slim progressive tool catalog
 
@@ -54,23 +60,47 @@ AI inside their real workflow — not locked behind a black-box SaaS.
 ## What you need
 
 - **Rhino 8** on Win or Mac
-- **[Pi](https://github.com/earendil-works/pi)** (the coding agent)
 - **.NET 7 SDK** (to build the Grasshopper plugin on install)
-- **Node.js** 20+ (for local development)
+- **Node.js** 22.19.0 or newer
+- An MCP host such as Codex or Claude Code
 
 ## Quick start
 
-### Install via Pi
+### Install the MCP server
 
 ```bash
-pi install npm:hopper-pi
+npm install --global hopper-pi
 ```
 
 `postinstall` builds the C# plugin and copies it into your Grasshopper `Libraries/hopper-pi/` folder.
 
 1. Restart Rhino / Grasshopper.
 2. On the canvas, add the **Hopper Code Backend** component (`GHZMQ`, under Params → Util).
-3. Start Pi and talk to the agent about Grasshopper or Rhino—the extension registers `gh_*` and `rh_*` tools automatically.
+3. Add `hopper-mcp` to your MCP host.
+
+For Codex:
+
+```bash
+codex mcp add hopper -- hopper-mcp
+```
+
+For Claude Code:
+
+```bash
+claude mcp add hopper --scope user -- hopper-mcp
+```
+
+Ready-to-adapt configuration files live in [`examples/mcp`](examples/mcp). Install the package before configuring the host instead of using first-run `npx`: installation may build the Grasshopper plugin before the stdio server can start. See the [MCP migration guide](docs/mcp-migration.md) for protocol and behavior details.
+
+### Pi compatibility (deprecated)
+
+Existing Pi users can still install the compatibility adapter:
+
+```bash
+pi install npm:hopper-pi
+```
+
+The Pi adapter, its bundled skills, and its dependencies remain available during the MCP migration. New integrations should use `hopper-mcp`.
 
 ### Clone and develop
 
@@ -78,7 +108,8 @@ pi install npm:hopper-pi
 git clone https://github.com/tsoumdoa/hoppercode.git
 cd hoppercode
 pnpm install          # builds & installs the GH plugin unless skipped
-pnpm run pi           # run Pi with this extension loaded
+pnpm run build
+node dist/mcp/stdio.js # normally launched by an MCP host
 ```
 
 Skip the plugin build when iterating on TypeScript only:
@@ -99,8 +130,9 @@ node scripts/install-grasshopper-plugin.mjs --force
 
 ## Architecture
 
-```
-Pi agent  →  hopper-pi (Node/TS)  →  ZMQ  →  Hopper Code Backend (Grasshopper in Rhino)
+```text
+Codex / Claude Code  →  hopper-mcp  →  shared Hopper core  →  ZMQ  →  Grasshopper / Rhino
+Pi (deprecated)      →  compatibility adapter  ────────────────┘
 ```
 
 | Port | Pattern | Purpose |
@@ -117,7 +149,7 @@ The backend tries the legacy `5555`-`5557` ports first. If any are already in us
 
 The token is generated once and reused across backend/frontend restarts, so normal restarts do not require re-pairing. Override discovery with `HOPPER_CONNECTION_PROFILE`, or override endpoints manually with `GH_ZMQ_PUB`, `GH_ZMQ_PUSH`, and `GH_ZMQ_REQ`. If you manually point at a token-protected backend, set `GH_ZMQ_TOKEN` as well.
 
-## Agent tools (overview)
+## MCP tools (overview)
 
 **Rhino document**
 
@@ -149,20 +181,9 @@ The token is generated once and reused across backend/frontend restarts, so norm
 | `gh_list_components` | Search component library by keyword |
 | `gh_get_canvas_errors` | Runtime messages plus component-overlap checks |
 
-**User clarification**
+MCP always exposes these 16 tools. Pi-only `pick_option`, `ask_user`, and `hopper_search_tools` are deliberately excluded; MCP hosts supply their own user interaction and tool-discovery behavior.
 
-| Tool | Role |
-| ---- | ---- |
-| `pick_option` | Ask the user to choose among informed options |
-| `ask_user` | Ask a free-text question when options are not practical |
-
-**Progressive loading (opt-in)**
-
-| Tool | Role |
-| ---- | ---- |
-| `hopper_search_tools` | Search the Hopper catalog and activate specialists (`HOPPER_PROGRESSIVE_TOOLS=1` / `--hopper-progressive-tools`) |
-
-Bundled Pi skills and progressive reference docs live under `mds/` (`gh-modeling-expert`, `rhino-document`, `gh-cookbook`, and `gh-reference`).
+Bundled Pi skills and progressive reference docs remain under `mds/` for compatibility (`gh-modeling-expert`, `rhino-document`, `gh-cookbook`, and `gh-reference`).
 
 For new Grasshopper builds, the canonical workflow is: resolve unusual or ambiguous types if needed, call `gh_apply_graph` once, inspect its integrated runtime/overlap validation, then use legacy tools only for surgical repair. `gh_get_canvas` remains for existing canvases, selections, and subgraphs.
 
@@ -170,7 +191,10 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 
 | Path | Role |
 | ---- | ---- |
-| `src/` | Pi extension: ZMQ client, tools, XML parsing |
+| `src/core/` | Host-neutral tool contracts and execution |
+| `src/mcp/` | MCP server, stdio entry point, resources, and prompts |
+| `src/pi/` | Deprecated Pi compatibility adapter |
+| `src/infra/`, `src/services/`, `src/tools/` | ZMQ client and Rhino/Grasshopper operations |
 | `grasshopper-plugin/` | C# Grasshopper plugin (`rhino-zmq-poc.gha`) |
 | `scripts/install-grasshopper-plugin.mjs` | Build + install plugin to Libraries |
 | `mds/` | Skills and progressive reference docs for the agent |
@@ -191,6 +215,8 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 
 ## Troubleshooting
 
+- **MCP host cannot start Hopper:** Run `npm install --global hopper-pi`, confirm `hopper-mcp` is on the host's `PATH`, and restart the host. MCP protocol output uses stdout; Hopper diagnostics use stderr.
+- **Protocol mismatch:** The default executable accepts legacy and modern MCP clients. Remove `--modern-only` unless the host is confirmed to use the modern protocol era.
 - **Inspect tool schemas:** Run `/hopper-schemas` to browse the JSON schemas exposed to the agent for every registered tool (or `/hopper-schemas rh_run_script` / `/hopper-schemas all`). Dump them with `/hopper-schemas dump` (writes `tool-schemas.json` in the cwd). `/hopper-schemas sizes` reports catalog counts and compact schema bytes by group/tool.
 - **No backend / tools fail:** Ensure **Hopper Code Backend** is on the canvas and Rhino is running, then run `/hopper-backend` to refresh the connection. If ports 5555–5557 are busy, the backend should fall back to free loopback ports automatically and show the profile path in the component log.
 - **Invalid connection token:** Restart the frontend after the backend has started so it can reread the connection profile. If you are using manual endpoint env vars, also set `GH_ZMQ_TOKEN`.

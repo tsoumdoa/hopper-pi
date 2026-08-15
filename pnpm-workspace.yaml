@@ -1,5 +1,6 @@
 allowBuilds:
   '@google/genai': true
+  '@modelcontextprotocol/inspector': true
   esbuild: true
   protobufjs: true
   zeromq: true
