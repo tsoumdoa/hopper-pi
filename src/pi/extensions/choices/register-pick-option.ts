@@ -1,14 +1,14 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import type { PickOption, PickOptionResult } from "../../types/choices.js";
+import type { PickOption, PickOptionResult } from "../../../types/choices.js";
 import {
 	OTHER_OPTION_LABEL,
 	appendOtherOptionLabels,
 	formatPickOptionLabels,
 	isOtherChoice,
 	resolvePickOption,
-} from "../../types/choices.js";
+} from "../../../types/choices.js";
 import { throwNoUi } from "./ui-helpers.js";
 
 const OptionSchema = Type.Object({

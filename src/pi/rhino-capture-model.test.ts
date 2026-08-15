@@ -7,7 +7,7 @@ import {
 	rhinoCaptureUnavailableGuidance,
 	shouldAskVisualCapturePermission,
 } from "./rhino-capture-model.js";
-import { RH_CAPTURE_VIEW_TOOL } from "./model-capabilities.js";
+import { RH_CAPTURE_VIEW_TOOL } from "../services/model-capabilities.js";
 
 test("promptWantsVisualCapture detects visual Rhino requests", () => {
 	assert.equal(promptWantsVisualCapture("take a screenshot of the Rhino view"), true);

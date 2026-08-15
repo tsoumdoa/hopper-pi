@@ -24,7 +24,7 @@ function collectDraft07TupleIssues(schema: unknown, path = "$"): string[] {
 }
 
 test("gh_apply_graph wire endpoints use draft 2020-12 prefixItems tuples", () => {
-	const schema = ghApplyGraphTool.parameters as Record<string, unknown>;
+	const schema = ghApplyGraphTool.parameters as unknown as Record<string, unknown>;
 	const issues = collectDraft07TupleIssues(schema);
 	assert.deepEqual(issues, []);
 

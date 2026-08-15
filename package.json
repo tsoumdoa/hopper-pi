@@ -13,7 +13,7 @@
 		"scripts"
 	],
 	"scripts": {
-		"dev": "tsx src/index.ts",
+		"dev": "tsx src/pi/index.ts",
 		"build": "tsc -p tsconfig.json",
 		"test": "vitest run",
 		"pi": "pi -e .",
@@ -34,12 +34,13 @@
 		"chalk": "^5.6.2",
 		"fast-xml-parser": "^5.10.1",
 		"nanoid": "^5.1.16",
+		"typebox": "1.1.38",
 		"zeromq": "^6.5.0"
 	},
 	"pi": {
 		"extensions": [
-			"./src/index.ts",
-			"./src/extensions/choices"
+			"./src/pi/index.ts",
+			"./src/pi/extensions/choices"
 		],
 		"skills": [
 			"./mds/skills",

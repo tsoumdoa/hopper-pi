@@ -1,22 +1,21 @@
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { rhRunScriptTool } from "./rh-run-script.js";
-import { rhQueryObjectsTool } from "./rh-query-objects.js";
-import { rhViewControlTool } from "./rh-view-control.js";
-import { rhCaptureViewTool } from "./rh-capture-view.js";
-import { ghParamRhinoTool } from "./gh-param-rhino.js";
-import {
-	ghGetCanvasTool,
-	ghListComponentsTool,
-	ghGetCanvasErrorsTool,
-} from "./query-tools.js";
-import { ghEditComponentsTool } from "./edit-tools/gh-edit-components.js";
-import { ghEditParamTool } from "./edit-tools/gh-edit-param.js";
-import { ghEditWireTool } from "./edit-tools/gh-edit-wire.js";
-import { ghEditGroupTool } from "./edit-tools/gh-edit-group.js";
-import { ghCreateWidgetTool } from "./edit-tools/gh-create-widget.js";
-import { ghMutateWidgetTool } from "./edit-tools/gh-mutate-widget.js";
-import { ghEditScriptTool } from "./edit-tools/gh-edit-script.js";
-import { ghApplyGraphTool } from "./gh-apply-graph.js";
+import { HOPPER_TOOLS } from "../core/tool-registry.js";
+import { toPiTool, type PiToolPresentation } from "./adapter.js";
+import { renderGhEditScriptCall, renderGhEditScriptResult } from "./renderers/gh-edit-script.js";
+
+const scriptPresentation: Partial<PiToolPresentation> = {
+	renderCall: renderGhEditScriptCall as ToolDefinition["renderCall"],
+	renderResult: renderGhEditScriptResult as ToolDefinition["renderResult"],
+};
+const piTools = new Map(HOPPER_TOOLS.map((spec) => [
+	spec.name,
+	toPiTool(spec, spec.name === "gh_edit_script" ? scriptPresentation : undefined),
+]));
+function tool(name: string): ToolDefinition {
+	const result = piTools.get(name);
+	if (!result) throw new Error(`Unknown Hopper tool: ${name}`);
+	return result;
+}
 
 export const HOPPER_TOOL_GROUPS = [
 	"rhino",
@@ -56,94 +55,94 @@ type PromptTool = ToolDefinition & {
  */
 export const HOPPER_REGISTERED_CATALOG: readonly HopperToolCatalogEntry[] = [
 	{
-		tool: rhRunScriptTool,
+		tool: tool("rh_run_script"),
 		group: "rhino",
 		keywords: ["rhinodoc", "macro", "bake", "rhino python", "rhino csharp"],
 		alwaysActive: true,
 		requires: "backend",
 	},
 	{
-		tool: rhQueryObjectsTool,
+		tool: tool("rh_query_objects"),
 		group: "rhino",
 		keywords: ["object ids", "countonly", "layer filter", "selection"],
 		alwaysActive: true,
 		requires: "backend",
 	},
 	{
-		tool: rhViewControlTool,
+		tool: tool("rh_view_control"),
 		group: "rhino",
 		keywords: ["viewport", "camera", "named view", "cplane", "zoom"],
 		requires: "backend",
 	},
 	{
-		tool: ghApplyGraphTool,
+		tool: tool("gh_apply_graph"),
 		group: "gh-edit",
 		keywords: ["apply graph", "subgraph", "atomic"],
 		requires: "backend",
 	},
 	{
-		tool: ghParamRhinoTool,
+		tool: tool("gh_param_rhino"),
 		group: "gh-edit",
 		keywords: ["internalize", "reference geometry", "rhinoquery"],
 		requires: "backend",
 	},
 	{
-		tool: ghCreateWidgetTool,
+		tool: tool("gh_create_widget"),
 		group: "gh-edit",
 		keywords: ["slider", "panel", "toggle", "swatch", "scribble", "value list"],
 		requires: "backend",
 	},
 	{
-		tool: ghMutateWidgetTool,
+		tool: tool("gh_mutate_widget"),
 		group: "gh-edit",
 		keywords: ["slider value", "panel text", "mutate widget"],
 		requires: "backend",
 	},
 	{
-		tool: ghEditComponentsTool,
+		tool: tool("gh_edit_components"),
 		group: "gh-edit",
 		keywords: ["add component", "typeguid", "nickname"],
 		requires: "backend",
 	},
 	{
-		tool: ghEditParamTool,
+		tool: tool("gh_edit_param"),
 		group: "gh-script",
 		keywords: ["script ports", "syncparams", "addinput", "typehint"],
 		requires: "backend",
 	},
 	{
-		tool: ghEditWireTool,
+		tool: tool("gh_edit_wire"),
 		group: "gh-edit",
 		keywords: ["connect", "disconnect", "wire"],
 		requires: "backend",
 	},
 	{
-		tool: ghEditGroupTool,
+		tool: tool("gh_edit_group"),
 		group: "gh-edit",
 		keywords: ["group", "border"],
 		requires: "backend",
 	},
 	{
-		tool: ghEditScriptTool,
+		tool: tool("gh_edit_script"),
 		group: "gh-script",
 		keywords: ["script component", "patchcode", "setcode", "scriptparts"],
 		requires: "backend",
 	},
 	{
-		tool: ghGetCanvasTool,
+		tool: tool("gh_get_canvas"),
 		group: "gh-read",
 		keywords: ["canvas", "subgraph", "selection"],
 		alwaysActive: true,
 		requires: "backend",
 	},
 	{
-		tool: ghListComponentsTool,
+		tool: tool("gh_list_components"),
 		group: "gh-read",
 		keywords: ["typeguid", "registry", "vanilla"],
 		requires: "backend",
 	},
 	{
-		tool: ghGetCanvasErrorsTool,
+		tool: tool("gh_get_canvas_errors"),
 		group: "gh-read",
 		keywords: ["runtime errors", "overlap", "warnings"],
 		alwaysActive: true,
@@ -153,7 +152,7 @@ export const HOPPER_REGISTERED_CATALOG: readonly HopperToolCatalogEntry[] = [
 
 /** Dynamically registered; model/consent gated. Included in catalog for search + diagnostics. */
 export const RH_CAPTURE_VIEW_CATALOG_ENTRY: HopperToolCatalogEntry = {
-	tool: rhCaptureViewTool,
+	tool: tool("rh_capture_view"),
 	group: "rhino",
 	keywords: ["screenshot", "viewport image", "visual qa"],
 	requires: "images",

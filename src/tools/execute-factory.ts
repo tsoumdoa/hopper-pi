@@ -1,10 +1,9 @@
-import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
-import type { TextContent } from "@earendil-works/pi-ai";
+import type { HopperProgressUpdate, HopperResult, HopperTextContent } from "../core/tool-contract.js";
 import type { CommandAction } from "../types/commands.js";
 import { submitCommand, type SubmitResult } from "../infra/command-dispatch.js";
 import { formatDefaultResult, formatToolError } from "./result-formatters.js";
 
-type ProgressFn = (msg: { content: TextContent[]; details: unknown }) => void;
+type ProgressFn = (msg: HopperProgressUpdate) => void;
 
 type MappedAction = { action: CommandAction; params: unknown };
 
@@ -23,7 +22,7 @@ export function createExecute<P>(
 		params: { items: P[] },
 		_signal: unknown,
 		onUpdate: unknown,
-	): Promise<AgentToolResult<unknown>> => {
+	): Promise<HopperResult<unknown>> => {
 		const progressFn = typeof onUpdate === "function"
 			? (onUpdate as ProgressFn)
 			: undefined;
@@ -84,7 +83,7 @@ export function createHybridExecute<P extends { action: string; targetId?: strin
 		params: { items: P[] },
 		_signal: unknown,
 		onUpdate: unknown,
-	): Promise<AgentToolResult<unknown>> => {
+	): Promise<HopperResult<unknown>> => {
 		const progressFn = typeof onUpdate === "function"
 			? (onUpdate as ProgressFn)
 			: undefined;
@@ -114,7 +113,7 @@ export function createHybridExecute<P extends { action: string; targetId?: strin
 		if (mutationItems.length > 0) {
 			const jobResults = await execute(_toolCallId, { items: mutationItems }, _signal, onUpdate);
 			if (jobResults.content.length > 0 && "text" in jobResults.content[0]) {
-				results.push((jobResults.content[0] as TextContent).text);
+				results.push((jobResults.content[0] as HopperTextContent).text);
 			}
 		}
 
@@ -127,14 +126,14 @@ export function createHybridExecute<P extends { action: string; targetId?: strin
 
 export function createQueryExecute<P>(
 	progressText: string | ((params: P) => string),
-	handler: (params: P, onUpdate?: ProgressFn) => Promise<AgentToolResult<unknown>>,
+	handler: (params: P, onUpdate?: ProgressFn) => Promise<HopperResult<unknown>>,
 ) {
 	return async (
 		_toolCallId: string,
 		params: P,
 		_signal: unknown,
 		onUpdate: unknown,
-	): Promise<AgentToolResult<unknown>> => {
+	): Promise<HopperResult<unknown>> => {
 		const progressFn = typeof onUpdate === "function"
 			? (onUpdate as ProgressFn)
 			: undefined;

@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 
 export const DataMappingType = Type.Union([
 	Type.Literal("none"),

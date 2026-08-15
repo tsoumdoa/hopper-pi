@@ -1,4 +1,4 @@
-import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
+import type { HopperResult } from "../core/tool-contract.js";
 import { formatEndpoint, resolveConnection } from "./connection.js";
 
 export type BackendStatus = {
@@ -33,7 +33,7 @@ export function backendOfflineMessage(): string {
 	);
 }
 
-export function backendOfflineToolResult(): AgentToolResult<unknown> {
+export function backendOfflineToolResult(): HopperResult<unknown> {
 	return {
 		content: [{ type: "text", text: backendOfflineMessage() }],
 		details: { offline: true },

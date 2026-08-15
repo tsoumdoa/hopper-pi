@@ -21,8 +21,8 @@ import {
 	beginTransactionPair,
 	cancelTransactionPair,
 	commitTransactionPair,
-} from "./services/transaction-lifecycle.js";
-import { probeBackend } from "./infra/backend-status.js";
+} from "../services/transaction-lifecycle.js";
+import { probeBackend } from "../infra/backend-status.js";
 import { registerBackendStatusUI } from "./ui/backend-status.js";
 import { registerToolSchemasUI } from "./ui/tool-schemas.js";
 import {
@@ -30,14 +30,14 @@ import {
 	HOPPER_REGISTERED_CATALOG,
 	RH_CAPTURE_VIEW_CATALOG_ENTRY,
 	type HopperToolCatalogEntry,
-} from "./tools/index.js";
+} from "./catalog.js";
 import {
 	createHopperSearchToolsTool,
 	resetProgressiveActiveTools,
 	shouldResetProgressiveTools,
-} from "./tools/hopper-search-tools.js";
-import { withBackendGuard } from "./tools/with-backend-guard.js";
-import { ENV, isProgressiveToolsEnvEnabled } from "./config.js";
+} from "./progressive-tools.js";
+import { withBackendGuard } from "./backend-guard.js";
+import { ENV, isProgressiveToolsEnvEnabled } from "../config.js";
 import {
 	hasRhinoVisualCaptureDecision,
 	isRhinoVisualCaptureAllowed,
@@ -47,19 +47,19 @@ import {
 	setRhinoVisualCaptureConsent,
 	VISUAL_CAPTURE_ALLOW_SESSION_LABEL,
 	VISUAL_CAPTURE_DENY_LABEL,
-} from "./services/rhino-visual-consent.js";
+} from "../services/rhino-visual-consent.js";
 import {
 	createRhinoCaptureModelController,
 	promptOverridesVisualCaptureRestriction,
 	promptWantsVisualCapture,
 	rhinoCaptureUnavailableGuidance,
 	shouldAskVisualCapturePermission,
-} from "./services/rhino-capture-model.js";
+} from "./rhino-capture-model.js";
 import {
 	promptTargetsGrasshopper,
 	promptTargetsRhino,
 	rhinoRoutingGuidance,
-} from "./services/prompt-routing.js";
+} from "../services/prompt-routing.js";
 
 const PROGRESSIVE_TOOLS_FLAG = "hopper-progressive-tools";
 

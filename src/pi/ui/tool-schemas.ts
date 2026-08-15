@@ -5,7 +5,7 @@ import {
 	buildCatalogSizeReport,
 	formatCatalogSizeReport,
 	type HopperToolCatalogEntry,
-} from "../tools/catalog.js";
+} from "../catalog.js";
 
 /** Agent-facing tool surface: name, description, JSON Schema parameters, optional guidelines. */
 export type AgentToolSchema = {

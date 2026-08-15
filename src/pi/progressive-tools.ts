@@ -1,5 +1,5 @@
 import { defineTool, type ExtensionAPI, type ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import {
 	getAlwaysActiveToolNames,
 	getManagedHopperToolNames,

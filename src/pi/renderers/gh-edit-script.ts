@@ -2,17 +2,7 @@ import type { AgentToolResult, ToolRenderResultOptions } from "@earendil-works/p
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Text, type Component } from "@earendil-works/pi-tui";
 import { summarizeGhEditScriptItem } from "../../services/gh-edit-script-log.js";
-import type { GhEditScriptItem } from "../../types/gh-edit-script.js";
-
-export type GhEditScriptDetails = {
-	summaries: string[];
-	results: string[];
-	items: Record<string, unknown>[];
-	queryCount: number;
-	mutationCount: number;
-	error?: string;
-	validationErrors?: string[];
-};
+import type { GhEditScriptDetails, GhEditScriptItem } from "../../types/gh-edit-script.js";
 
 function renderSummaryLines(summaries: string[], theme: Theme): string {
 	return summaries

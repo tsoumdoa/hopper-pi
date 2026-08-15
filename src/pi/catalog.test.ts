@@ -15,7 +15,7 @@ import {
 	rankHopperTools,
 	resetProgressiveActiveTools,
 	shouldResetProgressiveTools,
-} from "./hopper-search-tools.js";
+} from "./progressive-tools.js";
 
 function withSearchCatalog(): HopperToolCatalogEntry[] {
 	const searchTool = createHopperSearchToolsTool(

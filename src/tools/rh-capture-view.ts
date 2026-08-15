@@ -1,5 +1,5 @@
-import { Type } from "@earendil-works/pi-ai";
-import { defineTool } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+import { defineHopperTool as defineTool } from "../core/tool-contract.js";
 import { withRequester } from "../infra/request-helpers.js";
 import { describeModel, modelSupportsImages } from "../services/model-capabilities.js";
 import { isRhinoVisualCaptureAllowed, VISUAL_CAPTURE_ENV_VAR } from "../services/rhino-visual-consent.js";

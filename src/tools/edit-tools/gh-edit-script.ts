@@ -1,12 +1,6 @@
-import { Type } from "@earendil-works/pi-ai";
-import { defineTool } from "@earendil-works/pi-coding-agent";
-import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+import { defineHopperTool as defineTool, type HopperProgressUpdate } from "../../core/tool-contract.js";
 import { executeGhEditScript } from "../../services/gh-edit-script-executor.js";
-import {
-	renderGhEditScriptCall,
-	renderGhEditScriptResult,
-	type GhEditScriptDetails,
-} from "./gh-edit-script-render.js";
 import { ScriptIOFields } from "./shared-types.js";
 import type { GhEditScriptItem } from "../../types/gh-edit-script.js";
 
@@ -131,12 +125,8 @@ export const ghEditScriptTool = defineTool({
 	execute: async (_toolCallId, params, _signal, onUpdate) => {
 		const items = params.items as GhEditScriptItem[];
 		const progressFn = typeof onUpdate === "function"
-			? onUpdate as (msg: { content: import("@earendil-works/pi-ai").TextContent[]; details: unknown }) => void
+			? onUpdate as (msg: HopperProgressUpdate) => void
 			: undefined;
 		return executeGhEditScript(items, progressFn);
 	},
-
-	renderCall: (args, theme) => renderGhEditScriptCall(args as { items: GhEditScriptItem[] }, theme),
-	renderResult: (result, options, theme) =>
-		renderGhEditScriptResult(result as AgentToolResult<GhEditScriptDetails>, options, theme),
 });

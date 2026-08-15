@@ -1,5 +1,5 @@
-import { Type } from "@earendil-works/pi-ai";
-import { defineTool } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+import { defineHopperTool as defineTool } from "../../core/tool-contract.js";
 import { createExecute, formatDefaultResult, defaultProgressMsg } from "../edit-handlers.js";
 import { resolveInstanceGuid, resolveTypeGuid } from "../../services/guid-shortener.js";
 import type { CommandAction } from "../../types/commands.js";

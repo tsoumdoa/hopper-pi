@@ -1,10 +1,10 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { BACKEND_POLL_INTERVAL_MS } from "../config.js";
+import { BACKEND_POLL_INTERVAL_MS } from "../../config.js";
 import {
 	formatBackendEndpoint,
 	probeBackend,
 	type BackendStatus,
-} from "../infra/backend-status.js";
+} from "../../infra/backend-status.js";
 
 const STATUS_KEY = "hopper-backend";
 const WIDGET_KEY = "hopper-backend";

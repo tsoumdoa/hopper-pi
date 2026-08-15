@@ -11,7 +11,7 @@ import {
 import {
 	HOPPER_REGISTERED_CATALOG,
 	RH_CAPTURE_VIEW_CATALOG_ENTRY,
-} from "../tools/catalog.js";
+} from "../pi/catalog.js";
 
 function sha256(value: unknown): string {
 	return createHash("sha256").update(JSON.stringify(value)).digest("hex");

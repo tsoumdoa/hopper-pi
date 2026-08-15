@@ -1,5 +1,5 @@
-import { Type } from "@earendil-works/pi-ai";
-import { defineTool } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+import { defineHopperTool as defineTool } from "../core/tool-contract.js";
 import { executeApplyGraph, formatApplyGraphResult } from "../services/gh-apply-graph.js";
 import {
 	AccessType,

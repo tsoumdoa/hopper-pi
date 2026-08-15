@@ -11,4 +11,4 @@ export {
 	type HopperToolCatalogEntry,
 	type HopperToolGroup,
 	type HopperToolRequires,
-} from "./catalog.js";
+} from "../pi/catalog.js";

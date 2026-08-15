@@ -1,5 +1,4 @@
-import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
-import type { TextContent } from "@earendil-works/pi-ai";
+import type { HopperProgressUpdate, HopperResult } from "../core/tool-contract.js";
 import { submitCommand } from "../infra/command-dispatch.js";
 import { withRequester } from "../infra/request-helpers.js";
 import { lineCount } from "../lib/line-count.js";
@@ -23,8 +22,7 @@ import {
 } from "./gh-edit-script-log.js";
 import type { CommandAction } from "../types/commands.js";
 import type { CsharpScriptPartsInput, PatchScope } from "../types/csharp-script.js";
-import type { GhEditScriptItem, ResolvedGhEditScriptItem } from "../types/gh-edit-script.js";
-import type { GhEditScriptDetails } from "../tools/edit-tools/gh-edit-script-render.js";
+import type { GhEditScriptDetails, GhEditScriptItem, ResolvedGhEditScriptItem } from "../types/gh-edit-script.js";
 
 const CSHARP_ONLY_PATCH_SCOPES = new Set([
 	"runScriptBody",
@@ -228,8 +226,8 @@ async function executeQueryItem(item: Extract<GhEditScriptItem, { action: "getCo
 
 export async function executeGhEditScript(
 	items: GhEditScriptItem[],
-	onUpdate?: (msg: { content: TextContent[]; details: unknown }) => void,
-): Promise<AgentToolResult<GhEditScriptDetails>> {
+	onUpdate?: (msg: HopperProgressUpdate) => void,
+): Promise<HopperResult<GhEditScriptDetails>> {
 	const summaries = items.map(summarizeGhEditScriptItem);
 
 	let preparedMutations: ResolvedGhEditScriptItem[] = [];

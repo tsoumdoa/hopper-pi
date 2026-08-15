@@ -1,14 +1,15 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { MULTIMODAL_FALLBACK_MODEL } from "../config.js";
 import { rhCaptureViewTool } from "../tools/rh-capture-view.js";
-import { withBackendGuard } from "../tools/with-backend-guard.js";
+import { toPiTool } from "./adapter.js";
+import { withBackendGuard } from "./backend-guard.js";
 import {
 	describeModel,
 	modelSupportsImages,
 	type ModelLike,
 	parseProviderModel,
 	RH_CAPTURE_VIEW_TOOL,
-} from "./model-capabilities.js";
+} from "../services/model-capabilities.js";
 
 export function promptWantsVisualCapture(prompt: string): boolean {
 	return /(?:^|[^\w])(screenshots?|captures?|visual\s+context|image|see\s+the\s+(?:model|view)|look\s+at\s+the\s+(?:model|view)|rh_capture_view)(?=[^\w]|$)/i.test(prompt);
@@ -53,7 +54,7 @@ export function createRhinoCaptureModelController(
 			captureToolRegistered = true;
 			return;
 		}
-		pi.registerTool(withBackendGuard(rhCaptureViewTool));
+		pi.registerTool(withBackendGuard(toPiTool(rhCaptureViewTool)));
 		captureToolRegistered = true;
 	}
 

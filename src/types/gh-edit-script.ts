@@ -35,3 +35,13 @@ export type GhEditScriptItem =
 export type ResolvedGhEditScriptItem = Exclude<GhEditScriptItem, { action: "getCode" | "getCodeParts" }> & {
 	resolvedCode?: string;
 };
+
+export type GhEditScriptDetails = {
+	summaries: string[];
+	results: string[];
+	items: Record<string, unknown>[];
+	queryCount: number;
+	mutationCount: number;
+	error?: string;
+	validationErrors?: string[];
+};
