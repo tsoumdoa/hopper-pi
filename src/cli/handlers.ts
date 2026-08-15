@@ -1,16 +1,27 @@
 import { createOperationRegistry } from "../operations/index.js";
-import type { JsonObject, JsonValue, OperationOutcome } from "../core/contracts.js";
+import type {
+	EditId,
+	JsonValue,
+	SessionBinding,
+} from "../core/contracts.js";
 import { HopperCoreError, type HopperError } from "../core/errors.js";
-import { OperationRegistry } from "../core/operations.js";
+import { OperationRegistry, type ResolvedOperationCall } from "../core/operations.js";
 import { createBackendClient, type BackendClient } from "../protocol/backend-client.js";
+import type { ExecuteActionsRequest } from "../protocol/wire.js";
+import { createRequestId } from "../protocol/wire.js";
 import { resolveConnection } from "../infra/connection.js";
+import type { ConnectionConfig } from "../infra/connection.js";
 import { createArtifactWriter } from "../infra/artifact-writer.js";
+import type { Requester } from "../infra/requester.js";
 import type { CliIO } from "./io.js";
 import { loadJsonInput } from "./input.js";
 import { cliError, cliResponse, type CliResponse } from "./response.js";
 import type { ParsedCommand } from "./args.js";
-import { createV1OperationContext } from "./backend.js";
-import type { ConnectionConfig } from "../infra/connection.js";
+import { createV1OperationContext, V1OperationBackend, type ExpectedIdentity } from "./backend.js";
+import { SessionStore, type SessionRecord } from "../session/store.js";
+import { withSessionLock } from "../session/lock.js";
+import { Journal, requestOutcomeEvent, requestStartedEvent } from "../session/journal.js";
+import { resolveStateRoot } from "../session/paths.js";
 
 const CLI_VERSION = "0.1.90";
 
@@ -18,15 +29,22 @@ export type CliDependencies = {
 	registry: OperationRegistry;
 	connection: () => ConnectionConfig;
 	createProtocolClient?: (connection: ConnectionConfig) => BackendClient;
+	createRequester?: (connection: ConnectionConfig) => Requester;
+	stateRoot: string;
+	sessions: SessionStore;
 	artifactsRoot?: string;
+	receiveTimeoutMs?: number;
 	io: CliIO;
 	now(): Date;
 };
 
 export function defaultDependencies(io: CliIO): CliDependencies {
+	const stateRoot = resolveStateRoot(io.env);
 	return {
 		registry: createOperationRegistry(),
 		connection: () => resolveConnection(),
+		stateRoot,
+		sessions: new SessionStore(stateRoot),
 		io,
 		now: () => new Date(),
 	};
@@ -53,7 +71,7 @@ export async function handleStatus(
 				backend: info.backend,
 				documents: info.documents,
 				capabilities: info.data?.capabilities ?? [],
-			} as JsonObject,
+			} as JsonValue,
 			artifacts: [],
 			warnings: [],
 			error: null,
@@ -115,10 +133,14 @@ export async function handleCall(
 	command: Extract<ParsedCommand, { kind: "call" }>,
 	deps: CliDependencies,
 ): Promise<CliResponse> {
-	let input: JsonValue;
+	let call: ResolvedOperationCall;
 	try {
-		input = await loadJsonInput(command.input, deps.io);
+		const input = await loadJsonInput(command.input, deps.io);
+		call = deps.registry.resolve(command.operation, input);
 	} catch (error) {
+		if (error instanceof HopperCoreError) {
+			return cliError("call", error.hopperError, { operation: command.operation });
+		}
 		return cliError("call", {
 			code: "invalid_input",
 			message: error instanceof Error ? error.message : String(error),
@@ -126,37 +148,205 @@ export async function handleCall(
 		}, { operation: command.operation });
 	}
 
-	let call;
+	if (command.sessionId) {
+		return callWithSession(command, call, deps);
+	}
+	if (call.scope !== "none" && call.scope !== "viewport") {
+		return cliError("call", {
+			code: "invalid_input",
+			message: `Mutations with scope '${call.scope}' require --session (or HOPPER_SESSION_ID). Start one with 'hopper session start'.`,
+			retryable: false,
+		}, { operation: command.operation });
+	}
+	return executeCall(command, call, deps, { session: null });
+}
+
+async function callWithSession(
+	command: Extract<ParsedCommand, { kind: "call" }>,
+	call: ResolvedOperationCall,
+	deps: CliDependencies,
+): Promise<CliResponse> {
+	const client = protocolClient(deps);
+	const journal = Journal.forSession(deps.stateRoot, command.sessionId!);
 	try {
-		call = deps.registry.resolve(command.operation, input);
+		let response: CliResponse | null = null;
+		await withSessionLock(command.sessionId!, deps.stateRoot, async () => {
+			const session = await deps.sessions.read(command.sessionId!);
+			if (session.closedAt) {
+				response = cliError("call", {
+					code: "session_locked",
+					message: `Session ${command.sessionId} is closed.`,
+					retryable: false,
+				}, { operation: command.operation });
+				return;
+			}
+			const info = await client.getInfo();
+			const bindingError = verifyBinding(session, info);
+			if (bindingError) {
+				response = cliError("call", bindingError, {
+					operation: command.operation,
+					sessionId: command.sessionId,
+				});
+				return;
+			}
+			const editId = await deps.sessions.reserveEditId(command.sessionId!);
+			response = await executeCall(command, call, deps, {
+				session: {
+					sessionId: session.sessionId,
+					backendId: info.backend.backendId,
+					grasshopperDocumentId: info.documents!.grasshopper.documentId,
+					rhinoDocumentId: info.documents?.rhino?.documentId ?? null,
+				},
+				editId,
+				journal,
+				expected: {
+					backendId: session.binding.backendId,
+					grasshopperDocumentId: session.binding.grasshopperDocumentId,
+					rhinoDocumentId: session.binding.rhinoDocumentId,
+				},
+				captureAllowed: session.captureAllowed || command.allowCapture,
+			});
+		});
+		return response!;
 	} catch (error) {
 		if (error instanceof HopperCoreError) {
-			return cliError("call", error.hopperError, { operation: command.operation });
+			return cliError("call", error.hopperError, {
+				operation: command.operation,
+				sessionId: command.sessionId,
+			});
 		}
-		throw error;
+		return cliError("call", {
+			code: "internal_error",
+			message: error instanceof Error ? error.message : String(error),
+			retryable: false,
+		}, { operation: command.operation });
+	} finally {
+		await client.close().catch(() => {});
 	}
-	const connection = deps.connection();
+}
+
+function verifyBinding(session: SessionRecord, info: Awaited<ReturnType<BackendClient["getInfo"]>>): HopperError | null {
+	if (info.backend.backendId !== session.binding.backendId) {
+		return {
+			code: "backend_conflict",
+			message: "The backend restarted since this session was bound. Run 'hopper session rebind'.",
+			retryable: false,
+		};
+	}
+	const grasshopper = info.documents?.grasshopper;
+	if (!grasshopper || grasshopper.documentId !== session.binding.grasshopperDocumentId) {
+		return {
+			code: "document_conflict",
+			message: "The active Grasshopper document changed since this session was bound.",
+			retryable: false,
+		};
+	}
+	const rhinoId = info.documents?.rhino?.documentId ?? null;
+	if (rhinoId !== session.binding.rhinoDocumentId) {
+		return {
+			code: "document_conflict",
+			message: "The active Rhino document changed since this session was bound.",
+			retryable: false,
+		};
+	}
+	return null;
+}
+
+type CallOptions = {
+	session: SessionBinding | null;
+	editId?: EditId;
+	journal?: Journal;
+	expected?: ExpectedIdentity;
+	captureAllowed?: boolean;
+};
+
+async function executeCall(
+	command: Extract<ParsedCommand, { kind: "call" }>,
+	call: ResolvedOperationCall,
+	deps: CliDependencies,
+	options: CallOptions,
+): Promise<CliResponse> {
+	const artifactsRoot = options.session
+		? `${deps.stateRoot}/sessions/${options.session.sessionId}/artifacts`
+		: deps.artifactsRoot;
+	const sentRequest: { request?: ExecuteActionsRequest } = {};
 	const { context, backend } = createV1OperationContext(
 		{
-			connection,
-			artifacts: createArtifactWriter(deps.artifactsRoot),
+			connection: deps.connection(),
+			artifacts: createArtifactWriter(artifactsRoot),
 			protocolClient: deps.createProtocolClient,
+			requestId: createRequestId(deps.now()),
 		},
 		{
 			signal: AbortSignal.timeout(300_000),
-			captureAllowed: command.allowCapture,
-			session: null,
+			captureAllowed: options.captureAllowed ?? command.allowCapture,
+			session: options.session,
 			reportProgress: () => {},
 		},
 	);
-	const requestId = context.requestId;
+	if (options.expected || options.editId) {
+		const innerClient = (backend as unknown as { client: BackendClient }).client;
+		const sessionBackend = new V1OperationBackend(innerClient, {
+			expected: options.expected,
+			hooks: {
+				onBeforeSend: async (wireRequest) => {
+					sentRequest.request = wireRequest;
+					if (options.session && options.journal && options.editId) {
+						await deps.sessions.writeRequest(options.session.sessionId, {
+							schemaVersion: 1,
+							requestId: wireRequest.requestId,
+							payloadSha256: wireRequest.payloadSha256,
+							request: wireRequest,
+						});
+						await options.journal.append(requestStartedEvent({
+							sessionId: options.session.sessionId,
+							editId: options.editId,
+							requestId: wireRequest.requestId,
+							occurredAt: new Date().toISOString(),
+							operation: command.operation,
+							mutationScope: call.scope,
+							inputSummary: call.operation.summarizeInput(call.input as never),
+							backendId: options.expected?.backendId ?? "",
+							grasshopperDocumentId: options.expected?.grasshopperDocumentId ?? "",
+							rhinoDocumentId: options.expected?.rhinoDocumentId ?? null,
+							beforeCheckpointId: null,
+						}));
+					}
+				},
+			},
+		});
+		(context as { backend: unknown }).backend = sessionBackend;
+	}
+
+	const startedAt = Date.now();
 	try {
 		const result = await deps.registry.execute(call, context);
+		if (options.session && options.journal && options.editId && sentRequest.request) {
+			await options.journal.append(requestOutcomeEvent({
+				sessionId: options.session.sessionId,
+				editId: options.editId,
+				requestId: sentRequest.request.requestId,
+				occurredAt: new Date().toISOString(),
+				outcome: result.outcome,
+				resultSummary: {
+					operation: command.operation,
+					message: result.message,
+					artifacts: result.artifacts.length,
+				},
+				error: result.error,
+				warnings: result.warnings,
+				afterCheckpointId: null,
+				diff: null,
+				durationMs: Date.now() - startedAt,
+			}));
+		}
 		return cliResponse({
 			ok: result.outcome === "succeeded" || result.outcome === "partial",
 			command: "call",
 			operation: command.operation,
-			requestId,
+			sessionId: options.session?.sessionId,
+			editId: options.editId,
+			requestId: sentRequest.request?.requestId ?? context.requestId,
 			outcome: result.outcome,
 			message: result.message,
 			data: result.data,
@@ -166,7 +356,10 @@ export async function handleCall(
 		});
 	} catch (error) {
 		if (error instanceof HopperCoreError) {
-			return cliError("call", error.hopperError, { operation: command.operation });
+			return cliError("call", error.hopperError, {
+				operation: command.operation,
+				sessionId: options.session?.sessionId,
+			});
 		}
 		return cliError("call", {
 			code: "internal_error",
@@ -188,4 +381,3 @@ function toHopperError(error: unknown): HopperError {
 }
 
 export { CLI_VERSION };
-export type { OperationOutcome };

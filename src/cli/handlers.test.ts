@@ -107,7 +107,7 @@ function deps(io: CliIO, overrides: Partial<CliDependencies> = {}): CliDependenc
 		io,
 		now: () => new Date(0),
 		...overrides,
-	};
+	} as CliDependencies;
 }
 
 test("status reports backend identity and documents", async () => {

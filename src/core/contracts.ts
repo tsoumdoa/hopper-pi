@@ -13,6 +13,15 @@ export type BackendId = `be_${string}`;
 export type GrasshopperDocumentId = `ghd_${string}`;
 export type RhinoDocumentId = `rhd_${string}`;
 
+/**
+ * Placeholder canvas diff shape used by journal records. PR 5 replaces this
+ * with the full semantic diff contract.
+ */
+export type CanvasDiff = {
+	beforeDigest: string;
+	afterDigest: string;
+} & Record<string, JsonValue>;
+
 export type MutationScope = "none" | "viewport" | "grasshopper" | "rhino" | "mixed";
 export type OperationOutcome =
 	| "succeeded"

@@ -76,13 +76,15 @@ export function cliResponse<T extends JsonValue>(response: Omit<CliResponse<T>, 
 export function cliError(
 	command: string,
 	error: HopperError,
-	options: { operation?: string; message?: string } = {},
+	options: { operation?: string; message?: string; sessionId?: string; editId?: string } = {},
 ): CliResponse {
 	return {
 		schemaVersion: 1,
 		ok: false,
 		command,
 		operation: options.operation,
+		sessionId: options.sessionId,
+		editId: options.editId,
 		outcome: error.code === "outcome_unknown" ? "unknown" : "failed",
 		message: options.message ?? error.message,
 		data: null,

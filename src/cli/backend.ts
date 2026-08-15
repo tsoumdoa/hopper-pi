@@ -35,8 +35,26 @@ const QUERY_KINDS_WITH_RHINO = new Set([
  * immediately before execution and send executeActions with payload digest
  * binding; reads ride the query envelope with optional identity verification.
  */
+export type ExpectedIdentity = {
+	backendId: string;
+	grasshopperDocumentId: string;
+	rhinoDocumentId: string | null;
+};
+
+export type MutationSendHooks = {
+	/** Session-bound callers persist the exact wire request and journal the
+	 * start event before any bytes go out. */
+	onBeforeSend?: (request: import("../protocol/wire.js").ExecuteActionsRequest) => Promise<void>;
+};
+
 export class V1OperationBackend implements OperationBackendClient {
-	constructor(private readonly client: BackendClient) {}
+	constructor(
+		private readonly client: BackendClient,
+		private readonly options: {
+			expected?: ExpectedIdentity;
+			hooks?: MutationSendHooks;
+		} = {},
+	) {}
 
 	query<T extends JsonValue>(request: JsonObject, signal?: AbortSignal): Promise<T> {
 		return this.queryInner<T>(request, signal);
@@ -90,10 +108,22 @@ export class V1OperationBackend implements OperationBackendClient {
 				retryable: false,
 			});
 		}
+		let expectedBackendId: string;
+		let expectedGrasshopperDocumentId: string;
+		let expectedRhinoDocumentId: string | null;
+		if (this.options.expected) {
+			expectedBackendId = this.options.expected.backendId;
+			expectedGrasshopperDocumentId = this.options.expected.grasshopperDocumentId;
+			expectedRhinoDocumentId = this.options.expected.rhinoDocumentId;
+		} else {
+			expectedBackendId = info.backend.backendId;
+			expectedGrasshopperDocumentId = documents.grasshopper.documentId;
+			expectedRhinoDocumentId = documents.rhino?.documentId ?? null;
+		}
 		const body = {
-			expectedBackendId: info.backend.backendId,
-			expectedGrasshopperDocumentId: documents.grasshopper.documentId,
-			expectedRhinoDocumentId: documents.rhino?.documentId ?? null,
+			expectedBackendId,
+			expectedGrasshopperDocumentId,
+			expectedRhinoDocumentId,
 			expectedCanvasDigest: null,
 			transactionName: "hopper call",
 			scope,
@@ -102,6 +132,8 @@ export class V1OperationBackend implements OperationBackendClient {
 		const wireRequest = attachMutationPayloadSha256(
 			createWireRequest("executeActions", body, { requestId: createRequestId() }),
 		) as ExecuteActionsRequest;
+
+		await this.options.hooks?.onBeforeSend?.(wireRequest);
 
 		try {
 			const response = await this.client.executeActions(wireRequest, signal);

@@ -11,6 +11,7 @@ import {
 	handleSchema,
 	handleStatus,
 } from "./handlers.js";
+import { handleHistory, handleSession } from "./session-handlers.js";
 import { mapOutcomeToExitCode, type CliResponse } from "./response.js";
 
 export async function writeCliResponse(response: CliResponse, json: boolean, io: ReturnType<typeof processIO>): Promise<void> {
@@ -73,6 +74,16 @@ export async function runCli(argv: readonly string[], io: ReturnType<typeof proc
 			return finish(handleSchema(parsed, deps), parsed.json, io);
 		case "call":
 			return finish(await handleCall(parsed, deps), parsed.json, io);
+		case "session.start":
+		case "session.show":
+		case "session.list":
+		case "session.close":
+		case "session.rebind":
+			return finish(await handleSession(parsed, deps), parsed.json, io);
+		case "history.list":
+		case "history.show":
+		case "history.reconcile":
+			return finish(await handleHistory(parsed, deps), parsed.json, io);
 		case "parse-error":
 			await writeOut(io, `${JSON.stringify({
 				schemaVersion: 1,
