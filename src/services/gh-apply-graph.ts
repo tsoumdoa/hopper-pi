@@ -245,7 +245,11 @@ export function shortenApplyGraphRefs(refs: Record<string, string>): Record<stri
 	);
 }
 
-export async function executeApplyGraph(input: ApplyGraphInput): Promise<ApplyGraphResult> {
+export async function executeApplyGraph(
+	input: ApplyGraphInput,
+	signal?: AbortSignal,
+): Promise<ApplyGraphResult> {
+	signal?.throwIfAborted();
 	const normalized = await normalizeApplyGraphInput(input);
 	if (!normalized.request) return failedResult(normalized.errors);
 
@@ -284,7 +288,7 @@ export async function executeApplyGraph(input: ApplyGraphInput): Promise<ApplyGr
 			runtimeMessages: errorsResponse.errors,
 			overlaps: checkCanvasOverlaps(canvasResponse.xml),
 		};
-	});
+	}, { signal });
 }
 
 export function formatApplyGraphResult(result: ApplyGraphResult): string {

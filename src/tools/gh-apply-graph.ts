@@ -110,15 +110,16 @@ export const ghApplyGraphTool = defineTool({
 			])),
 		}))),
 	}),
-	async execute(_toolCallId, params, _signal, onUpdate) {
+	async execute(_toolCallId, params, signal, onUpdate) {
 		onUpdate?.({
 			content: [{ type: "text", text: "Applying Grasshopper graph..." }],
 			details: {},
 		});
-		const result = await executeApplyGraph(params as ApplyGraphInput);
+		const result = await executeApplyGraph(params as ApplyGraphInput, signal);
 		return {
 			content: [{ type: "text", text: formatApplyGraphResult(result) }],
 			details: result,
+			isError: !result.ok || result.timedOut,
 		};
 	},
 });

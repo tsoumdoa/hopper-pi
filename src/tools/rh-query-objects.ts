@@ -8,6 +8,7 @@ import {
 } from "../services/guid-shortener.js";
 import type { QueryRhinoObjectsResponse } from "../types/messages.js";
 import { ResultLimitSchema, ResultOffsetSchema, RhinoObjectTypeSchema } from "./schemas.js";
+import { errorResult } from "../core/tool-error.js";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -59,7 +60,7 @@ export const rhQueryObjectsTool = defineTool({
 		offset: Type.Optional(ResultOffsetSchema),
 	}),
 
-	async execute(_toolCallId, params) {
+	async execute(_toolCallId, params, signal) {
 		const requestParams = {
 			selectionOnly: params.selectionOnly,
 			layer: params.layer,
@@ -67,18 +68,16 @@ export const rhQueryObjectsTool = defineTool({
 			objectIds: params.objectIds?.map(resolveRhinoGuid),
 		};
 
-		const res = await withRequester((req) =>
-			req.request<QueryRhinoObjectsResponse | { error?: string }>({
+		const res = await withRequester(
+			(req) => req.request<QueryRhinoObjectsResponse | { error?: string }>({
 				type: "queryRhinoObjects",
 				...requestParams,
 			}),
+			{ signal },
 		);
 
 		if ("error" in res && res.error) {
-			return {
-				content: [{ type: "text", text: `FAILED: ${res.error}` }],
-				details: {},
-			};
+			return errorResult("backend_error", `Rhino object query failed: ${res.error}`);
 		}
 
 		const objects = "objects" in res ? res.objects : [];

@@ -96,8 +96,11 @@ export const ghEditParamTool = defineTool({
 	}),
 	execute: createHybridExecute(
 		"listParams",
-		async (item) => {
-			const response = await withRequester((req) => fetchScriptParams(req, resolveInstanceGuid(item.targetId)));
+		async (item, signal) => {
+			const response = await withRequester(
+				(req) => fetchScriptParams(req, resolveInstanceGuid(item.targetId)),
+				{ signal },
+			);
 			const formatted = formatScriptParamsResponse(response);
 			return formatted.content[0].text;
 		},

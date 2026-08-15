@@ -4,25 +4,52 @@ export class Requester {
 	private socket: import("zeromq").Request | null = null;
 	private connection: ConnectionConfig | null = null;
 
-	async connect(options: { refresh?: boolean } = {}): Promise<void> {
+	constructor(private readonly defaultSignal?: AbortSignal) {}
+
+	async connect(options: { refresh?: boolean; signal?: AbortSignal } = {}): Promise<void> {
+		const signal = options.signal ?? this.defaultSignal;
+		signal?.throwIfAborted();
 		const { Request } = await import("zeromq");
+		signal?.throwIfAborted();
 		this.connection = resolveConnection(options);
 		this.socket = new Request();
-		await this.socket.connect(this.connection.reqEndpoint);
+		try {
+			await this.socket.connect(this.connection.reqEndpoint);
+			signal?.throwIfAborted();
+		} catch (error) {
+			await this.close();
+			throw error;
+		}
 	}
 
-	async request<T>(data: unknown): Promise<T> {
+	async request<T>(data: unknown, signal = this.defaultSignal): Promise<T> {
 		if (!this.socket) {
 			throw new Error("Requester not connected");
 		}
 		if (!this.connection) {
 			throw new Error("Requester connection not resolved");
 		}
+		signal?.throwIfAborted();
 		const payload = JSON.stringify(withConnectionToken(data, this.connection));
 
 		await this.socket.send(payload);
+		signal?.throwIfAborted();
 
-		const [response] = await this.socket.receive();
+		const socket = this.socket;
+		const receive = socket.receive();
+		const [response] = signal
+			? await new Promise<Awaited<typeof receive>>((resolve, reject) => {
+				const onAbort = () => {
+					if (this.socket === socket) this.socket = null;
+					void socket.close();
+					reject(new DOMException("The operation was aborted", "AbortError"));
+				};
+				signal.addEventListener("abort", onAbort, { once: true });
+				receive.then(resolve, reject).finally(() => {
+					signal.removeEventListener("abort", onAbort);
+				});
+			})
+			: await receive;
 
 		return parseJsonResponse<T>(response.toString());
 	}

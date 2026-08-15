@@ -2,6 +2,7 @@ import { Type } from "typebox";
 import { defineHopperTool as defineTool } from "../core/tool-contract.js";
 import { withRequester } from "../infra/request-helpers.js";
 import type { ControlRhinoViewResponse } from "../types/messages.js";
+import { errorResult } from "../core/tool-error.js";
 
 type RhinoPointInput = { x?: number; y?: number; z?: number };
 
@@ -167,13 +168,12 @@ export const rhViewControlTool = defineTool({
 		),
 	}),
 
-	async execute(_toolCallId, params, _signal, onUpdate) {
+	async execute(_toolCallId, params, signal, onUpdate) {
 		const validationError = validateRhViewControlParams(params as RhViewControlParams);
 		if (validationError) {
-			return {
-				content: [{ type: "text" as const, text: `FAILED: ${validationError}` }],
+			return errorResult("invalid_input", `Rhino view input is invalid: ${validationError}`, {
 				details: { validationError },
-			};
+			});
 		}
 
 		onUpdate?.({
@@ -181,25 +181,24 @@ export const rhViewControlTool = defineTool({
 			details: {},
 		});
 
-		const res = await withRequester((req) =>
-			req.request<ControlRhinoViewResponse | { error?: string }>({
+		const res = await withRequester(
+			(req) => req.request<ControlRhinoViewResponse | { error?: string }>({
 				type: "controlRhinoView",
 				...params,
 			}),
+			{ signal },
 		);
 
 		if ("error" in res && res.error) {
-			return {
-				content: [{ type: "text" as const, text: `FAILED: ${res.error}` }],
-				details: {},
-			};
+			return errorResult("backend_error", `Rhino view update failed: ${res.error}`);
 		}
 
 		if (!("ok" in res) || !res.ok) {
-			return {
-				content: [{ type: "text" as const, text: `FAILED: ${"error" in res ? res.error : "Rhino view update failed"}` }],
-				details: { response: res },
-			};
+			return errorResult(
+				"backend_error",
+				`Rhino view update failed: ${"error" in res ? res.error : "unknown backend failure"}`,
+				{ details: { response: res } },
+			);
 		}
 
 		return {

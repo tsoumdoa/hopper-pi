@@ -17,6 +17,30 @@ async function runSafe(fn: () => Promise<void>): Promise<void> {
 	}
 }
 
+export async function beginTransactionPairStrict(): Promise<void> {
+	await beginAgentTransaction();
+	await beginRhinoAgentTransaction();
+}
+
+export async function commitTransactionPairStrict(): Promise<void> {
+	await commitAgentTransaction();
+	await commitRhinoAgentTransaction();
+}
+
+export async function cancelTransactionPairStrict(): Promise<void> {
+	const results = await Promise.allSettled([
+		cancelAgentTransaction(),
+		cancelRhinoAgentTransaction(),
+	]);
+	const failures = results.filter((result) => result.status === "rejected");
+	if (failures.length > 0) {
+		throw new AggregateError(
+			failures.map((result) => (result as PromiseRejectedResult).reason),
+			"Failed to cancel Hopper transaction pair",
+		);
+	}
+}
+
 export async function beginTransactionPair(): Promise<void> {
 	await runSafe(beginAgentTransaction);
 	await runSafe(beginRhinoAgentTransaction);

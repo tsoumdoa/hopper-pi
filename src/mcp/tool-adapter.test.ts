@@ -10,6 +10,7 @@ function fakeContext(options: {
 	progressToken?: string | number;
 	signal?: AbortSignal;
 	notifications?: unknown[];
+	notifyError?: Error;
 } = {}): ServerContext {
 	const notifications = options.notifications ?? [];
 	return {
@@ -23,6 +24,7 @@ function fakeContext(options: {
 			signal: options.signal ?? new AbortController().signal,
 			send: async () => ({}),
 			notify: async (notification: unknown) => {
+				if (options.notifyError) throw options.notifyError;
 				notifications.push(notification);
 			},
 			log: async () => {},
@@ -97,4 +99,59 @@ test("adapter preserves core failure results", () => {
 			isError: true,
 		},
 	);
+});
+
+test("progress notification failure does not replace a successful tool result", async () => {
+	const spec = defineHopperTool({
+		name: "progress_failure",
+		label: "Progress failure",
+		description: "test",
+		parameters: Type.Object({}),
+		annotations: {
+			readOnlyHint: true,
+			destructiveHint: false,
+			idempotentHint: true,
+			openWorldHint: false,
+		},
+		async execute(_id, _params, _signal, onUpdate) {
+			onUpdate?.({ content: [{ type: "text", text: "working" }], details: {} });
+			return { content: [{ type: "text", text: "done" }], details: { ok: true } };
+		},
+	});
+
+	const result = await createMcpToolHandler(spec)(
+		{},
+		fakeContext({ progressToken: "p", notifyError: new Error("no progress") }),
+	);
+	const content = (result as any).content;
+	assert.equal(content[0]?.type, "text");
+	assert.equal(content[0]?.type === "text" ? content[0].text : "", "done");
+});
+
+test("progress is suppressed after request cancellation", async () => {
+	const controller = new AbortController();
+	const notifications: unknown[] = [];
+	const spec = defineHopperTool({
+		name: "cancelled_progress",
+		label: "Cancelled progress",
+		description: "test",
+		parameters: Type.Object({}),
+		annotations: {
+			readOnlyHint: true,
+			destructiveHint: false,
+			idempotentHint: true,
+			openWorldHint: false,
+		},
+		async execute(_id, _params, _signal, onUpdate) {
+			controller.abort();
+			onUpdate?.({ content: [{ type: "text", text: "late" }], details: {} });
+			return { content: [], details: {} };
+		},
+	});
+
+	await createMcpToolHandler(spec)(
+		{},
+		fakeContext({ signal: controller.signal, progressToken: "p", notifications }),
+	);
+	assert.deepEqual(notifications, []);
 });

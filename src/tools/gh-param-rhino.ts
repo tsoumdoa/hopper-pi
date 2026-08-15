@@ -177,13 +177,14 @@ export const ghParamRhinoTool = defineTool({
 	}),
 	execute: createHybridExecute(
 		"get",
-		async (item) => {
+		async (item, signal) => {
 			const targetId = resolveInstanceGuid(item.targetId);
-			const res = await withRequester((req) =>
-				req.request<GetParamRhinoGeometryResponse | { error?: string }>({
+			const res = await withRequester(
+				(req) => req.request<GetParamRhinoGeometryResponse | { error?: string }>({
 					type: "getParamRhinoGeometry",
 					targetId,
 				}),
+				{ signal },
 			);
 			if ("error" in res && res.error) {
 				return `get failed: ${res.error}`;

@@ -1,8 +1,7 @@
 import { Type } from "typebox";
 import { defineHopperTool as defineTool } from "../core/tool-contract.js";
+import { errorResult } from "../core/tool-error.js";
 import { withRequester } from "../infra/request-helpers.js";
-import { describeModel, modelSupportsImages } from "../services/model-capabilities.js";
-import { isRhinoVisualCaptureAllowed, VISUAL_CAPTURE_ENV_VAR } from "../services/rhino-visual-consent.js";
 import type { CaptureRhinoViewResponse, RhinoViewMetadata } from "../types/messages.js";
 
 const DEFAULT_WIDTH = 1280;
@@ -73,36 +72,21 @@ export const rhCaptureViewTool = defineTool({
 		),
 	}),
 
-	async execute(_toolCallId, params, _signal, onUpdate, _ctx) {
-		if (!modelSupportsImages(_ctx.model)) {
-			return {
-				content: [
-					{
-						type: "text" as const,
-						text:
-							`${describeModel(_ctx.model)} does not support image input, so Rhino viewport screenshots are unavailable. ` +
-							"Tell the user they need to choose a multimodal model in Pi before viewport screenshots can be used. " +
-							"Until then, continue with rh_view_control, rh_query_objects, gh_get_canvas, gh_get_canvas_errors, or rh_run_script.",
-					},
-				],
-				details: { allowed: false, reason: "model_not_multimodal" },
-			};
+	async executeCore(params, ctx) {
+		if (ctx.supportsImages === false) {
+			return errorResult(
+				"unsupported_client",
+				"The current client cannot receive Rhino viewport images. Continue with text and geometry tools.",
+				{ details: { allowed: false, reason: "images_not_supported" } },
+			);
 		}
 
-		if (!isRhinoVisualCaptureAllowed()) {
-			return {
-				content: [
-					{
-						type: "text" as const,
-						text:
-							"Rhino viewport screenshot capture was not allowed for this Pi session. " +
-							"The user can explicitly ask to allow Rhino screenshots for this session, or set " +
-							`${VISUAL_CAPTURE_ENV_VAR}=allow before starting Pi to override the UI gate. ` +
-							"Continue without visual capture using rh_view_control, rh_query_objects, gh_get_canvas, gh_get_canvas_errors, or rh_run_script.",
-					},
-				],
-				details: { allowed: false },
-			};
+		if (ctx.captureAllowed !== true) {
+			return errorResult(
+				"consent_required",
+				"Rhino viewport capture requires explicit approval for this call.",
+				{ details: { allowed: false } },
+			);
 		}
 
 		const request = {
@@ -115,27 +99,28 @@ export const rhCaptureViewTool = defineTool({
 			restoreView: params.restoreView !== false,
 		};
 
-		onUpdate?.({
+		ctx.reportProgress?.({
 			content: [{ type: "text", text: `Capturing Rhino viewport "${request.view}"...` }],
 			details: {},
 		});
 
-		const res = await withRequester((req) =>
-			req.request<CaptureRhinoViewResponse | { error?: string }>(request),
+		const res = await withRequester(
+			(req) => req.request<CaptureRhinoViewResponse | { error?: string }>(request),
+			{ signal: ctx.signal },
 		);
 
 		if ("error" in res && res.error) {
-			return {
-				content: [{ type: "text" as const, text: `FAILED: ${res.error}` }],
+			return errorResult("backend_error", `Rhino capture failed: ${res.error}`, {
 				details: { allowed: true },
-			};
+			});
 		}
 
 		if (!("ok" in res) || !res.ok) {
-			return {
-				content: [{ type: "text" as const, text: `FAILED: ${"error" in res ? res.error : "Rhino capture failed"}` }],
-				details: { allowed: true, response: res },
-			};
+			return errorResult(
+				"backend_error",
+				`Rhino capture failed: ${"error" in res ? res.error : "unknown backend failure"}`,
+				{ details: { allowed: true, response: res } },
+			);
 		}
 
 		return {

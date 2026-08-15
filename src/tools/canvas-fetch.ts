@@ -10,9 +10,9 @@ import type {
 
 let _components: ListAllComponentsResponse | null = null;
 
-export async function getCachedOrFetchComponents(): Promise<ListAllComponentsResponse> {
+export async function getCachedOrFetchComponents(signal?: AbortSignal): Promise<ListAllComponentsResponse> {
 	if (_components) return _components;
-	const data = await withRequester(fetchAllComponents);
+	const data = await withRequester(fetchAllComponents, { signal });
 	_components = data;
 	return data;
 }

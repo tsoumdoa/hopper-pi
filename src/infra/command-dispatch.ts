@@ -15,12 +15,15 @@ export function buildJobRequest(action: CommandAction, params: unknown): SubmitJ
 export async function submitCommand(
 	action: CommandAction,
 	params: unknown,
+	options: { signal?: AbortSignal } = {},
 ): Promise<{ jobId: string }> {
+	options.signal?.throwIfAborted();
 	await ensureBackendReachable();
+	options.signal?.throwIfAborted();
 	const request = buildJobRequest(action, params);
 	const publisher = getPublisher();
-	await publisher.connect();
-	await publisher.publishCommand(request);
+	await publisher.connect(options.signal);
+	await publisher.publishCommand(request, options.signal);
 	return { jobId: request.jobId };
 }
 

@@ -74,7 +74,11 @@ export type HopperToolDefinition<TInputSchema extends TSchema = TSchema> = {
 	annotations?: HopperToolAnnotations;
 	outputSchema?: TSchema;
 	prepareArguments?: (args: unknown) => Static<TInputSchema>;
-	execute: LegacyExecute<TInputSchema>;
+	execute?: LegacyExecute<TInputSchema>;
+	executeCore?: (
+		input: Static<TInputSchema>,
+		ctx: HopperCallContext,
+	) => Promise<HopperResult<any>>;
 };
 
 const READ_ONLY_TOOLS = new Set([
@@ -106,9 +110,13 @@ export function defineHopperTool<TInputSchema extends TSchema>(
 	const execute = (...args: any[]) => {
 		if (args.length === 2 && args[1] && typeof args[1] === "object" && "toolCallId" in args[1]) {
 			const [input, ctx] = args as [Static<TInputSchema>, HopperCallContext];
-			return definition.execute(ctx.toolCallId, input, ctx.signal, ctx.reportProgress, ctx.hostContext);
+			if (definition.executeCore) return definition.executeCore(input, ctx);
+			if (definition.execute) {
+				return definition.execute(ctx.toolCallId, input, ctx.signal, ctx.reportProgress, ctx.hostContext);
+			}
 		}
-		return definition.execute(args[0], args[1], args[2], args[3], args[4]);
+		if (definition.execute) return definition.execute(args[0], args[1], args[2], args[3], args[4]);
+		throw new TypeError(`${definition.name} must be called with HopperCallContext`);
 	};
 	return {
 		name: definition.name,

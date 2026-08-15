@@ -46,9 +46,10 @@ export const ghGetCanvasTool = defineTool({
 		(params) => params.selectionOnly
 			? "Fetching selected canvas objects from backend..."
 			: "Fetching current canvas from backend...",
-		async (params) => {
-			const response = await withRequester<GetCurrentCanvasResponse>((req) =>
-				fetchCurrentCanvas(req, { selectionOnly: params.selectionOnly === true }),
+		async (params, _onUpdate, signal) => {
+			const response = await withRequester<GetCurrentCanvasResponse>(
+				(req) => fetchCurrentCanvas(req, { selectionOnly: params.selectionOnly === true }),
+				{ signal },
 			);
 			const hasFilters = !!params.subgraph || params.selectionOnly === true;
 			return formatCanvasResponse(response, hasFilters ? params : undefined);
@@ -93,12 +94,12 @@ export const ghListComponentsTool = defineTool({
 		offset: Type.Optional(ResultOffsetSchema),
 	}),
 
-	async execute(_toolCallId, params, _signal, onUpdate, _ctx) {
+	async execute(_toolCallId, params, signal, onUpdate, _ctx) {
 		onUpdate?.({
 			content: [{ type: "text", text: "Fetching component registry..." }],
 			details: {},
 		});
-		const response = await getCachedOrFetchComponents();
+		const response = await getCachedOrFetchComponents(signal);
 		return formatComponentsMultiQuery(
 			response,
 			params.queries,
@@ -117,7 +118,7 @@ export const ghGetCanvasErrorsTool = defineTool({
 	promptSnippet: "Validate Grasshopper runtime messages and detect component overlaps",
 	parameters: Type.Object({}),
 
-	async execute(_toolCallId, _params, _signal, onUpdate) {
+	async execute(_toolCallId, _params, signal, onUpdate) {
 		onUpdate?.({
 			content: [
 				{ type: "text", text: "Fetching canvas errors and overlap data..." },
@@ -135,6 +136,7 @@ export const ghGetCanvasErrorsTool = defineTool({
 					GetCurrentCanvasResponse,
 				];
 			},
+			{ signal },
 		);
 		const overlapResult = checkCanvasOverlaps(canvasResponse.xml);
 		return formatCanvasErrorsResponse(errorsResponse, overlapResult);

@@ -3,6 +3,7 @@ import { defineHopperTool as defineTool } from "../core/tool-contract.js";
 import { validateRhinoScriptItem } from "../services/rhino-script-validator.js";
 import { formatToolFailed } from "./result-formatters.js";
 import { runRhinoScript } from "./rhino-script-handlers.js";
+import { isAbortError } from "../core/tool-error.js";
 
 const ROUTING_PREFIX =
 	"Use rh_run_script for Rhino document work (geometry, layers, selection, blocks, direct bake, materials). " +
@@ -39,12 +40,15 @@ export const rhRunScriptTool = defineTool({
 		),
 	}),
 
-	async execute(_toolCallId, params, _signal, onUpdate) {
+	async execute(_toolCallId, params, signal, onUpdate) {
 		const results: string[] = [];
+		let hasError = false;
 
 		for (const item of params.items) {
+			signal?.throwIfAborted();
 			const validationError = validateRhinoScriptItem(item);
 			if (validationError) {
+				hasError = true;
 				results.push(formatToolFailed(validationError));
 				continue;
 			}
@@ -55,8 +59,10 @@ export const rhRunScriptTool = defineTool({
 			});
 
 			try {
-				results.push(await runRhinoScript(item));
+				results.push(await runRhinoScript(item, signal));
 			} catch (err) {
+				if (isAbortError(err)) throw err;
+				hasError = true;
 				results.push(formatToolFailed(err));
 			}
 		}
@@ -64,6 +70,7 @@ export const rhRunScriptTool = defineTool({
 		return {
 			content: [{ type: "text", text: results.join("\n\n") }],
 			details: {},
+			...(hasError ? { isError: true } : {}),
 		};
 	},
 });

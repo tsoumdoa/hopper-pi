@@ -19,13 +19,13 @@ vi.mock("../infra/request-helpers.js", () => ({
 
 import { rhCaptureViewTool } from "./rh-capture-view.js";
 
-const multimodalCtx = {
-	model: { provider: "test", id: "vision", input: ["text", "image"] },
-} as any;
-
-const textOnlyCtx = {
-	model: { provider: "test", id: "text", input: ["text"] },
-} as any;
+function captureContext(options: { supportsImages: boolean; captureAllowed: boolean }) {
+	return {
+		toolCallId: "tool-call",
+		supportsImages: options.supportsImages,
+		captureAllowed: options.captureAllowed,
+	};
+}
 
 beforeEach(() => {
 	delete process.env[VISUAL_CAPTURE_ENV_VAR];
@@ -53,25 +53,19 @@ test("Rhino visual capture consent can be overridden by env", () => {
 });
 
 test("rh_capture_view refuses capture when consent is not allowed", async () => {
-	setRhinoVisualCaptureConsent(false);
 	const result = await rhCaptureViewTool.execute(
-		"tool-call",
 		{ view: "active" },
-		undefined,
-		undefined,
-		multimodalCtx,
+		captureContext({ supportsImages: true, captureAllowed: false }),
 	);
 
 	assert.equal(mocks.request.mock.calls.length, 0);
 	const text = result.content[0]?.type === "text" ? result.content[0].text : "";
-	assert.match(text, /not allowed/);
-	assert.match(text, /HOPPER_RHINO_CAPTURE_CONSENT=allow/);
-	assert.deepEqual(result.details, { allowed: false });
+	assert.match(text, /requires explicit approval/);
+	assert.equal(result.isError, true);
+	assert.equal((result.details as any).error.code, "consent_required");
 });
 
-test("rh_capture_view allows capture when env override is allowed", async () => {
-	setRhinoVisualCaptureConsent(false);
-	process.env[VISUAL_CAPTURE_ENV_VAR] = "allow";
+test("rh_capture_view allows capture when its adapter grants consent", async () => {
 	mocks.request.mockResolvedValue({
 		type: "captureRhinoView.response",
 		timestamp: 1,
@@ -83,11 +77,8 @@ test("rh_capture_view allows capture when env override is allowed", async () => 
 	});
 
 	const result = await rhCaptureViewTool.execute(
-		"tool-call",
 		{ view: "active" },
-		undefined,
-		undefined,
-		multimodalCtx,
+		captureContext({ supportsImages: true, captureAllowed: true }),
 	);
 
 	assert.equal(mocks.request.mock.calls.length, 1);
@@ -95,23 +86,18 @@ test("rh_capture_view allows capture when env override is allowed", async () => 
 });
 
 test("rh_capture_view refuses capture when model does not support images", async () => {
-	setRhinoVisualCaptureConsent(true);
 	const result = await rhCaptureViewTool.execute(
-		"tool-call",
 		{ view: "active" },
-		undefined,
-		undefined,
-		textOnlyCtx,
+		captureContext({ supportsImages: false, captureAllowed: true }),
 	);
 
 	assert.equal(mocks.request.mock.calls.length, 0);
-	assert.match(result.content[0]?.type === "text" ? result.content[0].text : "", /does not support image input/);
-	assert.match(result.content[0]?.type === "text" ? result.content[0].text : "", /choose a multimodal model in Pi/);
-	assert.deepEqual(result.details, { allowed: false, reason: "model_not_multimodal" });
+	assert.match(result.content[0]?.type === "text" ? result.content[0].text : "", /cannot receive/);
+	assert.equal(result.isError, true);
+	assert.equal((result.details as any).error.code, "unsupported_client");
 });
 
 test("rh_capture_view returns image content when consent is allowed", async () => {
-	setRhinoVisualCaptureConsent(true);
 	mocks.request.mockResolvedValue({
 		type: "captureRhinoView.response",
 		timestamp: 1,
@@ -136,11 +122,8 @@ test("rh_capture_view returns image content when consent is allowed", async () =
 	});
 
 	const result = await rhCaptureViewTool.execute(
-		"tool-call",
 		{ view: "perspective", width: 99999, height: 720 },
-		undefined,
-		undefined,
-		multimodalCtx,
+		captureContext({ supportsImages: true, captureAllowed: true }),
 	);
 
 	assert.equal(mocks.request.mock.calls.length, 1);

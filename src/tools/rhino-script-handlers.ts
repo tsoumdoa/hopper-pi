@@ -7,7 +7,7 @@ export type RhRunScriptItem = {
 	echo?: boolean;
 };
 
-export async function runRhinoScript(item: RhRunScriptItem): Promise<string> {
+export async function runRhinoScript(item: RhRunScriptItem, signal?: AbortSignal): Promise<string> {
 	return withRequester(async (req) => {
 		const res = await req.request<RunRhinoScriptResponse>({
 			type: "runRhinoScript",
@@ -26,5 +26,5 @@ export async function runRhinoScript(item: RhRunScriptItem): Promise<string> {
 		const lines = [`OK (mode=${item.mode})`];
 		if (res.output) lines.push(res.output);
 		return lines.join("\n");
-	});
+	}, { signal });
 }

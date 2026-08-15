@@ -36,7 +36,15 @@ export function backendOfflineMessage(): string {
 export function backendOfflineToolResult(): HopperResult<unknown> {
 	return {
 		content: [{ type: "text", text: backendOfflineMessage() }],
-		details: { offline: true },
+		details: {
+			offline: true,
+			error: {
+				code: "backend_offline",
+				message: backendOfflineMessage(),
+				retryable: true,
+			},
+		},
+		isError: true,
 	};
 }
 
