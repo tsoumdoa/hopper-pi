@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using Grasshopper;
 using Grasshopper.Kernel;
+using rhino_zmq_poc.Protocol;
 
 namespace rhino_zmq_poc
 {
@@ -164,12 +165,16 @@ namespace rhino_zmq_poc
                     {
                         var request = JsonSerializer.Deserialize<ApplyGraphRequest>(root.GetRawText());
                         if (request == null)
-                            return JsonSerializer.Serialize(new { error = "Invalid applyGraph request" });
+                            throw new HopperRequestException("invalid_input", "Invalid applyGraph request");
                         return JsonSerializer.Serialize(GraphOperations.Apply(doc, request));
+                    }
+                    catch (HopperRequestException)
+                    {
+                        throw;
                     }
                     catch (Exception ex)
                     {
-                        return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
+                        throw new HopperRequestException("operation_failed", $"{ex.GetType().Name} - {ex.Message}");
                     }
                 }, TimeSpan.FromSeconds(30));
             }
@@ -218,18 +223,18 @@ namespace rhino_zmq_poc
             {
                 var targetId = root.GetProperty("targetId").GetString();
                 if (string.IsNullOrEmpty(targetId))
-                    return JsonSerializer.Serialize(new { error = "targetId is required" });
+                    throw new HopperRequestException("invalid_input", "targetId is required");
 
                 if (!Guid.TryParse(targetId, out var targetGuid))
-                    return JsonSerializer.Serialize(new { error = $"invalid targetId '{targetId}'" });
+                    throw new HopperRequestException("invalid_input", $"invalid targetId '{targetId}'");
 
                 var obj = doc?.FindObject(targetGuid, false);
                 if (obj == null)
-                    return JsonSerializer.Serialize(new { error = $"object not found '{targetId}'" });
+                    throw new HopperRequestException("operation_failed", $"object not found '{targetId}'");
 
                 var comp = obj as GH_Component;
                 if (comp == null)
-                    return JsonSerializer.Serialize(new { error = $"'{targetId}' is not a GH_Component" });
+                    throw new HopperRequestException("invalid_input", $"'{targetId}' is not a GH_Component");
 
                 var inputs = comp.Params.Input.Select(p => new ScriptParamInfo
                 {
@@ -260,9 +265,13 @@ namespace rhino_zmq_poc
 
                 return JsonSerializer.Serialize(response);
             }
+            catch (HopperRequestException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
-                return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
+                throw new HopperRequestException("operation_failed", $"{ex.GetType().Name} - {ex.Message}");
             }
         }
     }
@@ -280,14 +289,14 @@ namespace rhino_zmq_poc
             {
                 var targetId = root.GetProperty("targetId").GetString();
                 if (string.IsNullOrEmpty(targetId))
-                    return JsonSerializer.Serialize(new { error = "targetId is required" });
+                    throw new HopperRequestException("invalid_input", "targetId is required");
 
                 if (!Guid.TryParse(targetId, out var targetGuid))
-                    return JsonSerializer.Serialize(new { error = $"invalid targetId '{targetId}'" });
+                    throw new HopperRequestException("invalid_input", $"invalid targetId '{targetId}'");
 
                 var obj = doc?.FindObject(targetGuid, false);
                 if (obj == null)
-                    return JsonSerializer.Serialize(new { error = $"object not found '{targetId}'" });
+                    throw new HopperRequestException("operation_failed", $"object not found '{targetId}'");
 
                 var reflector = GhScriptReflector.Get();
                 var code = reflector.GetSourceCode(obj);
@@ -300,9 +309,13 @@ namespace rhino_zmq_poc
 
                 return JsonSerializer.Serialize(response);
             }
+            catch (HopperRequestException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
-                return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
+                throw new HopperRequestException("operation_failed", $"{ex.GetType().Name} - {ex.Message}");
             }
         }
     }
@@ -365,7 +378,7 @@ namespace rhino_zmq_poc
                         ? idEl.GetString()
                         : null;
                     if (string.IsNullOrEmpty(targetId))
-                        return JsonSerializer.Serialize(new { error = "targetId is required" });
+                        throw new HopperRequestException("invalid_input", "targetId is required");
 
                     var result = RhinoParamGeometryOps.GetParamRhinoGeometry(doc, new GetParamRhinoGeometryParams
                     {
@@ -384,7 +397,7 @@ namespace rhino_zmq_poc
                 }
                 catch (Exception ex)
                 {
-                    return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
+                    throw new HopperRequestException("operation_failed", $"{ex.GetType().Name} - {ex.Message}");
                 }
             });
         }
@@ -435,7 +448,7 @@ namespace rhino_zmq_poc
                 }
                 catch (Exception ex)
                 {
-                    return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
+                    throw new HopperRequestException("operation_failed", $"{ex.GetType().Name} - {ex.Message}");
                 }
             });
         }
@@ -455,7 +468,7 @@ namespace rhino_zmq_poc
                 }
                 catch (Exception ex)
                 {
-                    return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
+                    throw new HopperRequestException("operation_failed", $"{ex.GetType().Name} - {ex.Message}");
                 }
             }, TimeSpan.FromSeconds(10));
         }
@@ -475,7 +488,7 @@ namespace rhino_zmq_poc
                 }
                 catch (Exception ex)
                 {
-                    return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
+                    throw new HopperRequestException("operation_failed", $"{ex.GetType().Name} - {ex.Message}");
                 }
             }, TimeSpan.FromSeconds(10));
         }

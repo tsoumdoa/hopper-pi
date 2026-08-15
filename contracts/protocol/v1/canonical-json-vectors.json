@@ -1,0 +1,111 @@
+{
+	"schemaVersion": 1,
+	"vectors": [
+		{
+			"name": "empty-object",
+			"value": {},
+			"canonical": "{}",
+			"sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+		},
+		{
+			"name": "key-sorting",
+			"value": {
+				"zeta": 1,
+				"alpha": 2,
+				"Mid": 3,
+				"beta": {
+					"deep": true,
+					"alpha": false
+				}
+			},
+			"canonical": "{\"Mid\":3,\"alpha\":2,\"beta\":{\"alpha\":false,\"deep\":true},\"zeta\":1}",
+			"sha256": "799f230020d75a07898b33d392c23db922d3a283f56e0301715c3a22b169f25b"
+		},
+		{
+			"name": "array-order-preserved",
+			"value": {
+				"items": [
+					3,
+					1,
+					2
+				],
+				"nested": [
+					{
+						"b": 1,
+						"a": 2
+					},
+					[
+						true,
+						false,
+						null
+					]
+				]
+			},
+			"canonical": "{\"items\":[3,1,2],\"nested\":[{\"a\":2,\"b\":1},[true,false,null]]}",
+			"sha256": "b436b256663c2ccf09bcacb7be8c2211fb345451c1e816b8d6356b90bbeaa61a"
+		},
+		{
+			"name": "numbers",
+			"value": {
+				"int": 42,
+				"negative": -7,
+				"half": 0.5,
+				"mixed": -2.25,
+				"zero": 0,
+				"big": 9007199254740991
+			},
+			"canonical": "{\"big\":9007199254740991,\"half\":0.5,\"int\":42,\"mixed\":-2.25,\"negative\":-7,\"zero\":0}",
+			"sha256": "4b04405d492f3b1e35d4d818c37978a8466f63b8053f1935acf6478101d40388"
+		},
+		{
+			"name": "strings",
+			"value": {
+				"plain": "grasshopper",
+				"unicode": "héllo wörld 🦗",
+				"escaped": "line\nbreak\ttab\"quote\\slash",
+				"empty": ""
+			},
+			"canonical": "{\"empty\":\"\",\"escaped\":\"line\\nbreak\\ttab\\\"quote\\\\slash\",\"plain\":\"grasshopper\",\"unicode\":\"héllo wörld 🦗\"}",
+			"sha256": "9cda1c754da0a16cdb634969fb714db7dd1c20b4d0b1c3a935131cafc94e1790"
+		},
+		{
+			"name": "mutation-body",
+			"value": {
+				"expectedBackendId": "be_01J9FIXTURE000000000000000",
+				"expectedGrasshopperDocumentId": "ghd_01J9FIXTURE00000000000GH",
+				"expectedRhinoDocumentId": null,
+				"expectedCanvasDigest": null,
+				"transactionName": "fixture transaction",
+				"scope": "grasshopper",
+				"actions": [
+					{
+						"kind": "command",
+						"command": {
+							"action": "addComponent",
+							"params": {
+								"typeGuid": "df2a4a64-6k",
+								"position": {
+									"x": 120.5,
+									"y": 80
+								}
+							}
+						}
+					},
+					{
+						"kind": "applyGraph",
+						"input": {
+							"type": "applyGraph",
+							"components": [],
+							"widgets": [],
+							"scripts": [],
+							"wires": [],
+							"groups": []
+						}
+					}
+				]
+			},
+			"canonical": "{\"actions\":[{\"command\":{\"action\":\"addComponent\",\"params\":{\"position\":{\"x\":120.5,\"y\":80},\"typeGuid\":\"df2a4a64-6k\"}},\"kind\":\"command\"},{\"input\":{\"components\":[],\"groups\":[],\"scripts\":[],\"type\":\"applyGraph\",\"widgets\":[],\"wires\":[]},\"kind\":\"applyGraph\"}],\"expectedBackendId\":\"be_01J9FIXTURE000000000000000\",\"expectedCanvasDigest\":null,\"expectedGrasshopperDocumentId\":\"ghd_01J9FIXTURE00000000000GH\",\"expectedRhinoDocumentId\":null,\"scope\":\"grasshopper\",\"transactionName\":\"fixture transaction\"}",
+			"sha256": "4c6dbbb32c7aeae843def329a4b8abad5a068c3b588e80e45969254f6a8948af"
+		}
+	]
+}

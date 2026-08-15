@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 	
   <PropertyGroup>
     <!-- Select the framework(s) you wish to target.
@@ -7,7 +7,11 @@
     -->
     <TargetFrameworks>net7.0-windows;net7.0</TargetFrameworks>
     <EnableDynamicLoading>true</EnableDynamicLoading>
-    <TargetExt>.gha</TargetExt>
+
+    <!-- Primary output stays rhino-zmq-poc.dll so test hosts can resolve the
+         ProjectReference through deps.json; a .gha copy is produced after build
+         for Rhino. Building directly as .gha breaks `dotnet test` because the
+         deps.json runtime entry then points at a non-DLL asset. -->
     <NoWarn>NU1701;NETSDK1086</NoWarn>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
@@ -34,6 +38,10 @@
   <ItemGroup>
     <InternalsVisibleTo Include="rhino-zmq-poc.Tests" />
   </ItemGroup>
+
+  <Target Name="CopyGhaArtifact" AfterTargets="Build">
+    <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(TargetDir)$(AssemblyName).gha" />
+  </Target>
 
   <!-- For Windows only builds -->
   <PropertyGroup Condition="$(TargetFramework.Contains('-windows')) or $(TargetFramework.StartsWith('net4'))">

@@ -1,0 +1,23 @@
+{
+	"schemaVersion": 1,
+	"cases": [
+		{
+			"name": "epoch",
+			"epochMs": 0,
+			"randomHex": "00000000000000000000",
+			"expected": "req_00000000000000000000000000"
+		},
+		{
+			"name": "2026-08-15",
+			"epochMs": 1786797296789,
+			"randomHex": "deadbeefcafebabe0123",
+			"expected": "req_01M02PP34NVTPVXVYAZTXBW093"
+		},
+		{
+			"name": "max-timestamp",
+			"epochMs": 253402300799000,
+			"randomHex": "ffffffffffffffffffff",
+			"expected": "req_76EZ91ZP0RZZZZZZZZZZZZZZZZ"
+		}
+	]
+}

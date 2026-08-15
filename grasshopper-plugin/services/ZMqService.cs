@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -11,6 +12,10 @@ using System.Threading.Tasks;
 using Grasshopper.Kernel;
 using NetMQ;
 using NetMQ.Sockets;
+using Rhino;
+using rhino_zmq_poc.Protocol;
+using rhino_zmq_poc.Protocol.Execution;
+using Execution = rhino_zmq_poc.Protocol.Execution;
 
 namespace rhino_zmq_poc
 {
@@ -21,10 +26,39 @@ namespace rhino_zmq_poc
         private const int DefaultPullPort = 5556;
         private const int DefaultRepPort = 5557;
         private const int StartMaxAttempts = 5;
+        private const int LedgerCapacity = 1024;
+        private static readonly TimeSpan UiDispatchTimeout = TimeSpan.FromSeconds(120);
+        private static readonly TimeSpan GateTimeout = TimeSpan.FromSeconds(30);
+
+        /// <summary>
+        /// Legacy PULL/PUSH command actions that must not run through the
+        /// versioned executeActions route: reads belong to the query protocol
+        /// and transaction control belongs to the TransactionCoordinator.
+        /// </summary>
+        private static readonly HashSet<string> LegacyControlActions = new HashSet<string>(
+            new[]
+            {
+                "getScriptCode",
+                "listScriptParams",
+                "beginAgentTransaction",
+                "commitAgentTransaction",
+                "cancelAgentTransaction",
+                "beginRhinoAgentTransaction",
+                "commitRhinoAgentTransaction",
+                "cancelRhinoAgentTransaction",
+            },
+            StringComparer.Ordinal);
 
         private PublisherSocket _pubSocket;
         private PullSocket _pullSocket;
-        private ResponseSocket _repSocket;
+
+        /// <summary>
+        /// The request/reply endpoint now uses a RouterSocket so a long-running
+        /// mutation cannot prevent getRequestStatus from being received. The
+        /// socket thread owns the router; workers only enqueue outbound replies.
+        /// The profile field keeps its historical ReqEndpoint name.
+        /// </summary>
+        private RouterSocket _repSocket;
         private CancellationTokenSource _cts = new CancellationTokenSource();
         private Task _commandTask;
         private Task _repTask;
@@ -32,8 +66,14 @@ namespace rhino_zmq_poc
         private readonly JobQueue _jobQueue;
         private readonly GH_Document _doc;
         private readonly UiRequestDispatcher _requestDispatcher = new UiRequestDispatcher();
+        private readonly object _dispatchLock = new object();
         private readonly ConcurrentQueue<(string topic, string json)> _publishQueue = new ConcurrentQueue<(string, string)>();
+        private readonly ConcurrentQueue<(byte[] identity, string payload)> _replyQueue = new ConcurrentQueue<(byte[], string)>();
         private readonly Action<GhJobStatus> _jobStatusHandler;
+        private readonly DocumentIdentityService _identityService;
+        private readonly RequestLedger _requestLedger;
+        private readonly BackendRequestRouter _backendRouter;
+        private readonly TransactionCoordinator _coordinator;
         private string _pubEndpoint;
         private string _pullEndpoint;
         private string _repEndpoint;
@@ -62,12 +102,150 @@ namespace rhino_zmq_poc
             _requestDispatcher.Register("captureRhinoView", new CaptureRhinoViewHandler());
             _requestDispatcher.Register("controlRhinoView", new ControlRhinoViewHandler());
             _requestDispatcher.Register("getParamRhinoGeometry", new GetParamRhinoGeometryHandler());
+            _identityService = new DocumentIdentityService(PluginVersion);
+            _requestLedger = new RequestLedger(LedgerCapacity);
+            _coordinator = BuildTransactionCoordinator();
+            _backendRouter = BuildBackendRouter();
             _jobStatusHandler = status =>
             {
                 OnJobStatus?.Invoke(status);
                 EnqueuePublish("gh.job.status", JsonSerializer.Serialize(status));
             };
             _jobQueue.OnStatusChanged += _jobStatusHandler;
+        }
+
+        private static string PluginVersion =>
+            typeof(ZMqService).Assembly.GetName().Version?.ToString() ?? "unknown";
+
+        private BackendDocumentsDto CurrentDocuments() => _identityService.GetDocuments(_doc, RhinoDoc.ActiveDoc);
+
+        private TransactionCoordinator BuildTransactionCoordinator()
+        {
+            var commands = new CommandHandlerRegistry();
+            var executor = new CommandExecutor(DebugLog);
+            foreach (var action in CommandActionRegistry.KnownActions)
+            {
+                if (LegacyControlActions.Contains(action)) continue;
+                commands.Register(new LegacyCommandHandlerAdapter(action, executor));
+            }
+
+            return new TransactionCoordinator(
+                new CommandBackendActionExecutor(commands, ExecuteNonCommandAction),
+                new RhinoUiThreadDispatcher(UiDispatchTimeout),
+                new DocumentExecutionGate(),
+                new ExpectedIdentityValidator(() => _identityService.Backend, CurrentDocuments),
+                new LegacyAgentTransactionFactory(),
+                GateTimeout);
+        }
+
+        private BackendRequestRouter BuildBackendRouter()
+        {
+            var router = new BackendRequestRouter(
+                IsAuthorized,
+                () => _identityService.Backend,
+                CurrentDocuments);
+            router.Register("getBackendInfo", new GetBackendInfoHandler(
+                new[] { "executeActions", "getBackendInfo", "getRequestStatus", "query" },
+                BackendRequestRouter.DefaultMaxRequestBytes,
+                maxCheckpointBytes: 64 * 1024 * 1024,
+                deduplicationWindowMs: (long)RequestLedger.DefaultWindow.TotalMilliseconds));
+            router.Register("query", new QueryHandler(_requestDispatcher, _dispatchLock, () => _doc));
+            router.Register("executeActions", new ExecuteActionsHandler(
+                _requestLedger,
+                _coordinator,
+                () => _doc,
+                () => RhinoDoc.ActiveDoc));
+            router.Register("getRequestStatus", new GetRequestStatusHandler(_requestLedger));
+            return router;
+        }
+
+        /// <summary>
+        /// Executes the non-command backend action kinds on the UI thread (the
+        /// coordinator already marshals this call).
+        /// </summary>
+        private Execution.ActionResult ExecuteNonCommandAction(
+            GH_Document ghDocument,
+            RhinoDoc rhinoDocument,
+            BackendAction action)
+        {
+            try
+            {
+                switch (action?.Kind)
+                {
+                    case "applyGraph":
+                    {
+                        var request = action.Input.ValueKind == JsonValueKind.Object
+                            ? JsonSerializer.Deserialize<ApplyGraphRequest>(action.Input.GetRawText())
+                            : null;
+                        if (request == null)
+                            return Execution.ActionResult.Failure("invalid_input", "An applyGraph input object is required.");
+                        var applied = GraphOperations.Apply(ghDocument, request);
+                        return new Execution.ActionResult
+                        {
+                            Outcome = applied.Ok
+                                ? Execution.ExecutionOutcomes.Succeeded
+                                : Execution.ExecutionOutcomes.Failed,
+                            Message = applied.Ok
+                                ? $"applyGraph committed ({applied.Counts?.Components ?? 0} components)"
+                                : "applyGraph failed structurally and was rolled back.",
+                            Data = applied,
+                            Error = applied.Ok
+                                ? null
+                                : new Execution.HopperError
+                                {
+                                    Code = "operation_failed",
+                                    Message = string.Join("; ", applied.StructuralErrors?.Select(error => $"{error.Path}: {error.Code}") ?? Array.Empty<string>()),
+                                    Retryable = false,
+                                },
+                        };
+                    }
+                    case "runRhinoScript":
+                    {
+                        var mode = action.Input.TryGetProperty("mode", out var modeElement) ? modeElement.GetString() : null;
+                        var source = action.Input.TryGetProperty("source", out var sourceElement) ? sourceElement.GetString() : null;
+                        var echo = action.Input.TryGetProperty("echo", out var echoElement) && echoElement.ValueKind == JsonValueKind.True;
+                        var result = RhinoScriptExecutor.Run(new RunRhinoScriptParams
+                        {
+                            Mode = mode,
+                            Source = source,
+                            Echo = echo,
+                        });
+                        return new Execution.ActionResult
+                        {
+                            Outcome = result.Ok
+                                ? Execution.ExecutionOutcomes.Succeeded
+                                : Execution.ExecutionOutcomes.Failed,
+                            Message = result.Ok ? "Script completed." : (result.Error ?? "Script failed."),
+                            Data = result,
+                            Error = result.Ok
+                                ? null
+                                : new Execution.HopperError
+                                {
+                                    Code = "operation_failed",
+                                    Message = result.Error ?? "Script failed.",
+                                    Retryable = false,
+                                },
+                        };
+                    }
+                    case "controlRhinoView":
+                    {
+                        var param = action.Input.ValueKind == JsonValueKind.Object
+                            ? JsonSerializer.Deserialize<ControlRhinoViewParams>(action.Input.GetRawText())
+                            : null;
+                        var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
+                        var controlled = ViewportCaptureOps.Control(rhinoDoc, param);
+                        return Execution.ActionResult.Success("View control applied.", controlled);
+                    }
+                    default:
+                        return Execution.ActionResult.Failure(
+                            "invalid_command",
+                            $"No handler is registered for action kind '{action?.Kind}'.");
+                }
+            }
+            catch (Exception ex)
+            {
+                return Execution.ActionResult.Failure("operation_failed", $"{ex.GetType().Name}: {ex.Message}");
+            }
         }
 
         public void Start()
@@ -98,13 +276,13 @@ namespace rhino_zmq_poc
         {
             PublisherSocket pub = null;
             PullSocket pull = null;
-            ResponseSocket rep = null;
+            RouterSocket rep = null;
 
             try
             {
                 pub = BindSocket(new PublisherSocket(), endpoints.PubEndpoint);
                 pull = BindSocket(new PullSocket(), endpoints.PullEndpoint);
-                rep = BindSocket(new ResponseSocket(), endpoints.RepEndpoint);
+                rep = BindSocket(new RouterSocket(), endpoints.RepEndpoint);
 
                 _pubSocket = pub;
                 _pullSocket = pull;
@@ -126,9 +304,9 @@ namespace rhino_zmq_poc
 
                 var token = _cts.Token;
                 _commandTask = Task.Run(() => CommandLoop(token));
-                _repTask = Task.Run(() => RepLoop(token));
+                _repTask = Task.Run(() => RouterLoop(token));
                 IsRunning = true;
-                DebugLog($"[ZMQ] Started ({label}) PUB={endpoints.PubEndpoint}, PULL={endpoints.PullEndpoint}, REP={endpoints.RepEndpoint}");
+                DebugLog($"[ZMQ] Started ({label}) PUB={endpoints.PubEndpoint}, PULL={endpoints.PullEndpoint}, ROUTER={endpoints.RepEndpoint}");
                 return true;
             }
             catch (Exception ex)
@@ -204,7 +382,7 @@ namespace rhino_zmq_poc
                         continue;
                     }
 
-                    DebugLog($"[PULL] Received: {message}");
+                    DebugLog($"[PULL] Received: {RequestLogRedactor.Redact(message)}");
                     ProcessCommand(message);
                     DrainPublishQueue();
                 }
@@ -261,31 +439,47 @@ namespace rhino_zmq_poc
             }
         }
 
-        private void RepLoop(CancellationToken ct)
+        private void RouterLoop(CancellationToken ct)
         {
             while (!ct.IsCancellationRequested)
             {
                 try
                 {
-                    string message;
-                    if (_repSocket == null ||
-                        !_repSocket.TryReceiveFrameString(TimeSpan.FromMilliseconds(100), out message))
-                    {
-                        continue;
-                    }
+                    DrainReplyQueue();
 
-                    DebugLog($"[REP] Received: {message}");
+                    if (_repSocket == null)
+                        break;
+
+                    var message = new NetMQMessage();
+                    if (!_repSocket.TryReceiveMultipartMessage(TimeSpan.FromMilliseconds(100), ref message))
+                        continue;
+
+                    if (message.FrameCount < 3)
+                        continue;
+
+                    var identity = message[0].Buffer;
+                    var payload = message[message.FrameCount - 1].ConvertToString();
+
+                    DebugLog($"[ROUTER] Received: {RequestLogRedactor.Redact(payload)}");
 
                     if (ct.IsCancellationRequested)
                         break;
 
-                    var response = HandleRequest(message);
-
-                    if (ct.IsCancellationRequested || _repSocket == null)
-                        break;
-
-                    _repSocket.SendFrame(response);
-                    DebugLog("[REP] Sent response");
+                    Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var response = await HandleRoutedRequest(payload, ct);
+                            _replyQueue.Enqueue((identity, response));
+                        }
+                        catch (OperationCanceledException)
+                        {
+                        }
+                        catch (Exception ex)
+                        {
+                            DebugLog($"[ROUTER] Worker error: {ex.Message}");
+                        }
+                    }, ct);
                 }
                 catch (ObjectDisposedException) when (ct.IsCancellationRequested)
                 {
@@ -293,7 +487,55 @@ namespace rhino_zmq_poc
                 }
                 catch (Exception ex) when (!ct.IsCancellationRequested)
                 {
-                    DebugLog($"[REP] Error: {ex.Message}");
+                    DebugLog($"[ROUTER] Error: {ex.Message}");
+                }
+            }
+        }
+
+        private async Task<string> HandleRoutedRequest(string message, CancellationToken ct)
+        {
+            if (IsVersionedRequest(message))
+            {
+                var wire = await _backendRouter.DispatchAsync(message, ct).ConfigureAwait(false);
+                return JsonSerializer.Serialize(wire);
+            }
+            return HandleRequest(message);
+        }
+
+        internal static bool IsVersionedRequest(string message)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(message);
+                var root = document.RootElement;
+                return root.ValueKind == JsonValueKind.Object &&
+                    root.TryGetProperty("protocolVersion", out var version) &&
+                    version.ValueKind == JsonValueKind.Number;
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
+        private void DrainReplyQueue()
+        {
+            while (_replyQueue.TryDequeue(out var reply))
+            {
+                try
+                {
+                    if (_repSocket == null)
+                        return;
+
+                    _repSocket
+                        .SendMoreFrame(reply.identity)
+                        .SendMoreFrame(Array.Empty<byte>())
+                        .SendFrame(reply.payload);
+                    DebugLog("[ROUTER] Sent response");
+                }
+                catch (Exception ex)
+                {
+                    DebugLog($"[ROUTER] Send error: {ex.Message}");
                 }
             }
         }
@@ -306,7 +548,9 @@ namespace rhino_zmq_poc
             try
             {
                 using var doc = JsonDocument.Parse(message);
-                var type = doc.RootElement.GetProperty("type").GetString();
+                var type = doc.RootElement.TryGetProperty("type", out var typeElement)
+                    ? typeElement.GetString()
+                    : null;
 
                 if (type == "ping")
                 {
@@ -334,19 +578,26 @@ namespace rhino_zmq_poc
                     });
                 }
 
-                if (_requestDispatcher.TryDispatch(type, _doc, doc.RootElement, out var response))
+                string response;
+                lock (_dispatchLock)
                 {
-                    if (_cts.IsCancellationRequested)
-                        return JsonSerializer.Serialize(new { error = "Service shutting down" });
-
-                    return response;
+                    if (!_requestDispatcher.TryDispatch(type, _doc, doc.RootElement, out response))
+                        return JsonSerializer.Serialize(new { error = $"Unknown request type: {type}" });
                 }
 
-                return JsonSerializer.Serialize(new { error = $"Unknown request type: {type}" });
+                if (_cts.IsCancellationRequested)
+                    return JsonSerializer.Serialize(new { error = "Service shutting down" });
+
+                return response;
+            }
+            catch (HopperRequestException ex)
+            {
+                // Legacy clients still expect { error } bodies for handler failures.
+                return JsonSerializer.Serialize(new { error = ex.Message });
             }
             catch (Exception ex)
             {
-                DebugLog($"[REP] HandleRequest error: {ex.Message}");
+                DebugLog($"[ROUTER] HandleRequest error: {ex.Message}");
                 return JsonSerializer.Serialize(new { error = ex.Message });
             }
         }

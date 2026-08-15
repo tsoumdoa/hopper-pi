@@ -2,6 +2,7 @@ using System.Text.Json;
 using Grasshopper.Kernel;
 using rhino_zmq_poc;
 using Xunit;
+using static Xunit.Skip;
 
 namespace grasshopper_plugin.Tests;
 
@@ -72,8 +73,14 @@ public class ApplyGraphContractTests
         Assert.Empty(GraphOperations.Validate(request));
     }
 
-    [Fact]
+    [SkippableFact]
     public void Invalid_port_after_creation_rolls_back_to_byte_equal_snapshot()
+    {
+        Skip.If(!GrasshopperRuntime.Available, "Requires loadable Grasshopper runtime assemblies.");
+        Invalid_port_after_creation_rolls_back_to_byte_equal_snapshot_inner();
+    }
+
+    private static void Invalid_port_after_creation_rolls_back_to_byte_equal_snapshot_inner()
     {
         const string json = """
         {
@@ -98,8 +105,14 @@ public class ApplyGraphContractTests
         Assert.True(DocumentSnapshots.AreEqual(before, after));
     }
 
-    [Fact]
+    [SkippableFact]
     public void Multi_wire_graph_runs_one_solution()
+    {
+        Skip.If(!GrasshopperRuntime.Available, "Requires loadable Grasshopper runtime assemblies.");
+        Multi_wire_graph_runs_one_solution_inner();
+    }
+
+    private static void Multi_wire_graph_runs_one_solution_inner()
     {
         const string json = """
         {

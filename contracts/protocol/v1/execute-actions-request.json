@@ -1,0 +1,34 @@
+{
+	"schemaVersion": 1,
+	"request": {
+		"protocolVersion": 1,
+		"type": "executeActions",
+		"requestId": "req_01M01BFR00NENTQAXBNENTQAXB",
+		"issuedAt": "2026-08-15T00:00:00.000Z",
+		"body": {
+			"expectedBackendId": "be_01J9FIXTUREBACKEND000000000",
+			"expectedGrasshopperDocumentId": "ghd_01J9FIXTURECANVAS000000000",
+			"expectedRhinoDocumentId": null,
+			"expectedCanvasDigest": null,
+			"transactionName": "fixture: apply two actions",
+			"scope": "grasshopper",
+			"actions": [
+				{
+					"kind": "command",
+					"command": {
+						"action": "moveComponent",
+						"params": {
+							"targetId": "c9f1",
+							"position": {
+								"x": 200,
+								"y": 150.5
+							}
+						}
+					}
+				}
+			]
+		}
+	},
+	"payloadSha256": "78ba0a61334dfca00d7e0cd8da0e3c061fe622db5fe645682409f2b7f0e51c30",
+	"canonicalBodySha256": "78ba0a61334dfca00d7e0cd8da0e3c061fe622db5fe645682409f2b7f0e51c30"
+}
