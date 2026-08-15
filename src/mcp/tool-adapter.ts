@@ -51,7 +51,9 @@ export type McpToolAdapterOptions = {
 	captureConsentCodec?: RequestStateCodec<{
 		purpose: "rhino_capture";
 		argsHash: string;
+		nonce: string;
 	}>;
+	consumeCaptureNonce?: (nonce: string) => boolean;
 };
 
 export function createMcpToolHandler(
@@ -85,7 +87,12 @@ export function createMcpToolHandler(
 		const input = spec.prepareArguments ? spec.prepareArguments(args) : args;
 		let captureAllowed = false;
 		if (spec.name === "rh_capture_view" && options.captureConsentCodec) {
-			const consent = await requireCaptureConsent(input, ctx, options.captureConsentCodec);
+			const consent = await requireCaptureConsent(
+				input,
+				ctx,
+				options.captureConsentCodec,
+				options.consumeCaptureNonce ?? (() => false),
+			);
 			if ("result" in consent) return consent.result;
 			captureAllowed = true;
 		}

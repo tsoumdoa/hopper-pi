@@ -8,7 +8,16 @@ import {
 import { VISUAL_CAPTURE_ENV_VAR } from "../services/rhino-visual-consent.js";
 import { requireCaptureConsent } from "./capture-consent.js";
 
-type State = { purpose: "rhino_capture"; argsHash: string };
+type State = { purpose: "rhino_capture"; argsHash: string; nonce: string };
+
+function oneTimeConsumer() {
+	const consumed = new Set<string>();
+	return (nonce: string) => {
+		if (consumed.has(nonce)) return false;
+		consumed.add(nonce);
+		return true;
+	};
+}
 
 function context(options: {
 	state?: State;
@@ -42,7 +51,7 @@ afterEach(() => {
 });
 
 test("capture consent returns input_required before any capture", async () => {
-	const result = await requireCaptureConsent({ view: "active" }, context(), codec());
+	const result = await requireCaptureConsent({ view: "active" }, context(), codec(), oneTimeConsumer());
 	assert.ok("result" in result);
 	assert.equal((result as any).result.resultType, "input_required");
 	assert.ok((result as any).result.inputRequests.captureConsent);
@@ -51,8 +60,9 @@ test("capture consent returns input_required before any capture", async () => {
 
 test("a signed accepted retry authorizes only matching capture arguments", async () => {
 	const stateCodec = codec();
+	const consume = oneTimeConsumer();
 	const firstContext = context();
-	const first = await requireCaptureConsent({ view: "active" }, firstContext, stateCodec);
+	const first = await requireCaptureConsent({ view: "active" }, firstContext, stateCodec, consume);
 	const wireState = (first as any).result.requestState as string;
 	const verified = await stateCodec.verify(wireState, firstContext);
 	const accepted = context({
@@ -63,10 +73,14 @@ test("a signed accepted retry authorizes only matching capture arguments", async
 	});
 
 	assert.deepEqual(
-		await requireCaptureConsent({ view: "active" }, accepted, stateCodec),
+		await requireCaptureConsent({ view: "active" }, accepted, stateCodec, consume),
 		{ allowed: true },
 	);
-	const changed = await requireCaptureConsent({ view: "top" }, accepted, stateCodec);
+	const replay = await requireCaptureConsent({ view: "active" }, accepted, stateCodec, consume);
+	assert.ok("result" in replay);
+	assert.equal((replay as any).result.isError, true);
+
+	const changed = await requireCaptureConsent({ view: "top" }, accepted, stateCodec, consume);
 	assert.ok("result" in changed);
 	assert.equal((changed as any).result.isError, true);
 });
@@ -74,12 +88,12 @@ test("a signed accepted retry authorizes only matching capture arguments", async
 test("environment allow bypasses MRTR and deny returns a tool error", async () => {
 	process.env[VISUAL_CAPTURE_ENV_VAR] = "allow";
 	assert.deepEqual(
-		await requireCaptureConsent({}, context(), codec()),
+		await requireCaptureConsent({}, context(), codec(), oneTimeConsumer()),
 		{ allowed: true },
 	);
 
 	process.env[VISUAL_CAPTURE_ENV_VAR] = "deny";
-	const denied = await requireCaptureConsent({}, context(), codec());
+	const denied = await requireCaptureConsent({}, context(), codec(), oneTimeConsumer());
 	assert.ok("result" in denied);
 	assert.equal((denied as any).result.isError, true);
 });

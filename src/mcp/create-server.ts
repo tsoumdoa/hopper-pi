@@ -13,10 +13,17 @@ export function createHopperMcpServer(options: HopperMcpServerOptions): McpServe
 	const captureConsentCodec = createRequestStateCodec<{
 		purpose: "rhino_capture";
 		argsHash: string;
+		nonce: string;
 	}>({
 		key: randomBytes(32),
 		bind: (ctx) => ctx.mcpReq.method,
 	});
+	const consumedCaptureNonces = new Set<string>();
+	const consumeCaptureNonce = (nonce: string): boolean => {
+		if (consumedCaptureNonces.has(nonce)) return false;
+		consumedCaptureNonces.add(nonce);
+		return true;
+	};
 	const server = new McpServer(
 		{ name: "hopper-mcp", version: options.version },
 		{
@@ -29,7 +36,7 @@ export function createHopperMcpServer(options: HopperMcpServerOptions): McpServe
 	);
 
 	for (const tool of HOPPER_TOOLS) {
-		registerMcpTool(server, tool, { captureConsentCodec });
+		registerMcpTool(server, tool, { captureConsentCodec, consumeCaptureNonce });
 	}
 	return server;
 }
