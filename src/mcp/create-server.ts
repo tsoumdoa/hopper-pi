@@ -2,9 +2,14 @@ import { randomBytes } from "node:crypto";
 import { createRequestStateCodec, McpServer } from "@modelcontextprotocol/server";
 import { HOPPER_TOOLS } from "../core/tool-registry.js";
 import { registerMcpTool, toMcpToolDefinition } from "./tool-adapter.js";
+import { CanvasSnapshotStore } from "./canvas-snapshot-store.js";
+import { registerHopperPrompts } from "./prompts.js";
+import { registerHopperResources } from "./resources.js";
 
 export type HopperMcpServerOptions = {
 	version: string;
+	snapshotStore?: CanvasSnapshotStore;
+	onSubgraphRead?: (uri: string) => void;
 };
 
 export const HOPPER_MCP_TOOL_DEFINITIONS = HOPPER_TOOLS.map(toMcpToolDefinition);
@@ -25,11 +30,21 @@ export function createHopperMcpServer(options: HopperMcpServerOptions): McpServe
 			requestState: {
 				verify: (state, ctx) => captureConsentCodec.verify(state, ctx),
 			},
+			cacheHints: {
+				"prompts/list": { ttlMs: 3_600_000, cacheScope: "public" },
+				"resources/list": { ttlMs: 3_600_000, cacheScope: "public" },
+				"resources/templates/list": { ttlMs: 3_600_000, cacheScope: "public" },
+			},
 		},
 	);
 
 	for (const tool of HOPPER_TOOLS) {
 		registerMcpTool(server, tool, { captureConsentCodec });
 	}
+	registerHopperResources(server, {
+		snapshotStore: options.snapshotStore ?? new CanvasSnapshotStore(),
+		onSubgraphRead: options.onSubgraphRead,
+	});
+	registerHopperPrompts(server);
 	return server;
 }

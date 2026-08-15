@@ -8,6 +8,7 @@ let _cached: Subscriber | null = null;
 export class Subscriber {
 	private socket: import("zeromq").Subscriber | null = null;
 	private connection: ConnectionConfig | null = null;
+	private receiving = false;
 
 	async connect(): Promise<void> {
 		const connection = resolveConnection();
@@ -30,25 +31,39 @@ export class Subscriber {
 		this.socket.subscribe(topic);
 	}
 
-	async subscribe(handler: MessageHandler): Promise<void> {
+	async subscribe(handler: MessageHandler, signal?: AbortSignal): Promise<void> {
 		if (!this.socket) {
 			throw new Error("Subscriber not connected");
 		}
-		while (true) {
-			const [topic, data] = await this.socket.receive();
-			if (!topic || !data) continue;
+		if (this.receiving) throw new Error("Subscriber already has an active receive loop");
+		this.receiving = true;
+		try {
+			while (!signal?.aborted && this.socket) {
+				let frames: Buffer[];
+				try {
+					frames = await this.socket.receive();
+				} catch (error) {
+					if (signal?.aborted || !this.socket) break;
+					if ((error as { code?: string }).code === "EAGAIN") continue;
+					throw error;
+				}
+				const [topic, data] = frames;
+				if (!topic || !data) continue;
 
-			const topicStr = topic.toString();
-			const payload = data.toString();
+				const topicStr = topic.toString();
+				const payload = data.toString();
 
-			let parsed: GhMessage;
-			try {
-				parsed = JSON.parse(payload) as GhMessage;
-			} catch {
-				// ignore unparseable subscriber messages
-				continue;
+				let parsed: GhMessage;
+				try {
+					parsed = JSON.parse(payload) as GhMessage;
+				} catch {
+					continue;
+				}
+				if (parsed.type !== topicStr) continue;
+				handler(parsed);
 			}
-			handler(parsed);
+		} finally {
+			this.receiving = false;
 		}
 	}
 

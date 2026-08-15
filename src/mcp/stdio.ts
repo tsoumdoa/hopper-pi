@@ -3,6 +3,8 @@
 import { readFileSync } from "node:fs";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { createHopperMcpServer } from "./create-server.js";
+import { CanvasSnapshotStore } from "./canvas-snapshot-store.js";
+import { DocumentUpdateBridge } from "./document-update-bridge.js";
 
 export type HopperStdioOptions = {
 	modernOnly: boolean;
@@ -24,8 +26,24 @@ function packageVersion(): string {
 
 export function startHopperStdio(options: HopperStdioOptions) {
 	const version = packageVersion();
-	return serveStdio(
-		() => createHopperMcpServer({ version }),
+	const snapshots = new CanvasSnapshotStore();
+	const bridge = new DocumentUpdateBridge(snapshots);
+	bridge.start();
+	const handle = serveStdio(
+		() => {
+			const server = createHopperMcpServer({
+				version,
+				snapshotStore: snapshots,
+				onSubgraphRead: (uri) => bridge.trackSubgraph(uri),
+			});
+			const remove = bridge.addServer(server);
+			const previousClose = server.server.onclose;
+			server.server.onclose = () => {
+				remove();
+				previousClose?.();
+			};
+			return server;
+		},
 		{
 			legacy: options.modernOnly ? "reject" : "serve",
 			onerror(error) {
@@ -33,6 +51,12 @@ export function startHopperStdio(options: HopperStdioOptions) {
 			},
 		},
 	);
+	return {
+		async close() {
+			await handle.close();
+			await bridge.close();
+		},
+	};
 }
 
 const isMain = process.argv[1] !== undefined &&
