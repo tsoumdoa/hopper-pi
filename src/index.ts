@@ -54,7 +54,7 @@ import {
 	promptWantsVisualCapture,
 	rhinoCaptureUnavailableGuidance,
 	shouldAskVisualCapturePermission,
-} from "./services/rhino-capture-model.js";
+} from "./adapters/pi/rhino-capture-model.js";
 import {
 	promptTargetsGrasshopper,
 	promptTargetsRhino,

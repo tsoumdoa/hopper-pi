@@ -17,6 +17,9 @@ importers:
       '@earendil-works/pi-tui':
         specifier: ^0.82.0
         version: 0.82.0
+      '@sinclair/typebox':
+        specifier: ^0.34.52
+        version: 0.34.52
       chalk:
         specifier: ^5.6.2
         version: 5.6.2
@@ -573,6 +576,9 @@ packages:
 
   '@silvia-odwyer/photon-node@0.3.4':
     resolution: {integrity: sha512-bnly4BKB3KDTFxrUIcgCLbaeVVS8lrAkri1pEzskpmxu9MdfGQTy8b8EgcD83ywD3RPMsIulY8xJH5Awa+t9fA==}
+
+  '@sinclair/typebox@0.34.52':
+    resolution: {integrity: sha512-XiMQh7qqVlxZzcVD+kkGMNGMzcTrDMLWI7S4x7z1MkCkbDPrekpZXEUK0eZqZFMuHQg2a2DZOcDIh9o5v3Gonw==}
 
   '@smithy/core@3.29.8':
     resolution: {integrity: sha512-rpCbCV+TimOBi3VLNBMmtTvgfOWcFIEAru3+TFlG87SL2F+te4jOnnNR+cf3uR4eJ5Qf4LnT80fqnBKgPRS6zA==}
@@ -1802,6 +1808,8 @@ snapshots:
   '@rolldown/pluginutils@1.0.1': {}
 
   '@silvia-odwyer/photon-node@0.3.4': {}
+
+  '@sinclair/typebox@0.34.52': {}
 
   '@smithy/core@3.29.8':
     dependencies:

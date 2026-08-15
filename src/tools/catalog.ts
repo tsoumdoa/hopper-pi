@@ -1,22 +1,22 @@
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { rhRunScriptTool } from "./rh-run-script.js";
-import { rhQueryObjectsTool } from "./rh-query-objects.js";
-import { rhViewControlTool } from "./rh-view-control.js";
-import { rhCaptureViewTool } from "./rh-capture-view.js";
-import { ghParamRhinoTool } from "./gh-param-rhino.js";
 import {
+	ghApplyGraphTool,
+	ghCreateWidgetTool,
+	ghEditComponentsTool,
+	ghEditGroupTool,
+	ghEditParamTool,
+	ghEditScriptTool,
+	ghEditWireTool,
 	ghGetCanvasTool,
-	ghListComponentsTool,
 	ghGetCanvasErrorsTool,
-} from "./query-tools.js";
-import { ghEditComponentsTool } from "./edit-tools/gh-edit-components.js";
-import { ghEditParamTool } from "./edit-tools/gh-edit-param.js";
-import { ghEditWireTool } from "./edit-tools/gh-edit-wire.js";
-import { ghEditGroupTool } from "./edit-tools/gh-edit-group.js";
-import { ghCreateWidgetTool } from "./edit-tools/gh-create-widget.js";
-import { ghMutateWidgetTool } from "./edit-tools/gh-mutate-widget.js";
-import { ghEditScriptTool } from "./edit-tools/gh-edit-script.js";
-import { ghApplyGraphTool } from "./gh-apply-graph.js";
+	ghListComponentsTool,
+	ghMutateWidgetTool,
+	ghParamRhinoTool,
+	rhCaptureViewTool,
+	rhQueryObjectsTool,
+	rhRunScriptTool,
+	rhViewControlTool,
+} from "../adapters/pi/operation-tools.js";
 
 export const HOPPER_TOOL_GROUPS = [
 	"rhino",

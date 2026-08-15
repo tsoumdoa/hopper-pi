@@ -1,30 +1,30 @@
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import type { TextContent } from "@earendil-works/pi-ai";
-import { submitCommand } from "../infra/command-dispatch.js";
-import { withRequester } from "../infra/request-helpers.js";
-import { lineCount } from "../lib/line-count.js";
-import { fetchScriptCode } from "../tools/canvas-fetch.js";
-import { formatDefaultResult, formatToolError } from "../tools/result-formatters.js";
-import { resolveInstanceGuid } from "./guid-shortener.js";
+import { submitCommand } from "../../infra/command-dispatch.js";
+import { withRequester } from "../../infra/request-helpers.js";
+import { lineCount } from "../../lib/line-count.js";
+import { fetchScriptCode } from "../../tools/canvas-fetch.js";
+import { formatDefaultResult, formatToolError } from "../../tools/result-formatters.js";
+import { resolveInstanceGuid } from "../../services/guid-shortener.js";
 import {
 	assembleCsharpScript,
 	formatCsharpScriptParts,
 	parseCsharpScript,
-} from "./csharp-script-assembler.js";
-import { applyLinePatches, applyPatchesToScript } from "./csharp-script-patcher.js";
+} from "../../services/csharp-script-assembler.js";
+import { applyLinePatches, applyPatchesToScript } from "../../services/csharp-script-patcher.js";
 import {
 	formatCsharpValidationErrors,
 	looksLikeGrasshopperCsharpScript,
 	validateCsharpScript,
-} from "./csharp-script-validator.js";
+} from "../../services/csharp-script-validator.js";
 import {
 	sanitizeGhEditScriptItem,
 	summarizeGhEditScriptItem,
-} from "./gh-edit-script-log.js";
-import type { CommandAction } from "../types/commands.js";
-import type { CsharpScriptPartsInput, PatchScope } from "../types/csharp-script.js";
-import type { GhEditScriptItem, ResolvedGhEditScriptItem } from "../types/gh-edit-script.js";
-import type { GhEditScriptDetails } from "../tools/edit-tools/gh-edit-script-render.js";
+} from "../../services/gh-edit-script-log.js";
+import type { CommandAction } from "../../types/commands.js";
+import type { CsharpScriptPartsInput, PatchScope } from "../../types/csharp-script.js";
+import type { GhEditScriptItem, ResolvedGhEditScriptItem } from "../../types/gh-edit-script.js";
+import type { GhEditScriptDetails } from "../../tools/edit-tools/gh-edit-script-render.js";
 
 const CSHARP_ONLY_PATCH_SCOPES = new Set([
 	"runScriptBody",

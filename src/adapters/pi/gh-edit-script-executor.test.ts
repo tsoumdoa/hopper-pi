@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { applyLinePatches } from "./csharp-script-patcher.js";
+import { applyLinePatches } from "../../services/csharp-script-patcher.js";
 import { defaultPatchScope, validatePatchScope } from "./gh-edit-script-executor.js";
 
 test("defaultPatchScope selects runScriptBody for C# and full for Python", () => {

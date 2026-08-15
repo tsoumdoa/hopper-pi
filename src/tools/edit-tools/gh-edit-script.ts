@@ -1,7 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
-import { executeGhEditScript } from "../../services/gh-edit-script-executor.js";
+import { executeGhEditScript } from "../../adapters/pi/gh-edit-script-executor.js";
 import {
 	renderGhEditScriptCall,
 	renderGhEditScriptResult,
