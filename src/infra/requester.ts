@@ -33,25 +33,35 @@ export class Requester {
 		const payload = JSON.stringify(withConnectionToken(data, this.connection));
 
 		await this.socket.send(payload);
-		signal?.throwIfAborted();
-
 		const socket = this.socket;
-		const receive = socket.receive();
-		const [response] = signal
-			? await new Promise<Awaited<typeof receive>>((resolve, reject) => {
+		if (signal?.aborted) {
+			this.socket = null;
+			void socket.close();
+			signal.throwIfAborted();
+		}
+		let removeAbort = () => {};
+		const aborted = signal
+			? new Promise<never>((_resolve, reject) => {
 				const onAbort = () => {
 					if (this.socket === socket) this.socket = null;
 					void socket.close();
 					reject(new DOMException("The operation was aborted", "AbortError"));
 				};
+				removeAbort = () => signal.removeEventListener("abort", onAbort);
 				signal.addEventListener("abort", onAbort, { once: true });
-				receive.then(resolve, reject).finally(() => {
-					signal.removeEventListener("abort", onAbort);
-				});
+				if (signal.aborted) onAbort();
 			})
-			: await receive;
+			: undefined;
+		try {
+			const receive = socket.receive();
+			const [response] = aborted
+				? await Promise.race([receive, aborted])
+				: await receive;
 
-		return parseJsonResponse<T>(response.toString());
+			return parseJsonResponse<T>(response.toString());
+		} finally {
+			removeAbort();
+		}
 	}
 
 	async close(): Promise<void> {

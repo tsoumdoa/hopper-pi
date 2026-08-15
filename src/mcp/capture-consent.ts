@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
 	acceptedContent,
 	inputRequired,
@@ -14,6 +14,7 @@ import { getRhinoVisualCaptureEnvOverride } from "../services/rhino-visual-conse
 type CaptureRequestState = {
 	purpose: "rhino_capture";
 	argsHash: string;
+	nonce: string;
 };
 
 const ConsentSchema = {
@@ -55,6 +56,7 @@ export async function requireCaptureConsent(
 	args: unknown,
 	ctx: ServerContext,
 	codec: RequestStateCodec<CaptureRequestState>,
+	consumeNonce: (nonce: string) => boolean,
 ): Promise<CaptureConsentResult> {
 	const override = getRhinoVisualCaptureEnvOverride();
 	if (override === "allowed") return { allowed: true };
@@ -76,6 +78,14 @@ export async function requireCaptureConsent(
 				),
 			};
 		}
+		if (!consumeNonce(state.nonce)) {
+			return {
+				result: consentError(
+					"consent_required",
+					"Capture approval has already been used. Approve a new capture request.",
+				),
+			};
+		}
 		if (response.action !== "accept") {
 			return { result: consentError("consent_denied", "Rhino viewport capture was not approved.") };
 		}
@@ -85,7 +95,7 @@ export async function requireCaptureConsent(
 	}
 
 	const requestState = await codec.mint(
-		{ purpose: "rhino_capture", argsHash: hash },
+		{ purpose: "rhino_capture", argsHash: hash, nonce: randomBytes(16).toString("hex") },
 		ctx,
 	);
 	return {
