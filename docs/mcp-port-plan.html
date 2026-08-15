@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hopper MCP port plan</title>
+  <style>
+    :root {
+      --background: oklch(0.97 0.005 260);
+      --foreground: oklch(0.18 0.02 260);
+      --card: oklch(1 0 0);
+      --card-foreground: oklch(0.18 0.02 260);
+      --primary: oklch(0.50 0.25 280);
+      --primary-foreground: oklch(1 0 0);
+      --secondary: oklch(0.50 0.18 180);
+      --secondary-foreground: oklch(1 0 0);
+      --muted: oklch(0.92 0.01 260);
+      --muted-foreground: oklch(0.40 0.02 260);
+      --accent: oklch(0.60 0.22 50);
+      --accent-foreground: oklch(0.18 0.02 260);
+      --destructive: oklch(0.50 0.25 25);
+      --destructive-foreground: oklch(1 0 0);
+      --success: oklch(0.45 0.20 150);
+      --success-foreground: oklch(1 0 0);
+      --warning: oklch(0.55 0.18 85);
+      --warning-foreground: oklch(0.18 0.02 260);
+      --border: oklch(0.88 0.01 260);
+      --input: oklch(0.92 0.01 260);
+      --ring: oklch(0.50 0.25 280);
+      --code-bg: oklch(0.92 0.01 260);
+      --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+      --font-display: ui-serif, Georgia, "Times New Roman", serif;
+      --radius: 0.625rem;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --background: oklch(0.17 0.015 260);
+        --foreground: oklch(0.93 0.01 260);
+        --card: oklch(0.21 0.018 260);
+        --card-foreground: oklch(0.93 0.01 260);
+        --primary: oklch(0.72 0.17 280);
+        --primary-foreground: oklch(0.14 0.02 260);
+        --secondary: oklch(0.70 0.14 180);
+        --secondary-foreground: oklch(0.14 0.02 260);
+        --muted: oklch(0.26 0.015 260);
+        --muted-foreground: oklch(0.70 0.02 260);
+        --accent: oklch(0.73 0.16 55);
+        --accent-foreground: oklch(0.14 0.02 260);
+        --destructive: oklch(0.70 0.19 25);
+        --success: oklch(0.68 0.16 150);
+        --warning: oklch(0.75 0.14 85);
+        --border: oklch(0.34 0.018 260);
+        --input: oklch(0.26 0.015 260);
+        --ring: oklch(0.72 0.17 280);
+        --code-bg: oklch(0.14 0.018 260);
+      }
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--background);
+      color: var(--foreground);
+      font-family: var(--font-sans);
+      font-size: 15px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--primary); text-underline-offset: 3px; }
+    code { font-family: var(--font-mono); }
+    .container { max-width: 1080px; margin: 0 auto; padding: 64px 24px 96px; }
+    .eyebrow, .prompt-label, .stat-label, .section-number, .tag, .badge, .code-label,
+    .when, .source-label, .decision-label, .step-label {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .eyebrow { color: var(--muted-foreground); font-size: 0.72rem; }
+    h1, h2, h3 { color: var(--foreground); font-family: var(--font-display); font-weight: 500; }
+    header h1 { font-size: clamp(2.1rem, 5vw, 3.6rem); line-height: 1.05; margin: 10px 0 20px; max-width: 16ch; }
+    .lede { color: var(--muted-foreground); font-size: 1.08rem; max-width: 68ch; margin-bottom: 28px; }
+    .prompt-box { background: var(--muted); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 16px 24px; }
+    .prompt-label { color: var(--muted-foreground); display: block; font-size: 0.68rem; margin-bottom: 4px; }
+    .prompt-box p { color: var(--muted-foreground); font-size: 0.92rem; line-height: 1.55; }
+    .summary-strip { display: grid; gap: 16px; grid-template-columns: repeat(4, 1fr); margin: 32px 0 0; }
+    .stat-card { background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 18px 20px; text-align: center; }
+    .stat-value { display: block; font-family: var(--font-display); font-size: 1.85rem; font-weight: 500; line-height: 1.1; }
+    .stat-label { color: var(--muted-foreground); display: block; font-size: 0.66rem; margin-top: 6px; }
+    section { margin-top: 88px; scroll-margin-top: 24px; }
+    .section-header { align-items: baseline; border-bottom: 1.5px solid var(--border); display: flex; gap: 16px; margin-bottom: 28px; padding-bottom: 10px; }
+    .section-number { color: var(--primary); font-size: 0.75rem; }
+    .section-header h2 { font-size: 1.55rem; }
+    h3 { font-size: 1.13rem; margin-bottom: 7px; }
+    p { max-width: 72ch; }
+    .recommendation {
+      background: color-mix(in oklab, var(--primary) 7%, var(--card));
+      border: 1.5px solid var(--primary);
+      border-radius: var(--radius);
+      padding: 28px 30px;
+    }
+    .recommendation h2 { font-size: 1.45rem; margin-bottom: 8px; }
+    .recommendation p { font-size: 1rem; }
+    .recommendation .small { color: var(--muted-foreground); font-size: 0.86rem; margin-top: 12px; }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+    .tag { background: var(--muted); border-radius: calc(var(--radius) - 4px); color: var(--muted-foreground); font-size: 0.66rem; padding: 3px 9px; text-transform: none; }
+    .tag.highlight { background: color-mix(in oklab, var(--primary) 13%, transparent); color: var(--primary); }
+    .two-col { display: grid; gap: 24px; grid-template-columns: 1fr 1fr; }
+    .card { background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 24px; }
+    .card p { color: var(--muted-foreground); font-size: 0.9rem; }
+    .card-list { list-style: none; margin-top: 14px; }
+    .card-list li { border-top: 1px solid var(--border); display: grid; gap: 12px; grid-template-columns: 88px 1fr; padding: 10px 0; }
+    .card-list strong { font-family: var(--font-mono); font-size: 0.72rem; font-weight: 600; }
+    .card-list span { color: var(--muted-foreground); font-size: 0.86rem; }
+    .diagram-panel { background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius); margin: 24px 0; overflow: hidden; padding: 24px; }
+    .diagram-caption { color: var(--muted-foreground); display: block; font-family: var(--font-mono); font-size: 0.7rem; margin-top: 12px; text-align: center; }
+    .flow-note { background: var(--muted); border-radius: var(--radius); color: var(--muted-foreground); font-size: 0.88rem; margin-top: 18px; padding: 14px 18px; }
+    .decision-grid { display: grid; gap: 16px; grid-template-columns: repeat(2, 1fr); }
+    .decision { background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 22px; }
+    .decision-label { color: var(--primary); display: block; font-size: 0.66rem; margin-bottom: 8px; }
+    .decision h3 { font-size: 1.08rem; }
+    .decision p { color: var(--muted-foreground); font-size: 0.87rem; }
+    .decision.good { border-color: var(--success); }
+    .decision.good .decision-label { color: var(--success); }
+    .mapping { border: 1.5px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .mapping-row { align-items: start; border-bottom: 1px solid var(--border); display: grid; gap: 18px; grid-template-columns: 160px 1fr 1fr; padding: 17px 22px; }
+    .mapping-row:last-child { border-bottom: none; }
+    .mapping-row.header { background: var(--muted); color: var(--muted-foreground); font-family: var(--font-mono); font-size: 0.67rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+    .mapping-row .primitive { color: var(--primary); font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600; }
+    .mapping-row p { color: var(--muted-foreground); font-size: 0.87rem; }
+    .mapping-row strong { font-size: 0.88rem; }
+    .milestones { display: flex; flex-direction: column; }
+    .milestone { display: grid; gap: 0 18px; grid-template-columns: 112px 28px 1fr; }
+    .milestone .when { color: var(--muted-foreground); font-size: 0.7rem; padding-top: 3px; text-align: right; }
+    .dot-col { align-items: center; display: flex; flex-direction: column; }
+    .dot { background: var(--card); border: 3px solid var(--primary); border-radius: 50%; flex: 0 0 auto; height: 14px; width: 14px; }
+    .line { background: var(--border); flex: 1; margin: 4px 0; width: 2px; }
+    .milestone:last-child .line { display: none; }
+    .milestone .body { padding-bottom: 42px; }
+    .milestone .body p { color: var(--muted-foreground); font-size: 0.89rem; margin-bottom: 10px; }
+    .acceptance { background: var(--muted); border-radius: var(--radius); margin-top: 12px; padding: 12px 16px; }
+    .acceptance .step-label { color: var(--muted-foreground); display: block; font-size: 0.63rem; margin-bottom: 4px; }
+    .acceptance p { color: var(--foreground) !important; font-size: 0.82rem !important; margin: 0 !important; }
+    .code-panel { background: var(--code-bg); border: 1.5px solid var(--border); border-radius: var(--radius); margin: 18px 0; overflow-x: auto; padding: 22px; }
+    .code-label { color: var(--muted-foreground); display: block; font-size: 0.67rem; margin-bottom: 9px; text-transform: none; }
+    .code-panel pre { color: var(--foreground); font-family: var(--font-mono); font-size: 0.81rem; line-height: 1.6; }
+    .kw { color: var(--primary); }
+    .fn { color: var(--accent); }
+    .str { color: var(--success); }
+    .cm { color: var(--muted-foreground); font-style: italic; }
+    .risk-grid { border: 1.5px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .risk-row { align-items: center; border-bottom: 1px solid var(--border); display: grid; gap: 22px; grid-template-columns: 1fr auto 1.35fr; padding: 17px 22px; }
+    .risk-row:last-child { border-bottom: none; }
+    .risk-name { font-size: 0.9rem; font-weight: 600; }
+    .risk-mitigation { color: var(--muted-foreground); font-size: 0.87rem; }
+    .badge { border-radius: calc(var(--radius) - 4px); font-size: 0.64rem; padding: 2px 8px; }
+    .badge.high { background: color-mix(in oklab, var(--destructive) 15%, transparent); color: var(--destructive); }
+    .badge.med { background: color-mix(in oklab, var(--warning) 15%, transparent); color: var(--warning); }
+    .badge.low { background: color-mix(in oklab, var(--success) 15%, transparent); color: var(--success); }
+    .callout { background: var(--card); border-left: 3px solid var(--primary); border-radius: 0 var(--radius) var(--radius) 0; margin: 16px 0; padding: 17px 22px; }
+    .callout p { color: var(--muted-foreground); font-size: 0.88rem; }
+    .decide-with { color: var(--primary); display: block; font-family: var(--font-mono); font-size: 0.68rem; font-weight: 500; margin-top: 8px; }
+    details { border: 1.5px solid var(--border); border-radius: var(--radius); margin: 14px 0; }
+    summary { cursor: pointer; font-weight: 600; list-style: none; padding: 15px 20px; }
+    summary::before { content: "\25B8"; display: inline-block; margin-right: 8px; transition: transform 0.2s; }
+    details[open] summary::before { transform: rotate(90deg); }
+    .details-body { color: var(--muted-foreground); font-size: 0.88rem; padding: 0 20px 20px 42px; }
+    .details-body ul { padding-left: 18px; }
+    .details-body li + li { margin-top: 6px; }
+    .sources { display: grid; gap: 12px; }
+    .source { background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 16px 20px; }
+    .source-label { color: var(--muted-foreground); display: block; font-size: 0.64rem; margin-bottom: 3px; }
+    .source p { color: var(--muted-foreground); font-size: 0.84rem; }
+    .scope-line { align-items: center; display: flex; gap: 12px; margin-bottom: 8px; }
+    .scope-mark { background: var(--success); border-radius: 50%; height: 8px; width: 8px; }
+    .scope-mark.out { background: var(--muted-foreground); }
+    .scope-line span:last-child { color: var(--muted-foreground); font-size: 0.88rem; }
+    footer { border-top: 1.5px solid var(--border); color: var(--muted-foreground); font-family: var(--font-mono); font-size: 0.68rem; margin-top: 88px; padding-top: 20px; }
+
+    @media (max-width: 800px) {
+      .summary-strip { grid-template-columns: repeat(2, 1fr); }
+      .two-col, .decision-grid { grid-template-columns: 1fr; }
+      .mapping-row { grid-template-columns: 120px 1fr; }
+      .mapping-row > :last-child { grid-column: 2; }
+      .mapping-row.header { display: none; }
+      .risk-row { grid-template-columns: 1fr auto; }
+      .risk-mitigation { grid-column: 1 / -1; }
+    }
+    @media (max-width: 560px) {
+      .container { padding: 36px 16px 72px; }
+      .summary-strip { grid-template-columns: 1fr 1fr; }
+      section { margin-top: 64px; }
+      .milestone { grid-template-columns: 24px 1fr; }
+      .milestone .when { grid-column: 2; padding: 0 0 6px; text-align: left; }
+      .dot-col { grid-column: 1; grid-row: 1 / span 2; }
+      .milestone .body { grid-column: 2; }
+      .mapping-row { grid-template-columns: 1fr; }
+      .mapping-row > :last-child { grid-column: 1; }
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <header>
+      <span class="eyebrow">Implementation plan · hoppercode · 14 August 2026</span>
+      <h1>Port Hopper from a Pi extension to an MCP server</h1>
+      <p class="lede">Keep the working Rhino and Grasshopper bridge. Replace the Pi-only agent boundary with a small, standards-based MCP server that any compatible host can launch.</p>
+      <div class="prompt-box">
+        <span class="prompt-label">Brief</span>
+        <p>Explore what it looks like to port this project to an MCP-based project following the 2026-07-28 specification.</p>
+      </div>
+      <div class="summary-strip">
+        <div class="stat-card"><span class="stat-value">16</span><span class="stat-label">Hopper tools to expose</span></div>
+        <div class="stat-card"><span class="stat-value">2</span><span class="stat-label">Pi-only tools to retire</span></div>
+        <div class="stat-card"><span class="stat-value">1st</span><span class="stat-label">stdio transport</span></div>
+        <div class="stat-card"><span class="stat-value">6</span><span class="stat-label">Migration phases</span></div>
+      </div>
+    </header>
+
+    <section>
+      <div class="recommendation">
+        <h2>Recommended shape</h2>
+        <p>Make the TypeScript process the MCP server and keep ZeroMQ as its private bridge to the Grasshopper plugin. Ship stdio first with the stable <code>@modelcontextprotocol/server</code> v2 SDK. Keep the Pi adapter for one release while both adapters call the same framework-neutral handlers.</p>
+        <p class="small">This is a boundary refactor, not a C# rewrite. Most of the parser, command, validation, and Grasshopper code remains useful as-is.</p>
+        <div class="tags">
+          <span class="tag highlight">2026-07-28 source of truth</span>
+          <span class="tag">dual-era compatibility during rollout</span>
+          <span class="tag">localhost only</span>
+          <span class="tag">no remote HTTP in the first release</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="architecture">
+      <div class="section-header"><span class="section-number">01</span><h2>The boundary that changes</h2></div>
+      <div class="diagram-panel">
+        <svg viewBox="0 0 960 390" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:960px" role="img" aria-labelledby="arch-title arch-desc">
+          <title id="arch-title">Before and after architecture for Hopper</title>
+          <desc id="arch-desc">The existing Pi extension is replaced with a standards-based MCP server. The TypeScript services, ZeroMQ bridge, and Grasshopper plugin remain.</desc>
+          <style>
+            .box { fill: var(--card); stroke: var(--border); stroke-width: 1.5; }
+            .new { fill: color-mix(in oklab, var(--primary) 9%, var(--card)); stroke: var(--primary); stroke-width: 1.8; }
+            .keep { fill: color-mix(in oklab, var(--success) 8%, var(--card)); stroke: var(--success); stroke-width: 1.5; }
+            .old { fill: var(--muted); stroke: var(--muted-foreground); stroke-width: 1.5; stroke-dasharray: 5 4; }
+            .title { fill: var(--foreground); font-family: var(--font-sans); font-size: 13px; font-weight: 650; }
+            .sub { fill: var(--muted-foreground); font-family: var(--font-mono); font-size: 10px; }
+            .lane { fill: var(--muted-foreground); font-family: var(--font-mono); font-size: 10px; font-weight: 650; letter-spacing: 1px; }
+            .edge { stroke: var(--muted-foreground); stroke-width: 1.6; }
+            .edge-new { stroke: var(--primary); stroke-width: 1.8; }
+            .edge-label { fill: var(--muted-foreground); font-family: var(--font-mono); font-size: 9.5px; }
+          </style>
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted-foreground)"/></marker>
+            <marker id="arrow-primary" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--primary)"/></marker>
+          </defs>
+
+          <text x="26" y="32" class="lane">TODAY</text>
+          <rect x="26" y="52" width="150" height="58" rx="10" class="box"/>
+          <text x="101" y="77" text-anchor="middle" class="title">Pi host</text>
+          <text x="101" y="94" text-anchor="middle" class="sub">agent + TUI</text>
+          <line x1="176" y1="81" x2="230" y2="81" class="edge" marker-end="url(#arrow)"/>
+          <text x="203" y="70" text-anchor="middle" class="edge-label">private API</text>
+          <rect x="230" y="52" width="174" height="58" rx="10" class="old"/>
+          <text x="317" y="77" text-anchor="middle" class="title">Pi extension layer</text>
+          <text x="317" y="94" text-anchor="middle" class="sub">lifecycle + dynamic tools</text>
+          <line x1="404" y1="81" x2="458" y2="81" class="edge" marker-end="url(#arrow)"/>
+          <rect x="458" y="52" width="174" height="58" rx="10" class="keep"/>
+          <text x="545" y="77" text-anchor="middle" class="title">TypeScript services</text>
+          <text x="545" y="94" text-anchor="middle" class="sub">tools + validation</text>
+          <line x1="632" y1="81" x2="686" y2="81" class="edge" marker-end="url(#arrow)"/>
+          <text x="659" y="70" text-anchor="middle" class="edge-label">ZMQ</text>
+          <rect x="686" y="52" width="244" height="58" rx="10" class="keep"/>
+          <text x="808" y="77" text-anchor="middle" class="title">Grasshopper plugin</text>
+          <text x="808" y="94" text-anchor="middle" class="sub">Rhino UI thread + operations</text>
+
+          <line x1="26" y1="152" x2="930" y2="152" stroke="var(--border)" stroke-width="1.5"/>
+
+          <text x="26" y="194" class="lane">TARGET</text>
+          <rect x="26" y="214" width="150" height="58" rx="10" class="box"/>
+          <text x="101" y="239" text-anchor="middle" class="title">Any MCP host</text>
+          <text x="101" y="256" text-anchor="middle" class="sub">Codex, IDE, desktop</text>
+          <line x1="176" y1="243" x2="230" y2="243" class="edge-new" marker-end="url(#arrow-primary)"/>
+          <text x="203" y="232" text-anchor="middle" class="edge-label">stdio</text>
+          <rect x="230" y="204" width="174" height="78" rx="10" class="new"/>
+          <text x="317" y="233" text-anchor="middle" class="title">Hopper MCP server</text>
+          <text x="317" y="251" text-anchor="middle" class="sub">tools + resources + prompts</text>
+          <text x="317" y="267" text-anchor="middle" class="sub">stateless protocol edge</text>
+          <line x1="404" y1="243" x2="458" y2="243" class="edge-new" marker-end="url(#arrow-primary)"/>
+          <rect x="458" y="214" width="174" height="58" rx="10" class="keep"/>
+          <text x="545" y="239" text-anchor="middle" class="title">Hopper core</text>
+          <text x="545" y="256" text-anchor="middle" class="sub">shared handlers + schemas</text>
+          <line x1="632" y1="243" x2="686" y2="243" class="edge" marker-end="url(#arrow)"/>
+          <text x="659" y="232" text-anchor="middle" class="edge-label">ZMQ</text>
+          <rect x="686" y="214" width="244" height="58" rx="10" class="keep"/>
+          <text x="808" y="239" text-anchor="middle" class="title">Grasshopper plugin</text>
+          <text x="808" y="256" text-anchor="middle" class="sub">existing command protocol</text>
+
+          <path d="M317,282 C317,330 430,336 506,336" fill="none" stroke="var(--muted-foreground)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+          <rect x="506" y="310" width="180" height="50" rx="10" class="old"/>
+          <text x="596" y="332" text-anchor="middle" class="title">Pi compatibility adapter</text>
+          <text x="596" y="348" text-anchor="middle" class="sub">temporary, then removable</text>
+        </svg>
+        <span class="diagram-caption">Green components stay. Purple components are new. The dashed Pi adapter is temporary.</span>
+      </div>
+      <div class="two-col">
+        <div class="card">
+          <h3>Keep</h3>
+          <div class="scope-line"><span class="scope-mark"></span><span><code>src/infra</code> connection discovery and ZeroMQ clients</span></div>
+          <div class="scope-line"><span class="scope-mark"></span><span><code>src/services</code> parsing, validation, graph apply, and formatting</span></div>
+          <div class="scope-line"><span class="scope-mark"></span><span>The C# command registry, queue, document monitor, and Rhino operations</span></div>
+        </div>
+        <div class="card">
+          <h3>Replace or isolate</h3>
+          <div class="scope-line"><span class="scope-mark out"></span><span><code>src/index.ts</code> as the only entry point</span></div>
+          <div class="scope-line"><span class="scope-mark out"></span><span>Pi <code>defineTool</code>, <code>ExtensionAPI</code>, TUI rendering, and session hooks in core code</span></div>
+          <div class="scope-line"><span class="scope-mark out"></span><span>Per-session tool activation and implicit per-agent-turn transactions</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="decisions">
+      <div class="section-header"><span class="section-number">02</span><h2>Decisions to make up front</h2></div>
+      <div class="decision-grid">
+        <div class="decision good">
+          <span class="decision-label">Adopt</span>
+          <h3>stdio as the first transport</h3>
+          <p>Hopper is a local companion to Rhino. A host launches the server, credentials stay in the environment, and the MCP endpoint never becomes a network service. Use <code>serveStdio(factory)</code>.</p>
+        </div>
+        <div class="decision good">
+          <span class="decision-label">Adopt</span>
+          <h3>One deterministic tool list</h3>
+          <p>Register the 15 catalog tools plus <code>rh_capture_view</code> in stable name order. Remove session-specific activation. This matches the 2026 rule that list results no longer vary by connection.</p>
+        </div>
+        <div class="decision">
+          <span class="decision-label">Defer</span>
+          <h3>Streamable HTTP</h3>
+          <p>Add it only for a real remote or multi-host use case. It needs Origin checks, localhost binding by default, MCP request headers, and the authorization framework. There is no payoff for the first local release.</p>
+        </div>
+        <div class="decision">
+          <span class="decision-label">Defer</span>
+          <h3>Tasks extension</h3>
+          <p>The current bridge can preserve queued <code>jobId</code> results without adopting Tasks. Add durable task handles later if long Rhino jobs need polling, reconnection, or mid-flight input.</p>
+        </div>
+      </div>
+      <div class="flow-note">Compatibility posture: write handlers for the 2026 model, then let the v2 SDK serve modern and legacy clients from the same stdio entry during rollout. Add a <code>--modern-only</code> switch instead of hard-cutting older hosts on day one.</div>
+    </section>
+
+    <section id="primitives">
+      <div class="section-header"><span class="section-number">03</span><h2>Map Hopper to MCP primitives</h2></div>
+      <div class="mapping">
+        <div class="mapping-row header"><span>MCP primitive</span><span>Hopper mapping</span><span>Porting rule</span></div>
+        <div class="mapping-row">
+          <span class="primitive">Tools</span>
+          <div><strong>16 Hopper operations</strong><p>15 current catalog entries plus the viewport capture tool.</p></div>
+          <p>Use JSON Schema 2020-12, add <code>outputSchema</code>, return both <code>structuredContent</code> and a text rendering, and mark tool errors with <code>isError</code>.</p>
+        </div>
+        <div class="mapping-row">
+          <span class="primitive">Resources</span>
+          <div><strong>Read-only application state</strong><p><code>hopper://backend/status</code>, <code>hopper://grasshopper/canvas</code>, and resource templates for subgraphs and reference docs.</p></div>
+          <p>Keep query tools for model-controlled reads. Resources add host-controlled context selection and future subscriptions. Mark live Rhino data as private with a short cache lifetime.</p>
+        </div>
+        <div class="mapping-row">
+          <span class="primitive">Prompts</span>
+          <div><strong>Three user-started workflows</strong><p>Build a graph, inspect and repair a canvas, and model directly in Rhino.</p></div>
+          <p>Adapt the useful parts of <code>mds/skills</code>. Put cross-tool rules in server instructions. Do not repeat full tool descriptions.</p>
+        </div>
+        <div class="mapping-row">
+          <span class="primitive">Elicitation</span>
+          <div><strong>Viewport consent only</strong><p>Replace the Pi pre-prompt UI gate with an <code>input_required</code> result when capture needs consent.</p></div>
+          <p>Use MRTR request state so a retry can prove what the user approved. Keep the environment override for non-interactive hosts.</p>
+        </div>
+        <div class="mapping-row">
+          <span class="primitive">Subscriptions</span>
+          <div><strong>Canvas and catalog changes</strong><p>Bridge <code>DocumentMonitor</code> events into <code>subscriptions/listen</code>.</p></div>
+          <p>Start after read and mutation tools are stable. Request-scoped progress remains on the tool call response, not the subscription stream.</p>
+        </div>
+        <div class="mapping-row">
+          <span class="primitive">Tasks</span>
+          <div><strong>Optional later extension</strong><p>Candidate for queued commands and long script runs.</p></div>
+          <p>Do not make the first MCP release depend on extension support. Preserve explicit <code>jobId</code> fields now, which leaves a clean migration path.</p>
+        </div>
+      </div>
+
+      <div class="two-col" style="margin-top:24px">
+        <div class="card">
+          <h3>Remove from the MCP catalog</h3>
+          <ul class="card-list">
+            <li><strong>ask_user</strong><span>It is a Pi host UI wrapper. MCP clients own user interaction. Server-initiated questions use MRTR elicitation inside the operation that needs input.</span></li>
+            <li><strong>pick_option</strong><span>Same reason. Convert only real server-side choices to elicitation schemas.</span></li>
+            <li><strong>hopper_search_tools</strong><span>It mutates a session-scoped active tool set. Replace it with deterministic <code>tools/list</code>, compact descriptions, and host-side selection.</span></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Add to every tool definition</h3>
+          <ul class="card-list">
+            <li><strong>title</strong><span>Use the current Pi label.</span></li>
+            <li><strong>annotations</strong><span>Set read-only, destructive, idempotent, and open-world hints conservatively. Treat them as display hints, never authorization.</span></li>
+            <li><strong>output</strong><span>Define a stable machine result. Keep the compact human text because older clients and models still benefit from it.</span></li>
+            <li><strong>errors</strong><span>Return <code>isError: true</code> for offline backend, validation, and Rhino execution failures.</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="lifecycle">
+      <div class="section-header"><span class="section-number">04</span><h2>Fix the lifecycle mismatches</h2></div>
+      <div class="two-col">
+        <div class="card">
+          <h3>Transactions become per call</h3>
+          <p>Pi currently begins Grasshopper and Rhino transactions at <code>agent_start</code> and commits them at <code>agent_end</code>. MCP has no model-turn lifecycle. Wrap each mutating tool handler in begin, commit, and cancel. Keep <code>gh_apply_graph</code> as the preferred multi-edit atomic operation.</p>
+          <div class="acceptance"><span class="step-label">Acceptance</span><p>A failed mutation leaves no partial edit and one successful tool call creates one undo step.</p></div>
+        </div>
+        <div class="card">
+          <h3>State uses explicit handles</h3>
+          <p>Do not infer identity or state from a protocol session. Current ZMQ connection discovery may remain process-local. Any future cross-call transaction or durable job must return a server-minted handle and accept it as an ordinary argument.</p>
+          <div class="acceptance"><span class="step-label">Acceptance</span><p>Restarting the MCP process does not leave an invisible open transaction in Rhino.</p></div>
+        </div>
+        <div class="card">
+          <h3>Consent moves into the call</h3>
+          <p><code>before_agent_start</code> can no longer inspect the prompt or switch models. Always advertise <code>rh_capture_view</code>. If the host lacks image support it may ignore the tool. When consent is unknown, return an elicitation request or a clear tool error if the client cannot elicit.</p>
+          <div class="acceptance"><span class="step-label">Acceptance</span><p>No pixels leave Rhino until the call has an explicit approval or the documented environment override.</p></div>
+        </div>
+        <div class="card">
+          <h3>Cancellation reaches the bridge</h3>
+          <p>Thread the MCP request signal through tool handlers and ZeroMQ waits. For synchronous calls, stop waiting and close the request cleanly. For queued edits, add a best-effort cancel command only where the C# job queue can safely honor it.</p>
+          <div class="acceptance"><span class="step-label">Acceptance</span><p>Canceling a stdio request produces no later response or progress notification for that request.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="milestones">
+      <div class="section-header"><span class="section-number">05</span><h2>Migration sequence</h2></div>
+      <div class="milestones">
+        <div class="milestone">
+          <div class="when">Phase 1</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Freeze the contracts</h3>
+            <p>Snapshot every current Hopper tool name, JSON schema, success result, and failure result. Separate the 16 server operations from the Pi-only interaction tools. Record the 79 passing TypeScript tests as the migration baseline.</p>
+            <div class="tags"><span class="tag">tool catalog golden</span><span class="tag">result fixtures</span><span class="tag">backend protocol inventory</span></div>
+            <div class="acceptance"><span class="step-label">Exit check</span><p>A test can compare the old Pi adapter and the future MCP adapter against the same fixture.</p></div>
+          </div>
+        </div>
+        <div class="milestone">
+          <div class="when">Phase 2</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Extract a Hopper core</h3>
+            <p>Move schemas, metadata, and handlers behind a framework-neutral <code>HopperToolSpec</code>. Replace Pi result types in services with a local result type. Keep thin Pi renderers in a compatibility folder.</p>
+            <div class="tags"><span class="tag">src/core/tool-contract.ts</span><span class="tag">src/core/tool-registry.ts</span><span class="tag">src/pi/adapter.ts</span></div>
+            <div class="acceptance"><span class="step-label">Exit check</span><p>Core, infra, and service modules contain no <code>@earendil-works</code> imports.</p></div>
+          </div>
+        </div>
+        <div class="milestone">
+          <div class="when">Phase 3</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Serve the tools over modern MCP</h3>
+            <p>Add <code>@modelcontextprotocol/server</code> v2 and register tools from the shared catalog. Reuse the current TypeBox-generated JSON documents through <code>fromJsonSchema()</code>, which minimizes schema churn and validates them as JSON Schema 2020-12. Start with <code>serveStdio(factory)</code>.</p>
+            <div class="tags"><span class="tag">src/mcp/create-server.ts</span><span class="tag">src/mcp/tool-adapter.ts</span><span class="tag">src/mcp/stdio.ts</span></div>
+            <div class="acceptance"><span class="step-label">Exit check</span><p><code>server/discover</code>, <code>tools/list</code>, and every <code>tools/call</code> pass the official Inspector in 2026-07-28 mode.</p></div>
+          </div>
+        </div>
+        <div class="milestone">
+          <div class="when">Phase 4</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Restore safety and observability</h3>
+            <p>Add per-call transactions, MCP progress, request cancellation, structured errors, viewport elicitation, and OpenTelemetry metadata propagation. Audit stdout so stdio emits only newline-delimited JSON-RPC. Send diagnostics to stderr.</p>
+            <div class="tags"><span class="tag">transaction wrapper</span><span class="tag">AbortSignal</span><span class="tag">MRTR consent</span><span class="tag">trace context</span></div>
+            <div class="acceptance"><span class="step-label">Exit check</span><p>Crash, cancel, offline-backend, denial, and invalid-input tests leave Rhino and Grasshopper in a known state.</p></div>
+          </div>
+        </div>
+        <div class="milestone">
+          <div class="when">Phase 5</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Add resources, prompts, and change streams</h3>
+            <p>Expose backend status and canvas data as private resources, then add the three workflow prompts. Bridge document change events to <code>subscriptions/listen</code>. Give list and read results explicit <code>ttlMs</code> and <code>cacheScope</code>.</p>
+            <div class="tags"><span class="tag">src/mcp/resources.ts</span><span class="tag">src/mcp/prompts.ts</span><span class="tag">subscriptions/listen</span></div>
+            <div class="acceptance"><span class="step-label">Exit check</span><p>A client can read the canvas, receive one correlated update, and retrieve each prompt without invoking a tool.</p></div>
+          </div>
+        </div>
+        <div class="milestone">
+          <div class="when">Phase 6</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Package, prove, and retire the old edge</h3>
+            <p>Add a <code>hopper-mcp</code> executable, host configuration examples, Inspector checks in CI, and a migration guide. Publish Pi and MCP entries together once. Remove the Pi runtime dependencies after real host testing confirms parity.</p>
+            <div class="tags"><span class="tag">package bin</span><span class="tag">host configs</span><span class="tag">CI conformance</span><span class="tag">Pi deprecation</span></div>
+            <div class="acceptance"><span class="step-label">Exit check</span><p>A clean install can launch Hopper from two independent MCP hosts and operate the same Rhino backend.</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="interface">
+      <div class="section-header"><span class="section-number">06</span><h2>The key interfaces</h2></div>
+      <p style="color:var(--muted-foreground)">The useful seam is small. Each tool owns portable metadata and a handler. Pi and MCP adapters translate at the edge.</p>
+      <div class="code-panel">
+        <span class="code-label">src/core/tool-contract.ts</span>
+        <pre><code><span class="kw">export interface</span> <span class="fn">HopperToolSpec</span>&lt;Input, Output&gt; {
+  name: <span class="kw">string</span>;
+  title: <span class="kw">string</span>;
+  description: <span class="kw">string</span>;
+  inputSchema: JsonSchema2020;
+  outputSchema: JsonSchema2020;
+  annotations: {
+    readOnlyHint: <span class="kw">boolean</span>;
+    destructiveHint: <span class="kw">boolean</span>;
+    idempotentHint: <span class="kw">boolean</span>;
+    openWorldHint: <span class="kw">boolean</span>;
+  };
+  execute(input: Input, ctx: HopperCallContext): <span class="fn">Promise</span>&lt;HopperResult&lt;Output&gt;&gt;;
+}</code></pre>
+      </div>
+      <div class="code-panel">
+        <span class="code-label">src/mcp/create-server.ts</span>
+        <pre><code><span class="kw">const</span> server = <span class="kw">new</span> <span class="fn">McpServer</span>(
+  { name: <span class="str">"hopper-mcp"</span>, version: packageVersion },
+  { instructions: hopperInstructions }
+);
+
+<span class="kw">for</span> (<span class="kw">const</span> tool <span class="kw">of</span> hopperTools) {
+  server.<span class="fn">registerTool</span>(tool.name, {
+    title: tool.title,
+    description: tool.description,
+    inputSchema: <span class="fn">fromJsonSchema</span>(tool.inputSchema),
+    outputSchema: <span class="fn">fromJsonSchema</span>(tool.outputSchema),
+    annotations: tool.annotations
+  }, <span class="kw">async</span> (input, ctx) =&gt; <span class="fn">toMcpResult</span>(
+    <span class="kw">await</span> tool.<span class="fn">execute</span>(input, <span class="fn">fromMcpContext</span>(ctx))
+  ));
+}</code></pre>
+      </div>
+      <details>
+        <summary>Why keep raw JSON Schema for the first port?</summary>
+        <div class="details-body">The project already emits TypeBox-style JSON schemas, including a deliberate 2020-12 tuple for <code>gh_apply_graph</code>. The v2 SDK supports <code>fromJsonSchema()</code> and performs runtime validation. Rewriting every tool in Zod at the same time would mix a protocol migration with a schema rewrite and make parity harder to prove.</div>
+      </details>
+      <details>
+        <summary>What happens to the current Pi entry?</summary>
+        <div class="details-body">Move it to <code>src/pi/index.ts</code>. Its lifecycle and TUI features remain available during the bridge release, but its tools adapt the shared registry. Once MCP hosts cover viewport consent, model capability filtering, and normal install flows, remove the Pi entry and the three <code>@earendil-works</code> dependencies.</div>
+      </details>
+    </section>
+
+    <section id="tests">
+      <div class="section-header"><span class="section-number">07</span><h2>Verification gates</h2></div>
+      <div class="two-col">
+        <div class="card">
+          <h3>Automated contract suite</h3>
+          <ul class="card-list">
+            <li><strong>Catalog</strong><span>Stable ordering, unique names, annotations, JSON Schema 2020-12 validation, and no Pi-only tools.</span></li>
+            <li><strong>Results</strong><span>Every success has structured content plus text. Every operational failure is visible as a tool error.</span></li>
+            <li><strong>Protocol</strong><span>Modern discovery, per-request metadata, required result types, progress, cancellation, and MRTR retries.</span></li>
+            <li><strong>Transport</strong><span>No stray stdout, newline framing, graceful EOF shutdown, and restart after child exit.</span></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Integration matrix</h3>
+          <ul class="card-list">
+            <li><strong>Mock bridge</strong><span>All tool calls in CI without Rhino.</span></li>
+            <li><strong>Inspector</strong><span>CLI smoke test pinned to protocol version 2026-07-28.</span></li>
+            <li><strong>Real Rhino</strong><span>Mac and Windows manual suite for query, graph apply, undo, script, cancellation, and capture consent.</span></li>
+            <li><strong>Two hosts</strong><span>Prove the package is no longer coupled to one agent runtime.</span></li>
+          </ul>
+        </div>
+      </div>
+      <div class="flow-note">Current baseline checked during planning: 19 Vitest files passed, 79 tests passed, and TypeScript compilation passed. The Grasshopper plugin also built after dependency restore, with six existing platform warnings and no errors.</div>
+    </section>
+
+    <section id="risks">
+      <div class="section-header"><span class="section-number">08</span><h2>Risks and mitigations</h2></div>
+      <div class="risk-grid">
+        <div class="risk-row"><div class="risk-name">Loss of one-undo-step-per-agent-turn</div><div><span class="badge high">High</span></div><div class="risk-mitigation">Document the semantic change, use per-call transactions, and steer new builds through atomic <code>gh_apply_graph</code>. Do not fake a turn boundary MCP cannot observe.</div></div>
+        <div class="risk-row"><div class="risk-name">Schema drift during adapter work</div><div><span class="badge high">High</span></div><div class="risk-mitigation">Freeze current schemas first and use <code>fromJsonSchema()</code>. Add 2020-12 validation and a golden <code>tools/list</code> fixture before changing descriptions.</div></div>
+        <div class="risk-row"><div class="risk-name">Viewport data leaves Rhino without consent</div><div><span class="badge high">High</span></div><div class="risk-mitigation">Require MRTR elicitation or the explicit environment override. Treat tool annotations as untrusted display hints, not permission.</div></div>
+        <div class="risk-row"><div class="risk-name">A canceled MCP call keeps editing Rhino</div><div><span class="badge high">High</span></div><div class="risk-mitigation">Propagate cancellation through the TypeScript wait path. Add C# queue cancellation only where operations can stop safely. Report the limit for already-running Rhino UI work.</div></div>
+        <div class="risk-row"><div class="risk-name">Host compatibility varies</div><div><span class="badge med">Medium</span></div><div class="risk-mitigation">Serve both protocol eras during rollout, test with Inspector and two real hosts, and keep optional features out of the first release.</div></div>
+        <div class="risk-row"><div class="risk-name">Remote transport expands the attack area</div><div><span class="badge med">Medium</span></div><div class="risk-mitigation">Do not ship HTTP first. If added, use the SDK handler, Origin validation, localhost defaults, and the MCP authorization spec. Never expose raw ZMQ ports.</div></div>
+      </div>
+    </section>
+
+    <section id="questions">
+      <div class="section-header"><span class="section-number">09</span><h2>Open product choices</h2></div>
+      <div class="callout">
+        <h3>Keep one npm package or publish a new server package?</h3>
+        <p>My default is one package with two executable entries during the bridge release. Split only if Pi and MCP need different release cadences.</p>
+        <span class="decide-with">Decide with: maintainer and release owner</span>
+      </div>
+      <div class="callout">
+        <h3>How much legacy client support is worth carrying?</h3>
+        <p>The SDK can serve both eras. Set a removal condition now, such as two named hosts supporting 2026-07-28, so compatibility code does not become permanent by accident.</p>
+        <span class="decide-with">Decide with: supported-host list</span>
+      </div>
+      <div class="callout">
+        <h3>Should queued edits become MCP Tasks?</h3>
+        <p>Answer after measuring real tool durations and host extension support. A job that returns in a few seconds does not need a durable task. A job that must survive reconnects does.</p>
+        <span class="decide-with">Decide with: usage data after the core port</span>
+      </div>
+      <div class="callout">
+        <h3>Should reference material become prompts, resources, or a future Skills extension?</h3>
+        <p>Use prompts and resources now because they are stable server primitives. Keep the content modular so it can move to Skills over MCP if the extension and target hosts settle on an interoperable shape.</p>
+        <span class="decide-with">Decide with: client support matrix</span>
+      </div>
+    </section>
+
+    <section id="sources">
+      <div class="section-header"><span class="section-number">10</span><h2>Specification basis</h2></div>
+      <div class="sources">
+        <div class="source"><span class="source-label">Protocol</span><p><a href="https://modelcontextprotocol.io/specification/2026-07-28">MCP 2026-07-28 specification</a> and <a href="https://modelcontextprotocol.io/specification/2026-07-28/changelog">key changes</a>. These define stateless requests, per-request capabilities, <code>server/discover</code>, MRTR, subscriptions, caching fields, and removed session behavior.</p></div>
+        <div class="source"><span class="source-label">Transport</span><p><a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio">stdio transport</a> and <a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http">Streamable HTTP</a>. These support the stdio-first decision and the HTTP security requirements.</p></div>
+        <div class="source"><span class="source-label">Server features</span><p><a href="https://modelcontextprotocol.io/specification/2026-07-28/server/tools">Tools</a>, <a href="https://modelcontextprotocol.io/specification/2026-07-28/server/resources">resources</a>, <a href="https://modelcontextprotocol.io/specification/2026-07-28/server/prompts">prompts</a>, and <a href="https://modelcontextprotocol.io/specification/2026-07-28/server/discover">discovery</a>.</p></div>
+        <div class="source"><span class="source-label">Implementation</span><p><a href="https://github.com/modelcontextprotocol/typescript-sdk">Official TypeScript SDK v2</a>, its <a href="https://github.com/modelcontextprotocol/typescript-sdk/blob/main/docs/protocol-versions.md">protocol-era guide</a>, and <a href="https://ts.sdk.modelcontextprotocol.io/v2/advanced/schema-libraries">raw JSON Schema support</a>.</p></div>
+        <div class="source"><span class="source-label">Optional extension</span><p><a href="https://modelcontextprotocol.io/extensions/tasks/overview">MCP Tasks</a>. It is useful for durable long-running work but is deliberately outside the first port.</p></div>
+      </div>
+    </section>
+
+    <footer>Plan artifact · based on repository inspection and the MCP 2026-07-28 specification · no implementation changes proposed in this document</footer>
+  </main>
+</body>
+</html>
