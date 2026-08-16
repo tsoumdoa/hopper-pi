@@ -184,13 +184,10 @@ namespace rhino_zmq_poc.Protocol
         private static Dictionary<string, JsonElement> PersistentProperties(IGH_DocumentObject obj)
         {
             var properties = new Dictionary<string, JsonElement>();
-            if (obj is GH_ActiveObject active)
-            {
-                if (active.Hidden)
-                    properties["hidden"] = JsonSerializer.SerializeToElement(true);
-                if (active.Locked)
-                    properties["locked"] = JsonSerializer.SerializeToElement(true);
-            }
+            if (obj is GH_ActiveObject active && active.Locked)
+                properties["locked"] = JsonSerializer.SerializeToElement(true);
+            if (obj is IGH_PreviewObject preview && preview.Hidden)
+                properties["hidden"] = JsonSerializer.SerializeToElement(true);
             return properties;
         }
 
