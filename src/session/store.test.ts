@@ -8,7 +8,7 @@ import type { BackendDocuments } from "../protocol/wire.js";
 import { journalPath, resolveStateRoot } from "./paths.js";
 
 const BACKEND = {
-	backendId: "be_01TESTBACKEND000000000000",
+	backendId: "be_01TESTBACKEND000000000000" as const,
 	backendStartedAt: "2026-08-15T00:00:00.000Z",
 	pluginVersion: "1.0.0",
 	protocolVersion: 1 as const,
@@ -17,13 +17,13 @@ const BACKEND = {
 function documents(rhino: boolean): BackendDocuments {
 	return {
 		grasshopper: {
-			documentId: "ghd_01TESTCANVAS000000000000",
+			documentId: "ghd_01TESTCANVAS000000000000" as const,
 			displayName: "canvas.gh",
 			path: "/tmp/canvas.gh",
 		},
 		rhino: rhino
 			? {
-				documentId: "rhd_01TESTRHINO0000000000000",
+				documentId: "rhd_01TESTRHINO0000000000000" as const,
 				runtimeSerialNumber: 7,
 				displayName: "model.3dm",
 				path: "/tmp/model.3dm",

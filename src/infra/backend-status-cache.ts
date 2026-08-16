@@ -1,4 +1,3 @@
-import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import { formatEndpoint, resolveConnection } from "./connection.js";
 
 export type BackendStatus = {
@@ -31,13 +30,6 @@ export function backendOfflineMessage(): string {
 		`Grasshopper backend is offline (${endpoint}). ` +
 		"Please check that Rhino is running, Grasshopper is open, and the Hopper connection profile/token is current."
 	);
-}
-
-export function backendOfflineToolResult(): AgentToolResult<unknown> {
-	return {
-		content: [{ type: "text", text: backendOfflineMessage() }],
-		details: { offline: true },
-	};
 }
 
 export class BackendOfflineError extends Error {

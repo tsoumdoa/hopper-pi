@@ -86,4 +86,29 @@ test("help text documents the command surface", () => {
 	assert.match(text, /hopper <command>/);
 	assert.match(text, /--json/);
 	assert.match(text, /--allow-capture/);
+	assert.match(text, /batch/);
+	assert.match(text, /plugin install/);
+	assert.match(text, /history diff/);
+});
+
+test("parses batch, history, and plugin commands", () => {
+	const batch = parseArgs(["batch", "--session", "hs_01JX", "--data", "{\"items\":[]}"], ENV);
+	assert.equal(batch.kind, "batch");
+	if (batch.kind === "batch") assert.equal(batch.sessionId, "hs_01JX");
+
+	const diff = parseArgs(["history", "diff", "hs_01JX", "edit_000004"], ENV);
+	assert.equal(diff.kind, "history.diff");
+	const undo = parseArgs(["history", "undo", "hs_01JX", "edit_000004"], ENV);
+	assert.equal(undo.kind, "history.undo");
+	const redo = parseArgs(["history", "redo", "hs_01JX", "edit_000004"], ENV);
+	assert.equal(redo.kind, "history.redo");
+	const install = parseArgs(["plugin", "install", "--force"], ENV);
+	assert.equal(install.kind, "plugin.install");
+	if (install.kind === "plugin.install") assert.equal(install.force, true);
+	const doctor = parseArgs(["plugin", "doctor", "--json"], ENV);
+	assert.equal(doctor.kind, "plugin.doctor");
+	assert.equal(doctor.json, true);
+
+	assert.throws(() => parseArgs(["batch", "--data", "{}"], ENV), ArgParseError);
+	assert.throws(() => parseArgs(["plugin", "explode"], ENV), ArgParseError);
 });

@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { DEBUG, DEFAULT_ZMQ_ENDPOINTS, ENV } from "../config.js";
 
 export type ConnectionConfig = {
 	pubEndpoint: string;
@@ -23,8 +24,6 @@ type ConnectionProfile = {
 	startedAt?: number;
 };
 
-import { DEBUG, DEFAULT_ZMQ_ENDPOINTS, ENV } from "../config.js";
-
 export { DEBUG };
 
 let cachedConnection: ConnectionConfig | null = null;
@@ -38,16 +37,46 @@ export function connectionProfileDirectory(): string {
 		return dirname(process.env[ENV.HOPPER_CONNECTION_PROFILE]!);
 	}
 
+	const current = currentProfileDirectory();
+	migrateLegacyProfile(current);
+	return current;
+}
+
+function currentProfileDirectory(): string {
+	if (process.platform === "win32" && process.env.APPDATA) {
+		return join(process.env.APPDATA, "hoppercode");
+	}
+	if (process.platform === "darwin") {
+		return join(homedir(), "Library", "Application Support", "hoppercode");
+	}
+	const dataHome = process.env.XDG_DATA_HOME || join(homedir(), ".local", "share");
+	return join(dataHome, "hoppercode");
+}
+
+function legacyProfileDirectory(): string {
 	if (process.platform === "win32" && process.env.APPDATA) {
 		return join(process.env.APPDATA, "hopper-pi");
 	}
-
 	if (process.platform === "darwin") {
 		return join(homedir(), "Library", "Application Support", "hopper-pi");
 	}
-
 	const dataHome = process.env.XDG_DATA_HOME || join(homedir(), ".local", "share");
 	return join(dataHome, "hopper-pi");
+}
+
+function migrateLegacyProfile(currentDir: string): void {
+	const currentProfile = join(currentDir, "connection.json");
+	if (existsSync(currentProfile)) return;
+	const legacyDir = legacyProfileDirectory();
+	const legacyProfile = join(legacyDir, "connection.json");
+	if (!existsSync(legacyProfile)) return;
+	mkdirSync(currentDir, { recursive: true, mode: 0o700 });
+	copyFileSync(legacyProfile, currentProfile);
+	const legacyToken = join(legacyDir, "connection-token");
+	const currentToken = join(currentDir, "connection-token");
+	if (existsSync(legacyToken) && !existsSync(currentToken)) {
+		copyFileSync(legacyToken, currentToken);
+	}
 }
 
 export function connectionProfilePath(): string {

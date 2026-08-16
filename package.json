@@ -2,9 +2,7 @@
 	"name": "hopper-pi",
 	"license": "MIT",
 	"version": "0.1.90",
-	"keywords": [
-		"pi-package"
-	],
+	"description": "Standalone hopper CLI for Grasshopper and Rhino. Experimental CLI port.",
 	"type": "module",
 	"files": [
 		"dist",
@@ -13,12 +11,10 @@
 		"scripts"
 	],
 	"scripts": {
-		"dev": "tsx src/index.ts",
+		"dev": "tsx src/cli/main.ts",
 		"build": "tsc -p tsconfig.json",
 		"test": "vitest run",
-		"pi": "pi -e .",
 		"dump:components": "tsx src/scripts/dump-components.ts",
-		"postinstall": "node scripts/install-grasshopper-plugin.mjs",
 		"build:gh-plugin": "node scripts/install-grasshopper-plugin.mjs --build-only",
 		"prepack": "npm run build"
 	},
@@ -29,24 +25,10 @@
 		"vitest": "^4.1.10"
 	},
 	"dependencies": {
-		"@earendil-works/pi-ai": "^0.82.0",
-		"@earendil-works/pi-coding-agent": "^0.82.0",
-		"@earendil-works/pi-tui": "^0.82.0",
 		"@sinclair/typebox": "^0.34.52",
-		"chalk": "^5.6.2",
 		"fast-xml-parser": "^5.10.1",
 		"nanoid": "^5.1.16",
 		"zeromq": "^6.5.0"
-	},
-	"pi": {
-		"extensions": [
-			"./src/index.ts",
-			"./src/extensions/choices"
-		],
-		"skills": [
-			"./mds/skills",
-			"./mds/reference"
-		]
 	},
 	"bin": {
 		"hopper": "./dist/cli/main.js"

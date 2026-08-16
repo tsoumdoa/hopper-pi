@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Build rhino-zmq-poc and install into Grasshopper Libraries/hopper-pi/
+ * Build rhino-zmq-poc and install into Grasshopper Libraries/hoppercode/
  *
  * Env:
  *   HOPPER_SKIP_GH_PLUGIN=1  — skip entirely (dev / git clone)
  *   HOPPER_GH_LIBRARIES      — full path to plugin install dir (overrides auto-detect)
- *   HOPPER_GH_PLUGIN_DIR     — subfolder name under Libraries (default: hopper-pi)
+ *   HOPPER_GH_PLUGIN_DIR     — subfolder name under Libraries (default: hoppercode)
  *   HOPPER_GH_STRICT=1       — exit 1 on copy/build failure (default: warn and exit 0)
  */
 
@@ -34,16 +34,16 @@ const buildOnly = args.has("--build-only");
 const force = args.has("--force");
 
 function log(...parts) {
-	console.log("[hopper-pi]", ...parts);
+	console.log("[hoppercode]", ...parts);
 }
 
 function warn(...parts) {
-	console.warn("[hopper-pi]", ...parts);
+	console.warn("[hoppercode]", ...parts);
 }
 
 function fail(message, code = 1) {
 	if (process.env.HOPPER_GH_STRICT === "1") {
-		console.error("[hopper-pi]", message);
+		console.error("[hoppercode]", message);
 		process.exit(code);
 	}
 	warn(message);
@@ -118,7 +118,7 @@ function findGrasshopperLibrariesRoot() {
 }
 
 function resolveInstallDir() {
-	const subdir = process.env.HOPPER_GH_PLUGIN_DIR || "hopper-pi";
+	const subdir = process.env.HOPPER_GH_PLUGIN_DIR || "hoppercode";
 
 	if (process.env.HOPPER_GH_LIBRARIES) {
 		const p = process.env.HOPPER_GH_LIBRARIES;

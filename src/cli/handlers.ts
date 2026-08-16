@@ -3,12 +3,15 @@ import type {
 	EditId,
 	JsonValue,
 	SessionBinding,
+	SessionId,
+	BackendId,
+	GrasshopperDocumentId,
 } from "../core/contracts.js";
 import { HopperCoreError, type HopperError } from "../core/errors.js";
 import { OperationRegistry, type ResolvedOperationCall } from "../core/operations.js";
 import { createBackendClient, type BackendClient } from "../protocol/backend-client.js";
 import type { ExecuteActionsRequest } from "../protocol/wire.js";
-import { createRequestId } from "../protocol/wire.js";
+import { createRequestId, createWireRequest } from "../protocol/wire.js";
 import { resolveConnection } from "../infra/connection.js";
 import type { ConnectionConfig } from "../infra/connection.js";
 import { createArtifactWriter } from "../infra/artifact-writer.js";
@@ -22,6 +25,9 @@ import { SessionStore, type SessionRecord } from "../session/store.js";
 import { withSessionLock } from "../session/lock.js";
 import { Journal, requestOutcomeEvent, requestStartedEvent } from "../session/journal.js";
 import { resolveStateRoot } from "../session/paths.js";
+import { CheckpointStore } from "../session/checkpoints.js";
+import { diffCanvases, emptyCanvas } from "../core/canvas.js";
+import type { CanvasDiff } from "../core/contracts.js";
 
 const CLI_VERSION = "0.1.90";
 
@@ -32,6 +38,7 @@ export type CliDependencies = {
 	createRequester?: (connection: ConnectionConfig) => Requester;
 	stateRoot: string;
 	sessions: SessionStore;
+	checkpoints: CheckpointStore;
 	artifactsRoot?: string;
 	receiveTimeoutMs?: number;
 	io: CliIO;
@@ -45,6 +52,7 @@ export function defaultDependencies(io: CliIO): CliDependencies {
 		connection: () => resolveConnection(),
 		stateRoot,
 		sessions: new SessionStore(stateRoot),
+		checkpoints: new CheckpointStore(stateRoot),
 		io,
 		now: () => new Date(),
 	};
@@ -190,6 +198,16 @@ async function callWithSession(
 				return;
 			}
 			const editId = await deps.sessions.reserveEditId(command.sessionId!);
+			let beforeCheckpointId: string | null = null;
+			let expectedCanvasDigest: string | null = null;
+			if (call.scope === "grasshopper" || call.scope === "mixed") {
+				const before = await captureSessionCheckpoint(client, command.sessionId!, {
+					backendId: session.binding.backendId,
+					grasshopperDocumentId: session.binding.grasshopperDocumentId,
+				}, deps);
+				beforeCheckpointId = before.checkpointId;
+				expectedCanvasDigest = before.canvasDigest;
+			}
 			response = await executeCall(command, call, deps, {
 				session: {
 					sessionId: session.sessionId,
@@ -205,6 +223,8 @@ async function callWithSession(
 					rhinoDocumentId: session.binding.rhinoDocumentId,
 				},
 				captureAllowed: session.captureAllowed || command.allowCapture,
+				beforeCheckpointId,
+				expectedCanvasDigest,
 			});
 		});
 		return response!;
@@ -258,6 +278,8 @@ type CallOptions = {
 	journal?: Journal;
 	expected?: ExpectedIdentity;
 	captureAllowed?: boolean;
+	beforeCheckpointId?: string | null;
+	expectedCanvasDigest?: string | null;
 };
 
 async function executeCall(
@@ -285,9 +307,10 @@ async function executeCall(
 		},
 	);
 	if (options.expected || options.editId) {
-		const innerClient = (backend as unknown as { client: BackendClient }).client;
+		const innerClient = backend.protocolClient;
 		const sessionBackend = new V1OperationBackend(innerClient, {
 			expected: options.expected,
+			expectedCanvasDigest: options.expectedCanvasDigest ?? null,
 			hooks: {
 				onBeforeSend: async (wireRequest) => {
 					sentRequest.request = wireRequest;
@@ -309,7 +332,7 @@ async function executeCall(
 							backendId: options.expected?.backendId ?? "",
 							grasshopperDocumentId: options.expected?.grasshopperDocumentId ?? "",
 							rhinoDocumentId: options.expected?.rhinoDocumentId ?? null,
-							beforeCheckpointId: null,
+							beforeCheckpointId: options.beforeCheckpointId ?? null,
 						}));
 					}
 				},
@@ -321,6 +344,46 @@ async function executeCall(
 	const startedAt = Date.now();
 	try {
 		const result = await deps.registry.execute(call, context);
+		let afterCheckpointId: string | null = null;
+		let diff: CanvasDiff | null = null;
+		const warnings = [...result.warnings];
+		if (
+			options.session
+			&& options.beforeCheckpointId
+			&& (result.outcome === "succeeded" || result.outcome === "partial")
+		) {
+			try {
+				const innerClient = backend.protocolClient;
+				const after = await captureSessionCheckpoint(
+					innerClient,
+					options.session.sessionId,
+					{
+						backendId: options.expected?.backendId ?? options.session.backendId,
+						grasshopperDocumentId: options.expected?.grasshopperDocumentId
+							?? options.session.grasshopperDocumentId,
+					},
+					deps,
+				);
+				afterCheckpointId = after.checkpointId;
+				const beforeStored = await deps.checkpoints.read(options.session.sessionId, options.beforeCheckpointId);
+				diff = diffCanvases(beforeStored.canonicalCanvas, after.canonicalCanvas ?? emptyCanvas());
+				const executionDigest = (result.data && typeof result.data === "object" && !Array.isArray(result.data))
+					? (result.data as { canvasDigestAfter?: string }).canvasDigestAfter
+					: undefined;
+				if (executionDigest && executionDigest !== after.canvasDigest) {
+					result.outcome = "partial";
+					warnings.push({
+						code: "checkpoint_race",
+						message: "The after-checkpoint digest differed from the execution response.",
+					});
+				}
+			} catch {
+				warnings.push({
+					code: "checkpoint_incomplete",
+					message: "The mutation succeeded but the after checkpoint could not be captured.",
+				});
+			}
+		}
 		if (options.session && options.journal && options.editId && sentRequest.request) {
 			await options.journal.append(requestOutcomeEvent({
 				sessionId: options.session.sessionId,
@@ -334,9 +397,9 @@ async function executeCall(
 					artifacts: result.artifacts.length,
 				},
 				error: result.error,
-				warnings: result.warnings,
-				afterCheckpointId: null,
-				diff: null,
+				warnings,
+				afterCheckpointId,
+				diff,
 				durationMs: Date.now() - startedAt,
 			}));
 		}
@@ -351,21 +414,43 @@ async function executeCall(
 			message: result.message,
 			data: result.data,
 			artifacts: result.artifacts,
-			warnings: result.warnings,
+			warnings,
 			error: result.error,
 		});
 	} catch (error) {
+		const hopper = error instanceof HopperCoreError
+			? error.hopperError
+			: {
+				code: "internal_error" as const,
+				message: error instanceof Error ? error.message : String(error),
+				retryable: false,
+			};
+		if (options.session && options.journal && options.editId && sentRequest.request) {
+			await options.journal.append(requestOutcomeEvent({
+				sessionId: options.session.sessionId,
+				editId: options.editId,
+				requestId: sentRequest.request.requestId,
+				occurredAt: new Date().toISOString(),
+				outcome: hopper.code === "outcome_unknown" ? "unknown" : "failed",
+				resultSummary: {
+					operation: command.operation,
+					message: hopper.message,
+					artifacts: 0,
+				},
+				error: hopper,
+				warnings: [],
+				afterCheckpointId: null,
+				diff: null,
+				durationMs: Date.now() - startedAt,
+			}));
+		}
 		if (error instanceof HopperCoreError) {
 			return cliError("call", error.hopperError, {
 				operation: command.operation,
 				sessionId: options.session?.sessionId,
 			});
 		}
-		return cliError("call", {
-			code: "internal_error",
-			message: error instanceof Error ? error.message : String(error),
-			retryable: false,
-		}, { operation: command.operation });
+		return cliError("call", hopper, { operation: command.operation });
 	} finally {
 		await backend.close().catch(() => {});
 	}
@@ -377,6 +462,33 @@ function toHopperError(error: unknown): HopperError {
 		code: "backend_offline",
 		message: error instanceof Error ? error.message : String(error),
 		retryable: true,
+	};
+}
+
+export async function captureSessionCheckpoint(
+	client: BackendClient,
+	sessionId: SessionId,
+	expected: { backendId: string; grasshopperDocumentId: string },
+	deps: CliDependencies,
+) {
+	const request = createWireRequest("captureCheckpoint", {
+		expectedBackendId: expected.backendId as BackendId,
+		expectedGrasshopperDocumentId: expected.grasshopperDocumentId as GrasshopperDocumentId,
+	});
+	const response = await client.captureCheckpoint(request);
+	if (response.outcome !== "succeeded" || !response.data) {
+		throw new HopperCoreError(response.error ?? {
+			code: "operation_failed",
+			message: "Checkpoint capture failed.",
+			retryable: false,
+		});
+	}
+	const record = await deps.checkpoints.save(sessionId, response.data);
+	return {
+		...response.data,
+		checkpointId: record.checkpointId,
+		canvasDigest: record.canvasDigest,
+		canonicalCanvas: response.data.canonicalCanvas ?? emptyCanvas(),
 	};
 }
 

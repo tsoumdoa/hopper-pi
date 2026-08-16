@@ -404,4 +404,229 @@ namespace rhino_zmq_poc.Protocol
             }
         }
     }
+
+    internal sealed class CaptureCheckpointHandler : IBackendRequestHandler
+    {
+        private readonly CanvasCheckpointService _checkpoints;
+        private readonly IUiThreadDispatcher _dispatcher;
+        private readonly IDocumentExecutionGate _gate;
+        private readonly TimeSpan _gateTimeout;
+        private readonly Func<GH_Document> _grasshopperDocument;
+        private readonly Func<BackendIdentityDto> _backend;
+        private readonly Func<BackendDocumentsDto> _documents;
+
+        public CaptureCheckpointHandler(
+            CanvasCheckpointService checkpoints,
+            IUiThreadDispatcher dispatcher,
+            IDocumentExecutionGate gate,
+            TimeSpan gateTimeout,
+            Func<GH_Document> grasshopperDocument,
+            Func<BackendIdentityDto> backend,
+            Func<BackendDocumentsDto> documents)
+        {
+            _checkpoints = checkpoints ?? throw new ArgumentNullException(nameof(checkpoints));
+            _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+            _gate = gate ?? throw new ArgumentNullException(nameof(gate));
+            _gateTimeout = gateTimeout;
+            _grasshopperDocument = grasshopperDocument ?? (() => null);
+            _backend = backend ?? throw new ArgumentNullException(nameof(backend));
+            _documents = documents ?? throw new ArgumentNullException(nameof(documents));
+        }
+
+        public async Task<WireResponseDto<JsonElement>> HandleAsync(RequestContext context, JsonElement body)
+        {
+            var expectedBackendId = StringOrNull(body, "expectedBackendId");
+            var expectedDocumentId = StringOrNull(body, "expectedGrasshopperDocumentId");
+            var backend = _backend();
+            var documents = _documents();
+            if (string.IsNullOrEmpty(expectedBackendId) ||
+                !string.Equals(expectedBackendId, backend?.BackendId, StringComparison.Ordinal))
+            {
+                throw new HopperRequestException("backend_conflict", "The backend identity does not match the expected backend.");
+            }
+            if (documents?.Grasshopper == null ||
+                !string.Equals(expectedDocumentId, documents.Grasshopper.DocumentId, StringComparison.Ordinal))
+            {
+                throw new HopperRequestException(
+                    "document_conflict",
+                    "The active Grasshopper document does not match the expected document.");
+            }
+
+            IDisposable lease;
+            try
+            {
+                lease = await _gate.AcquireMutationAsync(expectedDocumentId, _gateTimeout, context.ServiceStopping)
+                    .ConfigureAwait(false);
+            }
+            catch (TimeoutException ex)
+            {
+                throw new HopperRequestException("backend_busy", ex.Message, retryable: true);
+            }
+            catch (OperationCanceledException ex)
+            {
+                throw new HopperRequestException("backend_busy", ex.Message, retryable: true);
+            }
+
+            using (lease)
+            {
+                var envelope = await _dispatcher.InvokeAsync(
+                    () => _checkpoints.Capture(_grasshopperDocument(), backend, documents.Grasshopper),
+                    context.ServiceStopping).ConfigureAwait(false);
+                return BackendRequestRouter.Success("succeeded", envelope);
+            }
+        }
+
+        private static string StringOrNull(JsonElement body, string name) =>
+            body.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
+    }
+
+    internal sealed class RestoreCheckpointHandler : IBackendRequestHandler
+    {
+        private readonly RequestLedger _ledger;
+        private readonly CanvasCheckpointService _checkpoints;
+        private readonly IUiThreadDispatcher _dispatcher;
+        private readonly IDocumentExecutionGate _gate;
+        private readonly TimeSpan _gateTimeout;
+        private readonly Func<GH_Document> _grasshopperDocument;
+        private readonly Func<BackendIdentityDto> _backend;
+        private readonly Func<BackendDocumentsDto> _documents;
+
+        public RestoreCheckpointHandler(
+            RequestLedger ledger,
+            CanvasCheckpointService checkpoints,
+            IUiThreadDispatcher dispatcher,
+            IDocumentExecutionGate gate,
+            TimeSpan gateTimeout,
+            Func<GH_Document> grasshopperDocument,
+            Func<BackendIdentityDto> backend,
+            Func<BackendDocumentsDto> documents)
+        {
+            _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
+            _checkpoints = checkpoints ?? throw new ArgumentNullException(nameof(checkpoints));
+            _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+            _gate = gate ?? throw new ArgumentNullException(nameof(gate));
+            _gateTimeout = gateTimeout;
+            _grasshopperDocument = grasshopperDocument ?? (() => null);
+            _backend = backend ?? throw new ArgumentNullException(nameof(backend));
+            _documents = documents ?? throw new ArgumentNullException(nameof(documents));
+        }
+
+        public async Task<WireResponseDto<JsonElement>> HandleAsync(RequestContext context, JsonElement body)
+        {
+            ExecuteActionsHandler.ValidatePayloadSha256(context.PayloadSha256, body);
+            var begin = _ledger.TryBegin(context.RequestId, context.PayloadSha256);
+            switch (begin.Decision)
+            {
+                case LedgerDecision.Conflict:
+                    throw new HopperRequestException(
+                        "request_id_conflict",
+                        "This request ID was already used with a different payload.");
+                case LedgerDecision.Expired:
+                    throw new HopperRequestException(
+                        "request_expired",
+                        "The request ID is older than the deduplication window.");
+                case LedgerDecision.Busy:
+                    throw new HopperRequestException(
+                        "backend_busy",
+                        "The request ledger is at capacity; retry later.",
+                        retryable: true);
+                case LedgerDecision.Existing:
+                    if (begin.Entry.CachedResponse != null)
+                    {
+                        begin.Entry.CachedResponse.Type = "restoreCheckpoint";
+                        begin.Entry.CachedResponse.RequestId = context.RequestId;
+                        return begin.Entry.CachedResponse;
+                    }
+                    return BackendRequestRouter.Success("in_progress", new RequestStatusDataDto
+                    {
+                        TargetRequestId = context.RequestId,
+                        State = "running",
+                    });
+            }
+
+            try
+            {
+                var expectedBackendId = StringOrNull(body, "expectedBackendId");
+                var expectedDocumentId = StringOrNull(body, "expectedGrasshopperDocumentId");
+                var expectedLiveDigest = StringOrNull(body, "expectedLiveCanvasDigest");
+                var transactionName = StringOrNull(body, "transactionName") ?? "Hopper restore";
+                if (!body.TryGetProperty("checkpoint", out var checkpointElement) ||
+                    checkpointElement.ValueKind != JsonValueKind.Object)
+                {
+                    throw new HopperRequestException("invalid_input", "A checkpoint object is required.");
+                }
+
+                var backend = _backend();
+                var documents = _documents();
+                if (!string.Equals(expectedBackendId, backend?.BackendId, StringComparison.Ordinal))
+                    throw new HopperRequestException("backend_conflict", "The backend identity does not match the expected backend.");
+                if (documents?.Grasshopper == null ||
+                    !string.Equals(expectedDocumentId, documents.Grasshopper.DocumentId, StringComparison.Ordinal))
+                {
+                    throw new HopperRequestException(
+                        "document_conflict",
+                        "The active Grasshopper document does not match the expected document.");
+                }
+
+                var checkpoint = JsonSerializer.Deserialize<CanvasCheckpointEnvelopeDto>(checkpointElement.GetRawText())
+                    ?? throw new HopperRequestException("invalid_input", "The checkpoint envelope is invalid.");
+                if (!string.Equals(checkpoint.BackendId, expectedBackendId, StringComparison.Ordinal) ||
+                    !string.Equals(checkpoint.GrasshopperDocumentId, expectedDocumentId, StringComparison.Ordinal))
+                {
+                    throw new HopperRequestException(
+                        "document_conflict",
+                        "The checkpoint was captured against a different backend or document.");
+                }
+
+                IDisposable lease;
+                try
+                {
+                    lease = await _gate.AcquireMutationAsync(expectedDocumentId, _gateTimeout, context.ServiceStopping)
+                        .ConfigureAwait(false);
+                }
+                catch (TimeoutException ex)
+                {
+                    throw new HopperRequestException("backend_busy", ex.Message, retryable: true);
+                }
+                catch (OperationCanceledException ex)
+                {
+                    throw new HopperRequestException("backend_busy", ex.Message, retryable: true);
+                }
+
+                RestoreCheckpointDataDto restored;
+                using (lease)
+                {
+                    restored = await _dispatcher.InvokeAsync(
+                        () => _checkpoints.CompareAndRestore(
+                            _grasshopperDocument(),
+                            checkpoint,
+                            expectedLiveDigest,
+                            transactionName),
+                        context.ServiceStopping).ConfigureAwait(false);
+                }
+
+                var response = BackendRequestRouter.Success("succeeded", restored);
+                _ledger.Complete(context.RequestId, context.PayloadSha256, "succeeded", response);
+                return response;
+            }
+            catch (HopperRequestException ex)
+            {
+                var failed = BackendRequestRouter.Error(
+                    context.RequestId,
+                    ex.Code,
+                    ex.Message,
+                    ex.Retryable,
+                    type: "restoreCheckpoint");
+                _ledger.Complete(context.RequestId, context.PayloadSha256, "failed", failed);
+                throw;
+            }
+        }
+
+        private static string StringOrNull(JsonElement body, string name) =>
+            body.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
+    }
 }

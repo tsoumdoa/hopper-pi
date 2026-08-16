@@ -13,14 +13,62 @@ export type BackendId = `be_${string}`;
 export type GrasshopperDocumentId = `ghd_${string}`;
 export type RhinoDocumentId = `rhd_${string}`;
 
-/**
- * Placeholder canvas diff shape used by journal records. PR 5 replaces this
- * with the full semantic diff contract.
- */
+export type CanonicalCanvasObject = {
+	id: string;
+	typeId: string;
+	kind: string;
+	name: string;
+	x: number;
+	y: number;
+	properties: JsonObject;
+};
+
+export type CanonicalWire = {
+	fromObjectId: string;
+	fromPort: string;
+	toObjectId: string;
+	toPort: string;
+};
+
+export type CanonicalGroup = {
+	id: string;
+	name: string;
+	memberIds: string[];
+	properties: JsonObject;
+};
+
+export type CanonicalCanvas = {
+	objects: CanonicalCanvasObject[];
+	wires: CanonicalWire[];
+	groups: CanonicalGroup[];
+};
+
+export type CanvasObjectChange = { id: string; object: CanonicalCanvasObject };
+export type CanvasMoveChange = {
+	id: string;
+	before: { x: number; y: number };
+	after: { x: number; y: number };
+};
+export type CanvasRenameChange = { id: string; before: string; after: string };
+export type CanvasPropertyChange = { id: string; before: JsonObject; after: JsonObject };
+export type CanvasGroupChange = {
+	id: string;
+	before: CanonicalGroup | null;
+	after: CanonicalGroup | null;
+};
+
 export type CanvasDiff = {
 	beforeDigest: string;
 	afterDigest: string;
-} & Record<string, JsonValue>;
+	added: CanvasObjectChange[];
+	removed: CanvasObjectChange[];
+	moved: CanvasMoveChange[];
+	renamed: CanvasRenameChange[];
+	propertiesChanged: CanvasPropertyChange[];
+	wiresAdded: CanonicalWire[];
+	wiresRemoved: CanonicalWire[];
+	groupsChanged: CanvasGroupChange[];
+};
 
 export type MutationScope = "none" | "viewport" | "grasshopper" | "rhino" | "mixed";
 export type OperationOutcome =

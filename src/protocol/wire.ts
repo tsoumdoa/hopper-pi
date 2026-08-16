@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type {
 	BackendId,
+	CanonicalCanvas,
 	GrasshopperDocumentId,
 	JsonObject,
 	JsonValue,
@@ -254,11 +255,12 @@ export type CanvasCheckpointEnvelope = {
 	grasshopperDocumentId: GrasshopperDocumentId;
 	capturedAt: string;
 	encoding: "base64";
-	compression: "none";
+	compression: "none" | "gzip";
 	bytes: string;
 	byteLength: number;
 	binarySha256: string;
 	canvasDigest: string;
+	canonicalCanvas?: CanonicalCanvas;
 };
 
 export type CaptureCheckpointRequest = WireRequest<"captureCheckpoint", {

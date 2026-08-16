@@ -33,13 +33,21 @@ namespace rhino_zmq_poc
 
     internal static class ConnectionProfileStore
     {
-        private const string AppDirectoryName = "hopper-pi";
+        private const string AppDirectoryName = "hoppercode";
+        private const string LegacyAppDirectoryName = "hopper-pi";
         private const string ProfileFileName = "connection.json";
         private const string TokenFileName = "connection-token";
 
-        public static string DirectoryPath => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            AppDirectoryName);
+        public static string DirectoryPath
+        {
+            get
+            {
+                MigrateLegacyProfileIfNeeded();
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    AppDirectoryName);
+            }
+        }
 
         public static string ProfilePath => Path.Combine(DirectoryPath, ProfileFileName);
 
@@ -86,6 +94,28 @@ namespace rhino_zmq_poc
             catch
             {
                 // Stale or unreadable profiles are harmless; the frontend will probe before use.
+            }
+        }
+
+        private static void MigrateLegacyProfileIfNeeded()
+        {
+            var current = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                AppDirectoryName);
+            if (Directory.Exists(current)) return;
+
+            var legacy = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                LegacyAppDirectoryName);
+            if (!Directory.Exists(legacy)) return;
+
+            Directory.CreateDirectory(current);
+            foreach (var fileName in new[] { ProfileFileName, TokenFileName })
+            {
+                var source = Path.Combine(legacy, fileName);
+                var destination = Path.Combine(current, fileName);
+                if (File.Exists(source) && !File.Exists(destination))
+                    File.Copy(source, destination);
             }
         }
 

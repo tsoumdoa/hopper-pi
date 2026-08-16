@@ -13,7 +13,6 @@ export type { BackendStatus } from "./backend-status-cache.js";
 export {
 	BackendOfflineError,
 	backendOfflineMessage,
-	backendOfflineToolResult,
 	formatBackendEndpoint,
 	getCachedBackendStatus,
 	isBackendKnownOffline,

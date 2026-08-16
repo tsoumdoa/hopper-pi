@@ -74,6 +74,9 @@ namespace rhino_zmq_poc
         private readonly RequestLedger _requestLedger;
         private readonly BackendRequestRouter _backendRouter;
         private readonly TransactionCoordinator _coordinator;
+        private readonly CanvasCheckpointService _checkpoints;
+        private readonly IDocumentExecutionGate _executionGate;
+        private readonly IUiThreadDispatcher _uiDispatcher;
         private string _pubEndpoint;
         private string _pullEndpoint;
         private string _repEndpoint;
@@ -104,6 +107,9 @@ namespace rhino_zmq_poc
             _requestDispatcher.Register("getParamRhinoGeometry", new GetParamRhinoGeometryHandler());
             _identityService = new DocumentIdentityService(PluginVersion);
             _requestLedger = new RequestLedger(LedgerCapacity);
+            _executionGate = new DocumentExecutionGate();
+            _uiDispatcher = new RhinoUiThreadDispatcher(UiDispatchTimeout);
+            _checkpoints = new CanvasCheckpointService(64 * 1024 * 1024);
             _coordinator = BuildTransactionCoordinator();
             _backendRouter = BuildBackendRouter();
             _jobStatusHandler = status =>
@@ -131,8 +137,8 @@ namespace rhino_zmq_poc
 
             return new TransactionCoordinator(
                 new CommandBackendActionExecutor(commands, ExecuteNonCommandAction),
-                new RhinoUiThreadDispatcher(UiDispatchTimeout),
-                new DocumentExecutionGate(),
+                _uiDispatcher,
+                _executionGate,
                 new ExpectedIdentityValidator(() => _identityService.Backend, CurrentDocuments),
                 new LegacyAgentTransactionFactory(),
                 GateTimeout);
@@ -143,10 +149,19 @@ namespace rhino_zmq_poc
             var router = new BackendRequestRouter(
                 IsAuthorized,
                 () => _identityService.Backend,
-                CurrentDocuments);
+                CurrentDocuments,
+                maxRequestBytes: 64 * 1024 * 1024);
             router.Register("getBackendInfo", new GetBackendInfoHandler(
-                new[] { "executeActions", "getBackendInfo", "getRequestStatus", "query" },
-                BackendRequestRouter.DefaultMaxRequestBytes,
+                new[]
+                {
+                    "executeActions",
+                    "getBackendInfo",
+                    "getRequestStatus",
+                    "query",
+                    "captureCheckpoint",
+                    "restoreCheckpoint",
+                },
+                64 * 1024 * 1024,
                 maxCheckpointBytes: 64 * 1024 * 1024,
                 deduplicationWindowMs: (long)RequestLedger.DefaultWindow.TotalMilliseconds));
             router.Register("query", new QueryHandler(_requestDispatcher, _dispatchLock, () => _doc));
@@ -156,6 +171,23 @@ namespace rhino_zmq_poc
                 () => _doc,
                 () => RhinoDoc.ActiveDoc));
             router.Register("getRequestStatus", new GetRequestStatusHandler(_requestLedger));
+            router.Register("captureCheckpoint", new CaptureCheckpointHandler(
+                _checkpoints,
+                _uiDispatcher,
+                _executionGate,
+                GateTimeout,
+                () => _doc,
+                () => _identityService.Backend,
+                CurrentDocuments));
+            router.Register("restoreCheckpoint", new RestoreCheckpointHandler(
+                _requestLedger,
+                _checkpoints,
+                _uiDispatcher,
+                _executionGate,
+                GateTimeout,
+                () => _doc,
+                () => _identityService.Backend,
+                CurrentDocuments));
             return router;
         }
 

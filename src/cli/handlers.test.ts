@@ -84,7 +84,37 @@ function fakeProtocolClient(options: {
 			throw new Error("unexpected executeActions");
 		},
 		async captureCheckpoint() {
-			throw new Error("unexpected checkpoint");
+			const bytes = Buffer.from("checkpoint-bytes");
+			return {
+				protocolVersion: 1,
+				type: "captureCheckpoint",
+				requestId: "req_01M0000000000000000000000",
+				backend: {
+					backendId: "be_test",
+					backendStartedAt: "2026-08-15T00:00:00.000Z",
+					pluginVersion: "1.0.0",
+					protocolVersion: 1,
+				},
+				documents: null,
+				outcome: "succeeded",
+				startedAt: null,
+				completedAt: null,
+				data: {
+					schemaVersion: 1,
+					checkpointId: "cp_test",
+					backendId: "be_test",
+					grasshopperDocumentId: "ghd_1",
+					capturedAt: "2026-08-15T00:00:00.000Z",
+					encoding: "base64",
+					compression: "none",
+					bytes: bytes.toString("base64"),
+					byteLength: bytes.byteLength,
+					binarySha256: "00",
+					canvasDigest: "digest",
+					canonicalCanvas: { objects: [], wires: [], groups: [] },
+				},
+				error: null,
+			} as never;
 		},
 		async restoreCheckpoint() {
 			throw new Error("unexpected restore");

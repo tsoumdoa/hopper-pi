@@ -44,14 +44,15 @@ export type ExpectedIdentity = {
 export type MutationSendHooks = {
 	/** Session-bound callers persist the exact wire request and journal the
 	 * start event before any bytes go out. */
-	onBeforeSend?: (request: import("../protocol/wire.js").ExecuteActionsRequest) => Promise<void>;
+	onBeforeSend?: (request: ExecuteActionsRequest) => Promise<void>;
 };
 
 export class V1OperationBackend implements OperationBackendClient {
 	constructor(
-		private readonly client: BackendClient,
+		readonly protocolClient: BackendClient,
 		private readonly options: {
 			expected?: ExpectedIdentity;
+			expectedCanvasDigest?: string | null;
 			hooks?: MutationSendHooks;
 		} = {},
 	) {}
@@ -75,7 +76,7 @@ export class V1OperationBackend implements OperationBackendClient {
 		const wireRequest = createWireRequest("query", {
 			query: { kind: type, input },
 		}) as QueryBackendRequest;
-		const response = await this.client.query<T>(wireRequest, signal);
+		const response = await this.protocolClient.query<T>(wireRequest, signal);
 		throwIfFailed(response);
 		return response.data as T;
 	}
@@ -96,7 +97,7 @@ export class V1OperationBackend implements OperationBackendClient {
 			| "viewport" | "grasshopper" | "rhino" | "mixed";
 		let info: WireResponse;
 		try {
-			info = await this.client.getInfo(signal);
+			info = await this.protocolClient.getInfo(signal);
 		} catch (error) {
 			throw toCoreError(error);
 		}
@@ -124,7 +125,7 @@ export class V1OperationBackend implements OperationBackendClient {
 			expectedBackendId,
 			expectedGrasshopperDocumentId,
 			expectedRhinoDocumentId,
-			expectedCanvasDigest: null,
+		expectedCanvasDigest: this.options.expectedCanvasDigest ?? null,
 			transactionName: "hopper call",
 			scope,
 			actions,
@@ -136,7 +137,7 @@ export class V1OperationBackend implements OperationBackendClient {
 		await this.options.hooks?.onBeforeSend?.(wireRequest);
 
 		try {
-			const response = await this.client.executeActions(wireRequest, signal);
+			const response = await this.protocolClient.executeActions(wireRequest, signal);
 			return {
 				outcome: response.outcome,
 				data: response.data,
@@ -156,7 +157,7 @@ export class V1OperationBackend implements OperationBackendClient {
 	}
 
 	async close(): Promise<void> {
-		await this.client.close();
+		await this.protocolClient.close();
 	}
 }
 

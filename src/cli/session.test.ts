@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,6 +25,7 @@ import type { CliIO } from "./io.js";
 import { handleCall, type CliDependencies } from "./handlers.js";
 import { handleHistory, handleSession } from "./session-handlers.js";
 import { SessionStore } from "../session/store.js";
+import { CheckpointStore } from "../session/checkpoints.js";
 
 const BACKEND_ID = "be_01TESTBACKEND000000000000" as const;
 const GH_ID = "ghd_01TESTCANVAS000000000000" as const;
@@ -78,14 +80,14 @@ function fakeClient(overrides: {
 				deduplicationWindowMs: 1,
 			});
 		},
-		async query(request: QueryBackendRequest): Promise<QueryBackendResponse<JsonValue>> {
+		async query<T extends JsonValue>(request: QueryBackendRequest): Promise<QueryBackendResponse<T>> {
 			throw new Error(`unexpected query ${(request as { type: string }).type}`);
 		},
 		async getRequestStatus(requestId: string): Promise<GetRequestStatusResponse> {
 			const cached = client.statusResponses.get(requestId);
 			if (cached) return cached;
 			return wireResponse("getRequestStatus", requestId as RequestId, "succeeded", {
-				targetRequestId: requestId,
+				targetRequestId: requestId as RequestId,
 				state: "not_found",
 				cachedResponse: null,
 			});
@@ -110,10 +112,29 @@ function fakeClient(overrides: {
 				});
 		},
 		async captureCheckpoint(request: CaptureCheckpointRequest): Promise<CaptureCheckpointResponse> {
-			throw new Error("unexpected checkpoint");
+			const bytes = Buffer.from("checkpoint-bytes");
+			return wireResponse("captureCheckpoint", request.requestId, "succeeded", {
+				schemaVersion: 1,
+				checkpointId: `cp_${request.requestId.slice(-8)}`,
+				backendId: BACKEND_ID,
+				grasshopperDocumentId: request.body.expectedGrasshopperDocumentId,
+				capturedAt: "2026-08-15T00:00:00.000Z",
+				encoding: "base64",
+				compression: "none",
+				bytes: bytes.toString("base64"),
+				byteLength: bytes.byteLength,
+				binarySha256: createHash("sha256").update(bytes).digest("hex"),
+				canvasDigest: "digest-live",
+				canonicalCanvas: { objects: [], wires: [], groups: [] },
+			});
 		},
 		async restoreCheckpoint(request: RestoreCheckpointRequest): Promise<RestoreCheckpointResponse> {
-			throw new Error("unexpected restore");
+			return wireResponse("restoreCheckpoint", request.requestId, "succeeded", {
+				restoredCheckpointId: request.body.checkpoint.checkpointId,
+				previousCanvasDigest: request.body.expectedLiveCanvasDigest,
+				currentCanvasDigest: request.body.checkpoint.canvasDigest,
+				grasshopperUndoRecorded: true,
+			});
 		},
 		async close() {},
 	};
@@ -155,6 +176,7 @@ async function makeDeps(overrides: {
 		createProtocolClient: () => client,
 		stateRoot: root,
 		sessions: new SessionStore(root),
+		checkpoints: new CheckpointStore(root),
 		io,
 		now: () => new Date(),
 	} as CliDependencies;
@@ -366,4 +388,75 @@ test("history show reports unknown edits", async () => {
 	);
 	assert.equal(missing.ok, false);
 	assert.equal(missing.error?.code, "request_not_found");
+});
+
+test("grasshopper mutations capture checkpoints and support undo/diff", async () => {
+	const { deps, client } = await makeDeps();
+	const session = await handleSession(
+		{ kind: "session.start", captureAllowed: false, json: true },
+		deps,
+	);
+	const sessionId = session.sessionId as `hs_${string}`;
+	const call = await handleCall({
+		kind: "call",
+		operation: "gh_edit_wire",
+		sessionId,
+		input: { kind: "inline", json: WIRE_INPUT },
+		allowCapture: false,
+		json: true,
+	}, deps);
+	assert.equal(call.ok, true, call.message);
+	assert.equal(client.executeActionsRequests[0]?.body.expectedCanvasDigest, "digest-live");
+
+	const diff = await handleHistory({ kind: "history.diff", sessionId, editId: "edit_000001", json: true }, deps);
+	assert.equal(diff.ok, true, diff.message);
+
+	const undo = await handleHistory({ kind: "history.undo", sessionId, editId: "edit_000001", json: true }, deps);
+	assert.equal(undo.ok, true, undo.message);
+	assert.equal(undo.editId, "edit_000002");
+});
+
+test("rhino-scoped history edits refuse durable undo", async () => {
+	const { deps } = await makeDeps();
+	const session = await handleSession(
+		{ kind: "session.start", captureAllowed: false, json: true },
+		deps,
+	);
+	const sessionId = session.sessionId as `hs_${string}`;
+	const { Journal } = await import("../session/journal.js");
+	await Journal.forSession(deps.stateRoot, sessionId).append({
+		schemaVersion: 1,
+		eventType: "request.started",
+		eventId: "evt_1",
+		sessionId,
+		editId: "edit_000001",
+		requestId: "req_01R",
+		occurredAt: "2026-08-16T00:00:00.000Z",
+		operation: "rh_run_script",
+		mutationScope: "rhino",
+		inputSummary: {},
+		backendId: BACKEND_ID,
+		grasshopperDocumentId: GH_ID,
+		rhinoDocumentId: RHINO_ID,
+		beforeCheckpointId: null,
+	});
+	await Journal.forSession(deps.stateRoot, sessionId).append({
+		schemaVersion: 1,
+		eventType: "request.outcome",
+		eventId: "evt_2",
+		sessionId,
+		editId: "edit_000001",
+		requestId: "req_01R",
+		occurredAt: "2026-08-16T00:00:01.000Z",
+		outcome: "succeeded",
+		resultSummary: {},
+		error: null,
+		warnings: [],
+		afterCheckpointId: null,
+		diff: null,
+		durationMs: 1,
+	});
+	const undo = await handleHistory({ kind: "history.undo", sessionId, editId: "edit_000001", json: true }, deps);
+	assert.equal(undo.ok, false);
+	assert.equal(undo.error?.code, "unsupported_undo");
 });

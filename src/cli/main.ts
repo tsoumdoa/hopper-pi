@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { helpText, parseArgs } from "./args.js";
+import { helpText, parseArgs, type ParsedCommand } from "./args.js";
 import { processIO, writeErr, writeOut, isTTY } from "./io.js";
 import {
 	CLI_VERSION,
@@ -12,6 +12,8 @@ import {
 	handleStatus,
 } from "./handlers.js";
 import { handleHistory, handleSession } from "./session-handlers.js";
+import { handleBatch } from "./batch.js";
+import { handlePlugin } from "./plugin.js";
 import { mapOutcomeToExitCode, type CliResponse } from "./response.js";
 
 export async function writeCliResponse(response: CliResponse, json: boolean, io: ReturnType<typeof processIO>): Promise<void> {
@@ -38,7 +40,7 @@ export async function writeCliResponse(response: CliResponse, json: boolean, io:
 }
 
 export async function runCli(argv: readonly string[], io: ReturnType<typeof processIO>): Promise<number> {
-	let parsed;
+	let parsed: ParsedCommand;
 	try {
 		parsed = parseArgs(argv, io.env);
 	} catch (error) {
@@ -74,6 +76,8 @@ export async function runCli(argv: readonly string[], io: ReturnType<typeof proc
 			return finish(handleSchema(parsed, deps), parsed.json, io);
 		case "call":
 			return finish(await handleCall(parsed, deps), parsed.json, io);
+		case "batch":
+			return finish(await handleBatch(parsed, deps), parsed.json, io);
 		case "session.start":
 		case "session.show":
 		case "session.list":
@@ -82,8 +86,14 @@ export async function runCli(argv: readonly string[], io: ReturnType<typeof proc
 			return finish(await handleSession(parsed, deps), parsed.json, io);
 		case "history.list":
 		case "history.show":
+		case "history.diff":
 		case "history.reconcile":
+		case "history.undo":
+		case "history.redo":
 			return finish(await handleHistory(parsed, deps), parsed.json, io);
+		case "plugin.install":
+		case "plugin.doctor":
+			return finish(await handlePlugin(parsed, deps), parsed.json, io);
 		case "parse-error":
 			await writeOut(io, `${JSON.stringify({
 				schemaVersion: 1,
@@ -98,7 +108,8 @@ export async function runCli(argv: readonly string[], io: ReturnType<typeof proc
 			})}\n`);
 			return 2;
 		default: {
-			const message = "Unsupported command.";
+			const exhaustive: never = parsed;
+			const message = `Unsupported command ${(exhaustive as { kind: string }).kind}.`;
 			await writeOut(io, `${JSON.stringify({
 				schemaVersion: 1,
 				ok: false,

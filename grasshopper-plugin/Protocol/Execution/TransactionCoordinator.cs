@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Grasshopper.Kernel;
 using Rhino;
+using rhino_zmq_poc.Protocol;
 
 namespace rhino_zmq_poc.Protocol.Execution
 {
@@ -98,6 +99,24 @@ namespace rhino_zmq_poc.Protocol.Execution
                 request.TransactionName,
                 ghDocument,
                 rhinoDocument);
+
+            var digestBefore = ComputeDigest(ghDocument);
+            if (!string.IsNullOrEmpty(request.ExpectedCanvasDigest) &&
+                !string.Equals(request.ExpectedCanvasDigest, digestBefore, StringComparison.Ordinal))
+            {
+                transaction.Rollback();
+                timer.Stop();
+                return Build(
+                    request,
+                    ExecutionOutcomes.Failed,
+                    new List<ActionResult>(),
+                    TransactionResult.Unchanged(),
+                    Error("canvas_conflict", "The live canvas digest does not match the expected digest.", false),
+                    timer.ElapsedMilliseconds,
+                    digestBefore,
+                    digestBefore);
+            }
+
             var results = new List<ActionResult>(request.Actions.Count);
 
             for (var index = 0; index < request.Actions.Count; index++)
@@ -126,18 +145,19 @@ namespace rhino_zmq_poc.Protocol.Execution
 
                 var rollback = transaction.Rollback();
                 timer.Stop();
-                return CompleteAfterFailure(request, results, rollback, result, timer.ElapsedMilliseconds);
+                return CompleteAfterFailure(request, results, rollback, result, timer.ElapsedMilliseconds, digestBefore, ComputeDigest(ghDocument));
             }
 
             var committed = transaction.Commit();
             timer.Stop();
+            var digestAfter = ComputeDigest(ghDocument);
             if (committed.Outcome == TransactionOutcomes.Unknown)
                 return Build(request, ExecutionOutcomes.Unknown, results, committed,
-                    Error("outcome_unknown", "The transaction commit outcome is unknown.", false), timer.ElapsedMilliseconds);
+                    Error("outcome_unknown", "The transaction commit outcome is unknown.", false), timer.ElapsedMilliseconds, digestBefore, digestAfter);
             if (committed.Outcome == TransactionOutcomes.Partial)
                 return Build(request, ExecutionOutcomes.Partial, results, committed,
-                    Error("partial_mutation", "The transaction committed only partially.", false), timer.ElapsedMilliseconds);
-            return Build(request, ExecutionOutcomes.Succeeded, results, committed, null, timer.ElapsedMilliseconds);
+                    Error("partial_mutation", "The transaction committed only partially.", false), timer.ElapsedMilliseconds, digestBefore, digestAfter);
+            return Build(request, ExecutionOutcomes.Succeeded, results, committed, null, timer.ElapsedMilliseconds, digestBefore, digestAfter);
         }
 
         private static ExecuteActionsResponse CompleteAfterFailure(
@@ -145,20 +165,22 @@ namespace rhino_zmq_poc.Protocol.Execution
             List<ActionResult> results,
             TransactionResult transaction,
             ActionResult failedAction,
-            long elapsedMs)
+            long elapsedMs,
+            string digestBefore,
+            string digestAfter)
         {
             if (failedAction.Outcome == ExecutionOutcomes.Unknown || transaction.Outcome == TransactionOutcomes.Unknown)
             {
                 return Build(request, ExecutionOutcomes.Unknown, results, transaction,
-                    failedAction.Error ?? Error("outcome_unknown", failedAction.Message, false), elapsedMs);
+                    failedAction.Error ?? Error("outcome_unknown", failedAction.Message, false), elapsedMs, digestBefore, digestAfter);
             }
             if (transaction.Outcome == TransactionOutcomes.Partial)
             {
                 return Build(request, ExecutionOutcomes.Partial, results, transaction,
-                    Error("partial_mutation", failedAction.Message, false), elapsedMs);
+                    Error("partial_mutation", failedAction.Message, false), elapsedMs, digestBefore, digestAfter);
             }
             return Build(request, ExecutionOutcomes.Failed, results, transaction,
-                failedAction.Error ?? Error("operation_failed", failedAction.Message, false), elapsedMs);
+                failedAction.Error ?? Error("operation_failed", failedAction.Message, false), elapsedMs, digestBefore, digestAfter);
         }
 
         private static void NormalizeActionResult(
@@ -214,14 +236,14 @@ namespace rhino_zmq_poc.Protocol.Execution
         }
 
         private static ExecuteActionsResponse Rejected(ExecuteActionsRequest request, HopperError error) =>
-            Build(request, ExecutionOutcomes.Failed, new List<ActionResult>(), TransactionResult.Unchanged(), error, 0);
+            Build(request, ExecutionOutcomes.Failed, new List<ActionResult>(), TransactionResult.Unchanged(), error, 0, null, null);
 
         private static ExecuteActionsResponse Unknown(ExecuteActionsRequest request, HopperError error) =>
             Build(request, ExecutionOutcomes.Unknown, new List<ActionResult>(), new TransactionResult
             {
                 Outcome = TransactionOutcomes.Unknown,
                 Limitations = new List<string> { "UI-thread work may still have completed." },
-            }, error, 0);
+            }, error, 0, null, null);
 
         private static ExecuteActionsResponse Build(
             ExecuteActionsRequest request,
@@ -229,7 +251,9 @@ namespace rhino_zmq_poc.Protocol.Execution
             List<ActionResult> actions,
             TransactionResult transaction,
             HopperError error,
-            long elapsedMs) => new ExecuteActionsResponse
+            long elapsedMs,
+            string digestBefore = null,
+            string digestAfter = null) => new ExecuteActionsResponse
         {
             RequestId = request?.RequestId,
             Outcome = outcome,
@@ -238,10 +262,24 @@ namespace rhino_zmq_poc.Protocol.Execution
                 PayloadSha256 = request?.PayloadSha256,
                 Actions = actions,
                 Transaction = transaction,
+                CanvasDigestBefore = digestBefore,
+                CanvasDigestAfter = digestAfter,
                 ElapsedMs = elapsedMs,
             },
             Error = error,
         };
+
+        private static string ComputeDigest(GH_Document document)
+        {
+            try
+            {
+                return document == null ? null : new CanvasCheckpointService().ComputeCanvasDigest(document);
+            }
+            catch
+            {
+                return null;
+            }
+        }
 
         private static HopperError Error(string code, string message, bool retryable) => new HopperError
         {

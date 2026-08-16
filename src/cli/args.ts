@@ -12,8 +12,15 @@ export type ParsedCommand =
 		allowCapture: boolean;
 		json: boolean;
 	}
+	| {
+		kind: "batch";
+		sessionId: SessionId;
+		input: InputSource;
+		json: boolean;
+	}
 	| SessionCommand
 	| HistoryCommand
+	| PluginCommand
 	| { kind: "help"; json: boolean }
 	| { kind: "version"; json: boolean }
 	| { kind: "parse-error"; message: string; json: boolean };
@@ -28,7 +35,14 @@ export type SessionCommand =
 export type HistoryCommand =
 	| { kind: "history.list"; sessionId: SessionId; json: boolean }
 	| { kind: "history.show"; sessionId: SessionId; editId: EditId; json: boolean }
-	| { kind: "history.reconcile"; sessionId: SessionId; editId: EditId; json: boolean };
+	| { kind: "history.diff"; sessionId: SessionId; editId: EditId; json: boolean }
+	| { kind: "history.reconcile"; sessionId: SessionId; editId: EditId; json: boolean }
+	| { kind: "history.undo"; sessionId: SessionId; editId: EditId; json: boolean }
+	| { kind: "history.redo"; sessionId: SessionId; editId: EditId; json: boolean };
+
+export type PluginCommand =
+	| { kind: "plugin.install"; force: boolean; json: boolean }
+	| { kind: "plugin.doctor"; json: boolean };
 
 export type InputSource =
 	| { kind: "file"; path: string }
@@ -62,13 +76,16 @@ commands:
   call <operation> [--session hs_...]      execute an operation
       (--input path.json | --input - | --data '{...}')
       [--allow-capture]
+  batch [--session hs_...]                 run prepared mutations as one edit
+      (--input path.json | --input - | --data '{...}')
   session start [--name "label"]           bind a new session to the live documents
       [--allow-capture]
   session show|close|rebind hs_...         inspect, close, or rebind a session
   session list                             list stored sessions
   history list hs_...                      list journal edits for a session
-  history show hs_... edit_000001          show one materialized edit
-  history reconcile hs_... edit_000001     resolve an unknown outcome
+  history show|diff|reconcile|undo|redo hs_... edit_000001
+  plugin install [--force]                 install the Grasshopper plugin
+  plugin doctor                            report plugin/backend install health
   help                                     show this help
   version                                  print the CLI version
 
@@ -76,7 +93,8 @@ global options:
   --json     emit one machine-readable JSON response document on stdout
 
 environment:
-  HOPPER_SESSION_ID      default session for call
+  HOPPER_SESSION_ID      default session for call/batch
+  HOPPER_STATE_DIR       override CLI session state root
   GH_ZMQ_REQ / GH_ZMQ_PUB / GH_ZMQ_PUSH / GH_ZMQ_TOKEN
                          backend connection overrides
 `;
@@ -116,6 +134,23 @@ export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv): Pars
 		}
 		case "call":
 			return parseCall(args, env, json);
+		case "batch":
+			return parseBatch(args, env, json);
+		case "plugin": {
+			const sub = args.shift();
+			switch (sub) {
+				case "install": {
+					const force = consumeFlag(args, "--force");
+					requireNoPositional(args, "plugin install");
+					return { kind: "plugin.install", force, json };
+				}
+				case "doctor":
+					requireNoPositional(args, "plugin doctor");
+					return { kind: "plugin.doctor", json };
+				default:
+					throw new ArgParseError("Unknown plugin subcommand. Use install or doctor.");
+			}
+		}
 		case "session": {
 			const sub = args.shift();
 			switch (sub) {
@@ -147,17 +182,23 @@ export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv): Pars
 					requireNoPositional(args, "history list");
 					return { kind: "history.list", sessionId, json };
 				case "show":
-				case "reconcile": {
+				case "diff":
+				case "reconcile":
+				case "undo":
+				case "redo": {
 					const editId = args.shift();
 					if (!editId || !isEditId(editId)) {
 						throw new ArgParseError(`history ${sub} requires an edit_... ID.`);
 					}
-					return sub === "show"
-						? { kind: "history.show", sessionId, editId, json }
-						: { kind: "history.reconcile", sessionId, editId, json };
+					requireNoPositional(args, `history ${sub}`);
+					if (sub === "show") return { kind: "history.show", sessionId, editId, json };
+					if (sub === "diff") return { kind: "history.diff", sessionId, editId, json };
+					if (sub === "reconcile") return { kind: "history.reconcile", sessionId, editId, json };
+					if (sub === "undo") return { kind: "history.undo", sessionId, editId, json };
+					return { kind: "history.redo", sessionId, editId, json };
 				}
 				default:
-					throw new ArgParseError("Unknown history subcommand. Use list, show, or reconcile.");
+					throw new ArgParseError("Unknown history subcommand. Use list, show, diff, reconcile, undo, or redo.");
 			}
 		}
 		default:
@@ -229,6 +270,47 @@ function parseCall(args: string[], env: NodeJS.ProcessEnv, json: boolean): Parse
 		allowCapture,
 		json,
 	};
+}
+
+function parseBatch(args: string[], env: NodeJS.ProcessEnv, json: boolean): ParsedCommand {
+	let sessionId: SessionId | undefined;
+	let input: InputSource | undefined;
+	while (args.length > 0) {
+		const arg = args.shift()!;
+		if (arg === "--session") {
+			const value = args.shift();
+			if (!value || !isSessionId(value)) {
+				throw new ArgParseError("--session expects a hs_... session ID.");
+			}
+			sessionId = value;
+		} else if (arg === "--input") {
+			const value = args.shift();
+			if (value === undefined) throw new ArgParseError("--input expects a path or '-'.");
+			if (input) throw new ArgParseError("Provide exactly one of --input or --data.");
+			input = value === "-" ? { kind: "stdin" } : { kind: "file", path: value };
+		} else if (arg === "--data") {
+			const value = args.shift();
+			if (value === undefined) throw new ArgParseError("--data expects a JSON string.");
+			if (input) throw new ArgParseError("Provide exactly one of --input or --data.");
+			input = { kind: "inline", json: value };
+		} else {
+			throw new ArgParseError(`Unknown option '${arg}' for batch.`);
+		}
+	}
+	if (!input) {
+		throw new ArgParseError(
+			"batch requires exactly one input source: --input path.json, --input -, or --data '{...}'.",
+		);
+	}
+	const envSession = env.HOPPER_SESSION_ID;
+	if (envSession && !isSessionId(envSession)) {
+		throw new ArgParseError("HOPPER_SESSION_ID is not a valid hs_... session ID.");
+	}
+	const resolvedSession = sessionId ?? (envSession as SessionId | undefined);
+	if (!resolvedSession) {
+		throw new ArgParseError("batch requires --session (or HOPPER_SESSION_ID).");
+	}
+	return { kind: "batch", sessionId: resolvedSession, input, json };
 }
 
 function parseSessionStart(args: string[], json: boolean): ParsedCommand {

@@ -9,10 +9,20 @@ import { cliError, cliResponse, type CliResponse } from "./response.js";
 import type { CliDependencies } from "./handlers.js";
 import { Journal, requestOutcomeEvent, type MaterializedEdit } from "../session/journal.js";
 import { SessionStore, SessionStoreError, type SessionRecord } from "../session/store.js";
-import { acquireSessionLock, SessionLockError } from "../session/lock.js";
+import { SessionLockError, withSessionLock } from "../session/lock.js";
 import { createBackendClient, type BackendClient } from "../protocol/backend-client.js";
-import type { GetRequestStatusResponse, WireResponse } from "../protocol/wire.js";
+import {
+	attachMutationPayloadSha256,
+	createRequestId,
+	createWireRequest,
+	type RestoreCheckpointRequest,
+	type GetRequestStatusResponse,
+	type WireResponse,
+} from "../protocol/wire.js";
 import { withConnectionToken } from "../infra/connection.js";
+import { captureSessionCheckpoint } from "./handlers.js";
+import { envelopeForRestore } from "../session/checkpoints.js";
+import { HopperCoreError } from "../core/errors.js";
 
 export async function handleSession(
 	command: SessionCommand,
@@ -65,6 +75,14 @@ export async function handleSession(
 			}
 			case "session.rebind": {
 				return rebindSession(command.sessionId, deps);
+			}
+			default: {
+				const exhaustive: never = command;
+				return cliError("session", {
+					code: "invalid_command",
+					message: `Unsupported session command ${(exhaustive as SessionCommand).kind}.`,
+					retryable: false,
+				});
 			}
 		}
 	} catch (error) {
@@ -159,6 +177,47 @@ export async function handleHistory(
 			}
 			case "history.reconcile": {
 				return reconcile(command.sessionId, command.editId, deps, journal);
+			}
+			case "history.diff": {
+				const edit = await journal.find(command.editId);
+				if (!edit) {
+					return cliError("history.diff", {
+						code: "request_not_found",
+						message: `Edit ${command.editId} does not exist.`,
+						retryable: false,
+					}, { sessionId: command.sessionId });
+				}
+				if (!edit.diff) {
+					return cliError("history.diff", {
+						code: "request_not_found",
+						message: `Edit ${command.editId} has no stored canvas diff.`,
+						retryable: false,
+					}, { sessionId: command.sessionId, editId: command.editId });
+				}
+				return cliResponse({
+					ok: true,
+					command: "history.diff",
+					sessionId: command.sessionId,
+					editId: command.editId,
+					outcome: "succeeded",
+					message: `Diff for ${command.editId}.`,
+					data: edit.diff as unknown as JsonValue,
+					artifacts: [],
+					warnings: [],
+					error: null,
+				});
+			}
+			case "history.undo":
+				return restoreHistory(command, "undo", deps, journal);
+			case "history.redo":
+				return restoreHistory(command, "redo", deps, journal);
+			default: {
+				const exhaustive: never = command;
+				return cliError("history", {
+					code: "invalid_command",
+					message: `Unsupported history command ${(exhaustive as HistoryCommand).kind}.`,
+					retryable: false,
+				});
 			}
 		}
 	} catch (error) {
@@ -310,6 +369,138 @@ async function reconcile(
 	}
 }
 
+async function restoreHistory(
+	command: Extract<HistoryCommand, { kind: "history.undo" | "history.redo" }>,
+	direction: "undo" | "redo",
+	deps: CliDependencies,
+	journal: Journal,
+): Promise<CliResponse> {
+	const edit = await journal.find(command.editId);
+	if (!edit) {
+		return cliError(command.kind, {
+			code: "request_not_found",
+			message: `Edit ${command.editId} does not exist.`,
+			retryable: false,
+		}, { sessionId: command.sessionId });
+	}
+	if (edit.mutationScope === "rhino" || edit.mutationScope === "mixed") {
+		return cliError(command.kind, {
+			code: "unsupported_undo",
+			message: `Durable ${direction} is not available for ${edit.mutationScope} edits.`,
+			retryable: false,
+		}, { sessionId: command.sessionId, editId: command.editId });
+	}
+	if (edit.state !== "succeeded") {
+		return cliError(command.kind, {
+			code: "unsupported_undo",
+			message: `Edit ${command.editId} is ${edit.state}; ${direction} requires a successful Grasshopper mutation.`,
+			retryable: false,
+		}, { sessionId: command.sessionId, editId: command.editId });
+	}
+	const restoreFromId = direction === "undo" ? edit.beforeCheckpointId : edit.afterCheckpointId;
+	const expectedLiveId = direction === "undo" ? edit.afterCheckpointId : edit.beforeCheckpointId;
+	if (!restoreFromId || !expectedLiveId) {
+		return cliError(command.kind, {
+			code: "unsupported_undo",
+			message: `Edit ${command.editId} is missing checkpoints required for ${direction}.`,
+			retryable: false,
+		}, { sessionId: command.sessionId, editId: command.editId });
+	}
+
+	const client = protocol(deps);
+	try {
+		let response: CliResponse | null = null;
+		await withLock(deps, command.sessionId, async () => {
+			const live = await sessionsOrFail(deps, command.sessionId);
+			if (live.closedAt) {
+				response = cliError(command.kind, {
+					code: "session_locked",
+					message: `Session ${command.sessionId} is closed.`,
+					retryable: false,
+				}, { sessionId: command.sessionId });
+				return;
+			}
+			const info = await client.getInfo();
+			if (info.backend.backendId !== live.binding.backendId) {
+				response = cliError(command.kind, {
+					code: "backend_conflict",
+					message: "The backend restarted since this session was bound. Run 'hopper session rebind'.",
+					retryable: false,
+				}, { sessionId: command.sessionId });
+				return;
+			}
+			await deps.checkpoints.verify(command.sessionId, restoreFromId);
+			const stored = await deps.checkpoints.read(command.sessionId, restoreFromId);
+			const expectedLive = await deps.checkpoints.read(command.sessionId, expectedLiveId);
+			const envelope = envelopeForRestore(stored);
+			const restoreRequest = attachMutationPayloadSha256(createWireRequest("restoreCheckpoint", {
+				expectedBackendId: live.binding.backendId,
+				expectedGrasshopperDocumentId: live.binding.grasshopperDocumentId,
+				expectedLiveCanvasDigest: expectedLive.record.canvasDigest,
+				checkpoint: envelope,
+				transactionName: `hopper history ${direction}`,
+			}, { requestId: createRequestId() })) as RestoreCheckpointRequest;
+			const restored = await client.restoreCheckpoint(restoreRequest);
+			if (restored.outcome !== "succeeded" || !restored.data) {
+				const error = restored.error ?? {
+					code: "operation_failed" as const,
+					message: `${direction} failed.`,
+					retryable: false,
+				};
+				response = cliError(command.kind, error, { sessionId: command.sessionId, editId: command.editId });
+				return;
+			}
+			const newEditId = await deps.sessions.reserveEditId(command.sessionId);
+			const after = await captureSessionCheckpoint(client, command.sessionId, {
+				backendId: live.binding.backendId,
+				grasshopperDocumentId: live.binding.grasshopperDocumentId,
+			}, deps);
+			await journal.append({
+				schemaVersion: 1,
+				eventType: "history.restored",
+				eventId: crypto.randomUUID(),
+				sessionId: command.sessionId,
+				editId: newEditId,
+				sourceEditId: command.editId,
+				requestId: restoreRequest.requestId,
+				occurredAt: new Date().toISOString(),
+				direction,
+				beforeCheckpointId: expectedLiveId,
+				afterCheckpointId: after.checkpointId,
+				outcome: "succeeded",
+			});
+			response = cliResponse({
+				ok: true,
+				command: command.kind,
+				sessionId: command.sessionId,
+				editId: newEditId,
+				requestId: restoreRequest.requestId,
+				outcome: "succeeded",
+				message: `${direction} of ${command.editId} restored checkpoint ${restoreFromId}.`,
+				data: {
+					sourceEditId: command.editId,
+					restored: restored.data,
+					afterCheckpointId: after.checkpointId,
+				} as JsonValue,
+				artifacts: [],
+				warnings: [],
+				error: null,
+			});
+		});
+		return response!;
+	} catch (error) {
+		if (error instanceof HopperCoreError) {
+			return cliError(command.kind, error.hopperError, {
+				sessionId: command.sessionId,
+				editId: command.editId,
+			});
+		}
+		return sessionError(command.kind, error);
+	} finally {
+		await client.close().catch(() => {});
+	}
+}
+
 function sessionResponse(command: string, message: string, session: SessionRecord): CliResponse {
 	return cliResponse({
 		ok: true,
@@ -359,7 +550,6 @@ export async function withLock<T>(
 	sessionId: SessionId,
 	fn: () => Promise<T>,
 ): Promise<T> {
-	const { withSessionLock } = await import("../session/lock.js");
 	return withSessionLock(sessionId, deps.stateRoot, fn);
 }
 
