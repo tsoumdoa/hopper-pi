@@ -88,7 +88,7 @@ test("help text documents the command surface", () => {
 	assert.match(text, /--allow-capture/);
 	assert.match(text, /batch/);
 	assert.match(text, /plugin install/);
-	assert.match(text, /history diff/);
+	assert.match(text, /history show\|diff\|reconcile\|undo\|redo/);
 });
 
 test("parses batch, history, and plugin commands", () => {
