@@ -55,11 +55,11 @@ test("plugin install refuses a symlink target without following it", async () =>
 	assert.equal(await readFile(join(real, "owned.dll"), "utf8"), "dll");
 });
 
-test("legacy build script refuses install mode without touching the override", async () => {
-	const root = await mkdtemp(join(tmpdir(), "hopper-legacy-plugin-"));
+test("postinstall delegates to the guarded installer without touching an ambiguous override", async () => {
+	const root = await mkdtemp(join(tmpdir(), "hopper-postinstall-plugin-"));
 	const marker = join(root, "keep.txt");
 	await writeFile(marker, "keep me\n");
-	const result = spawnSync(process.execPath, ["scripts/install-grasshopper-plugin.mjs", "--force"], {
+	const result = spawnSync(process.execPath, ["scripts/install-grasshopper-plugin.mjs"], {
 		cwd: process.cwd(),
 		env: {
 			...process.env,
@@ -69,7 +69,23 @@ test("legacy build script refuses install mode without touching the override", a
 		encoding: "utf8",
 	});
 
-	assert.equal(result.status, 1);
-	assert.match(result.stderr, /no longer installs files/);
+	assert.notEqual(result.status, 0);
+	assert.match(`${result.stdout}\n${result.stderr}`, /HOPPER_GH_LIBRARIES must be the Grasshopper Libraries folder/);
 	assert.equal(await readFile(marker, "utf8"), "keep me\n");
+});
+
+test("postinstall warns instead of breaking package installation by default", async () => {
+	const root = await mkdtemp(join(tmpdir(), "hopper-postinstall-plugin-"));
+	const result = spawnSync(process.execPath, ["scripts/install-grasshopper-plugin.mjs"], {
+		cwd: process.cwd(),
+		env: {
+			...process.env,
+			HOPPER_GH_LIBRARIES: root,
+			HOPPER_GH_STRICT: "0",
+		},
+		encoding: "utf8",
+	});
+
+	assert.equal(result.status, 0);
+	assert.match(result.stderr, /Automatic Grasshopper plugin install failed/);
 });

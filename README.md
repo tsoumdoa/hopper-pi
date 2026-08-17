@@ -28,8 +28,12 @@ available operations.
 
 ```bash
 npm install -g hopper-pi
-hopper plugin install --json
 ```
+
+The package's `postinstall` hook builds the C# plugin and copies the `.gha` and
+supporting `.dll` files into Grasshopper's `Libraries/hoppercode/` directory.
+Set `HOPPER_SKIP_GH_PLUGIN=1` to skip it, or run `hopper plugin install --json`
+later if automatic path detection is unavailable.
 
 1. Restart Rhino / Grasshopper.
 2. On the canvas, add the **Hopper Code Backend** component (`GHZMQ`, under Params → Util).
@@ -53,6 +57,9 @@ pnpm install
 pnpm test
 pnpm exec hopper --help
 ```
+
+`pnpm install` also runs the plugin installer unless `HOPPER_SKIP_GH_PLUGIN=1`
+is set.
 
 Skip the plugin build when iterating on TypeScript only:
 
@@ -136,7 +143,7 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 | ---- | ---- |
 | `src/` | `hopper` CLI, operation registry, sessions, protocol client |
 | `grasshopper-plugin/` | C# Grasshopper plugin (`rhino-zmq-poc.gha`) |
-| `scripts/install-grasshopper-plugin.mjs` | Build the plugin without installing it |
+| `scripts/install-grasshopper-plugin.mjs` | Postinstall entry point and build-only helper |
 | `mds/` | Modeling skills and reference docs for the agent |
 
 ## Environment variables

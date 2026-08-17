@@ -15,6 +15,7 @@
 		"build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json",
 		"test": "vitest run",
 		"dump:components": "tsx src/scripts/dump-components.ts",
+		"postinstall": "node scripts/install-grasshopper-plugin.mjs",
 		"build:gh-plugin": "node scripts/install-grasshopper-plugin.mjs --build-only",
 		"prepack": "npm run build"
 	},
