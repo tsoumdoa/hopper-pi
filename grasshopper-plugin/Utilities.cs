@@ -123,11 +123,12 @@ namespace rhino_zmq_poc
                 return func();
 
             var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var completed = 0;
+            // 0 = queued, 1 = running, 2 = completed, 3 = cancelled before start.
+            var state = 0;
 
             void ExecuteOnce()
             {
-                if (Interlocked.CompareExchange(ref completed, 1, 0) != 0)
+                if (Interlocked.CompareExchange(ref state, 1, 0) != 0)
                     return;
 
                 try
@@ -138,11 +139,15 @@ namespace rhino_zmq_poc
                 {
                     tcs.TrySetException(ex);
                 }
+                finally
+                {
+                    Volatile.Write(ref state, 2);
+                }
             }
 
             void PostToUi()
             {
-                if (Volatile.Read(ref completed) != 0)
+                if (Volatile.Read(ref state) != 0)
                     return;
 
                 try
@@ -166,7 +171,14 @@ namespace rhino_zmq_poc
             try
             {
                 if (!tcs.Task.Wait(wait))
-                    throw new TimeoutException($"RunOnUiThread timed out ({wait.TotalSeconds}s) waiting for UI thread");
+                {
+                    if (Interlocked.CompareExchange(ref state, 3, 0) == 0)
+                        throw new TimeoutException($"RunOnUiThread timed out ({wait.TotalSeconds}s) waiting for UI thread");
+
+                    // Work already started. It cannot be cancelled safely, so keep
+                    // the caller blocked until it completes and retains its gate.
+                    tcs.Task.Wait();
+                }
 
                 return tcs.Task.Result;
             }
@@ -177,7 +189,6 @@ namespace rhino_zmq_poc
             finally
             {
                 RhinoApp.Idle -= idleHandler;
-                Interlocked.Exchange(ref completed, 1);
             }
         }
     }

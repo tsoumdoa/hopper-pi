@@ -1,6 +1,7 @@
 using System;
 using System.Text.Json;
 using Grasshopper.Kernel;
+using Rhino;
 using rhino_zmq_poc.Protocol.Execution;
 
 namespace rhino_zmq_poc
@@ -27,10 +28,13 @@ namespace rhino_zmq_poc
 		}
 
 		public ActionResult ExecuteStructured(GH_Document doc, GhCommand command)
+			=> ExecuteStructured(doc, RhinoScriptExecutor.ResolveRhinoDoc(), command);
+
+		public ActionResult ExecuteStructured(GH_Document doc, RhinoDoc rhinoDoc, GhCommand command)
 		{
 			try
 			{
-				var message = ExecuteCore(doc, command);
+				var message = ExecuteCore(doc, rhinoDoc, command);
 				return ActionResult.Success(message, new { legacyMessage = message });
 			}
 			catch (CommandOperationException error)
@@ -40,6 +44,9 @@ namespace rhino_zmq_poc
 		}
 
 		private string ExecuteCore(GH_Document doc, GhCommand command)
+			=> ExecuteCore(doc, RhinoScriptExecutor.ResolveRhinoDoc(), command);
+
+		private string ExecuteCore(GH_Document doc, RhinoDoc rhinoDoc, GhCommand command)
 		{
 			if (command == null || string.IsNullOrEmpty(command.Action))
 				return CommandOperationException.Fail("Invalid command: missing action", "invalid_command");
@@ -49,7 +56,7 @@ namespace rhino_zmq_poc
 			if (!Handlers.TryGetValue(command.Action, out var handler))
 				return CommandOperationException.Fail($"Unknown action: {command.Action}", "invalid_command");
 
-            string result = handler(this, doc, command);
+            string result = handler(this, doc, rhinoDoc, command);
 
             _log?.Invoke($"Result: {result}");
 			return result;
@@ -333,33 +340,25 @@ namespace rhino_zmq_poc
         private string ExecuteCancelAgentTransaction(GH_Document doc, JsonElement _)
             => AgentTransaction.Cancel(doc);
 
-        private string ExecuteBeginRhinoAgentTransaction(JsonElement p)
+        private string ExecuteBeginRhinoAgentTransaction(RhinoDoc rhinoDoc, JsonElement p)
         {
             var param = p.Deserialize<BeginAgentTransactionParams>();
-            var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
             return RhinoAgentTransaction.Begin(rhinoDoc, param?.Name);
         }
 
-        private string ExecuteCommitRhinoAgentTransaction()
-        {
-            var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
-            return RhinoAgentTransaction.Commit(rhinoDoc);
-        }
+        private string ExecuteCommitRhinoAgentTransaction(RhinoDoc rhinoDoc)
+            => RhinoAgentTransaction.Commit(rhinoDoc);
 
-        private string ExecuteCancelRhinoAgentTransaction()
-        {
-            var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
-            return RhinoAgentTransaction.Cancel(rhinoDoc);
-        }
+        private string ExecuteCancelRhinoAgentTransaction(RhinoDoc rhinoDoc)
+            => RhinoAgentTransaction.Cancel(rhinoDoc);
 
-        private string ExecuteSetParamRhinoGeometry(GH_Document doc, JsonElement p)
+        private string ExecuteSetParamRhinoGeometry(GH_Document doc, RhinoDoc rhinoDoc, JsonElement p)
         {
             var param = p.Deserialize<SetParamRhinoGeometryParams>();
             if (param == null)
                 return CommandOperationException.Fail("setParamRhinoGeometry error: invalid params");
             if (string.IsNullOrWhiteSpace(param.TargetId))
                 return CommandOperationException.Fail("setParamRhinoGeometry error: missing targetId");
-            var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
             return RhinoParamGeometryOps.SetParamRhinoGeometry(doc, rhinoDoc, param);
         }
     }

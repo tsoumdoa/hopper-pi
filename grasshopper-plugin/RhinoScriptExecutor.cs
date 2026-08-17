@@ -32,12 +32,16 @@ namespace rhino_zmq_poc
 
         public static RunRhinoScriptResult Run(RunRhinoScriptParams p)
         {
+            return Run(ResolveRhinoDoc(), p);
+        }
+
+        public static RunRhinoScriptResult Run(RhinoDoc rhinoDoc, RunRhinoScriptParams p)
+        {
             if (p == null || string.IsNullOrWhiteSpace(p.Mode))
                 return Fail("Invalid params: mode is required");
             if (string.IsNullOrWhiteSpace(p.Source))
                 return Fail("Invalid params: source is required");
 
-            var rhinoDoc = ResolveRhinoDoc();
             if (rhinoDoc == null)
                 return Fail("No active Rhino document");
 

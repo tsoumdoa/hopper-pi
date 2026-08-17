@@ -62,12 +62,12 @@ pnpm install
 pnpm run dev
 ```
 
-Rebuild or reinstall the plugin manually:
+Build or reinstall the plugin manually:
 
 ```bash
 pnpm run build:gh-plugin
-# or force a full rebuild + copy:
-node scripts/install-grasshopper-plugin.mjs --force
+# Build and install through the guarded plugin manager:
+pnpm exec hopper plugin install --force
 ```
 
 ## Architecture
@@ -136,7 +136,7 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 | ---- | ---- |
 | `src/` | `hopper` CLI, operation registry, sessions, protocol client |
 | `grasshopper-plugin/` | C# Grasshopper plugin (`rhino-zmq-poc.gha`) |
-| `scripts/install-grasshopper-plugin.mjs` | Build + install plugin to Libraries |
+| `scripts/install-grasshopper-plugin.mjs` | Build the plugin without installing it |
 | `mds/` | Modeling skills and reference docs for the agent |
 
 ## Environment variables
@@ -158,8 +158,8 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 - **No backend / commands fail:** Ensure **Hopper Code Backend** is on the canvas and Rhino is running, then run `hopper status --json`. If ports 5555–5557 are busy, the backend should fall back to free loopback ports automatically and show the profile path in the component log.
 - **Invalid connection token:** Restart the frontend after the backend has started so it can reread the connection profile. If you are using manual endpoint env vars, also set `GH_ZMQ_TOKEN`.
 - **GH shows offline when Revit has focus (Rhino Inside):** The plugin marshals Grasshopper work onto Rhino's UI thread via `InvokeOnUiThread` (not `Idle`). Keep Grasshopper visible while the agent is working, then rerun `hopper status --json`. Older Rhino.Inside.Revit versions may still limit background Grasshopper — RiR 1.27+ improves this.
-- **Plugin did not install:** Install [.NET 7 SDK](https://dotnet.microsoft.com/download), then run `pnpm run build:gh-plugin`. On Windows, set `HOPPER_GH_LIBRARIES` if auto-detect fails.
-- **Stale plugin after `git pull`:** `node scripts/install-grasshopper-plugin.mjs --force`, then restart Rhino.
+- **Plugin did not install:** Install [.NET 7 SDK](https://dotnet.microsoft.com/download), then run `pnpm exec hopper plugin install`. On Windows, set `HOPPER_GH_LIBRARIES` to the Grasshopper `Libraries` folder if auto-detect fails.
+- **Stale plugin after `git pull`:** Run `pnpm exec hopper plugin install --force`, then restart Rhino.
 
 ## License
 

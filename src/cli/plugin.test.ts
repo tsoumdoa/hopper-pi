@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -52,4 +53,23 @@ test("plugin install refuses a symlink target without following it", async () =>
 		(error: unknown) => error instanceof HopperCoreError && /symlink/i.test(error.message),
 	);
 	assert.equal(await readFile(join(real, "owned.dll"), "utf8"), "dll");
+});
+
+test("legacy build script refuses install mode without touching the override", async () => {
+	const root = await mkdtemp(join(tmpdir(), "hopper-legacy-plugin-"));
+	const marker = join(root, "keep.txt");
+	await writeFile(marker, "keep me\n");
+	const result = spawnSync(process.execPath, ["scripts/install-grasshopper-plugin.mjs", "--force"], {
+		cwd: process.cwd(),
+		env: {
+			...process.env,
+			HOPPER_GH_LIBRARIES: root,
+			HOPPER_GH_STRICT: "1",
+		},
+		encoding: "utf8",
+	});
+
+	assert.equal(result.status, 1);
+	assert.match(result.stderr, /no longer installs files/);
+	assert.equal(await readFile(marker, "utf8"), "keep me\n");
 });

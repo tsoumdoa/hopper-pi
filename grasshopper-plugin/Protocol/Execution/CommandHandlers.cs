@@ -69,7 +69,7 @@ namespace rhino_zmq_poc.Protocol.Execution
 
         public ActionResult Execute(GH_Document ghDocument, RhinoDoc rhinoDocument, JsonElement parameters)
         {
-			return _executor.ExecuteStructured(ghDocument, new GhCommand
+			return _executor.ExecuteStructured(ghDocument, rhinoDocument, new GhCommand
 			{
 				Action = Action,
 				Params = parameters,

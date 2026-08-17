@@ -139,7 +139,10 @@ namespace rhino_zmq_poc
                 new CommandBackendActionExecutor(commands, ExecuteNonCommandAction),
                 _uiDispatcher,
                 _executionGate,
-                new ExpectedIdentityValidator(() => _identityService.Backend, CurrentDocuments),
+                new ExpectedIdentityValidator(
+                    () => _identityService.Backend,
+                    (grasshopperDocument, rhinoDocument) =>
+                        _identityService.GetDocuments(grasshopperDocument, rhinoDocument)),
                 new LegacyAgentTransactionFactory(),
                 GateTimeout);
         }
@@ -236,7 +239,7 @@ namespace rhino_zmq_poc
                         var mode = action.Input.TryGetProperty("mode", out var modeElement) ? modeElement.GetString() : null;
                         var source = action.Input.TryGetProperty("source", out var sourceElement) ? sourceElement.GetString() : null;
                         var echo = action.Input.TryGetProperty("echo", out var echoElement) && echoElement.ValueKind == JsonValueKind.True;
-                        var result = RhinoScriptExecutor.Run(new RunRhinoScriptParams
+                        var result = RhinoScriptExecutor.Run(rhinoDocument, new RunRhinoScriptParams
                         {
                             Mode = mode,
                             Source = source,
@@ -264,8 +267,7 @@ namespace rhino_zmq_poc
 						var param = action.Input.ValueKind == JsonValueKind.Object
 							? JsonSerializer.Deserialize<ControlRhinoViewParams>(action.Input.GetRawText())
 							: null;
-						var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
-						var controlled = ViewportCaptureOps.Control(rhinoDoc, param);
+						var controlled = ViewportCaptureOps.Control(rhinoDocument, param);
 						return controlled.Ok
 							? Execution.ActionResult.Success(controlled.Message ?? "View control applied.", controlled)
 							: new Execution.ActionResult

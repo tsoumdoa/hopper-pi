@@ -103,6 +103,68 @@ namespace grasshopper_plugin.Tests
             var result = ledger.GetStatus(RequestIdAt(DateTimeOffset.UtcNow), "digest");
             Assert.Equal(LedgerDecision.NotFound, result.Decision);
         }
+
+        [SkippableFact]
+        public async Task Accepted_request_is_completed_when_deserialization_throws()
+        {
+            Skip.If(!GrasshopperRuntime.Available, "Requires loadable Grasshopper runtime assemblies.");
+            await Accepted_request_is_completed_when_deserialization_throws_inner();
+        }
+
+        private async Task Accepted_request_is_completed_when_deserialization_throws_inner()
+        {
+            var ledger = new RequestLedger(capacity: 4);
+            var coordinator = new TransactionCoordinator(
+                new NoopExecutor(),
+                new InlineDispatcher(),
+                new DocumentExecutionGate(),
+                new AllowExecutionValidationHook(),
+                new ThrowingTransactionFactory(),
+                TimeSpan.FromSeconds(1));
+            var handler = new ExecuteActionsHandler(ledger, coordinator, () => null, () => null);
+            var body = JsonSerializer.SerializeToElement(new
+            {
+                expectedBackendId = "be_test",
+                expectedGrasshopperDocumentId = "ghd_test",
+                scope = "grasshopper",
+                actions = "not-an-array",
+            });
+            var digest = CanonicalJson.Sha256(body);
+            var requestId = RequestIdAt(DateTimeOffset.UtcNow);
+
+            await Assert.ThrowsAsync<JsonException>(() => handler.HandleAsync(new RequestContext
+            {
+                RequestId = requestId,
+                PayloadSha256 = digest,
+                ServiceStopping = CancellationToken.None,
+            }, body));
+
+            var status = ledger.GetStatus(requestId, digest);
+            Assert.Equal(LedgerDecision.Existing, status.Decision);
+            Assert.Equal("failed", status.Entry.State);
+            Assert.NotNull(status.Entry.CachedResponse);
+        }
+
+        private sealed class NoopExecutor : IBackendActionExecutor
+        {
+            public ActionResult Execute(GH_Document ghDocument, RhinoDoc rhinoDocument, BackendAction action) =>
+                ActionResult.Success("unused");
+        }
+
+        private sealed class InlineDispatcher : IUiThreadDispatcher
+        {
+            public Task<T> InvokeAsync<T>(Func<T> work, CancellationToken serviceStopping) =>
+                Task.FromResult(work());
+        }
+
+        private sealed class ThrowingTransactionFactory : IExecutionTransactionFactory
+        {
+            public IExecutionTransaction Begin(
+                string scope,
+                string transactionName,
+                GH_Document ghDocument,
+                RhinoDoc rhinoDocument) => throw new InvalidOperationException("unused");
+        }
     }
 
     public sealed class TransactionCoordinatorTests
@@ -220,7 +282,7 @@ namespace grasshopper_plugin.Tests
             };
             var transactions = new FakeTransactionFactory();
             var response = await Build(executor, transactions).ExecuteAsync(
-                Request(CommandAction(), CommandAction()), null, null, CancellationToken.None);
+                Request(CommandAction(), CommandAction()), () => null, () => null, CancellationToken.None);
 
             Assert.Equal("succeeded", response.Outcome);
             Assert.Null(response.Error);
@@ -247,7 +309,7 @@ namespace grasshopper_plugin.Tests
             };
             var transactions = new FakeTransactionFactory();
             var response = await Build(executor, transactions).ExecuteAsync(
-                Request(CommandAction("fail"), CommandAction()), null, null, CancellationToken.None);
+                Request(CommandAction("fail"), CommandAction()), () => null, () => null, CancellationToken.None);
 
             Assert.Equal("failed", response.Outcome);
             Assert.NotNull(response.Error);

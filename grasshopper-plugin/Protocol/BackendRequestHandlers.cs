@@ -134,11 +134,11 @@ namespace rhino_zmq_poc.Protocol
     internal sealed class ExpectedIdentityValidator : IExecutionValidationHook
     {
         private readonly Func<BackendIdentityDto> _backend;
-        private readonly Func<BackendDocumentsDto> _documents;
+        private readonly Func<GH_Document, RhinoDoc, BackendDocumentsDto> _documents;
 
         public ExpectedIdentityValidator(
             Func<BackendIdentityDto> backend,
-            Func<BackendDocumentsDto> documents)
+            Func<GH_Document, RhinoDoc, BackendDocumentsDto> documents)
         {
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
             _documents = documents ?? throw new ArgumentNullException(nameof(documents));
@@ -155,7 +155,7 @@ namespace rhino_zmq_poc.Protocol
             if (!string.Equals(request.ExpectedBackendId, backend?.BackendId, StringComparison.Ordinal))
                 return Error("backend_conflict", "The backend identity does not match the expected backend.");
 
-            var documents = _documents();
+            var documents = _documents(ghDocument, rhinoDocument);
             if (ghDocument == null || documents?.Grasshopper == null ||
                 !string.Equals(request.ExpectedGrasshopperDocumentId, documents.Grasshopper.DocumentId, StringComparison.Ordinal))
             {
@@ -230,24 +230,39 @@ namespace rhino_zmq_poc.Protocol
                     return ExistingResponse(context, begin.Entry);
             }
 
-            var request = ReadExecuteActionsRequest(context.RequestId, payloadSha256, body);
-            var startedAt = DateTimeOffset.UtcNow;
-            var execution = await _coordinator
-                .ExecuteAsync(request, _grasshopperDocument(), _rhinoDocument(), context.ServiceStopping)
-                .ConfigureAwait(false);
-            var completedAt = DateTimeOffset.UtcNow;
-
-            var cached = ToCachedResponse(execution);
-            if (!_ledger.Complete(context.RequestId, payloadSha256, execution.Outcome, cached))
+            try
             {
-                return BackendRequestRouter.Error(
-                    context.RequestId,
-                    "internal_error",
-                    "The request ledger entry disappeared during execution.",
-                    retryable: false);
-            }
+                var request = ReadExecuteActionsRequest(context.RequestId, payloadSha256, body);
+                var startedAt = DateTimeOffset.UtcNow;
+                var execution = await _coordinator
+                    .ExecuteAsync(request, _grasshopperDocument, _rhinoDocument, context.ServiceStopping)
+                    .ConfigureAwait(false);
+                var completedAt = DateTimeOffset.UtcNow;
 
-            return BuildExecutionResponse(context, execution, startedAt, completedAt);
+                var cached = ToCachedResponse(execution);
+                if (!_ledger.Complete(context.RequestId, payloadSha256, execution.Outcome, cached))
+                {
+                    return BackendRequestRouter.Error(
+                        context.RequestId,
+                        "internal_error",
+                        "The request ledger entry disappeared during execution.",
+                        retryable: false);
+                }
+
+                return BuildExecutionResponse(context, execution, startedAt, completedAt);
+            }
+            catch (Exception ex)
+            {
+                var requestError = ex as HopperRequestException;
+                var failed = BackendRequestRouter.Error(
+                    context.RequestId,
+                    requestError?.Code ?? "operation_failed",
+                    ex.Message,
+                    requestError?.Retryable ?? false,
+                    type: "executeActions");
+                _ledger.Complete(context.RequestId, payloadSha256, "failed", failed);
+                throw;
+            }
         }
 
         private static WireResponseDto<JsonElement> ExistingResponse(RequestContext context, RequestLedgerEntry entry)

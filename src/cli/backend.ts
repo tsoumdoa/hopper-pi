@@ -74,6 +74,11 @@ export class V1OperationBackend implements OperationBackendClient {
 			});
 		}
 		const wireRequest = createWireRequest("query", {
+			...(this.options.expected ? {
+				expectedBackendId: this.options.expected.backendId,
+				expectedGrasshopperDocumentId: this.options.expected.grasshopperDocumentId,
+				expectedRhinoDocumentId: this.options.expected.rhinoDocumentId,
+			} : {}),
 			query: { kind: type, input },
 		}) as QueryBackendRequest;
 		const response = await this.protocolClient.query<T>(wireRequest, signal);

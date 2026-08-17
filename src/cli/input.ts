@@ -27,6 +27,9 @@ export async function loadJsonInput(
 
 async function loadText(source: InputSource, io: CliIO, maxBytes: number): Promise<string> {
 	if (source.kind === "inline") {
+		if (Buffer.byteLength(source.json, "utf8") > maxBytes) {
+			throw new Error(`Input exceeds ${maxBytes} bytes.`);
+		}
 		return source.json;
 	}
 	if (source.kind === "stdin") {

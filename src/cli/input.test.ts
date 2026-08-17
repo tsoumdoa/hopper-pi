@@ -37,6 +37,10 @@ test("rejects invalid JSON, non-objects, and oversized inputs", async () => {
 		loadJsonInput({ kind: "stdin" }, io(" ".repeat(64)), 32),
 		/exceeds 32 bytes/,
 	);
+	await assert.rejects(
+		loadJsonInput({ kind: "inline", json: JSON.stringify({ value: "éé" }) }, io(), 14),
+		/exceeds 14 bytes/,
+	);
 });
 
 test("exit codes follow the plan mapping", () => {

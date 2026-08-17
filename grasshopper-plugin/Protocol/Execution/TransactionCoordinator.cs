@@ -36,17 +36,13 @@ namespace rhino_zmq_poc.Protocol.Execution
 
         public async Task<ExecuteActionsResponse> ExecuteAsync(
             ExecuteActionsRequest request,
-            GH_Document ghDocument,
-            RhinoDoc rhinoDocument,
+            Func<GH_Document> grasshopperDocument,
+            Func<RhinoDoc> rhinoDocument,
             CancellationToken serviceStopping)
         {
             var requestError = ValidateRequest(request);
             if (requestError != null)
                 return Rejected(request, requestError);
-
-            var identityError = _validation.Validate(request, ghDocument, rhinoDocument);
-            if (identityError != null)
-                return Rejected(request, identityError);
 
             IDisposable lease;
             try
@@ -70,7 +66,18 @@ namespace rhino_zmq_poc.Protocol.Execution
                 try
                 {
                     return await _dispatcher.InvokeAsync(
-                        () => ExecuteOnUiThread(request, ghDocument, rhinoDocument),
+                        () =>
+                        {
+                            var exactGrasshopperDocument = grasshopperDocument?.Invoke();
+                            var exactRhinoDocument = rhinoDocument?.Invoke();
+                            var identityError = _validation.Validate(
+                                request,
+                                exactGrasshopperDocument,
+                                exactRhinoDocument);
+                            return identityError == null
+                                ? ExecuteOnUiThread(request, exactGrasshopperDocument, exactRhinoDocument)
+                                : Rejected(request, identityError);
+                        },
                         serviceStopping).ConfigureAwait(false);
                 }
                 catch (TimeoutException ex)

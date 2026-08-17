@@ -1,4 +1,9 @@
-import type { JsonObject, JsonValue, MutationScope } from "../core/contracts.js";
+import type {
+	ExecuteActionsResponse,
+	JsonObject,
+	JsonValue,
+	MutationScope,
+} from "../core/contracts.js";
 import { HopperCoreError } from "../core/errors.js";
 import type { PreparedMutation, ResolvedOperationCall } from "../core/operations.js";
 import { cliError, cliResponse, type CliResponse } from "./response.js";
@@ -74,23 +79,6 @@ export async function handleBatch(
 	}
 
 	const resolved: ResolvedOperationCall[] = [];
-	const prepared: PreparedMutation[] = [];
-	const dummyContext = {
-		signal: AbortSignal.timeout(30_000),
-		requestId: "req_batch_prepare" as const,
-		session: null,
-		backend: {
-			query: async <T extends JsonValue>() => null as T,
-			executeActions: async () => ({ outcome: "succeeded" as const, data: null, error: null }),
-		},
-		artifacts: {
-			write: async () => {
-				throw new Error("batch preparation must not write artifacts");
-			},
-		},
-		reportProgress: () => {},
-		now: () => deps.now(),
-	};
 
 	for (const item of items) {
 		let call: ResolvedOperationCall;
@@ -120,22 +108,10 @@ export async function handleBatch(
 				retryable: false,
 			}, { operation: item.operation });
 		}
-		try {
-			prepared.push(await call.operation.prepareMutation(call.input, dummyContext));
-		} catch (error) {
-			if (error instanceof HopperCoreError) {
-				return cliError("batch", error.hopperError, { operation: item.operation });
-			}
-			return cliError("batch", {
-				code: "operation_not_batchable",
-				message: error instanceof Error ? error.message : String(error),
-				retryable: false,
-			}, { operation: item.operation });
-		}
 		resolved.push(call);
 	}
 
-	const scopes = new Set(prepared.map((entry) => entry.scope));
+	const scopes = new Set(resolved.map((entry) => entry.scope));
 	if (scopes.size !== 1) {
 		return cliError("batch", {
 			code: "operation_not_batchable",
@@ -144,16 +120,44 @@ export async function handleBatch(
 		});
 	}
 
-	const actions = prepared.flatMap((entry) => entry.actions);
 	const first = resolved[0]!;
 	const registry = Object.create(deps.registry) as CliDependencies["registry"];
 	registry.resolve = () => first;
 	registry.execute = async (_call, context) => {
+		const prepared: PreparedMutation[] = [];
+		const ranges: Array<{ start: number; count: number }> = [];
+		let actionOffset = 0;
+		for (const call of resolved) {
+			try {
+				const mutation = await call.operation.prepareMutation!(call.input, context);
+				prepared.push(mutation);
+				ranges.push({ start: actionOffset, count: mutation.actions.length });
+				actionOffset += mutation.actions.length;
+			} catch (error) {
+				if (error instanceof HopperCoreError) throw error;
+				throw new HopperCoreError({
+					code: "operation_not_batchable",
+					message: error instanceof Error ? error.message : String(error),
+					retryable: false,
+					details: { operation: call.operation.name },
+				});
+			}
+		}
+		const preparedScopes = new Set(prepared.map((entry) => entry.scope));
+		if (preparedScopes.size !== 1) {
+			throw new HopperCoreError({
+				code: "operation_not_batchable",
+				message: "batch items must share one mutation scope; mixed document bindings are rejected.",
+				retryable: false,
+			});
+		}
+		const actions = prepared.flatMap((entry) => entry.actions);
 		const response = await context.backend.executeActions({
-			scope: [...scopes][0] as MutationScope,
+			scope: [...preparedScopes][0] as MutationScope,
 			actions,
 		}, context.signal);
-		const finished = prepared.map((entry) => entry.finish(response));
+		const finished = prepared.map((entry, index) =>
+			entry.finish(sliceActionResponse(response, ranges[index]!)));
 		const failed = finished.find((result) => result.outcome !== "succeeded");
 		return {
 			outcome: failed?.outcome ?? "succeeded",
@@ -184,6 +188,27 @@ export async function handleBatch(
 		allowCapture: false,
 		json: command.json,
 	}, { ...deps, registry });
+}
+
+function sliceActionResponse(
+	response: ExecuteActionsResponse,
+	range: { start: number; count: number },
+): ExecuteActionsResponse {
+	if (!response.data || typeof response.data !== "object" || Array.isArray(response.data)) {
+		return response;
+	}
+	const actions = Array.isArray(response.data.actions) ? response.data.actions : null;
+	if (!actions) return response;
+	return {
+		...response,
+		data: {
+			...response.data,
+			actions: actions.slice(range.start, range.start + range.count).map((action, index) =>
+				action && typeof action === "object" && !Array.isArray(action)
+					? { ...action, index }
+					: action),
+		},
+	};
 }
 
 export function summarizeBatch(items: BatchItem[]): JsonObject {
