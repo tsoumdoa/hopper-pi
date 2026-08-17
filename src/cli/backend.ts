@@ -142,6 +142,7 @@ export class V1OperationBackend implements OperationBackendClient {
 				outcome: response.outcome,
 				data: response.data,
 				error: response.error,
+				canvasDigestAfter: response.data?.canvasDigestAfter ?? null,
 			};
 		} catch (error) {
 			const coreError = toCoreError(error);
@@ -150,6 +151,7 @@ export class V1OperationBackend implements OperationBackendClient {
 					outcome: "unknown",
 					data: null,
 					error: coreError.hopperError,
+					canvasDigestAfter: null,
 				};
 			}
 			throw coreError;

@@ -387,16 +387,31 @@ async function executeRead(index: number, item: Extract<GhEditScriptItem, { acti
 		message: "Parsed the C# script into structured parts.", data: JSON.parse(JSON.stringify(parts)), error: null };
 }
 
-function itemFromMutationResponse(index: number, item: GhEditScriptItem, response: ExecuteActionsResponse): ScriptItemResult {
-	const succeeded = response.outcome === "succeeded";
+function itemFromMutationResponse(
+	index: number,
+	item: GhEditScriptItem,
+	response: ExecuteActionsResponse,
+	actionIndex = index,
+): ScriptItemResult {
+	const envelope = response.data && typeof response.data === "object" && !Array.isArray(response.data)
+		? response.data
+		: null;
+	const action = envelope && Array.isArray(envelope.actions) ? envelope.actions[actionIndex] : null;
+	const actionRecord = action && typeof action === "object" && !Array.isArray(action) ? action : null;
+	const actionOutcome = actionRecord?.outcome;
+	const succeeded = actionOutcome === "succeeded"
+		|| (actionOutcome === undefined && response.outcome === "succeeded");
 	return {
 		index,
 		action: item.action,
-		outcome: succeeded ? "succeeded" : response.outcome === "unknown" ? "skipped" : "failed",
+		outcome: succeeded ? "succeeded"
+			: actionOutcome === "skipped" || actionOutcome === "unknown" || response.outcome === "unknown"
+				? "skipped" : "failed",
 		targetId: targetId(item),
-		message: succeeded ? `${item.action} completed.` : response.error?.message ?? `${item.action} failed.`,
-		data: response.data,
-		error: succeeded ? null : response.error ?? {
+		message: succeeded ? (actionRecord?.message as string | undefined) ?? `${item.action} completed.`
+			: (actionRecord?.message as string | undefined) ?? response.error?.message ?? `${item.action} failed.`,
+		data: actionRecord?.data ?? null,
+		error: succeeded ? null : (actionRecord?.error as HopperError | null | undefined) ?? response.error ?? {
 			code: response.outcome === "unknown" ? "outcome_unknown" : "operation_failed",
 			message: `${item.action} ended with outcome ${response.outcome}.`,
 			retryable: response.outcome === "unknown",
@@ -408,6 +423,7 @@ function finishResult(
 	items: ScriptItemResult[],
 	mutationCount: number,
 	forcedOutcome?: OperationOutcome,
+	canvasDigestAfter?: string | null,
 ): OperationResult<GhEditScriptData> {
 	if (forcedOutcome === "unknown") {
 		const error: HopperError = {
@@ -415,11 +431,11 @@ function finishResult(
 			message: "The backend could not prove whether the script mutation completed.",
 			retryable: true,
 		};
-		return { outcome: "unknown", message: error.message, data: { items }, warnings: [], artifacts: [], error };
+		return { outcome: "unknown", message: error.message, data: { items }, execution: { canvasDigestAfter: canvasDigestAfter ?? null }, warnings: [], artifacts: [], error };
 	}
 	const failures = items.filter((item) => item.outcome === "failed");
 	if (failures.length === 0) {
-		return { outcome: "succeeded", message: `Completed ${items.length} script item(s).`, data: { items }, warnings: [], artifacts: [], error: null };
+		return { outcome: "succeeded", message: `Completed ${items.length} script item(s).`, data: { items }, execution: { canvasDigestAfter: canvasDigestAfter ?? null }, warnings: [], artifacts: [], error: null };
 	}
 	const successes = items.length - failures.length;
 	const outcome: OperationOutcome = successes > 0 ? "partial" : "failed";
@@ -428,7 +444,7 @@ function finishResult(
 		message: `${failures.length} of ${items.length} script item(s) failed.`,
 		retryable: failures.some((item) => item.error?.retryable === true),
 	};
-	return { outcome, message: error.message, data: { items }, warnings: [], artifacts: [], error };
+	return { outcome, message: error.message, data: { items }, execution: { canvasDigestAfter: canvasDigestAfter ?? null }, warnings: [], artifacts: [], error };
 }
 
 export async function prepareGhEditScriptMutation(
@@ -449,7 +465,7 @@ export async function prepareGhEditScriptMutation(
 		actions,
 		finish(response) {
 			const results = input.items.map((item, index) => itemFromMutationResponse(index, item, response));
-			return finishResult(results, input.items.length, response.outcome);
+			return finishResult(results, input.items.length, response.outcome, response.canvasDigestAfter);
 		},
 	};
 }
@@ -482,8 +498,7 @@ export const ghEditScriptOperation = defineOperation<GhEditScriptInput, GhEditSc
 		}
 
 		const results: ScriptItemResult[] = [];
-		let mutationCount = 0;
-		let forcedOutcome: OperationOutcome | undefined;
+		const mutations: Array<{ index: number; item: GhEditScriptItem; action: BackendAction }> = [];
 		for (const [index, item] of input.items.entries()) {
 			context.reportProgress({
 				phase: READ_ACTIONS.has(item.action) ? "query" : "execute",
@@ -496,33 +511,34 @@ export const ghEditScriptOperation = defineOperation<GhEditScriptInput, GhEditSc
 					results.push(await executeRead(index, item, context));
 					continue;
 				}
-				mutationCount++;
-				const action = await mutationAction(item, context);
-				const response = await context.backend.executeActions({
-					scope: "grasshopper",
-					actions: [action],
-				}, context.signal);
-				results.push(itemFromMutationResponse(index, item, response));
-				if (response.outcome === "unknown") {
-					forcedOutcome = "unknown";
-					for (let skippedIndex = index + 1; skippedIndex < input.items.length; skippedIndex++) {
-						const skipped = input.items[skippedIndex]!;
-						results.push({
-							index: skippedIndex,
-							action: skipped.action,
-							outcome: "skipped",
-							targetId: targetId(skipped),
-							message: "Skipped because the previous mutation outcome is unknown.",
-							data: null,
-							error: null,
-						});
-					}
-					break;
-				}
+				mutations.push({ index, item, action: await mutationAction(item, context) });
 			} catch (error) {
 				results.push(failedItem(index, item, error));
 			}
 		}
-		return finishResult(results, mutationCount, forcedOutcome);
+		if (results.some((item) => item.outcome === "failed")) {
+			for (const mutation of mutations) {
+				results.push({
+					index: mutation.index,
+					action: mutation.item.action,
+					outcome: "skipped",
+					targetId: targetId(mutation.item),
+					message: "Skipped because mixed-call preparation failed before mutation execution.",
+					data: null,
+					error: null,
+				});
+			}
+			results.sort((left, right) => left.index - right.index);
+			return finishResult(results, mutations.length);
+		}
+		const response = await context.backend.executeActions({
+			scope: "grasshopper",
+			actions: mutations.map((mutation) => mutation.action),
+		}, context.signal);
+		for (const [actionIndex, mutation] of mutations.entries()) {
+			results.push(itemFromMutationResponse(mutation.index, mutation.item, response, actionIndex));
+		}
+		results.sort((left, right) => left.index - right.index);
+		return finishResult(results, mutations.length, response.outcome, response.canvasDigestAfter);
 	},
 });

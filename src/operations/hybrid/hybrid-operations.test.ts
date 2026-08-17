@@ -123,8 +123,9 @@ test("gh_param_rhino merges mixed read and mutation results in original order", 
 		{ action: "internalize", targetId: "p3", rhinoQuery: { selectionOnly: true } },
 	] }, harness.value);
 	assert.equal(harness.queries.length, 1);
-	assert.equal(harness.executions.length, 2);
-	assert.deepEqual(events, ["mutation", "read", "mutation"]);
+	assert.equal(harness.executions.length, 1);
+	assert.equal((harness.executions[0]?.actions as JsonValue[]).length, 2);
+	assert.deepEqual(events, ["read", "mutation"]);
 	assert.deepEqual(response.data?.items.map((item) => [item.index, item.action]), [
 		[0, "reference"],
 		[1, "get"],
@@ -145,7 +146,7 @@ test("a failed read before mutation stops later work and marks it skipped", asyn
 	assert.deepEqual(response.data?.items.map((item) => item.outcome), ["failed", "skipped"]);
 });
 
-test("a successful mutation followed by a failed read returns partial", async () => {
+test("a failed mixed-call read prevents every mutation", async () => {
 	const events: string[] = [];
 	const harness = context({
 		execute: async () => {
@@ -163,12 +164,12 @@ test("a successful mutation followed by a failed read returns partial", async ()
 		{ action: "removeInput", targetId: "script", name: "y" },
 	] }, harness.value);
 
-	assert.deepEqual(events, ["mutation", "read"]);
-	assert.equal(harness.executions.length, 1);
-	assert.equal(response.outcome, "partial");
-	assert.equal(response.error?.code, "partial_mutation");
+	assert.deepEqual(events, ["read"]);
+	assert.equal(harness.executions.length, 0);
+	assert.equal(response.outcome, "failed");
+	assert.equal(response.error?.code, "operation_failed");
 	assert.deepEqual(response.data?.items.map((item) => item.outcome), [
-		"succeeded", "failed", "skipped",
+		"skipped", "failed", "skipped",
 	]);
 });
 
@@ -193,13 +194,13 @@ test("an unknown mutation stops mixed execution and preserves unknown", async ()
 	] }, harness.value);
 
 	assert.equal(harness.executions.length, 1);
-	assert.equal(harness.queries.length, 0);
+	assert.equal(harness.queries.length, 1);
 	assert.equal(response.outcome, "unknown");
 	assert.equal(response.error?.code, "outcome_unknown");
 	assert.deepEqual(response.data?.items.map((item) => item.outcome), [
-		"skipped", "skipped", "skipped",
+		"skipped", "succeeded", "skipped",
 	]);
-	assert.match(response.data?.items[1]?.message ?? "", /unknown outcome/);
+	assert.match(response.data?.items[0]?.message ?? "", /outcome unknown/);
 });
 
 test("mutation-only execution retains one batched executeActions request", async () => {

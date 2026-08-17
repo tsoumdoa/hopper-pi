@@ -34,6 +34,17 @@ namespace grasshopper_plugin.Tests
         }
 
         [Fact]
+        public void Digest_changes_when_persistent_properties_change()
+        {
+            var before = SampleCanvas("same");
+            var after = SampleCanvas("same");
+            before.Objects[0].Properties["value"] = JsonSerializer.SerializeToElement(1.0);
+            after.Objects[0].Properties["value"] = JsonSerializer.SerializeToElement(2.0);
+
+            Assert.NotEqual(CanvasCanonical.Digest(before), CanvasCanonical.Digest(after));
+        }
+
+        [Fact]
         public void DecodeAndValidate_rejects_corrupt_bytes()
         {
             var payload = new byte[] { 1, 2, 3, 4 };

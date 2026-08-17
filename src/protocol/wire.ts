@@ -152,7 +152,7 @@ export type LowLevelCommand<A extends MutationCommandAction = MutationCommandAct
 };
 
 export type RhRunScriptInput = {
-	mode: "python" | "csharp";
+	mode: "command" | "python" | "csharp";
 	source: string;
 	echo?: boolean;
 };
@@ -308,4 +308,3 @@ export function createWireRequest<T extends string, B extends JsonObject>(
 		body,
 	};
 }
-

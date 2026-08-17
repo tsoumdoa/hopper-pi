@@ -167,6 +167,18 @@ test("status maps offline backends to exit code 3 JSON", async () => {
 	assert.equal(response.error?.code, "backend_offline");
 });
 
+test("status does not report a failed backend envelope as online", async () => {
+	const io = memoryIO();
+	const info = infoResponse();
+	info.outcome = "failed";
+	info.error = { code: "authentication_failed", message: "bad token", retryable: false };
+	const response = await handleStatus({ kind: "status", json: true }, deps(io, {
+		createProtocolClient: fakeProtocolClient({ info }),
+	}));
+	assert.equal(response.ok, false);
+	assert.equal(response.error?.code, "authentication_failed");
+});
+
 test("catalog lists every registered operation", () => {
 	const io = memoryIO();
 	const response = handleCatalog({ kind: "catalog", json: true }, deps(io));

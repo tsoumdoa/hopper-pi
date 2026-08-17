@@ -10,7 +10,7 @@ namespace rhino_zmq_poc
         public static string CreateScriptNode(GH_Document doc, CreateScriptNodeParams param)
         {
             if (!GraphObjectFactory.TryCreateScript(doc, param, out var created, out var error))
-                return $"createScriptNode error: {error}";
+                return CommandOperationException.Fail($"createScriptNode error: {error}");
             created.ExpireSolution(true);
             return $"createScriptNode: added {param.Language} script ({created.InstanceGuid}) at ({param.Position.X}, {param.Position.Y})";
         }
@@ -20,7 +20,7 @@ namespace rhino_zmq_poc
             try
             {
                 if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"setScriptCode error: {err}";
+                return CommandOperationException.Fail($"setScriptCode error: {err}");
 
                 var reflector = GhScriptReflector.Get();
                 reflector.SetSource(obj, param.Code);
@@ -28,7 +28,8 @@ namespace rhino_zmq_poc
                 var comp = obj as GH_Component;
                 if (comp != null && (param.Inputs != null || param.Outputs != null))
                 {
-                    comp.RecordUndoEvent("Sync script params");
+					if (!AgentTransaction.IsActive)
+						comp.RecordUndoEvent("Sync script params");
                     ComponentLifecycleOps.SyncScriptParams(comp, param.Inputs, param.Outputs);
                 }
 
@@ -38,7 +39,7 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"setScriptCode error: {ex.GetType().Name}: {ex.Message}";
+                return CommandOperationException.Fail($"setScriptCode error: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -50,7 +51,7 @@ namespace rhino_zmq_poc
             try
             {
                 if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"getScriptCode error: {err}";
+                return CommandOperationException.Fail($"getScriptCode error: {err}");
 
                 var reflector = GhScriptReflector.Get();
                 var code = reflector.GetSourceCode(obj);
@@ -59,7 +60,7 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"getScriptCode error: {ex.GetType().Name}: {ex.Message}";
+                return CommandOperationException.Fail($"getScriptCode error: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -68,16 +69,16 @@ namespace rhino_zmq_poc
             try
             {
                 if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"addScriptInput error: {err}";
+                return CommandOperationException.Fail($"addScriptInput error: {err}");
                 var comp = obj as GH_Component;
-                if (comp == null) return $"addScriptInput error: '{param.TargetId}' is not a GH_Component";
+                if (comp == null) return CommandOperationException.Fail($"addScriptInput error: '{param.TargetId}' is not a GH_Component");
                 ComponentLifecycleOps.AddScriptInputParam(comp, param.Name, access: param.Access, dataMapping: param.DataMapping, simplify: param.Simplify, reverse: param.Reverse, typeHint: param.TypeHint);
                 comp.ExpireSolution(true);
                 return $"addScriptInput: added input '{param.Name}' on ({param.TargetId})";
             }
             catch (Exception ex)
             {
-                return $"addScriptInput error: {ex.GetType().Name}: {ex.Message}";
+                return CommandOperationException.Fail($"addScriptInput error: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -86,15 +87,15 @@ namespace rhino_zmq_poc
             try
             {
                 if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"removeScriptInput error: {err}";
+                return CommandOperationException.Fail($"removeScriptInput error: {err}");
                 var comp = obj as GH_Component;
-                if (comp == null) return $"removeScriptInput error: '{param.TargetId}' is not a GH_Component";
+                if (comp == null) return CommandOperationException.Fail($"removeScriptInput error: '{param.TargetId}' is not a GH_Component");
                 ComponentLifecycleOps.RemoveScriptInputParam(comp, param.Name);
                 return $"removeScriptInput: removed input '{param.Name}' from ({param.TargetId})";
             }
             catch (Exception ex)
             {
-                return $"removeScriptInput error: {ex.GetType().Name}: {ex.Message}";
+                return CommandOperationException.Fail($"removeScriptInput error: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -103,16 +104,16 @@ namespace rhino_zmq_poc
             try
             {
                 if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"addScriptOutput error: {err}";
+                return CommandOperationException.Fail($"addScriptOutput error: {err}");
                 var comp = obj as GH_Component;
-                if (comp == null) return $"addScriptOutput error: '{param.TargetId}' is not a GH_Component";
+                if (comp == null) return CommandOperationException.Fail($"addScriptOutput error: '{param.TargetId}' is not a GH_Component");
                 ComponentLifecycleOps.AddScriptOutputParam(comp, param.Name, dataMapping: param.DataMapping, simplify: param.Simplify, reverse: param.Reverse, typeHint: param.TypeHint);
                 comp.ExpireSolution(true);
                 return $"addScriptOutput: added output '{param.Name}' on ({param.TargetId})";
             }
             catch (Exception ex)
             {
-                return $"addScriptOutput error: {ex.GetType().Name}: {ex.Message}";
+                return CommandOperationException.Fail($"addScriptOutput error: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -121,15 +122,15 @@ namespace rhino_zmq_poc
             try
             {
                 if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"removeScriptOutput error: {err}";
+                return CommandOperationException.Fail($"removeScriptOutput error: {err}");
                 var comp = obj as GH_Component;
-                if (comp == null) return $"removeScriptOutput error: '{param.TargetId}' is not a GH_Component";
+                if (comp == null) return CommandOperationException.Fail($"removeScriptOutput error: '{param.TargetId}' is not a GH_Component");
                 ComponentLifecycleOps.RemoveScriptOutputParam(comp, param.Name);
                 return $"removeScriptOutput: removed output '{param.Name}' from ({param.TargetId})";
             }
             catch (Exception ex)
             {
-                return $"removeScriptOutput error: {ex.GetType().Name}: {ex.Message}";
+                return CommandOperationException.Fail($"removeScriptOutput error: {ex.GetType().Name}: {ex.Message}");
             }
         }
     }

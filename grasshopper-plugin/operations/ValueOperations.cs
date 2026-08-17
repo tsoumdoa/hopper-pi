@@ -11,14 +11,14 @@ namespace rhino_zmq_poc
         public static string CreateSlider(GH_Document doc, CreateSliderParams param)
         {
             if (!GraphObjectFactory.TryCreateSlider(doc, param, out var created, out var error))
-                return $"createSlider error: {error}";
+                return CommandOperationException.Fail($"createSlider error: {error}");
             return $"createSlider: created ({created.InstanceGuid}) at ({param.Position.X}, {param.Position.Y})";
         }
 
         public static string EditSliderRange(GH_Document doc, EditSliderRangeParams param)
         {
             if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"editSliderRange error: {err}";
+                return CommandOperationException.Fail($"editSliderRange error: {err}");
 
             if (obj is GH_NumberSlider slider)
             {
@@ -32,13 +32,13 @@ namespace rhino_zmq_poc
                 return $"editSliderRange: updated ({param.TargetId}) min={param.Min} max={param.Max} digits={param.Digits}";
             }
 
-            return $"editSliderRange error: object '{param.TargetId}' is not a Number Slider";
+            return CommandOperationException.Fail($"editSliderRange error: object '{param.TargetId}' is not a Number Slider");
         }
 
         public static string SetSliderValue(GH_Document doc, SetSliderValueParams param)
         {
             if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"setSliderValue error: {err}";
+                return CommandOperationException.Fail($"setSliderValue error: {err}");
 
             if (obj is GH_NumberSlider slider)
             {
@@ -50,26 +50,26 @@ namespace rhino_zmq_poc
                 return $"setSliderValue: set ({param.TargetId}) = {param.Value}";
             }
 
-            return $"setSliderValue error: object '{param.TargetId}' is not a Number Slider";
+            return CommandOperationException.Fail($"setSliderValue error: object '{param.TargetId}' is not a Number Slider");
         }
 
         public static string CreatePanel(GH_Document doc, CreatePanelParams param)
         {
             if (!GraphObjectFactory.TryCreatePanel(doc, param, out var created, out var error))
-                return $"createPanel error: {error}";
+                return CommandOperationException.Fail($"createPanel error: {error}");
             return $"createPanel: created ({created.InstanceGuid}) at ({param.Position.X}, {param.Position.Y})";
         }
 
         public static string SetPanelParams(GH_Document doc, SetPanelParams param)
         {
             if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"setPanelParams error: {err}";
+                return CommandOperationException.Fail($"setPanelParams error: {err}");
 
             if (obj is GH_Panel panel)
             {
                 var textOutputError = Utilities.TryResolvePanelMultiline(param.TextOutput, out var multiline);
                 if (textOutputError != null)
-                    return $"setPanelParams error: {textOutputError}";
+                    return CommandOperationException.Fail($"setPanelParams error: {textOutputError}");
                 panel.Properties.Multiline = multiline;
 
                 if (!string.IsNullOrEmpty(param.BgColor))
@@ -90,13 +90,13 @@ namespace rhino_zmq_poc
                 return $"setPanelParams: updated properties on ({param.TargetId})";
             }
 
-            return $"setPanelParams error: object '{param.TargetId}' is not a Panel";
+            return CommandOperationException.Fail($"setPanelParams error: object '{param.TargetId}' is not a Panel");
         }
 
         public static string SetPanelText(GH_Document doc, SetPanelTextParams param)
         {
             if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"setPanelText error: {err}";
+                return CommandOperationException.Fail($"setPanelText error: {err}");
 
             if (obj is GH_Panel panel)
             {
@@ -108,7 +108,7 @@ namespace rhino_zmq_poc
                 return $"setPanelText: set ({param.TargetId}) text = \"{param.Text}\"";
             }
 
-            return $"setPanelText error: object '{param.TargetId}' is not a Panel";
+            return CommandOperationException.Fail($"setPanelText error: object '{param.TargetId}' is not a Panel");
         }
     }
 }

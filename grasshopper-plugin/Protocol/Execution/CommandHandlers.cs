@@ -54,11 +54,7 @@ namespace rhino_zmq_poc.Protocol.Execution
             _execute(ghDocument, rhinoDocument, parameters);
     }
 
-    /// <summary>
-    /// Compatibility adapter for actions that still use CommandExecutor. It does
-    /// not infer semantic failure from legacy text. Migrate each action to a typed
-    /// handler before enabling it on the versioned executeActions route.
-    /// </summary>
+	/// <summary>Compatibility adapter for command actions with typed outcomes.</summary>
     internal sealed class LegacyCommandHandlerAdapter : ICommandHandler
     {
         private readonly CommandExecutor _executor;
@@ -73,16 +69,12 @@ namespace rhino_zmq_poc.Protocol.Execution
 
         public ActionResult Execute(GH_Document ghDocument, RhinoDoc rhinoDocument, JsonElement parameters)
         {
-            var message = _executor.Execute(ghDocument, new GhCommand
-            {
-                Action = Action,
-                Params = parameters,
-            });
-            return ActionResult.Success(message, new Dictionary<string, object>
-            {
-                ["legacyMessage"] = message,
-            });
-        }
+			return _executor.ExecuteStructured(ghDocument, new GhCommand
+			{
+				Action = Action,
+				Params = parameters,
+			});
+		}
     }
 
     internal sealed class CommandBackendActionExecutor : IBackendActionExecutor

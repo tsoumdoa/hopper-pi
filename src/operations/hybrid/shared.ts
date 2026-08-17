@@ -163,23 +163,6 @@ function skippedItem(
 	};
 }
 
-function skippedRemainder(
-	startIndex: number,
-	itemCount: number,
-	reads: ReadonlyMap<number, HybridReadPlan>,
-	mutations: ReadonlyMap<number, PlannedMutation>,
-	reason: string,
-): ItemOperationData["items"] {
-	const skipped: ItemOperationData["items"] = [];
-	for (let index = startIndex; index < itemCount; index++) {
-		const read = reads.get(index);
-		const mutation = mutations.get(index);
-		if (read) skipped.push(skippedItem(index, read.publicAction, read.targetId, reason));
-		else if (mutation) skipped.push(skippedItem(index, mutation.publicAction, mutation.targetId, reason));
-	}
-	return skipped;
-}
-
 function terminalResult(
 	outcome: "failed" | "partial" | "unknown",
 	error: HopperError,
@@ -195,114 +178,40 @@ function terminalResult(
 	};
 }
 
-/**
- * Mutation-only inputs retain one backend request for batchability. Mixed
- * inputs execute one item at a time so reads observe preceding mutations and a
- * failed/unknown item can prevent unsafe later work.
- */
+/** Mixed calls complete their reads before sending one atomic mutation request.
+ * Reads cannot depend on mutations in the same input. This keeps one session
+ * edit mapped to one durable backend request. */
 export async function executeHybridInOrder(
 	context: OperationContext,
-	itemCount: number,
+	_itemCount: number,
 	readPlans: readonly HybridReadPlan[],
 	plannedMutations: readonly PlannedMutation[],
 ): Promise<OperationResult<ItemOperationData>> {
-	if (readPlans.length === 0) {
-		return executeMixed(context, [], [...plannedMutations]);
-	}
-
-	const reads = new Map(readPlans.map((plan) => [plan.originalIndex, plan]));
-	const mutations = new Map(plannedMutations.map((plan) => [plan.originalIndex, plan]));
-	const results: ItemOperationData["items"] = [];
-	let successfulMutation = false;
-
-	for (let index = 0; index < itemCount; index++) {
-		const read = reads.get(index);
-		if (read) {
-			const result = await read.execute();
-			results.push(result);
-			if (result.outcome === "failed") {
-				const outcome = successfulMutation ? "partial" : "failed";
-				const error: HopperError = successfulMutation
-					? {
-						code: "partial_mutation",
-						message: `A read failed after an earlier mutation succeeded: ${result.message}`,
-						retryable: false,
-					}
-					: (result.error as HopperError | null) ?? {
-						code: "operation_failed",
-						message: result.message,
-						retryable: false,
-					};
-				results.push(...skippedRemainder(
-					index + 1,
-					itemCount,
-					reads,
-					mutations,
-					"Skipped because an earlier read failed.",
-				));
-				return terminalResult(outcome, error, results);
-			}
-			continue;
-		}
-
-		const mutation = mutations.get(index);
-		if (!mutation) continue;
-		const response = await context.backend.executeActions(
-			{ actions: [mutation.action] },
-			context.signal,
-		);
-		const mutationResult = finishPlannedMutations(response, [mutation]);
-		const mutationItems = mutationResult.data?.items ?? [];
-		if (mutationItems.length > 0) {
-			results.push(...mutationItems);
-		} else if (mutationResult.outcome === "unknown") {
-			results.push(skippedItem(
-				index,
+	const readResults: ItemOperationData["items"] = [];
+	for (const plan of [...readPlans].sort((left, right) => left.originalIndex - right.originalIndex)) {
+		const result = await plan.execute();
+		readResults.push(result);
+		if (result.outcome !== "failed") continue;
+		const items = [
+			...readResults,
+			...plannedMutations.map((mutation) => skippedItem(
+				mutation.originalIndex,
 				mutation.publicAction,
 				mutation.targetId,
-				"Mutation outcome unknown; no terminal action result is available.",
-			));
-		}
-		if (mutationResult.outcome === "succeeded") {
-			successfulMutation = true;
-			continue;
-		}
-
-		const outcome = mutationResult.outcome === "unknown"
-			? "unknown"
-			: successfulMutation || mutationResult.outcome === "partial"
-				? "partial"
-				: "failed";
-		const baseError = mutationResult.error ?? fallbackError(response)!;
-		const error: HopperError = outcome === "partial" && baseError.code !== "partial_mutation"
-			? {
-				code: "partial_mutation",
-				message: successfulMutation
-					? `A mutation failed after earlier work succeeded: ${baseError.message}`
-					: baseError.message,
-				retryable: baseError.retryable,
-			}
-			: baseError;
-		results.push(...skippedRemainder(
-			index + 1,
-			itemCount,
-			reads,
-			mutations,
-			mutationResult.outcome === "unknown"
-				? "Skipped because an earlier mutation has an unknown outcome."
-				: "Skipped because an earlier mutation did not succeed.",
-		));
-		return terminalResult(outcome, error, results);
+				"Skipped because a read failed before mutation execution.",
+			)),
+		].sort((left, right) => left.index - right.index);
+		return terminalResult(
+			"failed",
+			(result.error as HopperError | null) ?? {
+				code: "operation_failed",
+				message: result.message,
+				retryable: false,
+			},
+			items,
+		);
 	}
-
-	return {
-		outcome: "succeeded",
-		message: `${results.length} item${results.length === 1 ? "" : "s"} succeeded.`,
-		data: { items: results },
-		warnings: [],
-		artifacts: [],
-		error: null,
-	};
+	return executeMixed(context, readResults, [...plannedMutations]);
 }
 
 export async function executeMixed(
@@ -356,6 +265,7 @@ export async function executeMixed(
 		outcome: "succeeded",
 		message: `${items.length} item${items.length === 1 ? "" : "s"} succeeded.`,
 		data: { items },
+		...(mutationResult?.execution ? { execution: mutationResult.execution } : {}),
 		warnings: [],
 		artifacts: [],
 		error: null,

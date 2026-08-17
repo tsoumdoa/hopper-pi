@@ -43,6 +43,9 @@ export function connectionProfileDirectory(): string {
 }
 
 function currentProfileDirectory(): string {
+	if (process.env.XDG_DATA_HOME) {
+		return join(process.env.XDG_DATA_HOME, "hoppercode");
+	}
 	if (process.platform === "win32" && process.env.APPDATA) {
 		return join(process.env.APPDATA, "hoppercode");
 	}
@@ -54,6 +57,9 @@ function currentProfileDirectory(): string {
 }
 
 function legacyProfileDirectory(): string {
+	if (process.env.XDG_DATA_HOME) {
+		return join(process.env.XDG_DATA_HOME, "hopper-pi");
+	}
 	if (process.platform === "win32" && process.env.APPDATA) {
 		return join(process.env.APPDATA, "hopper-pi");
 	}

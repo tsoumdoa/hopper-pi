@@ -134,7 +134,10 @@ describe("ghApplyGraphOperation", () => {
 		let request: JsonObject | undefined;
 		let passedSignal: AbortSignal | undefined;
 		const context = contextWithResponse(
-			{ outcome: "succeeded", data, error: null },
+			{ outcome: "succeeded", data: {
+				actions: [{ outcome: "succeeded", data }],
+				canvasDigestAfter: "digest-after",
+			}, error: null, canvasDigestAfter: "digest-after" },
 			(value, signal) => {
 				request = value;
 				passedSignal = signal;
@@ -152,6 +155,7 @@ describe("ghApplyGraphOperation", () => {
 			outcome: "succeeded",
 			message: "Applied the Grasshopper graph.",
 			data,
+			execution: { canvasDigestAfter: "digest-after" },
 			warnings: [],
 			artifacts: [],
 			error: null,

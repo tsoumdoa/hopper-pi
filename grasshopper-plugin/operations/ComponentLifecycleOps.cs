@@ -14,19 +14,19 @@ namespace rhino_zmq_poc
             {
                 if (!GraphObjectFactory.TryCreateComponent(
                     doc, param, null, out var obj, out var error))
-                    return $"addComponent error: {error}";
+                    return CommandOperationException.Fail($"addComponent error: {error}");
                 return $"addComponent: added ({obj.InstanceGuid}) at ({param.Position.X}, {param.Position.Y}) preview={param.Preview}";
             }
             catch (Exception ex)
             {
-                return $"addComponent error: {ex.GetType().Name}: {ex.Message}";
+                return CommandOperationException.Fail($"addComponent error: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
         public static string DeleteComponent(GH_Document doc, DeleteComponentParams param)
         {
             if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"deleteComponent error: {err}";
+                return CommandOperationException.Fail($"deleteComponent error: {err}");
 
             doc.RemoveObject(obj, false);
 
@@ -36,7 +36,7 @@ namespace rhino_zmq_poc
         public static string MoveComponent(GH_Document doc, MoveComponentParams param)
         {
             if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"moveComponent error: {err}";
+                return CommandOperationException.Fail($"moveComponent error: {err}");
 
             obj.Attributes.Pivot = new System.Drawing.PointF(
                 (float)param.Position.X,
@@ -72,7 +72,7 @@ namespace rhino_zmq_poc
             var target = comp.Params.Input.FirstOrDefault(x =>
                 string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
             if (target == null) return;
-            if (recordUndo)
+			if (recordUndo && !AgentTransaction.IsActive)
                 comp.RecordUndoEvent("Remove input");
             if (comp is IGH_VariableParameterComponent vpc)
             {
@@ -109,7 +109,7 @@ namespace rhino_zmq_poc
             var target = comp.Params.Output.FirstOrDefault(x =>
                 string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
             if (target == null) return;
-            if (recordUndo)
+			if (recordUndo && !AgentTransaction.IsActive)
                 comp.RecordUndoEvent("Remove output");
             if (comp is IGH_VariableParameterComponent vpc)
             {
@@ -154,20 +154,21 @@ namespace rhino_zmq_poc
             try
             {
                 if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"syncScriptParams error: {err}";
+                return CommandOperationException.Fail($"syncScriptParams error: {err}");
                 var comp = obj as GH_Component;
-                if (comp == null) return $"syncScriptParams error: '{param.TargetId}' is not a GH_Component";
+                if (comp == null) return CommandOperationException.Fail($"syncScriptParams error: '{param.TargetId}' is not a GH_Component");
                 if (param.Inputs == null && param.Outputs == null)
-                    return "syncScriptParams error: at least one of inputs or outputs is required";
+                    return CommandOperationException.Fail("syncScriptParams error: at least one of inputs or outputs is required");
 
-                comp.RecordUndoEvent("Sync script params");
+				if (!AgentTransaction.IsActive)
+					comp.RecordUndoEvent("Sync script params");
                 SyncScriptParams(comp, param.Inputs, param.Outputs);
                 comp.ExpireSolution(true);
                 return $"syncScriptParams: reconciled I/O on ({param.TargetId})";
             }
             catch (Exception ex)
             {
-                return $"syncScriptParams error: {ex.GetType().Name}: {ex.Message}";
+                return CommandOperationException.Fail($"syncScriptParams error: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -357,14 +358,14 @@ namespace rhino_zmq_poc
             try
             {
                 if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"editParamProps error: {err}";
+                return CommandOperationException.Fail($"editParamProps error: {err}");
                 var comp = obj as GH_Component;
-                if (comp == null) return $"editParamProps error: '{param.TargetId}' is not a GH_Component";
+                if (comp == null) return CommandOperationException.Fail($"editParamProps error: '{param.TargetId}' is not a GH_Component");
 
                 var target = comp.Params.Input.Cast<IGH_Param>().Concat(comp.Params.Output.Cast<IGH_Param>())
                     .FirstOrDefault(x => string.Equals(x.Name, param.Name, StringComparison.OrdinalIgnoreCase)
                                         || string.Equals(x.NickName, param.Name, StringComparison.OrdinalIgnoreCase));
-                if (target == null) return $"editParamProps error: param '{param.Name}' not found on inputs or outputs";
+                if (target == null) return CommandOperationException.Fail($"editParamProps error: param '{param.Name}' not found on inputs or outputs");
 
                 if (param.Access != null)
                 {
@@ -373,7 +374,7 @@ namespace rhino_zmq_poc
                         case "item": target.Access = GH_ParamAccess.item; break;
                         case "list": target.Access = GH_ParamAccess.list; break;
                         case "tree": target.Access = GH_ParamAccess.tree; break;
-                        default: return $"editParamProps error: unknown access type '{param.Access}' (supported: item, list, tree)";
+                        default: return CommandOperationException.Fail($"editParamProps error: unknown access type '{param.Access}' (supported: item, list, tree)");
                     }
                 }
 
@@ -384,7 +385,7 @@ namespace rhino_zmq_poc
                         case "none": target.DataMapping = GH_DataMapping.None; break;
                         case "flatten": target.DataMapping = GH_DataMapping.Flatten; break;
                         case "graft": target.DataMapping = GH_DataMapping.Graft; break;
-                        default: return $"editParamProps error: unknown dataMapping '{param.DataMapping}' (supported: none, flatten, graft)";
+                        default: return CommandOperationException.Fail($"editParamProps error: unknown dataMapping '{param.DataMapping}' (supported: none, flatten, graft)");
                     }
                 }
 
@@ -405,7 +406,7 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"editParamProps error: {ex.GetType().Name}: {ex.Message}";
+                return CommandOperationException.Fail($"editParamProps error: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -414,9 +415,9 @@ namespace rhino_zmq_poc
             try
             {
                 if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"listScriptParams error: {err}";
+                return CommandOperationException.Fail($"listScriptParams error: {err}");
                 var comp = obj as GH_Component;
-                if (comp == null) return $"listScriptParams error: '{param.TargetId}' is not a GH_Component";
+                if (comp == null) return CommandOperationException.Fail($"listScriptParams error: '{param.TargetId}' is not a GH_Component");
 
                 var inputInfo = comp.Params.Input.Select(p =>
                     $"{p.Name}({Utilities.AccessStr(p.Access)},{Utilities.MappingStr(p.DataMapping)},{p.Simplify.ToString().ToLower()},{p.Reverse.ToString().ToLower()},{GhScriptReflector.GetTypeHintName(p)})").ToArray();
@@ -427,7 +428,7 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return $"listScriptParams error: {ex.GetType().Name}: {ex.Message}";
+                return CommandOperationException.Fail($"listScriptParams error: {ex.GetType().Name}: {ex.Message}");
             }
         }
 

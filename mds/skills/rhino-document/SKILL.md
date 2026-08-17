@@ -48,7 +48,7 @@ Use `print()` in Python or `Console.WriteLine()` in C# for values the agent must
    - `rhinoQuery` for a layer/selection/type bulk set.
 5. `reference` keeps live Rhino links; `internalize` stores copies. Use `get` to verify.
 
-Before internalizing more than 10 objects or a whole layer, confirm reference vs internalize with `pick_option`.
+Before internalizing more than 10 objects or a whole layer, ask the user to confirm reference vs internalize.
 
 ## Never
 

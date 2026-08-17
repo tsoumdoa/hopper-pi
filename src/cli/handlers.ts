@@ -69,6 +69,13 @@ export async function handleStatus(
 	const client = protocolClient(deps);
 	try {
 		const info = await client.getInfo();
+		if (info.outcome !== "succeeded" || info.error) {
+			return cliError("status", info.error ?? {
+				code: "operation_failed",
+				message: `Backend status request ended ${info.outcome}.`,
+				retryable: false,
+			});
+		}
 		return cliResponse({
 			ok: true,
 			command: "status",
@@ -367,11 +374,14 @@ async function executeCall(
 				afterCheckpointId = after.checkpointId;
 				const beforeStored = await deps.checkpoints.read(options.session.sessionId, options.beforeCheckpointId);
 				diff = diffCanvases(beforeStored.canonicalCanvas, after.canonicalCanvas ?? emptyCanvas());
-				const executionDigest = (result.data && typeof result.data === "object" && !Array.isArray(result.data))
-					? (result.data as { canvasDigestAfter?: string }).canvasDigestAfter
-					: undefined;
+				const executionDigest = result.execution?.canvasDigestAfter ?? undefined;
 				if (executionDigest && executionDigest !== after.canvasDigest) {
 					result.outcome = "partial";
+					result.error = {
+						code: "partial_mutation",
+						message: "The mutation completed, but another canvas edit raced the after checkpoint.",
+						retryable: false,
+					};
 					warnings.push({
 						code: "checkpoint_race",
 						message: "The after-checkpoint digest differed from the execution response.",
@@ -404,7 +414,7 @@ async function executeCall(
 			}));
 		}
 		return cliResponse({
-			ok: result.outcome === "succeeded" || result.outcome === "partial",
+			ok: result.outcome === "succeeded",
 			command: "call",
 			operation: command.operation,
 			sessionId: options.session?.sessionId,

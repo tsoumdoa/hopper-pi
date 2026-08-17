@@ -126,7 +126,7 @@ export function resolvePluginInstallDirectory(env: NodeJS.ProcessEnv = process.e
 	return join(root, pluginDirName);
 }
 
-export function assertSafePluginInstallTarget(installDir: string, force: boolean): void {
+export function assertSafePluginInstallTarget(installDir: string, _force: boolean): void {
 	assertNotSymlink(installDir);
 	const parent = dirname(installDir);
 	assertNotSymlink(parent);
@@ -145,10 +145,10 @@ export function assertSafePluginInstallTarget(installDir: string, force: boolean
 		}
 		return;
 	}
-	if (existing.length > 0 && !force) {
+	if (existing.length > 0) {
 		throw new HopperCoreError({
 			code: "invalid_input",
-			message: `Refusing to install into non-Hopper directory ${installDir}. Re-run with --force only after confirming it is safe.`,
+			message: `Refusing to install into non-Hopper directory ${installDir}. Move its contents or select another Libraries directory.`,
 			retryable: false,
 		});
 	}
@@ -285,8 +285,21 @@ function install(force: boolean): PluginDoctorReport {
 			files: files.sort((left, right) => left.name.localeCompare(right.name)),
 		};
 		writeFileSync(join(staging, ".hopper-install.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-		if (existsSync(installDir)) rmSync(installDir, { recursive: true, force: true });
-		renameSync(staging, installDir);
+		const backup = `${installDir}.hopper-backup-${Date.now()}`;
+		let movedExisting = false;
+		try {
+			if (existsSync(installDir)) {
+				renameSync(installDir, backup);
+				movedExisting = true;
+			}
+			renameSync(staging, installDir);
+			if (movedExisting) rmSync(backup, { recursive: true, force: true });
+		} catch (error) {
+			if (!existsSync(installDir) && movedExisting && existsSync(backup)) {
+				renameSync(backup, installDir);
+			}
+			throw error;
+		}
 	} catch (error) {
 		rmSync(staging, { recursive: true, force: true });
 		throw error;

@@ -63,11 +63,11 @@ namespace rhino_zmq_poc
 
         public static string SetParamRhinoGeometry(GH_Document doc, RhinoDoc rhinoDoc, SetParamRhinoGeometryParams param)
         {
-            if (doc == null) return "setParamRhinoGeometry error: Grasshopper document is null";
-            if (rhinoDoc == null) return "setParamRhinoGeometry error: no active Rhino document";
-            if (param == null) return "setParamRhinoGeometry error: invalid params";
+            if (doc == null) return CommandOperationException.Fail("setParamRhinoGeometry error: Grasshopper document is null");
+            if (rhinoDoc == null) return CommandOperationException.Fail("setParamRhinoGeometry error: no active Rhino document");
+            if (param == null) return CommandOperationException.Fail("setParamRhinoGeometry error: invalid params");
             if (!Guid.TryParse(param.TargetId, out var targetGuid))
-                return $"setParamRhinoGeometry error: invalid targetId '{param.TargetId}'";
+                return CommandOperationException.Fail($"setParamRhinoGeometry error: invalid targetId '{param.TargetId}'");
             var hasIds = param.RhinoObjectIds != null && param.RhinoObjectIds.Count > 0;
             var hasQuery = param.RhinoQuery != null && (
                 param.RhinoQuery.SelectionOnly == true
@@ -76,16 +76,16 @@ namespace rhino_zmq_poc
                 || (param.RhinoQuery.ObjectIds != null && param.RhinoQuery.ObjectIds.Count > 0));
 
             if (hasIds && hasQuery)
-                return "setParamRhinoGeometry error: provide rhinoObjectIds or rhinoQuery, not both";
+                return CommandOperationException.Fail("setParamRhinoGeometry error: provide rhinoObjectIds or rhinoQuery, not both");
             if (!hasIds && !hasQuery)
             {
                 if (param.RhinoQuery != null)
-                    return "setParamRhinoGeometry error: rhinoQuery must include layer, objectType, or selectionOnly";
-                return "setParamRhinoGeometry error: rhinoObjectIds or rhinoQuery is required";
+                    return CommandOperationException.Fail("setParamRhinoGeometry error: rhinoQuery must include layer, objectType, or selectionOnly");
+                return CommandOperationException.Fail("setParamRhinoGeometry error: rhinoObjectIds or rhinoQuery is required");
             }
 
             if (hasIds && param.RhinoObjectIds.Count > MaxRhinoObjectIds)
-                return $"setParamRhinoGeometry error: rhinoObjectIds accepts at most {MaxRhinoObjectIds} IDs; use rhinoQuery for bulk";
+				return CommandOperationException.Fail($"setParamRhinoGeometry error: rhinoObjectIds accepts at most {MaxRhinoObjectIds} IDs; use rhinoQuery for bulk");
 
             List<string> objectIds;
             string queryNote = null;
@@ -93,7 +93,7 @@ namespace rhino_zmq_poc
             {
                 var matched = RhinoObjectQuery.Query(rhinoDoc, param.RhinoQuery);
                 if (matched.Count == 0)
-                    return "setParamRhinoGeometry error: rhinoQuery matched no Rhino objects";
+                    return CommandOperationException.Fail("setParamRhinoGeometry error: rhinoQuery matched no Rhino objects");
                 objectIds = matched.Select(o => o.ObjectId).ToList();
                 queryNote = FormatRhinoQueryNote(param.RhinoQuery, matched.Count);
             }
@@ -104,11 +104,11 @@ namespace rhino_zmq_poc
 
             var mode = (param.Mode ?? "").Trim().ToLowerInvariant();
             if (mode != "reference" && mode != "internalize")
-                return $"setParamRhinoGeometry error: unknown mode '{param.Mode}'";
+                return CommandOperationException.Fail($"setParamRhinoGeometry error: unknown mode '{param.Mode}'");
 
             var obj = doc.FindObject(targetGuid, true);
             if (obj is not IGH_Param ghParam)
-                return $"setParamRhinoGeometry error: '{param.TargetId}' is not a Grasshopper parameter";
+                return CommandOperationException.Fail($"setParamRhinoGeometry error: '{param.TargetId}' is not a Grasshopper parameter");
 
             var reference = mode == "reference";
             ghParam.RemoveAllSources();
@@ -118,17 +118,17 @@ namespace rhino_zmq_poc
             foreach (var rawId in objectIds)
             {
                 if (!Guid.TryParse(rawId, out var rhinoObjectId))
-                    return $"setParamRhinoGeometry error: invalid rhinoObjectId '{rawId}'";
+                    return CommandOperationException.Fail($"setParamRhinoGeometry error: invalid rhinoObjectId '{rawId}'");
 
                 var rhinoObj = rhinoDoc.Objects.FindId(rhinoObjectId);
                 if (rhinoObj == null)
-                    return $"setParamRhinoGeometry error: Rhino object not found '{rawId}'";
+                    return CommandOperationException.Fail($"setParamRhinoGeometry error: Rhino object not found '{rawId}'");
 
                 if (!TryCreateGoo(rhinoObj, reference, out var goo, out var gooError))
-                    return $"setParamRhinoGeometry error: {gooError}";
+                    return CommandOperationException.Fail($"setParamRhinoGeometry error: {gooError}");
 
                 if (!AppendPersistent(ghParam, goo, out var appendError))
-                    return $"setParamRhinoGeometry error: {appendError}";
+                    return CommandOperationException.Fail($"setParamRhinoGeometry error: {appendError}");
             }
 
             ghParam.OnObjectChanged(GH_ObjectEventType.PersistentData);

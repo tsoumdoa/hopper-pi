@@ -49,6 +49,10 @@ test("exit codes follow the plan mapping", () => {
 	assert.equal(mapOutcomeToExitCode(failed("backend_offline")), 3);
 	assert.equal(mapOutcomeToExitCode(failed("invalid_input")), 2);
 	assert.equal(mapOutcomeToExitCode(failed("operation_failed")), 5);
+	assert.equal(mapOutcomeToExitCode({
+		...failed("partial_mutation"),
+		outcome: "partial",
+	}), 5);
 	assert.equal(mapOutcomeToExitCode(failed("journal_corrupt")), 70);
 	assert.equal(mapErrorToExitCode({ code: "unsupported_undo", message: "x", retryable: false }), 4);
 });

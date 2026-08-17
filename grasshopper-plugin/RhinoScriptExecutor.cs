@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 using Rhino;
 
 namespace rhino_zmq_poc
@@ -10,11 +11,16 @@ namespace rhino_zmq_poc
         public bool Echo { get; set; }
     }
 
-    internal class RunRhinoScriptResult
-    {
-        public bool Ok { get; set; }
-        public string Output { get; set; }
-        public string Error { get; set; }
+	internal class RunRhinoScriptResult
+	{
+		[JsonPropertyName("ok")]
+		public bool Ok { get; set; }
+
+		[JsonPropertyName("output")]
+		public string Output { get; set; }
+
+		[JsonPropertyName("error")]
+		public string Error { get; set; }
     }
 
     internal static class RhinoScriptExecutor

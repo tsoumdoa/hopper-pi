@@ -258,6 +258,42 @@ test("session-bound mutation verifies binding, reserves edits, and journals", as
 	assert.equal(edits[0]?.state, "succeeded");
 });
 
+test("an after-checkpoint digest race is a partial mutation", async () => {
+	const client = fakeClient({
+		executeResponse: (request) => wireResponse("executeActions", request.requestId, "succeeded", {
+			payloadSha256: request.payloadSha256,
+			actions: [],
+			transaction: {
+				outcome: "committed",
+				grasshopperUndoRecorded: true,
+				rhinoUndoRecorded: false,
+				grasshopperRolledBack: false,
+				rhinoRolledBack: false,
+				limitations: [],
+			},
+			canvasDigestBefore: "digest-live",
+			canvasDigestAfter: "digest-execution",
+			elapsedMs: 1,
+		}),
+	});
+	const { deps } = await makeDeps({ client });
+	const session = await handleSession(
+		{ kind: "session.start", captureAllowed: false, json: true },
+		deps,
+	);
+	const response = await handleCall({
+		kind: "call",
+		operation: "gh_edit_wire",
+		sessionId: session.sessionId as `hs_${string}`,
+		input: { kind: "inline", json: WIRE_INPUT },
+		allowCapture: false,
+		json: true,
+	}, deps);
+	assert.equal(response.ok, false);
+	assert.equal(response.outcome, "partial");
+	assert.equal(response.error?.code, "partial_mutation");
+});
+
 test("a changed Grasshopper document rejects before mutation", async () => {
 	const { deps, client } = await makeDeps();
 	const session = await handleSession(

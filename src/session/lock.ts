@@ -103,15 +103,7 @@ export async function acquireSessionLock(
 		}
 
 		if (held && isStale(held)) {
-			// Reclaim atomically: rename the stale directory aside, then retry.
-			const stalePath = `${dirname(path)}.stale-${randomBytes(4).toString("hex")}`;
-			const { rename } = await import("node:fs/promises");
-			try {
-				await rename(dirname(path), stalePath);
-				await rm(stalePath, { recursive: true, force: true });
-			} catch {
-				// Someone else reclaimed it first; retry acquisition.
-			}
+			await removeOwnedLockDirectory(path, held.nonce);
 			continue;
 		}
 
@@ -143,10 +135,33 @@ async function releaseIfOwned(path: string, nonce: string): Promise<void> {
 		return;
 	}
 	if (held?.nonce !== nonce) return;
+	await removeOwnedLockDirectory(path, nonce);
+}
+
+async function removeOwnedLockDirectory(path: string, nonce: string): Promise<void> {
+	const directory = dirname(path);
+	const moved = `${directory}.remove-${randomBytes(8).toString("hex")}`;
+	const { rename } = await import("node:fs/promises");
 	try {
-		await rm(dirname(path), { recursive: true, force: true });
+		await rename(directory, moved);
 	} catch {
-		// The replacement owner's lock must never be deleted on a race.
+		return;
+	}
+	let movedOwner: LockOwner | null = null;
+	try {
+		movedOwner = JSON.parse(await readFile(`${moved}/${path.slice(directory.length + 1)}`, "utf8")) as LockOwner;
+	} catch {
+		movedOwner = null;
+	}
+	if (movedOwner?.nonce === nonce) {
+		await rm(moved, { recursive: true, force: true });
+		return;
+	}
+	try {
+		await rename(moved, directory);
+	} catch {
+		// A new owner acquired the original path. Keep the displaced lock rather
+		// than deleting a directory whose nonce no longer matches.
 	}
 }
 

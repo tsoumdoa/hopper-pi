@@ -16,7 +16,10 @@ type QueryImplementation = (request: JsonObject) => Promise<JsonValue>;
 
 function makeContext(
 	queryImplementation: QueryImplementation,
-	options: { captureAllowed?: boolean } = {},
+	options: {
+		captureAllowed?: boolean;
+		executeActions?: BackendClient["executeActions"];
+	} = {},
 ) {
 	const requests: JsonObject[] = [];
 	const writes: Array<{ kind: string; contents: Uint8Array; mediaType: string }> = [];
@@ -39,7 +42,11 @@ function makeContext(
 		captureAllowed: options.captureAllowed,
 		backend: {
 			query,
-			executeActions: async () => ({ outcome: "succeeded", data: null, error: null }),
+			executeActions: async (request, signal) => {
+				requests.push(request);
+				return options.executeActions?.(request, signal)
+					?? { outcome: "succeeded", data: null, error: null };
+			},
 		},
 		artifacts: {
 			write: async (writeOptions) => {
@@ -90,13 +97,17 @@ test("Rhino operation registry exposes the planned scopes", () => {
 });
 
 test("rh_run_script redacts source and returns structured item results", async () => {
-	const { context, requests } = makeContext(async () => ({
-		type: "runRhinoScript.response",
-		timestamp: 1,
-		ok: true,
-		output: "42",
-		error: "",
-	}));
+	const { context, requests } = makeContext(async () => null, {
+		executeActions: async () => ({
+			outcome: "succeeded",
+			data: { actions: [{
+				outcome: "succeeded",
+				message: "Script completed.",
+				data: { ok: true, output: "42", error: "" },
+			}] },
+			error: null,
+		}),
+	});
 	const input = { items: [{ mode: "python" as const, source: "print(42)\n", echo: true }] };
 	const summary = rhRunScriptOperation.summarizeInput(input);
 	assert.equal(JSON.stringify(summary).includes("print(42)"), false);
@@ -119,7 +130,8 @@ test("rh_run_script redacts source and returns structured item results", async (
 			error: null,
 		}],
 	});
-	assert.equal(requests[0]?.source, "print(42)\n");
+	const actions = requests[0]?.actions as JsonObject[];
+	assert.equal((actions[0]?.input as JsonObject).source, "print(42)\n");
 });
 
 test("rh_run_script validates all sources before sending and reports mixed results as partial", async () => {
@@ -130,12 +142,15 @@ test("rh_run_script validates all sources before sending and reports mixed resul
 	assert.equal(invalidResponse.error?.code, "invalid_input");
 	assert.equal(invalid.requests.length, 0);
 
-	let call = 0;
-	const mixed = makeContext(async () => {
-		call += 1;
-		return call === 1
-			? { ok: true, output: "created", error: "" }
-			: { ok: false, output: "", error: "script failed" };
+	const mixed = makeContext(async () => null, {
+		executeActions: async () => ({
+			outcome: "failed",
+			data: { actions: [
+				{ outcome: "succeeded", message: "created", data: { ok: true, output: "created", error: "" } },
+				{ outcome: "failed", message: "script failed", data: { ok: false, output: "", error: "script failed" } },
+			] },
+			error: { code: "operation_failed", message: "script failed", retryable: false },
+		}),
 	});
 	const response = await rhRunScriptOperation.execute({
 		items: [
@@ -143,17 +158,22 @@ test("rh_run_script validates all sources before sending and reports mixed resul
 			{ mode: "csharp", source: "Console.WriteLine(2);" },
 		],
 	}, mixed.context);
-	assert.equal(response.outcome, "partial");
-	assert.equal(response.error?.code, "partial_mutation");
+	assert.equal(response.outcome, "failed");
+	assert.equal(response.error?.code, "operation_failed");
 	assert.equal(response.data?.items.length, 2);
 });
 
-test("rh_run_script stops after a backend exception and preserves unknown state", async () => {
+test("rh_run_script preserves an unknown atomic request", async () => {
 	let calls = 0;
-	const timedOut = makeContext(async () => {
-		calls += 1;
-		if (calls === 1) return { ok: true, output: "first", error: "" };
-		throw new Error("request timed out after send");
+	const timedOut = makeContext(async () => null, {
+		executeActions: async () => {
+			calls += 1;
+			return {
+				outcome: "unknown",
+				data: null,
+				error: { code: "outcome_unknown", message: "request timed out after send", retryable: true },
+			};
+		},
 	});
 	const response = await rhRunScriptOperation.execute({
 		items: [
@@ -162,17 +182,17 @@ test("rh_run_script stops after a backend exception and preserves unknown state"
 			{ mode: "python", source: "print(3)" },
 		],
 	}, timedOut.context);
-	assert.equal(calls, 2);
+	assert.equal(calls, 1);
 	assert.equal(response.outcome, "unknown");
 	assert.equal(response.error?.code, "outcome_unknown");
 	assert.equal(response.error?.retryable, true);
 	assert.deepEqual(response.data?.items.map((item) => item.outcome), [
-		"succeeded",
 		"unknown",
-		"skipped",
+		"unknown",
+		"unknown",
 	]);
+	assert.equal(response.data?.items[0]?.error, "request timed out after send");
 	assert.equal(response.data?.items[1]?.error, "request timed out after send");
-	assert.equal(response.data?.items[2]?.error, null);
 });
 
 test("rh_query_objects preserves filters and returns count or paginated objects", async () => {
@@ -198,7 +218,13 @@ test("rh_view_control applies semantic checks and returns structured metadata", 
 	assert.equal(invalid.error?.code, "invalid_input");
 	assert.equal(blocked.requests.length, 0);
 
-	const allowed = makeContext(async () => ({ ok: true, message: "View updated", metadata }));
+	const allowed = makeContext(async () => null, {
+		executeActions: async () => ({
+			outcome: "succeeded",
+			data: { actions: [{ outcome: "succeeded", message: "View updated", data: { ok: true, message: "View updated", metadata } }] },
+			error: null,
+		}),
+	});
 	const response = await rhViewControlOperation.execute({
 		action: "camera",
 		camera: { lensLength: 35 },

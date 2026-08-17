@@ -12,7 +12,7 @@
 	],
 	"scripts": {
 		"dev": "tsx src/cli/main.ts",
-		"build": "tsc -p tsconfig.json",
+		"build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json",
 		"test": "vitest run",
 		"dump:components": "tsx src/scripts/dump-components.ts",
 		"build:gh-plugin": "node scripts/install-grasshopper-plugin.mjs --build-only",

@@ -179,7 +179,7 @@ test("executes mixed reads and mutations in original order", async () => {
 		{ action: "getCode", targetId: "last" },
 	] }, operationContext);
 
-	assert.deepEqual(events, ["query:first", "mutation:createScriptNode", "query:last"]);
+	assert.deepEqual(events, ["query:first", "query:last", "mutation:createScriptNode"]);
 	assert.equal(result.outcome, "succeeded");
 	assert.deepEqual(result.data?.items.map((item) => [item.index, item.action, item.outcome]), [
 		[0, "getCode", "succeeded"],

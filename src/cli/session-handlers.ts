@@ -1,4 +1,5 @@
 import type {
+	CanvasDiff,
 	EditId,
 	JsonValue,
 	JsonObject,
@@ -23,6 +24,8 @@ import { withConnectionToken } from "../infra/connection.js";
 import { captureSessionCheckpoint } from "./handlers.js";
 import { envelopeForRestore } from "../session/checkpoints.js";
 import { HopperCoreError } from "../core/errors.js";
+import type { HopperError, HopperWarning } from "../core/errors.js";
+import { diffCanvases, emptyCanvas } from "../core/canvas.js";
 
 export async function handleSession(
 	command: SessionCommand,
@@ -241,7 +244,7 @@ async function reconcile(
 	}
 	if (edit.state === "succeeded" || edit.state === "failed" || edit.state === "partial") {
 		return cliResponse({
-			ok: true,
+			ok: edit.state === "succeeded",
 			command: "history.reconcile",
 			sessionId,
 			editId,
@@ -250,7 +253,7 @@ async function reconcile(
 			data: edit as unknown as JsonValue,
 			artifacts: [],
 			warnings: [],
-			error: null,
+			error: edit.error,
 		});
 	}
 
@@ -259,11 +262,29 @@ async function reconcile(
 	try {
 		const session = await deps.sessions.read(sessionId);
 		const status = await client.getRequestStatus(stored.requestId, stored.payloadSha256);
-		const state = status.data?.state;
+		const state = status.data?.state
+			?? (status.error?.code === "request_not_found" ? "not_found" : undefined)
+			?? (status.error?.code === "request_expired" ? "expired" : undefined);
 		if (state && state !== "running" && state !== "not_found" && state !== "expired") {
-			const outcome = state === "succeeded" || state === "failed" || state === "partial"
+			let outcome: "succeeded" | "failed" | "partial" | "unknown" = state === "succeeded" || state === "failed" || state === "partial"
 				? state
 				: "unknown";
+			let error: HopperError | null = outcome === "succeeded" ? null : {
+				code: outcome === "partial" ? "partial_mutation" : "operation_failed",
+				message: `Reconciled from backend state ${state}.`,
+				retryable: false,
+			};
+			const checkpoint = await reconcileCheckpoint(
+				client,
+				sessionId,
+				edit,
+				session,
+				outcome,
+				status.data?.cachedResponse?.data?.canvasDigestAfter ?? null,
+				deps,
+			);
+			outcome = checkpoint.outcome;
+			error = checkpoint.error ?? error;
 			await journal.append(requestOutcomeEvent({
 				sessionId,
 				editId,
@@ -274,14 +295,10 @@ async function reconcile(
 					source: "reconcile",
 					backendState: state,
 				},
-				error: outcome === "succeeded" ? null : {
-					code: outcome === "partial" ? "partial_mutation" : "operation_failed",
-					message: `Reconciled from backend state ${state}.`,
-					retryable: false,
-				},
-				warnings: [],
-				afterCheckpointId: null,
-				diff: null,
+				error,
+				warnings: checkpoint.warnings,
+				afterCheckpointId: checkpoint.afterCheckpointId,
+				diff: checkpoint.diff,
 				durationMs: 0,
 			}));
 			const updated = await journal.find(editId);
@@ -294,8 +311,8 @@ async function reconcile(
 				message: `Reconciled edit ${editId} from backend state ${state}.`,
 				data: updated as unknown as JsonValue,
 				artifacts: [],
-				warnings: [],
-				error: null,
+				warnings: checkpoint.warnings,
+				error,
 			});
 		}
 
@@ -313,7 +330,22 @@ async function reconcile(
 						withConnectionToken(stored.request, deps.connection()) as never,
 						{ receiveTimeoutMs: deps.receiveTimeoutMs ?? 30_000 },
 					);
-					const outcome = response.outcome === "in_progress" ? "unknown" : response.outcome;
+					let outcome = response.outcome === "in_progress" ? "unknown" : response.outcome;
+					let error = response.error;
+					const executionDigest = response.data && typeof response.data === "object" && !Array.isArray(response.data)
+						? response.data.canvasDigestAfter as string | null | undefined
+						: null;
+					const checkpoint = await reconcileCheckpoint(
+						client,
+						sessionId,
+						edit,
+						session,
+						outcome,
+						executionDigest ?? null,
+						deps,
+					);
+					outcome = checkpoint.outcome;
+					error = checkpoint.error ?? error;
 					await journal.append(requestOutcomeEvent({
 						sessionId,
 						editId,
@@ -321,10 +353,10 @@ async function reconcile(
 						occurredAt: new Date().toISOString(),
 						outcome,
 						resultSummary: { source: "reconcile-resend" },
-						error: response.error,
-						warnings: [],
-						afterCheckpointId: null,
-						diff: null,
+						error,
+						warnings: checkpoint.warnings,
+						afterCheckpointId: checkpoint.afterCheckpointId,
+						diff: checkpoint.diff,
 						durationMs: 0,
 					}));
 					const updated = await journal.find(editId);
@@ -337,8 +369,8 @@ async function reconcile(
 						message: `Resent the original request; outcome ${outcome}.`,
 						data: updated as unknown as JsonValue,
 						artifacts: [],
-						warnings: [],
-						error: response.error,
+						warnings: checkpoint.warnings,
+						error,
 					});
 				} finally {
 					await requester.close();
@@ -366,6 +398,60 @@ async function reconcile(
 		});
 	} finally {
 		await client.close().catch(() => {});
+	}
+}
+
+async function reconcileCheckpoint(
+	client: BackendClient,
+	sessionId: SessionId,
+	edit: MaterializedEdit,
+	session: SessionRecord,
+	outcome: "succeeded" | "failed" | "partial" | "unknown",
+	executionDigest: string | null,
+	deps: CliDependencies,
+): Promise<{
+	outcome: "succeeded" | "failed" | "partial" | "unknown";
+	error: HopperError | null;
+	warnings: HopperWarning[];
+	afterCheckpointId: string | null;
+	diff: CanvasDiff | null;
+}> {
+	const base = {
+		outcome,
+		error: null,
+		warnings: [] as HopperWarning[],
+		afterCheckpointId: null,
+		diff: null,
+	};
+	if (outcome !== "succeeded" || !edit.beforeCheckpointId || edit.mutationScope !== "grasshopper") {
+		return base;
+	}
+	try {
+		const after = await captureSessionCheckpoint(client, sessionId, {
+			backendId: session.binding.backendId,
+			grasshopperDocumentId: session.binding.grasshopperDocumentId,
+		}, deps);
+		const before = await deps.checkpoints.read(sessionId, edit.beforeCheckpointId);
+		const diff = diffCanvases(before.canonicalCanvas, after.canonicalCanvas ?? emptyCanvas());
+		if (executionDigest && executionDigest !== after.canvasDigest) {
+			const message = "The reconciled after-checkpoint digest differed from the execution response.";
+			return {
+				outcome: "partial",
+				error: { code: "partial_mutation", message, retryable: false },
+				warnings: [{ code: "checkpoint_race", message }],
+				afterCheckpointId: after.checkpointId,
+				diff,
+			};
+		}
+		return { ...base, afterCheckpointId: after.checkpointId, diff };
+	} catch {
+		return {
+			...base,
+			warnings: [{
+				code: "checkpoint_incomplete",
+				message: "The mutation succeeded but reconciliation could not capture the after checkpoint.",
+			}],
+		};
 	}
 }
 
@@ -440,22 +526,107 @@ async function restoreHistory(
 				checkpoint: envelope,
 				transactionName: `hopper history ${direction}`,
 			}, { requestId: createRequestId() })) as RestoreCheckpointRequest;
-			const restored = await client.restoreCheckpoint(restoreRequest);
+			const newEditId = await deps.sessions.reserveEditId(command.sessionId);
+			await deps.sessions.writeRequest(command.sessionId, {
+				schemaVersion: 1,
+				requestId: restoreRequest.requestId,
+				payloadSha256: restoreRequest.payloadSha256,
+				request: restoreRequest,
+			});
+			await journal.append({
+				schemaVersion: 1,
+				eventType: "request.started",
+				eventId: crypto.randomUUID(),
+				sessionId: command.sessionId,
+				editId: newEditId,
+				requestId: restoreRequest.requestId,
+				occurredAt: new Date().toISOString(),
+				operation: command.kind,
+				mutationScope: "grasshopper",
+				inputSummary: { sourceEditId: command.editId, direction },
+				backendId: live.binding.backendId,
+				grasshopperDocumentId: live.binding.grasshopperDocumentId,
+				rhinoDocumentId: live.binding.rhinoDocumentId,
+				beforeCheckpointId: expectedLiveId,
+			});
+			let restored: Awaited<ReturnType<BackendClient["restoreCheckpoint"]>>;
+			try {
+				restored = await client.restoreCheckpoint(restoreRequest);
+			} catch (cause) {
+				const error: HopperError = cause instanceof HopperCoreError
+					? cause.hopperError
+					: {
+						code: "outcome_unknown",
+						message: cause instanceof Error ? cause.message : String(cause),
+						retryable: true,
+					};
+				const outcome = error.code === "outcome_unknown" ? "unknown" : "failed";
+				await journal.append(requestOutcomeEvent({
+					sessionId: command.sessionId,
+					editId: newEditId,
+					requestId: restoreRequest.requestId,
+					occurredAt: new Date().toISOString(),
+					outcome,
+					resultSummary: { sourceEditId: command.editId, direction },
+					error,
+					warnings: [],
+					afterCheckpointId: null,
+					diff: null,
+					durationMs: 0,
+				}));
+				response = cliError(command.kind, error, { sessionId: command.sessionId, editId: newEditId });
+				return;
+			}
 			if (restored.outcome !== "succeeded" || !restored.data) {
 				const error = restored.error ?? {
 					code: "operation_failed" as const,
 					message: `${direction} failed.`,
 					retryable: false,
 				};
-				response = cliError(command.kind, error, { sessionId: command.sessionId, editId: command.editId });
+				await journal.append(requestOutcomeEvent({
+					sessionId: command.sessionId,
+					editId: newEditId,
+					requestId: restoreRequest.requestId,
+					occurredAt: new Date().toISOString(),
+					outcome: restored.outcome === "in_progress" ? "unknown" : restored.outcome,
+					resultSummary: { sourceEditId: command.editId, direction },
+					error,
+					warnings: [],
+					afterCheckpointId: null,
+					diff: null,
+					durationMs: 0,
+				}));
+				response = cliError(command.kind, error, { sessionId: command.sessionId, editId: newEditId });
 				return;
 			}
-			const newEditId = await deps.sessions.reserveEditId(command.sessionId);
-			const after = await captureSessionCheckpoint(client, command.sessionId, {
-				backendId: live.binding.backendId,
-				grasshopperDocumentId: live.binding.grasshopperDocumentId,
-			}, deps);
-			await journal.append({
+			let afterCheckpointId: string | null = null;
+			const warnings: HopperWarning[] = [];
+			try {
+				const after = await captureSessionCheckpoint(client, command.sessionId, {
+					backendId: live.binding.backendId,
+					grasshopperDocumentId: live.binding.grasshopperDocumentId,
+				}, deps);
+				afterCheckpointId = after.checkpointId;
+			} catch {
+				warnings.push({
+					code: "checkpoint_incomplete",
+					message: `The ${direction} succeeded but its after checkpoint could not be captured.`,
+				});
+			}
+			await journal.append(requestOutcomeEvent({
+				sessionId: command.sessionId,
+				editId: newEditId,
+				requestId: restoreRequest.requestId,
+				occurredAt: new Date().toISOString(),
+				outcome: "succeeded",
+				resultSummary: { sourceEditId: command.editId, direction },
+				error: null,
+				warnings,
+				afterCheckpointId,
+				diff: null,
+				durationMs: 0,
+			}));
+			if (afterCheckpointId) await journal.append({
 				schemaVersion: 1,
 				eventType: "history.restored",
 				eventId: crypto.randomUUID(),
@@ -466,7 +637,7 @@ async function restoreHistory(
 				occurredAt: new Date().toISOString(),
 				direction,
 				beforeCheckpointId: expectedLiveId,
-				afterCheckpointId: after.checkpointId,
+				afterCheckpointId,
 				outcome: "succeeded",
 			});
 			response = cliResponse({
@@ -474,16 +645,16 @@ async function restoreHistory(
 				command: command.kind,
 				sessionId: command.sessionId,
 				editId: newEditId,
-				requestId: restoreRequest.requestId,
+					requestId: restoreRequest.requestId,
 				outcome: "succeeded",
 				message: `${direction} of ${command.editId} restored checkpoint ${restoreFromId}.`,
 				data: {
 					sourceEditId: command.editId,
 					restored: restored.data,
-					afterCheckpointId: after.checkpointId,
+						afterCheckpointId,
 				} as JsonValue,
 				artifacts: [],
-				warnings: [],
+				warnings,
 				error: null,
 			});
 		});

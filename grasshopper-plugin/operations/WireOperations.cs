@@ -108,23 +108,23 @@ namespace rhino_zmq_poc
         public static string ConnectWire(GH_Document doc, ConnectWireParams param)
         {
             if (doc == null)
-                return "connectWire error: document is null";
+                return CommandOperationException.Fail("connectWire error: document is null");
 
             var sourceObj = FindByInstanceId(doc, param.From.ComponentId);
             if (sourceObj == null)
-                return $"connectWire error: source component not found '{param.From.ComponentId}'";
+                return CommandOperationException.Fail($"connectWire error: source component not found '{param.From.ComponentId}'");
 
             var targetObj = FindByInstanceId(doc, param.To.ComponentId);
             if (targetObj == null)
-                return $"connectWire error: target component not found '{param.To.ComponentId}'";
+                return CommandOperationException.Fail($"connectWire error: target component not found '{param.To.ComponentId}'");
 
             var sourcePort = FindOutputPort(sourceObj, param.From.Port);
             if (sourcePort == null)
-                return $"connectWire error: output port '{param.From.Port}' not found on source";
+                return CommandOperationException.Fail($"connectWire error: output port '{param.From.Port}' not found on source");
 
             var targetPort = FindInputPort(targetObj, param.To.Port);
             if (targetPort == null)
-                return $"connectWire error: input port '{param.To.Port}' not found on target";
+                return CommandOperationException.Fail($"connectWire error: input port '{param.To.Port}' not found on target");
 
             targetPort.AddSource(sourcePort);
 						targetObj.ExpireSolution(true);
@@ -137,23 +137,23 @@ namespace rhino_zmq_poc
         public static string DisconnectWire(GH_Document doc, DisconnectWireParams param)
         {
             if (doc == null)
-                return "disconnectWire error: document is null";
+                return CommandOperationException.Fail("disconnectWire error: document is null");
 
             var sourceObj = FindByInstanceId(doc, param.From.ComponentId);
             if (sourceObj == null)
-                return $"disconnectWire error: source component not found '{param.From.ComponentId}'";
+                return CommandOperationException.Fail($"disconnectWire error: source component not found '{param.From.ComponentId}'");
 
             var targetObj = FindByInstanceId(doc, param.To.ComponentId);
             if (targetObj == null)
-                return $"disconnectWire error: target component not found '{param.To.ComponentId}'";
+                return CommandOperationException.Fail($"disconnectWire error: target component not found '{param.To.ComponentId}'");
 
             var sourcePort = FindOutputPort(sourceObj, param.From.Port);
             if (sourcePort == null)
-                return $"disconnectWire error: output port '{param.From.Port}' not found on source";
+                return CommandOperationException.Fail($"disconnectWire error: output port '{param.From.Port}' not found on source");
 
             var targetPort = FindInputPort(targetObj, param.To.Port);
             if (targetPort == null)
-                return $"disconnectWire error: input port '{param.To.Port}' not found on target";
+                return CommandOperationException.Fail($"disconnectWire error: input port '{param.To.Port}' not found on target");
 
             targetPort.RemoveSource(sourcePort);
 						targetObj.ExpireSolution(true);

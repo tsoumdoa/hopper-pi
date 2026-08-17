@@ -8,7 +8,7 @@ namespace rhino_zmq_poc
         public static string RenameComponent(GH_Document doc, RenameComponentParams param)
         {
             if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"renameComponent error: {err}";
+                return CommandOperationException.Fail($"renameComponent error: {err}");
 
             obj.NickName = param.NickName;
             doc.NewSolution(true);
@@ -19,12 +19,12 @@ namespace rhino_zmq_poc
         public static string SetComponentLocked(GH_Document doc, SetComponentLockedParams param)
         {
             if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"setComponentLocked error: {err}";
+                return CommandOperationException.Fail($"setComponentLocked error: {err}");
 
             if (obj is GH_ActiveObject activeObj)
                 activeObj.Locked = param.Locked;
             else
-                return $"setComponentLocked error: object '{param.TargetId}' does not support locking";
+                return CommandOperationException.Fail($"setComponentLocked error: object '{param.TargetId}' does not support locking");
 
             return $"setComponentLocked: set ({param.TargetId}) locked={param.Locked}";
         }
@@ -32,7 +32,7 @@ namespace rhino_zmq_poc
         public static string SetComponentHidden(GH_Document doc, SetComponentHiddenParams param)
         {
             if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"setComponentHidden error: {err}";
+                return CommandOperationException.Fail($"setComponentHidden error: {err}");
 
             var hiddenProp = obj.GetType().GetProperty("Hidden");
             if (hiddenProp != null)
@@ -45,7 +45,7 @@ namespace rhino_zmq_poc
             }
             else
             {
-                return $"setComponentHidden error: object '{param.TargetId}' does not support hiding";
+                return CommandOperationException.Fail($"setComponentHidden error: object '{param.TargetId}' does not support hiding");
             }
 
             return $"setComponentHidden: set ({param.TargetId}) hidden={param.Hidden}";

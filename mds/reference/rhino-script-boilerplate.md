@@ -67,7 +67,7 @@ Console.WriteLine(id);
 
 ## Undo
 
-When Hopper Pi lifecycle hooks run, all `rh_run_script` calls in one agent turn are grouped into **one Rhino Undo** step (separate from Grasshopper canvas undo).
+One `rh_run_script` call sends all of its items in one Rhino mutation transaction and creates at most one Rhino undo record.
 
 ## Do not use rh_run_script for
 

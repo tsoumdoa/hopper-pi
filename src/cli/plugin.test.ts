@@ -33,6 +33,10 @@ test("plugin install refuses a populated non-Hopper directory without deleting i
 		() => assertSafePluginInstallTarget(installDir, false),
 		(error: unknown) => error instanceof HopperCoreError && error.hopperError.code === "invalid_input",
 	);
+	assert.throws(
+		() => assertSafePluginInstallTarget(installDir, true),
+		(error: unknown) => error instanceof HopperCoreError && error.hopperError.code === "invalid_input",
+	);
 	assert.equal(await readFile(stranger, "utf8"), "keep me\n");
 });
 

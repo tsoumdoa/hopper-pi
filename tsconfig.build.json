@@ -1,0 +1,20 @@
+{
+	"extends": "./tsconfig.json",
+	"exclude": [
+		"src/**/*.test.ts",
+		"src/contracts/**",
+		"src/scripts/**",
+		"src/infra/backend-status-cache.ts",
+		"src/infra/backend-status.ts",
+		"src/infra/command-dispatch.ts",
+		"src/infra/request-helpers.ts",
+		"src/services/agent-transaction.ts",
+		"src/services/gh-apply-graph.ts",
+		"src/services/rhino-agent-transaction.ts",
+		"src/tools/canvas-fetch.ts",
+		"src/tools/canvas-formatters.ts",
+		"src/tools/query-handlers.ts",
+		"src/tools/result-formatters.ts",
+		"src/tools/rhino-script-handlers.ts"
+	]
+}

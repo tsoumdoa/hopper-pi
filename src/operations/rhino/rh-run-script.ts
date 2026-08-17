@@ -92,65 +92,56 @@ export const rhRunScriptOperation = defineOperation<RhRunScriptInput, RhRunScrip
 			});
 		}
 
-		const items: RhRunScriptData["items"] = [];
-		for (const [index, item] of input.items.entries()) {
-			context.reportProgress({
-				phase: "rhino_script",
-				message: `Running Rhino ${item.mode} script.`,
-				completed: index,
-				total: input.items.length,
-			});
-			try {
-				const response = await context.backend.query<RunRhinoScriptResponse>({
-					type: "runRhinoScript",
-					mode: item.mode,
-					source: item.source,
-					echo: item.echo ?? false,
-				}, context.signal);
-				items.push({
-					index,
-					mode: item.mode,
-					outcome: response.ok ? "succeeded" : "failed",
-					output: response.output ?? "",
-					echoed: item.mode === "command" && item.echo === true,
-					error: response.ok ? null : response.error || "Rhino script failed.",
-				});
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				items.push({
-					index,
-					mode: item.mode,
-					outcome: "unknown",
-					output: "",
-					echoed: item.mode === "command" && item.echo === true,
-					error: message,
-				});
-				for (let skippedIndex = index + 1; skippedIndex < input.items.length; skippedIndex++) {
-					const skipped = input.items[skippedIndex]!;
-					items.push({
-						index: skippedIndex,
-						mode: skipped.mode,
-						outcome: "skipped",
-						output: "",
-						echoed: false,
-						error: null,
-					});
-				}
-				return failed("outcome_unknown", message, {
-					outcome: "unknown",
+		context.reportProgress({
+			phase: "rhino_script",
+			message: `Running ${input.items.length} Rhino script item(s).`,
+			completed: 0,
+			total: input.items.length,
+		});
+		const response = await context.backend.executeActions({
+			scope: "rhino",
+			actions: input.items.map((item) => ({
+				kind: "runRhinoScript",
+				input: { mode: item.mode, source: item.source, echo: item.echo ?? false },
+			})),
+		}, context.signal);
+		const envelope = response.data && typeof response.data === "object" && !Array.isArray(response.data)
+			? response.data
+			: null;
+		const actionResults = envelope && Array.isArray(envelope.actions) ? envelope.actions : [];
+		const items: RhRunScriptData["items"] = input.items.map((item, index) => {
+			const action = actionResults[index];
+			const record = action && typeof action === "object" && !Array.isArray(action) ? action : null;
+			const payload = record?.data && typeof record.data === "object" && !Array.isArray(record.data)
+				? record.data as RunRhinoScriptResponse
+				: null;
+			const outcome = record?.outcome === "succeeded" || record?.outcome === "failed"
+				|| record?.outcome === "unknown" || record?.outcome === "skipped"
+				? record.outcome
+				: response.outcome === "unknown" ? "unknown" : "skipped";
+			return {
+				index,
+				mode: item.mode,
+				outcome,
+				output: payload?.output ?? "",
+				echoed: item.mode === "command" && item.echo === true,
+				error: outcome === "failed" || outcome === "unknown"
+					? payload?.error || (record?.message as string | undefined) || response.error?.message || "Rhino script failed."
+					: null,
+			};
+		});
+		const base = response.outcome === "succeeded"
+			? succeeded(`Completed ${items.length} Rhino script item(s).`, { items })
+			: failed(
+				response.outcome === "unknown" ? "outcome_unknown"
+					: response.outcome === "partial" ? "partial_mutation" : "operation_failed",
+				response.error?.message ?? `Rhino script request ${response.outcome}.`,
+				{
+					outcome: response.outcome === "in_progress" ? "unknown" : response.outcome,
 					data: { items },
-					retryable: true,
-				});
-			}
-		}
-		const failures = items.filter((item) => item.outcome === "failed");
-		if (failures.length > 0) {
-			const hasSuccess = failures.length < items.length;
-			return failed(hasSuccess ? "partial_mutation" : "operation_failed", failures[0]!.error!, {
-				outcome: hasSuccess ? "partial" : "failed",
-				data: { items },
-			});
-		}
-		return succeeded(`Completed ${items.length} Rhino script item(s).`, { items });
+					retryable: response.outcome === "unknown",
+				},
+			);
+		return { ...base, execution: { canvasDigestAfter: response.canvasDigestAfter ?? null } };
 	},
 });

@@ -261,12 +261,25 @@ namespace rhino_zmq_poc
                     }
                     case "controlRhinoView":
                     {
-                        var param = action.Input.ValueKind == JsonValueKind.Object
-                            ? JsonSerializer.Deserialize<ControlRhinoViewParams>(action.Input.GetRawText())
-                            : null;
-                        var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
-                        var controlled = ViewportCaptureOps.Control(rhinoDoc, param);
-                        return Execution.ActionResult.Success("View control applied.", controlled);
+						var param = action.Input.ValueKind == JsonValueKind.Object
+							? JsonSerializer.Deserialize<ControlRhinoViewParams>(action.Input.GetRawText())
+							: null;
+						var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
+						var controlled = ViewportCaptureOps.Control(rhinoDoc, param);
+						return controlled.Ok
+							? Execution.ActionResult.Success(controlled.Message ?? "View control applied.", controlled)
+							: new Execution.ActionResult
+							{
+								Outcome = Execution.ExecutionOutcomes.Failed,
+								Message = controlled.Error ?? "View control failed.",
+								Data = controlled,
+								Error = new Execution.HopperError
+								{
+									Code = "operation_failed",
+									Message = controlled.Error ?? "View control failed.",
+									Retryable = false,
+								},
+							};
                     }
                     default:
                         return Execution.ActionResult.Failure(

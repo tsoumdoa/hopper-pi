@@ -247,6 +247,7 @@ export function finishItemMutation(
 		data: response.outcome === "unknown"
 			? null
 			: itemDataFromResponse(response, descriptors),
+		execution: { canvasDigestAfter: response.canvasDigestAfter ?? null },
 		warnings: [],
 		artifacts: [],
 		error,

@@ -91,6 +91,11 @@ export type OperationResult<T extends JsonValue> = {
 	outcome: OperationOutcome;
 	message: string;
 	data: T | null;
+	/** Mutation metadata used by the session journal. This is not part of the
+	 * operation's public data schema. */
+	execution?: {
+		canvasDigestAfter: string | null;
+	};
 	warnings: HopperWarning[];
 	artifacts: ArtifactRecord[];
 	error: HopperError | null;
@@ -123,6 +128,7 @@ export type ExecuteActionsResponse = {
 	outcome: OperationOutcome;
 	data: JsonValue | null;
 	error: HopperError | null;
+	canvasDigestAfter?: string | null;
 };
 
 export interface BackendClient {

@@ -9,11 +9,11 @@ description: Primary workflow for creating, editing, debugging, reviewing, or or
 
 Build, modify, review, or validate Grasshopper definitions per the user's request.
 
-**Rhino vs Grasshopper:** This skill is **Grasshopper canvas only** (`gh_*`). Directly commit current geometry to Rhino with `rh_run_script`; build a reusable parametric bake pipeline inside Grasshopper with [Cookbook Recipe 9](../gh-cookbook/reference/recipe-9-bake-geometry.md). Use `rh_view_control` for normal viewport/camera changes. If “bake” is ambiguous and either outcome is plausible, use `pick_option`.
+**Rhino vs Grasshopper:** This skill is **Grasshopper canvas only** (`gh_*`). Directly commit current geometry to Rhino with `rh_run_script`; build a reusable parametric bake pipeline inside Grasshopper with [Cookbook Recipe 9](../gh-cookbook/reference/recipe-9-bake-geometry.md). Use `rh_view_control` for normal viewport/camera changes. If "bake" is ambiguous and either outcome is plausible, ask the user which result they want.
 
 ## Complexity tiers
 
-Assess tier before building. When tier is ambiguous **and** the choice materially changes geometry, data loss, or user-visible output, use `pick_option` to confirm scope before placing components. Otherwise proceed with the documented default and state the assumption briefly.
+Assess tier before building. When tier is ambiguous **and** the choice materially changes geometry, data loss, or user-visible output, ask the user to confirm scope before placing components. Otherwise proceed with the documented default and state the assumption briefly.
 
 | Tier | When | New-build action | Read canvas |
 |------|------|------------------|-------------|
@@ -76,22 +76,13 @@ Full table, bounds math, pivot safety, worked examples → [layout-system.md](..
 - Extruded crvs result in open breps, you need to extrude them as srf or cap
   them.
 
-## User clarification tools
+## User clarification
 
 When the user's intent is ambiguous, prefer documented defaults and state assumptions. Ask only when the answer materially changes output, destructive edits, or repair strategy:
 
-| Situation | Tool |
-|-----------|------|
-| Vague scope with materially different outcomes ("fix this", "clean up", multiple interpretations) | `pick_option` |
-| 2+ plausible component types after `gh_list_components` and the choice changes the result | `pick_option` for the type to create (value = typeGuid) |
-| “This/that/the” refers to multiple canvas objects | `pick_option` after `gh_get_canvas` (value = targetId) |
-| Tier 2–3 build planning with unresolved scope, approach, or output choices | `pick_option` for the highest-impact choices only (max 2 calls total) |
-| Errors after wiring — repair strategy unclear | `pick_option` (surgical fix / rebuild / stop) |
-| Open-ended clarification with no good options | `ask_user` (free-text question) |
+Ask a short, direct question when vague scope, multiple component matches, ambiguous target references, or an unclear repair strategy would change the result. For Tier 2-3 planning, ask only about the highest-impact unresolved choices. Do not ask about layout spacing, slider ranges, or standard Custom Preview patterns.
 
-**Limits:** Max 2 `pick_option`/`ask_user` calls per turn unless the user wants collaboration. For Tier 2–3 planning, ask only choices that materially change the build and stay within that cap. `pick_option` needs 2–6 options per call (an "Other" option is always shown for custom answers — do not add it yourself); if you have only one, use `ask_user`. Do not ask about layout spacing, slider ranges, or standard Custom Preview patterns.
-
-Before `gh_param_rhino` **internalize** on >10 objects or a whole layer, use `pick_option` to confirm reference vs internalize.
+Before `gh_param_rhino` **internalize** on more than 10 objects or a whole layer, ask the user to confirm reference vs internalize.
 
 ## Final checklist
 

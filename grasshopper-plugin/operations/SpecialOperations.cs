@@ -13,14 +13,14 @@ namespace rhino_zmq_poc
         public static string CreateToggle(GH_Document doc, CreateToggleParams param)
         {
             if (!GraphObjectFactory.TryCreateToggle(doc, param, out var created, out var error))
-                return $"createToggle error: {error}";
+                return CommandOperationException.Fail($"createToggle error: {error}");
             return $"createToggle: created ({created.InstanceGuid}) at ({param.Position.X}, {param.Position.Y}) value={param.Value}";
         }
 
         public static string SetToggleValue(GH_Document doc, SetToggleValueParams param)
         {
             if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"setToggleValue error: {err}";
+                return CommandOperationException.Fail($"setToggleValue error: {err}");
 
             if (obj is GH_BooleanToggle toggle)
             {
@@ -32,20 +32,20 @@ namespace rhino_zmq_poc
                 return $"setToggleValue: set ({param.TargetId}) = {param.Value}";
             }
 
-            return $"setToggleValue error: object '{param.TargetId}' is not a Boolean Toggle";
+            return CommandOperationException.Fail($"setToggleValue error: object '{param.TargetId}' is not a Boolean Toggle");
         }
 
         public static string CreateSwatch(GH_Document doc, CreateSwatchParams param)
         {
             if (!GraphObjectFactory.TryCreateSwatch(doc, param, out var created, out var error))
-                return $"createSwatch error: {error}";
+                return CommandOperationException.Fail($"createSwatch error: {error}");
             return $"createSwatch: created ({created.InstanceGuid}) at ({param.Position.X}, {param.Position.Y}) color={param.Color}";
         }
 
         public static string SetSwatchColor(GH_Document doc, SetSwatchColorParams param)
         {
             if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"setSwatchColor error: {err}";
+                return CommandOperationException.Fail($"setSwatchColor error: {err}");
 
             if (obj is GH_ColourSwatch swatch)
             {
@@ -57,20 +57,20 @@ namespace rhino_zmq_poc
                 return $"setSwatchColor: set ({param.TargetId}) color = {param.Color}";
             }
 
-            return $"setSwatchColor error: object '{param.TargetId}' is not a Colour Swatch";
+            return CommandOperationException.Fail($"setSwatchColor error: object '{param.TargetId}' is not a Colour Swatch");
         }
 
         public static string CreateScribble(GH_Document doc, CreateScribbleParams param)
         {
             if (!GraphObjectFactory.TryCreateScribble(doc, param, out var created, out var error))
-                return $"createScribble error: {error}";
+                return CommandOperationException.Fail($"createScribble error: {error}");
             return $"createScribble: created ({created.InstanceGuid}) at ({param.Position.X}, {param.Position.Y})";
         }
 
         public static string SetScribbleText(GH_Document doc, SetScribbleTextParams param)
         {
             if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"setScribbleText error: {err}";
+                return CommandOperationException.Fail($"setScribbleText error: {err}");
 
             if (obj is GH_Scribble scribble)
             {
@@ -82,13 +82,13 @@ namespace rhino_zmq_poc
                 return $"setScribbleText: set ({param.TargetId}) text = \"{param.Text}\"";
             }
 
-            return $"setScribbleText error: object '{param.TargetId}' is not a Scribble";
+            return CommandOperationException.Fail($"setScribbleText error: object '{param.TargetId}' is not a Scribble");
         }
 
         public static string CreateValueList(GH_Document doc, CreateValueListParams param)
         {
             if (!GraphObjectFactory.TryCreateValueList(doc, param, out var created, out var error))
-                return $"createValueList error: {error}";
+                return CommandOperationException.Fail($"createValueList error: {error}");
             var count = created is GH_ValueList valueList ? valueList.ListItems.Count : 0;
             return $"createValueList: created ({created.InstanceGuid}) at ({param.Position.X}, {param.Position.Y}) with {count} items";
         }
@@ -96,12 +96,12 @@ namespace rhino_zmq_poc
         public static string SetValueListSelected(GH_Document doc, SetValueListSelectedParams param)
         {
             if (!OpHelpers.TryResolveTarget(doc, param.TargetId, out var obj, out var err))
-                return $"setValueListSelected error: {err}";
+                return CommandOperationException.Fail($"setValueListSelected error: {err}");
 
             if (obj is GH_ValueList valueList)
             {
                 if (param.SelectedIndex < 0 || param.SelectedIndex >= valueList.ListItems.Count)
-                    return $"setValueListSelected error: index {param.SelectedIndex} out of range [0..{valueList.ListItems.Count - 1}]";
+                    return CommandOperationException.Fail($"setValueListSelected error: index {param.SelectedIndex} out of range [0..{valueList.ListItems.Count - 1}]");
 
                 valueList.ListItems[param.SelectedIndex].Selected = true;
                 valueList.Attributes?.ExpireLayout();
@@ -111,7 +111,7 @@ namespace rhino_zmq_poc
                 return $"setValueListSelected: set ({param.TargetId}) selectedIndex = {param.SelectedIndex}";
             }
 
-            return $"setValueListSelected error: object '{param.TargetId}' is not a Value List";
+            return CommandOperationException.Fail($"setValueListSelected error: object '{param.TargetId}' is not a Value List");
         }
     }
 }

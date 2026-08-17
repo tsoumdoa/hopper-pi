@@ -99,12 +99,31 @@ export const rhViewControlOperation = defineOperation<RhViewControlInput, RhView
 		const validationError = validate(input);
 		if (validationError) return failed("invalid_input", validationError);
 		context.reportProgress({ phase: "rhino_view", message: `Updating Rhino view (${input.action}).` });
-		const response = await context.backend.query<ControlResponse>({
-			type: "controlRhinoView",
-			...input,
+		const response = await context.backend.executeActions({
+			scope: "viewport",
+			actions: [{ kind: "controlRhinoView", input }],
 		}, context.signal);
-		if (!response.ok) return failed("operation_failed", response.error || "Rhino view update failed.");
-		const message = response.message || "Rhino view updated.";
-		return succeeded(message, { message, metadata: response.metadata ?? null });
+		const envelope = response.data && typeof response.data === "object" && !Array.isArray(response.data)
+			? response.data
+			: null;
+		const action = envelope && Array.isArray(envelope.actions) ? envelope.actions[0] : null;
+		const actionRecord = action && typeof action === "object" && !Array.isArray(action) ? action : null;
+		const control = actionRecord?.data && typeof actionRecord.data === "object" && !Array.isArray(actionRecord.data)
+			? actionRecord.data as ControlResponse
+			: null;
+		if (response.outcome !== "succeeded") {
+			const base = failed<RhViewControlData>(
+				response.outcome === "unknown" ? "outcome_unknown"
+					: response.outcome === "partial" ? "partial_mutation" : "operation_failed",
+				response.error?.message || control?.error || "Rhino view update failed.",
+				{ outcome: response.outcome === "in_progress" ? "unknown" : response.outcome },
+			);
+			return { ...base, execution: { canvasDigestAfter: response.canvasDigestAfter ?? null } };
+		}
+		const message = control?.message || (actionRecord?.message as string | undefined) || "Rhino view updated.";
+		return {
+			...succeeded(message, { message, metadata: control?.metadata ?? null }),
+			execution: { canvasDigestAfter: response.canvasDigestAfter ?? null },
+		};
 	},
 });

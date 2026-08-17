@@ -388,12 +388,20 @@ namespace rhino_zmq_poc.Protocol
                     throw new HopperRequestException(
                         "request_id_conflict",
                         "The stored request used a different payload digest.");
-                case LedgerDecision.Expired:
-                    throw new HopperRequestException("request_expired", "The request is outside the deduplication window.");
-                case LedgerDecision.NotFound:
-                    throw new HopperRequestException(
-                        "request_not_found",
-                        "This backend has no record of the request. It may belong to a previous backend process.");
+				case LedgerDecision.Expired:
+					return Task.FromResult(BackendRequestRouter.Success("succeeded", new RequestStatusDataDto
+					{
+						TargetRequestId = targetRequestId,
+						State = "expired",
+						CachedResponse = null,
+					}));
+				case LedgerDecision.NotFound:
+					return Task.FromResult(BackendRequestRouter.Success("succeeded", new RequestStatusDataDto
+					{
+						TargetRequestId = targetRequestId,
+						State = "not_found",
+						CachedResponse = null,
+					}));
                 default:
                     return Task.FromResult(BackendRequestRouter.Success("succeeded", new RequestStatusDataDto
                     {

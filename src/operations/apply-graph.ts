@@ -281,10 +281,23 @@ function finishApplyGraph(response: ExecuteActionsResponse): OperationResult<App
 			message: `Grasshopper graph apply ended with outcome ${response.outcome}.`,
 			retryable: response.outcome === "unknown",
 		};
+	const envelope = response.data && typeof response.data === "object" && !Array.isArray(response.data)
+		? response.data
+		: null;
+	const firstAction = envelope && Array.isArray(envelope.actions)
+		? envelope.actions[0]
+		: null;
+	const actionData = firstAction && typeof firstAction === "object" && !Array.isArray(firstAction)
+		? firstAction.data
+		: null;
+	const directData = envelope && "counts" in envelope && "refs" in envelope
+		? envelope
+		: null;
 	return {
 		outcome: response.outcome,
 		message: resultMessage(response),
-		data: response.data as ApplyGraphData | null,
+		data: (actionData ?? directData) as ApplyGraphData | null,
+		execution: { canvasDigestAfter: response.canvasDigestAfter ?? null },
 		warnings: [],
 		artifacts: [],
 		error: response.error ?? fallbackError,

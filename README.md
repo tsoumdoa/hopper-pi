@@ -11,46 +11,10 @@ This branch is an **exploratory CLI port**. It is not a commitment to replace th
 
 ## What's new
 
-### 0.1.90 — Slim progressive tool catalog
-
-- **Opt-in progressive tools:** start with a small always-on Hopper core and activate specialists on demand. Enable with `HOPPER_PROGRESSIVE_TOOLS=1` or `--hopper-progressive-tools`. Off by default, so the current all-tools-active behavior stays.
-- **`hopper_search_tools`:** keyword search over the typed Hopper catalog; matching specialists activate for the rest of the session and reset on new/reload sessions.
-- **Catalog + size diagnostics:** tools carry group, keywords, and core flags. `/hopper-schemas sizes` reports compact schema bytes by group and tool. Discoverable tools omit prompt snippets so the active set stays lean.
-
-### 0.1.80 — Atomic graph apply & tool schema browser
-
-- **`gh_apply_graph`:** create a complete new Grasshopper subgraph in one synchronous call — components, widgets, scripts, wires, and groups — then run one solution and return short IDs plus runtime/overlap validation. New builds default to one apply; legacy edit tools stay for surgical repair.
-- **`/hopper-schemas`:** browse the exact agent-facing JSON schemas (name, description, parameters, guidelines) for every registered tool; `/hopper-schemas dump` writes `tool-schemas.json` in the cwd.
-- **Anthropic schema fix:** `gh_apply_graph` wire endpoints now emit draft 2020-12 `prefixItems` tuples so Claude no longer rejects the tool `input_schema`.
-- **Skill guidance:** modeling/cookbook/Rhino skills and reference docs point at the apply-once workflow; trim stale “core principles” from `gh-modeling-expert`.
-- **Prompt examples:** add pavilion / attractor plan prompts under `prompt-examples/`.
-
-### 0.1.70 — Faster agent guidance & screenshot override
-
-- **Less overthinking in Grasshopper/Rhino skills:** tighten clarification rules so the agent proceeds with documented defaults unless ambiguity materially changes output, risks data loss, or could edit the wrong target.
-- **Faster Grasshopper build guidance:** make “read once” a new-build default rather than a hard rule, remove verbose Tier 3 placement-math narration, allow confident multi-zone batching, and scope cleanup to touched components only.
-- **Screenshot permission override:** `HOPPER_RHINO_CAPTURE_CONSENT=allow` pre-allows Rhino viewport screenshots for restricted or non-interactive UI sessions; `deny` forces capture off. Users can also explicitly ask to allow screenshots later in a session.
-- **Tool schema cleanup:** `gh_list_components.searchFrom` now matches its documented default, and `gh_edit_components` uses action-specific required fields so agents can make shorter, more reliable tool calls.
-- **Package cleanup:** remove stale Pi skill/prompt paths that pointed at missing directories.
-
-### 0.1.6 — Undo history fix & security hardening
-
-- **Fix: Rhino undo history (#16)** — nested agent undo records broke Rhino's undo stack. Per-script `RecordDocumentUndo` is now disabled during agent turns so the single `RhinoAgentTransaction` owns the undo record, and `Cancel` no longer calls `doc.Undo()` (which could wipe unrelated user edits).
-- **Security hardening:** compare the ZMQ auth token in constant time, restrict the connection-profile token file to owner-only (`0600`), sanitize the view name interpolated into Rhino macros, and stop leaking stack traces to the wire.
-- **Reliability:** dispose the `JobQueue` signal and stop fire-and-forget shutdown waits, widen `formatMetadata` to accept null, and tighten plugin visibility (`public` → `internal`).
-- **CI/build:** add a GitHub Actions workflow for TypeScript typecheck and tests, bump to pnpm 11.5.3 / Node 22, disable credential persistence in checkout, and drop an unused `roslyn-language-server.linux-arm64` dependency.
-
-### 0.1.5 — View capture & control
-
-- **`rh_capture_view`** — capture a Rhino viewport screenshot as PNG visual context for visual QA, composition, visibility, and display checks. Permission-gated: only active after you allow Rhino viewport screenshots for the session, and only on models that accept image input.
-- **`rh_view_control`** — drive the viewport: switch active / standard / named / CPlane views, set the camera (location, target, lens length, projection), zoom (extents / selected / bounding box), and save named views.
-- New per-session viewport-capture consent flow so screenshots are opt-in.
-
-### 0.1.4 — Agent can ask questions
-
-- **`ask_user`** — ask the user a free-text clarifying question and wait for an answer when requirements are ambiguous.
-- **`pick_option`** — present 2–6 informed options to pick from (e.g. resolving ambiguous component matches after `gh_list_components`). An "Other" choice is appended automatically.
-- Fixes: silent failures on certain operations, long GUIDs leaking into output, and license corrections.
+Version 0.1.90 adds the standalone `hopper` CLI, durable sessions and history,
+the versioned request protocol, and atomic `gh_apply_graph` execution. Run
+`hopper catalog --json` and `hopper schema <operation> --json` to inspect the
+available operations.
 
 ## What you need
 
@@ -160,7 +124,7 @@ The token is generated once and reused across backend/frontend restarts, so norm
 | `gh_list_components` | Search component library by keyword |
 | `gh_get_canvas_errors` | Runtime messages plus component-overlap checks |
 
-This experiment does not ship Pi choice tools (`ask_user`, `pick_option`) or `hopper_search_tools`. The calling agent owns conversation, clarification, and model choice.
+The calling agent owns conversation, clarification, and model choice.
 
 Bundled modeling notes still live under `mds/` (`gh-modeling-expert`, `rhino-document`, `gh-cookbook`, and `gh-reference`).
 
@@ -173,7 +137,7 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 | `src/` | `hopper` CLI, operation registry, sessions, protocol client |
 | `grasshopper-plugin/` | C# Grasshopper plugin (`rhino-zmq-poc.gha`) |
 | `scripts/install-grasshopper-plugin.mjs` | Build + install plugin to Libraries |
-| `mds/` | Skills and progressive reference docs for the agent |
+| `mds/` | Modeling skills and reference docs for the agent |
 
 ## Environment variables
 

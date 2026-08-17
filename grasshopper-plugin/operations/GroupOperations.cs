@@ -11,7 +11,7 @@ namespace rhino_zmq_poc
         public static string AddGroup(GH_Document doc, AddGroupParams param)
         {
             if (doc == null)
-                return "addGroup error: document is null";
+                return CommandOperationException.Fail("addGroup error: document is null");
             var members = new System.Collections.Generic.List<IGH_DocumentObject>();
             var missing = new System.Collections.Generic.List<string>();
             foreach (var idStr in param.ComponentIds)
@@ -22,18 +22,18 @@ namespace rhino_zmq_poc
                     missing.Add(idStr);
             }
             if (missing.Count > 0)
-                return $"addGroup error: component(s) not found: {string.Join(", ", missing)}";
+                return CommandOperationException.Fail($"addGroup error: component(s) not found: {string.Join(", ", missing)}");
             if (!GraphObjectFactory.TryCreateGroup(
                 doc, param.GroupName, members, param.Color, param.Border,
                 out _, out var error))
-                return $"addGroup error: {error}";
+                return CommandOperationException.Fail($"addGroup error: {error}");
             return $"addGroup: created group '{param.GroupName}' with {members.Count} objects";
         }
 
         public static string RemoveFromGroup(GH_Document doc, RemoveFromGroupParams param)
         {
             if (doc == null)
-                return "removeFromGroup error: document is null";
+                return CommandOperationException.Fail("removeFromGroup error: document is null");
 
             GH_Group targetGroup = null;
             foreach (var obj in doc.Objects)
@@ -46,7 +46,7 @@ namespace rhino_zmq_poc
             }
 
             if (targetGroup == null)
-                return $"removeFromGroup error: group '{param.GroupName}' not found";
+                return CommandOperationException.Fail($"removeFromGroup error: group '{param.GroupName}' not found");
 
             int removedCount = 0;
             foreach (var idStr in param.ComponentIds)
@@ -78,11 +78,11 @@ namespace rhino_zmq_poc
         public static string DeleteGroup(GH_Document doc, DeleteGroupParams param)
         {
             if (doc == null)
-                return "deleteGroup error: document is null";
+                return CommandOperationException.Fail("deleteGroup error: document is null");
 
             var group = FindGroup(doc, param.GroupName);
             if (group == null)
-                return $"deleteGroup error: group '{param.GroupName}' not found";
+                return CommandOperationException.Fail($"deleteGroup error: group '{param.GroupName}' not found");
 
             doc.RemoveObject(group, false);
             return $"deleteGroup: deleted group '{param.GroupName}'";
@@ -91,11 +91,11 @@ namespace rhino_zmq_poc
         public static string ChangeGroupColor(GH_Document doc, ChangeGroupColorParams param)
         {
             if (doc == null)
-                return "changeGroupColor error: document is null";
+                return CommandOperationException.Fail("changeGroupColor error: document is null");
 
             var group = FindGroup(doc, param.GroupName);
             if (group == null)
-                return $"changeGroupColor error: group '{param.GroupName}' not found";
+                return CommandOperationException.Fail($"changeGroupColor error: group '{param.GroupName}' not found");
 
             group.Colour = Utilities.ParseRgbaColor(param.Color, Color.FromArgb(150, 255, 255, 255));
             return $"changeGroupColor: set color of group '{param.GroupName}' to '{param.Color}'";
@@ -104,11 +104,11 @@ namespace rhino_zmq_poc
         public static string RenameGroup(GH_Document doc, RenameGroupParams param)
         {
             if (doc == null)
-                return "renameGroup error: document is null";
+                return CommandOperationException.Fail("renameGroup error: document is null");
 
             var group = FindGroup(doc, param.GroupName);
             if (group == null)
-                return $"renameGroup error: group '{param.GroupName}' not found";
+                return CommandOperationException.Fail($"renameGroup error: group '{param.GroupName}' not found");
 
             string oldName = group.NickName;
             group.NickName = param.Name;
@@ -118,11 +118,11 @@ namespace rhino_zmq_poc
         public static string ChangeGroupStyle(GH_Document doc, ChangeGroupStyleParams param)
         {
             if (doc == null)
-                return "changeGroupStyle error: document is null";
+                return CommandOperationException.Fail("changeGroupStyle error: document is null");
 
             var group = FindGroup(doc, param.GroupName);
             if (group == null)
-                return $"changeGroupStyle error: group '{param.GroupName}' not found";
+                return CommandOperationException.Fail($"changeGroupStyle error: group '{param.GroupName}' not found");
 
             group.Colour = Utilities.ParseRgbaColor(param.Color, group.Colour);
             if (!string.IsNullOrEmpty(param.Name))

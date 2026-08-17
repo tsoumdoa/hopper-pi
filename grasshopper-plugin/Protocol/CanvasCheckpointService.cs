@@ -120,14 +120,18 @@ namespace rhino_zmq_poc.Protocol
                 if (obj == null || DocumentSnapshots.IsInfrastructure(obj)) continue;
                 if (obj is GH_Group group)
                 {
-                    canvas.Groups.Add(new CanonicalGroupDto
-                    {
+					canvas.Groups.Add(new CanonicalGroupDto
+					{
                         Id = group.InstanceGuid.ToString("D").ToLowerInvariant(),
                         Name = group.NickName ?? "",
                         MemberIds = group.Objects()
                             .Select(member => member.InstanceGuid.ToString("D").ToLowerInvariant())
                             .ToList(),
-                        Properties = new Dictionary<string, JsonElement>(),
+						Properties = new Dictionary<string, JsonElement>
+						{
+							["colorArgb"] = JsonSerializer.SerializeToElement(group.Colour.ToArgb()),
+							["border"] = JsonSerializer.SerializeToElement(group.Border.ToString()),
+						},
                     });
                     continue;
                 }
@@ -181,15 +185,89 @@ namespace rhino_zmq_poc.Protocol
             }
         }
 
-        private static Dictionary<string, JsonElement> PersistentProperties(IGH_DocumentObject obj)
-        {
-            var properties = new Dictionary<string, JsonElement>();
+		private static Dictionary<string, JsonElement> PersistentProperties(IGH_DocumentObject obj)
+		{
+			var properties = new Dictionary<string, JsonElement>();
             if (obj is GH_ActiveObject active && active.Locked)
                 properties["locked"] = JsonSerializer.SerializeToElement(true);
-            if (obj is IGH_PreviewObject preview && preview.Hidden)
-                properties["hidden"] = JsonSerializer.SerializeToElement(true);
-            return properties;
-        }
+			if (obj is IGH_PreviewObject preview && preview.Hidden)
+				properties["hidden"] = JsonSerializer.SerializeToElement(true);
+
+			if (obj is GH_NumberSlider slider)
+			{
+				properties["slider"] = JsonSerializer.SerializeToElement(new
+				{
+					minimum = slider.Slider.Minimum,
+					maximum = slider.Slider.Maximum,
+					value = slider.CurrentValue,
+					decimalPlaces = slider.Slider.DecimalPlaces,
+				});
+			}
+			else if (obj is GH_Panel panel)
+			{
+				properties["panel"] = JsonSerializer.SerializeToElement(new
+				{
+					text = panel.UserText ?? "",
+					multiline = panel.Properties.Multiline,
+					colorArgb = panel.Properties.Colour.ToArgb(),
+					width = panel.Attributes?.Bounds.Width ?? 0,
+					height = panel.Attributes?.Bounds.Height ?? 0,
+				});
+			}
+			else if (obj is GH_BooleanToggle toggle)
+			{
+				properties["value"] = JsonSerializer.SerializeToElement(toggle.Value);
+			}
+			else if (obj is GH_ColourSwatch swatch)
+			{
+				properties["colorArgb"] = JsonSerializer.SerializeToElement(swatch.SwatchColour.ToArgb());
+			}
+			else if (obj is GH_Scribble scribble)
+			{
+				properties["text"] = JsonSerializer.SerializeToElement(scribble.Text ?? "");
+			}
+			else if (obj is GH_ValueList valueList)
+			{
+				properties["items"] = JsonSerializer.SerializeToElement(valueList.ListItems.Select(item => new
+				{
+					name = item.Name ?? "",
+					value = item.Expression ?? "",
+					selected = item.Selected,
+				}).ToList());
+			}
+
+			if (obj is GH_Component component)
+			{
+				properties["parameters"] = JsonSerializer.SerializeToElement(new
+				{
+					inputs = component.Params.Input.Select(PersistentParameter).ToList(),
+					outputs = component.Params.Output.Select(PersistentParameter).ToList(),
+				});
+				try
+				{
+					var source = GhScriptReflector.Get().GetSourceCode(component);
+					if (!string.IsNullOrEmpty(source))
+						properties["scriptCode"] = JsonSerializer.SerializeToElement(source);
+				}
+				catch
+				{
+					// Non-script components do not expose script source.
+				}
+			}
+			return properties;
+		}
+
+		private static object PersistentParameter(IGH_Param parameter) => new
+		{
+			id = parameter.InstanceGuid.ToString("D").ToLowerInvariant(),
+			name = parameter.Name ?? "",
+			nickName = parameter.NickName ?? "",
+			access = parameter.Access.ToString(),
+			dataMapping = parameter.DataMapping.ToString(),
+			simplify = parameter.Simplify,
+			reverse = parameter.Reverse,
+			typeHint = GhScriptReflector.GetTypeHintName(parameter),
+		};
 
         private static double Round(float value) =>
             Math.Round(value, 4, MidpointRounding.AwayFromZero);

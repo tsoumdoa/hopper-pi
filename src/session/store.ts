@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import type { RequestId, SessionId } from "../core/contracts.js";
 import type { BackendIdentity, BackendDocuments } from "../protocol/wire.js";
-import type { ExecuteActionsRequest } from "../protocol/wire.js";
+import type { ExecuteActionsRequest, RestoreCheckpointRequest } from "../protocol/wire.js";
 import {
 	ensureSessionLayout,
 	journalPath,
@@ -41,7 +41,7 @@ export type StoredRequest = {
 	schemaVersion: 1;
 	requestId: RequestId;
 	payloadSha256: string;
-	request: ExecuteActionsRequest;
+	request: ExecuteActionsRequest | RestoreCheckpointRequest;
 };
 
 export class SessionStoreError extends Error {
