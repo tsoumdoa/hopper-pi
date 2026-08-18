@@ -27,7 +27,7 @@ async function probeRequester(
 		PingResponse | AuthErrorResponse | { type?: string }
 	>({
 		type: "ping",
-	});
+	}, { timeoutMs: PROBE_TIMEOUT_MS, mutates: false });
 	if (res.type === "auth.error") {
 		const error = "error" in res ? res.error : undefined;
 		throw new Error(error || "Invalid connection token");
@@ -70,15 +70,7 @@ export async function probeBackend(): Promise<BackendStatus> {
 }
 
 async function probeOnce(options: { refresh?: boolean } = {}): Promise<void> {
-	await Promise.race([
-		withProbeRequester(probeRequester, options),
-		new Promise<never>((_, reject) => {
-			setTimeout(
-				() => reject(new Error(`timeout after ${PROBE_TIMEOUT_MS}ms`)),
-				PROBE_TIMEOUT_MS
-			);
-		}),
-	]);
+	await withProbeRequester(probeRequester, options);
 }
 
 /** Re-probe when cached offline so a transient miss does not block tools. */

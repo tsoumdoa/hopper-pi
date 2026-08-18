@@ -31,6 +31,7 @@ namespace rhino_zmq_poc
         private int _stopped;
         private readonly JobQueue _jobQueue;
         private readonly GH_Document _doc;
+        private readonly TargetIdentityProvider _targetIdentity;
         private readonly UiRequestDispatcher _requestDispatcher = new UiRequestDispatcher();
         private readonly ConcurrentQueue<(string topic, string json)> _publishQueue = new ConcurrentQueue<(string, string)>();
         private readonly Action<GhJobStatus> _jobStatusHandler;
@@ -39,6 +40,7 @@ namespace rhino_zmq_poc
         private string _repEndpoint;
         private string _connectionToken;
         private string _instanceId;
+        private long _startedAt;
 
         public event Action<GhJobStatus> OnJobStatus;
         public event Action<string> OnDebugLog;
@@ -51,14 +53,15 @@ namespace rhino_zmq_poc
         {
             _jobQueue = jobQueue;
             _doc = doc;
-            _requestDispatcher.Register("listAllComponents", new ListAllComponentsHandler());
-            _requestDispatcher.Register("getCurrentCanvas", new GetCurrentCanvasHandler());
-            _requestDispatcher.Register("getCanvasErrors", new GetCanvasErrorsHandler());
-            _requestDispatcher.Register("applyGraph", new ApplyGraphHandler());
+            _targetIdentity = new TargetIdentityProvider(() => _instanceId);
+            _requestDispatcher.Register("listAllComponents", new ListAllComponentsHandler(_targetIdentity));
+            _requestDispatcher.Register("getCurrentCanvas", new GetCurrentCanvasHandler(_targetIdentity));
+			_requestDispatcher.Register("getCanvasErrors", new GetCanvasErrorsHandler(_targetIdentity));
+            _requestDispatcher.Register("applyGraph", new ApplyGraphHandler(_targetIdentity));
             _requestDispatcher.Register("listScriptParams", new ListScriptParamsHandler());
             _requestDispatcher.Register("getScriptCode", new GetScriptCodeHandler());
-            _requestDispatcher.Register("runRhinoScript", new RunRhinoScriptHandler());
-            _requestDispatcher.Register("queryRhinoObjects", new QueryRhinoObjectsHandler());
+            _requestDispatcher.Register("runRhinoScript", new RunRhinoScriptHandler(_targetIdentity));
+            _requestDispatcher.Register("queryRhinoObjects", new QueryRhinoObjectsHandler(_targetIdentity));
             _requestDispatcher.Register("captureRhinoView", new CaptureRhinoViewHandler());
             _requestDispatcher.Register("controlRhinoView", new ControlRhinoViewHandler());
             _requestDispatcher.Register("getParamRhinoGeometry", new GetParamRhinoGeometryHandler());
@@ -113,6 +116,7 @@ namespace rhino_zmq_poc
                 _pullEndpoint = endpoints.PullEndpoint;
                 _repEndpoint = endpoints.RepEndpoint;
 
+                _startedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 Profile = new ConnectionProfile
                 {
                     InstanceId = _instanceId,
@@ -120,7 +124,7 @@ namespace rhino_zmq_poc
                     PushEndpoint = endpoints.PullEndpoint,
                     ReqEndpoint = endpoints.RepEndpoint,
                     Token = _connectionToken,
-                    StartedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                    StartedAt = _startedAt
                 };
                 ConnectionProfileStore.Write(Profile);
 
@@ -204,7 +208,8 @@ namespace rhino_zmq_poc
                         continue;
                     }
 
-                    DebugLog($"[PULL] Received: {message}");
+					// Command payloads can also carry the token or embedded scripts.
+					DebugLog("[PULL] Received request");
                     ProcessCommand(message);
                     DrainPublishQueue();
                 }
@@ -274,7 +279,8 @@ namespace rhino_zmq_poc
                         continue;
                     }
 
-                    DebugLog($"[REP] Received: {message}");
+					// Never log request bodies. They may contain the connection token or script source.
+					DebugLog("[REP] Received request");
 
                     if (ct.IsCancellationRequested)
                         break;
@@ -319,10 +325,12 @@ namespace rhino_zmq_poc
                         });
                     }
 
-                    return JsonSerializer.Serialize(new PingResponse
+                    return Utilities.RunOnUiThread(() => JsonSerializer.Serialize(new PingResponse
                     {
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                    });
+                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        BackendStartedAt = _startedAt,
+                        Target = _targetIdentity.CaptureCurrent(_doc),
+                    }), TimeSpan.FromSeconds(5));
                 }
 
                 if (!IsAuthorized(doc.RootElement))

@@ -1,34 +1,9 @@
-import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { withRequester } from "../infra/request-helpers.js";
-import {
-	resolveRhinoGuid,
-	resolveRhinoGuids,
-	toShortRhinoGuid,
-} from "../services/guid-shortener.js";
-import type { QueryRhinoObjectsResponse } from "../types/messages.js";
-import { ResultLimitSchema, ResultOffsetSchema, RhinoObjectTypeSchema } from "./schemas.js";
+import { toShortRhinoGuid } from "../services/guid-shortener.js";
+import { RhQueryObjectsInputSchema } from "../core/schemas.js";
+import { formatCoreFailure, operationDetails, operationSignal, prototypeOperation } from "./core-adapter.js";
 
-const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 100;
-
-function paginate<T>(items: T[], limit?: number, offset?: number): {
-	slice: T[];
-	hasMore: boolean;
-	total: number;
-	offset: number;
-} {
-	const total = items.length;
-	const effectiveLimit = Math.min(Math.max(Math.trunc(limit ?? DEFAULT_LIMIT), 1), MAX_LIMIT);
-	const effectiveOffset = Math.max(Math.trunc(offset ?? 0), 0);
-	const slice = items.slice(effectiveOffset, effectiveOffset + effectiveLimit);
-	return {
-		slice,
-		hasMore: effectiveOffset + slice.length < total,
-		total,
-		offset: effectiveOffset,
-	};
-}
+const queryObjectsOperation = prototypeOperation("rh_query_objects");
 
 export const rhQueryObjectsTool = defineTool({
 	name: "rh_query_objects",
@@ -38,58 +13,25 @@ export const rhQueryObjectsTool = defineTool({
 		"Filter by selection, exact layer, geometry kind, and/or IDs. Use countOnly before large operations. " +
 		"For a whole layer or large set, pass the same filters directly to gh_param_rhino.rhinoQuery instead of listing IDs.",
 	promptSnippet: "List or count filtered Rhino document objects and return short IDs",
-	parameters: Type.Object({
-		selectionOnly: Type.Optional(
-			Type.Boolean({ description: "Only objects currently selected in Rhino" }),
-		),
-		layer: Type.Optional(
-			Type.String({ description: "Filter by layer name (exact match)" }),
-		),
-		objectType: Type.Optional(RhinoObjectTypeSchema),
-		objectIds: Type.Optional(
-			Type.Array(
-				Type.String({ description: "Rhino object ID (short or full)" }),
-				{ minItems: 1, description: "Return only these Rhino object IDs" },
-			),
-		),
-		countOnly: Type.Optional(
-			Type.Boolean({ description: "Return match count only, no object list" }),
-		),
-		limit: Type.Optional(ResultLimitSchema),
-		offset: Type.Optional(ResultOffsetSchema),
-	}),
+	parameters: RhQueryObjectsInputSchema,
 
-	async execute(_toolCallId, params) {
-		const requestParams = {
-			selectionOnly: params.selectionOnly,
-			layer: params.layer,
-			objectType: params.objectType,
-			objectIds: params.objectIds?.map(resolveRhinoGuid),
-		};
-
-		const res = await withRequester((req) =>
-			req.request<QueryRhinoObjectsResponse | { error?: string }>({
-				type: "queryRhinoObjects",
-				...requestParams,
-			}),
-		);
-
-		if ("error" in res && res.error) {
-			return {
-				content: [{ type: "text", text: `FAILED: ${res.error}` }],
-				details: {},
-			};
+	async execute(_toolCallId, params, signal) {
+		const result = await queryObjectsOperation.execute(params, operationSignal(signal));
+		if (result.outcome !== "succeeded") {
+			return { content: [{ type: "text", text: formatCoreFailure(result) }], details: operationDetails(result) };
 		}
-
-		const objects = "objects" in res ? res.objects : [];
-		if (objects.length === 0) {
+		const data = result.data as {
+			objects: Array<{ objectId: string; name: string; layer: string; objectType: string }>;
+			total: number; offset: number; hasMore: boolean; countOnly: boolean;
+		};
+		if (data.total === 0) {
 			return {
 				content: [{ type: "text", text: "No Rhino objects matched the query." }],
-				details: {},
+				details: operationDetails(result),
 			};
 		}
 
-		if (params.countOnly) {
+		if (data.countOnly) {
 			const filters: string[] = [];
 			if (params.layer) filters.push(`layer="${params.layer}"`);
 			if (params.objectType) filters.push(`type=${params.objectType}`);
@@ -100,27 +42,25 @@ export const rhQueryObjectsTool = defineTool({
 					{
 						type: "text",
 						text:
-							`${objects.length} Rhino object(s) matched${filterNote}. ` +
+							`${data.total} Rhino object(s) matched${filterNote}. ` +
 							"Use gh_param_rhino with rhinoQuery to reference/internalize in bulk without listing IDs.",
 					},
 				],
-				details: {},
+				details: operationDetails(result),
 			};
 		}
 
-		const { slice, hasMore, total, offset } = paginate(objects, params.limit, params.offset);
-
-		const lines = slice.map((o) => {
+		const lines = data.objects.map((o) => {
 			const shortId = toShortRhinoGuid(o.objectId);
 			return `${shortId}  ${o.objectType}  layer="${o.layer}"  name="${o.name || "(unnamed)"}"`;
 		});
 
 		const header =
-			total === slice.length
-				? `${total} Rhino object(s):`
-				: `${total} Rhino object(s) (showing ${offset + 1}-${offset + slice.length}):`;
-		const footer = hasMore
-			? `\n  ... ${total - offset - slice.length} more (call with offset=${offset + slice.length})`
+			data.total === data.objects.length
+				? `${data.total} Rhino object(s):`
+				: `${data.total} Rhino object(s) (showing ${data.offset + 1}-${data.offset + data.objects.length}):`;
+		const footer = data.hasMore
+			? `\n  ... ${data.total - data.offset - data.objects.length} more (call with offset=${data.offset + data.objects.length})`
 			: "";
 
 		return {
@@ -130,7 +70,7 @@ export const rhQueryObjectsTool = defineTool({
 					text: `${header}\n${lines.join("\n")}${footer}`,
 				},
 			],
-			details: {},
+			details: operationDetails(result),
 		};
 	},
 });

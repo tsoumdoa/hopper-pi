@@ -83,6 +83,7 @@ export function formatComponentsMultiQuery(
 		.filter((c) => !EXCLUDED_TYPE_GUIDS.includes(c.typeGuid))
 		.filter((c) => !isBlacklisted(c))
 		.filter((c) => {
+			if (searchFrom === "all") return true;
 			if (searchFrom === "params") return c.category === "Params";
 			if (searchFrom === "plugin") return !VANILLA_CATEGORIES.has(c.category);
 			return VANILLA_CATEGORIES.has(c.category) && c.category !== "Params";

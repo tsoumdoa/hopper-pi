@@ -97,6 +97,24 @@ pnpm run build:gh-plugin
 node scripts/install-grasshopper-plugin.mjs --force
 ```
 
+### JSON CLI prototype
+
+The package also installs a one-command-per-process `hopper` executable. It prints one JSON object for every non-help invocation. The CLI currently exposes five operations:
+
+```bash
+hopper status --json
+hopper gh operations --json
+hopper gh schema get-canvas --json
+hopper gh call get-canvas --data '{}' --json
+hopper gh call list-components --data '{"queries":["curve length"],"searchFrom":"all"}' --json
+hopper gh call apply-graph --input graph.json --json
+hopper rh operations --json
+hopper rh call query-objects --input query.json --json
+hopper rh call run-script --input script.json --json
+```
+
+`status` and operation responses identify the connected Grasshopper document and the active Rhino document used by the backend. A Rhino script failure or a transport failure after a mutation starts returns exit code `5` with `outcome: "unknown"`. Inspect the document before retrying such a call.
+
 ## Architecture
 
 ```

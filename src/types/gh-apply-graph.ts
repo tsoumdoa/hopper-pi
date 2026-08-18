@@ -1,5 +1,6 @@
 import type { CsharpScriptPartsInput } from "./csharp-script.js";
 import type { CanvasError } from "./messages.js";
+import type { DocumentTarget } from "./messages.js";
 import type { ScriptIOParam } from "./commands.js";
 import type { CanvasOverlapResult } from "../tools/canvas-checks.js";
 
@@ -120,6 +121,7 @@ export type ApplyGraphBackendResponse = {
 	refs: Record<string, string>;
 	structuralErrors: StructuralError[];
 	elapsedMs: number;
+	target?: DocumentTarget;
 };
 
 export type ApplyGraphResult = Omit<ApplyGraphBackendResponse, "type" | "timestamp" | "refs"> & {

@@ -1,8 +1,8 @@
-import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { validateRhinoScriptItem } from "../services/rhino-script-validator.js";
-import { formatToolFailed } from "./result-formatters.js";
-import { runRhinoScript } from "./rhino-script-handlers.js";
+import { RhRunScriptInputSchema } from "../core/schemas.js";
+import { formatCoreFailure, operationDetails, operationSignal, prototypeOperation } from "./core-adapter.js";
+
+const runScriptOperation = prototypeOperation("rh_run_script");
 
 const ROUTING_PREFIX =
 	"Use rh_run_script for Rhino document work (geometry, layers, selection, blocks, direct bake, materials). " +
@@ -17,53 +17,23 @@ export const rhRunScriptTool = defineTool({
 		"Prefer Python for multi-step work and command mode for one-liners. Use print() / Console.WriteLine() for returned output. " +
 		"Items run sequentially; a failure does not roll back earlier items. Changes share one Rhino Undo record per agent turn.",
 	promptSnippet: "Run command, Python, or C# against the active Rhino document",
-	parameters: Type.Object({
-		items: Type.Array(
-			Type.Object({
-				mode: Type.Union([
-					Type.Literal("command"),
-					Type.Literal("python"),
-					Type.Literal("csharp"),
-				], {
-					description:
-						"command = Rhino macro string; python = Rhino Python (scriptcontext/rs); csharp = Rhino C# script editor body",
-				}),
-				source: Type.String({ description: "Command macro or script source" }),
-				echo: Type.Optional(
-					Type.Boolean({
-						description: "Echo command to history (command mode only, default false)",
-					}),
-				),
-			}),
-			{ minItems: 1 },
-		),
-	}),
+	parameters: RhRunScriptInputSchema,
 
 	async execute(_toolCallId, params, _signal, onUpdate) {
-		const results: string[] = [];
-
-		for (const item of params.items) {
-			const validationError = validateRhinoScriptItem(item);
-			if (validationError) {
-				results.push(formatToolFailed(validationError));
-				continue;
-			}
-
-			onUpdate?.({
-				content: [{ type: "text", text: `Running Rhino ${item.mode} script...` }],
-				details: {},
-			});
-
-			try {
-				results.push(await runRhinoScript(item));
-			} catch (err) {
-				results.push(formatToolFailed(err));
-			}
+		onUpdate?.({ content: [{ type: "text", text: "Running Rhino script items..." }], details: {} });
+		const result = await runScriptOperation.execute(params, operationSignal(_signal));
+		if (result.outcome !== "succeeded") {
+			return { content: [{ type: "text", text: formatCoreFailure(result) }], details: operationDetails(result) };
 		}
-
+		const data = result.data as { items: Array<{ mode: string; ok: boolean; output: string; error: string | null }> };
+		const text = data.items.map((item) => [
+			`${item.ok ? "OK" : "FAILED"} (mode=${item.mode})`,
+			item.error,
+			item.output,
+		].filter(Boolean).join("\n")).join("\n\n");
 		return {
-			content: [{ type: "text", text: results.join("\n\n") }],
-			details: {},
+			content: [{ type: "text", text }],
+			details: operationDetails(result),
 		};
 	},
 });

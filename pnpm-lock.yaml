@@ -17,9 +17,15 @@ importers:
       '@earendil-works/pi-tui':
         specifier: ^0.82.0
         version: 0.82.0
+      '@sinclair/typebox':
+        specifier: ^0.34.52
+        version: 0.34.52
       chalk:
         specifier: ^5.6.2
         version: 5.6.2
+      commander:
+        specifier: ^14.0.3
+        version: 14.0.3
       fast-xml-parser:
         specifier: ^5.10.1
         version: 5.10.1
@@ -574,6 +580,9 @@ packages:
   '@silvia-odwyer/photon-node@0.3.4':
     resolution: {integrity: sha512-bnly4BKB3KDTFxrUIcgCLbaeVVS8lrAkri1pEzskpmxu9MdfGQTy8b8EgcD83ywD3RPMsIulY8xJH5Awa+t9fA==}
 
+  '@sinclair/typebox@0.34.52':
+    resolution: {integrity: sha512-XiMQh7qqVlxZzcVD+kkGMNGMzcTrDMLWI7S4x7z1MkCkbDPrekpZXEUK0eZqZFMuHQg2a2DZOcDIh9o5v3Gonw==}
+
   '@smithy/core@3.29.8':
     resolution: {integrity: sha512-rpCbCV+TimOBi3VLNBMmtTvgfOWcFIEAru3+TFlG87SL2F+te4jOnnNR+cf3uR4eJ5Qf4LnT80fqnBKgPRS6zA==}
     engines: {node: '>=18.0.0'}
@@ -706,6 +715,10 @@ packages:
   cmake-ts@1.0.2:
     resolution: {integrity: sha512-5l++JHE7MxFuyV/OwJf3ek7ZZN1aGPFPM5oUz6AnK5inQAPe4TFXRMz5sA2qg2FRgByPWdqO+gSfIPo8GzoKNQ==}
     hasBin: true
+
+  commander@14.0.3:
+    resolution: {integrity: sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw==}
+    engines: {node: '>=20'}
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
@@ -1803,6 +1816,8 @@ snapshots:
 
   '@silvia-odwyer/photon-node@0.3.4': {}
 
+  '@sinclair/typebox@0.34.52': {}
+
   '@smithy/core@3.29.8':
     dependencies:
       '@smithy/types': 4.16.1
@@ -1944,6 +1959,8 @@ snapshots:
   chalk@5.6.2: {}
 
   cmake-ts@1.0.2: {}
+
+  commander@14.0.3: {}
 
   convert-source-map@2.0.0: {}
 
