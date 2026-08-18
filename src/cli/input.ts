@@ -17,7 +17,9 @@ export type InputOptions = { input?: string; data?: string };
 export async function loadJsonObject(
 	options: InputOptions,
 	stdin: NodeJS.ReadableStream = process.stdin,
+	signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
+	if (signal?.aborted) throw interrupted();
 	const sources = Number(options.input !== undefined) + Number(options.data !== undefined);
 	if (sources === 0) {
 		throw new CliInputError(ERROR_CODE.INPUT_SOURCE_REQUIRED, "Use exactly one input source: --input path.json, --input -, or --data '{...}'");
@@ -31,18 +33,19 @@ export async function loadJsonObject(
 		bytes = Buffer.from(options.data, "utf8");
 		if (bytes.byteLength > MAX_INPUT_BYTES) throw tooLarge();
 	} else if (options.input === "-") {
-		bytes = await readBounded(stdin);
+		bytes = await readBounded(stdin, signal);
 	} else {
 		try {
 			const file = options.input!;
 			const metadata = await stat(file);
 			if (!metadata.isFile()) throw new Error("not a regular file");
-			bytes = await readBounded(createReadStream(file));
+			bytes = await readBounded(createReadStream(file), signal);
 		} catch (error) {
 			if (error instanceof CliInputError) throw error;
 			throw new CliInputError(ERROR_CODE.INPUT_READ_FAILED, `Could not read input file: ${options.input}`);
 		}
 	}
+	if (signal?.aborted) throw interrupted();
 
 	let text: string;
 	try {
@@ -63,7 +66,26 @@ export async function loadJsonObject(
 	return parsed as Record<string, unknown>;
 }
 
-async function readBounded(stream: NodeJS.ReadableStream): Promise<Uint8Array> {
+async function readBounded(stream: NodeJS.ReadableStream, signal?: AbortSignal): Promise<Uint8Array> {
+	if (signal?.aborted) throw interrupted();
+	let abortHandler: (() => void) | undefined;
+	const aborted = new Promise<never>((_, reject) => {
+		if (!signal) return;
+		abortHandler = () => {
+			if ("destroy" in stream && typeof stream.destroy === "function") stream.destroy();
+			reject(interrupted());
+		};
+		signal.addEventListener("abort", abortHandler, { once: true });
+	});
+
+	try {
+		return await Promise.race([collectBounded(stream), aborted]);
+	} finally {
+		if (abortHandler && signal) signal.removeEventListener("abort", abortHandler);
+	}
+}
+
+async function collectBounded(stream: NodeJS.ReadableStream): Promise<Uint8Array> {
 	const chunks: Buffer[] = [];
 	let size = 0;
 	for await (const chunk of stream) {
@@ -84,4 +106,8 @@ async function readBounded(stream: NodeJS.ReadableStream): Promise<Uint8Array> {
 
 function tooLarge(): CliInputError {
 	return new CliInputError(ERROR_CODE.INPUT_TOO_LARGE, "Input exceeds the 1 MiB limit");
+}
+
+function interrupted(): CliInputError {
+	return new CliInputError(ERROR_CODE.INTERRUPTED, "Input interrupted");
 }

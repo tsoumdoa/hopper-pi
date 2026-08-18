@@ -15,6 +15,16 @@ import {
 
 export type { CanvasFilters };
 
+export type CanvasData = {
+	docName: string;
+	componentCount: number;
+	wireCount: number;
+	subGraphCount: number;
+	components: Record<string, Component>;
+	wires: Wire[];
+	subGraphs: SubGraph[];
+};
+
 function shortenComponentGuids(component: Component): Component {
 	const shortInputs: Component["inputs"] = {};
 	for (const [key, input] of Object.entries(component.inputs)) {
@@ -284,55 +294,67 @@ export function formatCanvasResponse(response: GetCurrentCanvasResponse, filters
 		const selected = applySelectionFilter(filteredComponents, filteredWires, response);
 		filteredComponents = selected.components;
 		filteredWires = selected.wires;
-
-		if (Object.keys(filteredComponents).length === 0) {
-			return formatEmptySelectionResponse(response.docName);
-		}
 	}
 
 	const filteredSubGraphs = computeSubGraphs({ version: "", components: filteredComponents, wires: filteredWires });
-
-	const shortComponents = Object.fromEntries(
-		Object.entries(filteredComponents).map(([id, component]) => [
-			id,
-			shortenComponentGuids(component),
-		])
-	);
 	const compCount = Object.keys(filteredComponents).length;
 	const wireCount = filteredWires.length;
 	const subGraphCount = filteredSubGraphs.length;
 
+	return formatCanvasData({
+		docName: response.docName,
+		componentCount: compCount,
+		wireCount,
+		subGraphCount,
+		components: filteredComponents,
+		wires: filteredWires,
+		subGraphs: filteredSubGraphs,
+	}, filters);
+}
+
+export function formatCanvasData(data: CanvasData, filters?: CanvasFilters) {
+	const shortComponents = Object.fromEntries(
+		Object.entries(data.components).map(([id, component]) => [
+			id,
+			shortenComponentGuids(component),
+		]),
+	);
+
+	if (filters?.selectionOnly && data.componentCount === 0) {
+		return formatEmptySelectionResponse(data.docName);
+	}
+
 	if (!filters) {
-		if (subGraphCount === 0) {
+		if (data.subGraphCount === 0) {
 			return formatCanvasDetail(
-				response.docName,
-				compCount,
-				wireCount,
-				subGraphCount,
-				filteredSubGraphs,
+				data.docName,
+				data.componentCount,
+				data.wireCount,
+				data.subGraphCount,
+				data.subGraphs,
 				shortComponents,
 				{},
-				filteredWires,
+				data.wires,
 			);
 		}
 		return formatCanvasIndex(
-			response.docName,
-			compCount,
-			wireCount,
-			subGraphCount,
-			filteredSubGraphs,
+			data.docName,
+			data.componentCount,
+			data.wireCount,
+			data.subGraphCount,
+			data.subGraphs,
 			shortComponents,
 		);
 	}
 
 	return formatCanvasDetail(
-		response.docName,
-		compCount,
-		wireCount,
-		subGraphCount,
-		filteredSubGraphs,
+		data.docName,
+		data.componentCount,
+		data.wireCount,
+		data.subGraphCount,
+		data.subGraphs,
 		shortComponents,
 		filters,
-		filteredWires,
+		data.wires,
 	);
 }

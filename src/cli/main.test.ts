@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { Readable } from "node:stream";
+import { PassThrough, Readable } from "node:stream";
 import { describe, test } from "vitest";
 import { runCli } from "./main.js";
 import { RequestTransportError } from "../infra/requester.js";
 import type { BackendRequest } from "../core/operations.js";
 import { clearConnectionCache } from "../infra/connection.js";
+import { CliInputError, loadJsonObject } from "./input.js";
 
 const target = {
 	backendInstanceId: "backend-1",
@@ -29,6 +30,18 @@ async function invoke(args: string[], request?: BackendRequest, stdin?: NodeJS.R
 }
 
 describe("hopper JSON CLI", () => {
+	test("aborts a pending stdin read", async () => {
+		const stdin = new PassThrough();
+		const abort = new AbortController();
+		const pending = loadJsonObject({ input: "-" }, stdin, abort.signal);
+
+		abort.abort();
+
+		await assert.rejects(pending, (error: unknown) =>
+			error instanceof CliInputError && error.code === "INTERRUPTED");
+		assert.equal(stdin.destroyed, true);
+	});
+
 	test("offline operations and schemas return one deterministic JSON object", async () => {
 		const operations = await invoke(["gh", "operations", "--json"]);
 		assert.equal(operations.exitCode, 0);

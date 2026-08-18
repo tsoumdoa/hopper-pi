@@ -10,7 +10,7 @@ import {
 	fetchCanvasErrors,
 	getCachedOrFetchComponents,
 } from "./canvas-fetch.js";
-import { formatCanvasResponse } from "./canvas-formatters.js";
+import { formatCanvasData, type CanvasData } from "../presenters/canvas-formatter.js";
 import {
 	formatComponentsMultiQuery,
 	formatCanvasErrorsResponse,
@@ -41,16 +41,12 @@ export const ghGetCanvasTool = defineTool({
 		if (result.outcome !== "succeeded") {
 			return { content: [{ type: "text", text: formatCoreFailure(result) }], details: operationDetails(result) };
 		}
-		const data = result.data as {
-			docName: string; componentCount: number; wireCount: number; subGraphCount: number;
-			components: Record<string, unknown>; wires: unknown[]; subGraphs: unknown[];
-		};
+		const data = result.data as CanvasData;
+		const filters = params.subgraph || params.selectionOnly === true ? params : undefined;
+		const formatted = formatCanvasData(data, filters);
 		return {
-			content: [{
-				type: "text",
-				text: `Canvas: ${data.docName} (${data.componentCount} components, ${data.wireCount} wires, ${data.subGraphCount} sub-graphs)\n${JSON.stringify(data)}`,
-			}],
-			details: operationDetails(result),
+			content: formatted.content,
+			details: { ...formatted.details, target: result.target },
 		};
 	},
 });

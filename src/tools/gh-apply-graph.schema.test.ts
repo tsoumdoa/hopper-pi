@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { ghApplyGraphTool } from "./gh-apply-graph.js";
+import { formatApplyGraphFailure, ghApplyGraphTool } from "./gh-apply-graph.js";
 
 function collectDraft07TupleIssues(schema: unknown, path = "$"): string[] {
 	if (!schema || typeof schema !== "object") return [];
@@ -37,4 +37,31 @@ test("gh_apply_graph wire endpoints use draft 2020-12 prefixItems tuples", () =>
 		assert.equal(wires[end].minItems, 2);
 		assert.equal(wires[end].maxItems, 2);
 	}
+});
+
+test("gh_apply_graph keeps rollback-unconfirmed failures unknown in Pi output", () => {
+	const text = formatApplyGraphFailure({
+		outcome: "unknown",
+		message: "Graph apply failed and rollback was not confirmed. Inspect with gh call get-canvas before deciding whether to retry.",
+		target: null,
+		data: {
+			rolledBack: false,
+			timedOut: false,
+			counts: { components: 1, widgets: 0, scripts: 0, wires: 0, groups: 0 },
+			refs: { node: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" },
+			structuralErrors: [],
+			runtimeMessages: [],
+			overlaps: null,
+			elapsedMs: 1,
+		},
+		error: {
+			code: "MUTATION_OUTCOME_UNKNOWN",
+			message: "Graph apply failed and rollback was not confirmed.",
+			retryable: false,
+		},
+	});
+
+	assert.match(text, /^UNKNOWN:/);
+	assert.match(text, /inspect/i);
+	assert.doesNotMatch(text, /^Graph not applied/);
 });

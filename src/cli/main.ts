@@ -173,11 +173,14 @@ async function executeInvocation(
 	if (!operation) return unknownOperation(command, invocation.publicName);
 	let input: Record<string, unknown>;
 	try {
-		input = await loadJsonObject(invocation.input, stdin);
+		input = await loadJsonObject(invocation.input, stdin, signal);
 	} catch (error) {
 		const code = error instanceof CliInputError ? error.code : ERROR_CODE.INPUT_READ_FAILED;
 		const message = error instanceof Error ? error.message : "Could not read input";
-		return { response: cliFailure(command, code, message, { operation: operation.name }), exitCode: CLI_EXIT.INVALID_INPUT };
+		return {
+			response: cliFailure(command, code, message, { operation: operation.name }),
+			exitCode: code === ERROR_CODE.INTERRUPTED ? CLI_EXIT.OPERATION_FAILED : CLI_EXIT.INVALID_INPUT,
+		};
 	}
 	const validation = validateSchema(operation.inputSchema, input);
 	if (!validation.ok) {
