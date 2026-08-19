@@ -1,221 +1,255 @@
 # hoppercode
 
-A transparent, hackable modeling agent for computational designers who want
-AI inside their real workflow — not locked behind a black-box SaaS.
+`hoppercode` is a JSON CLI for agents and scripts that need to inspect or change Grasshopper and Rhino documents. It talks to a Grasshopper plugin over local ZeroMQ while Rhino is open.
 
-> **Heads up:** This project was heavily vibe-coded and is super early in its own development. APIs, tools, and behavior will change without notice. **Use it at your own risk.**
+The project is early. Commands and schemas may change between releases. Use dedicated files or backups when testing mutations.
 
-**hoppercode** (published as [`hopper-pi`](https://www.npmjs.com/package/hopper-pi)) is a [Pi](https://github.com/earendil-works/pi) extension plus a Grasshopper plugin that lets an AI agent inspect and edit a Grasshopper canvas—and run scripts against the Rhino document—over ZeroMQ while Rhino is open.
+Hopper is CLI-only. It does not load an agent extension, choose a model, manage a conversation, or ask the user questions. The calling agent or shell script owns that work.
 
+## Requirements
 
-## What's new
+- Rhino 8 on Windows or macOS
+- .NET 7 SDK to build the Grasshopper plugin
+- Node.js 20 or newer
+- pnpm for source installs and development
 
-### 0.1.90 — Slim progressive tool catalog
+## Install from source
 
-- **Opt-in progressive tools:** start with a small always-on Hopper core and activate specialists on demand. Enable with `HOPPER_PROGRESSIVE_TOOLS=1` or `--hopper-progressive-tools`. Off by default, so the current all-tools-active behavior stays.
-- **`hopper_search_tools`:** keyword search over the typed Hopper catalog; matching specialists activate for the rest of the session and reset on new/reload sessions.
-- **Catalog + size diagnostics:** tools carry group, keywords, and core flags. `/hopper-schemas sizes` reports compact schema bytes by group and tool. Discoverable tools omit prompt snippets so the active set stays lean.
-
-### 0.1.80 — Atomic graph apply & tool schema browser
-
-- **`gh_apply_graph`:** create a complete new Grasshopper subgraph in one synchronous call — components, widgets, scripts, wires, and groups — then run one solution and return short IDs plus runtime/overlap validation. New builds default to one apply; legacy edit tools stay for surgical repair.
-- **`/hopper-schemas`:** browse the exact agent-facing JSON schemas (name, description, parameters, guidelines) for every registered tool; `/hopper-schemas dump` writes `tool-schemas.json` in the cwd.
-- **Anthropic schema fix:** `gh_apply_graph` wire endpoints now emit draft 2020-12 `prefixItems` tuples so Claude no longer rejects the tool `input_schema`.
-- **Skill guidance:** modeling/cookbook/Rhino skills and reference docs point at the apply-once workflow; trim stale “core principles” from `gh-modeling-expert`.
-- **Prompt examples:** add pavilion / attractor plan prompts under `prompt-examples/`.
-
-### 0.1.70 — Faster agent guidance & screenshot override
-
-- **Less overthinking in Grasshopper/Rhino skills:** tighten clarification rules so the agent proceeds with documented defaults unless ambiguity materially changes output, risks data loss, or could edit the wrong target.
-- **Faster Grasshopper build guidance:** make “read once” a new-build default rather than a hard rule, remove verbose Tier 3 placement-math narration, allow confident multi-zone batching, and scope cleanup to touched components only.
-- **Screenshot permission override:** `HOPPER_RHINO_CAPTURE_CONSENT=allow` pre-allows Rhino viewport screenshots for restricted or non-interactive UI sessions; `deny` forces capture off. Users can also explicitly ask to allow screenshots later in a session.
-- **Tool schema cleanup:** `gh_list_components.searchFrom` now matches its documented default, and `gh_edit_components` uses action-specific required fields so agents can make shorter, more reliable tool calls.
-- **Package cleanup:** remove stale Pi skill/prompt paths that pointed at missing directories.
-
-### 0.1.6 — Undo history fix & security hardening
-
-- **Fix: Rhino undo history (#16)** — nested agent undo records broke Rhino's undo stack. Per-script `RecordDocumentUndo` is now disabled during agent turns so the single `RhinoAgentTransaction` owns the undo record, and `Cancel` no longer calls `doc.Undo()` (which could wipe unrelated user edits).
-- **Security hardening:** compare the ZMQ auth token in constant time, restrict the connection-profile token file to owner-only (`0600`), sanitize the view name interpolated into Rhino macros, and stop leaking stack traces to the wire.
-- **Reliability:** dispose the `JobQueue` signal and stop fire-and-forget shutdown waits, widen `formatMetadata` to accept null, and tighten plugin visibility (`public` → `internal`).
-- **CI/build:** add a GitHub Actions workflow for TypeScript typecheck and tests, bump to pnpm 11.5.3 / Node 22, disable credential persistence in checkout, and drop an unused `roslyn-language-server.linux-arm64` dependency.
-
-### 0.1.5 — View capture & control
-
-- **`rh_capture_view`** — capture a Rhino viewport screenshot as PNG visual context for visual QA, composition, visibility, and display checks. Permission-gated: only active after you allow Rhino viewport screenshots for the session, and only on models that accept image input.
-- **`rh_view_control`** — drive the viewport: switch active / standard / named / CPlane views, set the camera (location, target, lens length, projection), zoom (extents / selected / bounding box), and save named views.
-- New per-session viewport-capture consent flow so screenshots are opt-in.
-
-### 0.1.4 — Agent can ask questions
-
-- **`ask_user`** — ask the user a free-text clarifying question and wait for an answer when requirements are ambiguous.
-- **`pick_option`** — present 2–6 informed options to pick from (e.g. resolving ambiguous component matches after `gh_list_components`). An "Other" choice is appended automatically.
-- Fixes: silent failures on certain operations, long GUIDs leaking into output, and license corrections.
-
-## What you need
-
-- **Rhino 8** on Win or Mac
-- **[Pi](https://github.com/earendil-works/pi)** (the coding agent)
-- **.NET 7 SDK** (to build the Grasshopper plugin on install)
-- **Node.js** 20+ (for local development)
-
-## Quick start
-
-### Install via Pi
-
-```bash
-pi install npm:hopper-pi
-```
-
-`postinstall` builds the C# plugin and copies it into your Grasshopper `Libraries/hopper-pi/` folder.
-
-1. Restart Rhino / Grasshopper.
-2. On the canvas, add the **Hopper Code Backend** component (`GHZMQ`, under Params → Util).
-3. Start Pi and talk to the agent about Grasshopper or Rhino—the extension registers `gh_*` and `rh_*` tools automatically.
-
-### Clone and develop
+The CLI-only package has not been published under its new npm name yet. Install it from this repository:
 
 ```bash
 git clone https://github.com/tsoumdoa/hoppercode.git
 cd hoppercode
-pnpm install          # builds & installs the GH plugin unless skipped
-pnpm run pi           # run Pi with this extension loaded
+pnpm install
+pnpm run build
+npm link
 ```
 
-Skip the plugin build when iterating on TypeScript only:
+`pnpm install` builds the C# plugin and copies it into the Grasshopper Libraries directory unless `HOPPER_SKIP_GH_PLUGIN=1` is set.
+
+Then:
+
+1. Restart Rhino and Grasshopper.
+2. Add the `Hopper Code Backend` component to the canvas. Its nickname is `GHZMQ`, under Params > Util.
+3. Check the connection from a new shell.
+
+```bash
+hopper status --json
+```
+
+Rebuild or reinstall the plugin manually when needed:
+
+```bash
+pnpm run build:gh-plugin
+node scripts/install-grasshopper-plugin.mjs --force
+```
+
+To install Node dependencies without building the plugin:
 
 ```bash
 export HOPPER_SKIP_GH_PLUGIN=1
 pnpm install
-pnpm run dev
+pnpm run build
 ```
 
-Rebuild or reinstall the plugin manually:
+## CLI commands
 
-```bash
-pnpm run build:gh-plugin
-# or force a full rebuild + copy:
-node scripts/install-grasshopper-plugin.mjs --force
-```
-
-### JSON CLI prototype
-
-The package also installs a one-command-per-process `hopper` executable. It prints one JSON object for every non-help invocation. The CLI currently exposes five operations:
+The CLI runs one command per process. Except for `--help` and `--version`, every invocation requires `--json` and writes one JSON object to stdout.
 
 ```bash
 hopper status --json
+
 hopper gh operations --json
 hopper gh schema get-canvas --json
+hopper gh schema list-components --json
+hopper gh schema apply-graph --json
 hopper gh call get-canvas --data '{}' --json
-hopper gh call list-components --data '{"queries":["curve length"],"searchFrom":"all"}' --json
+hopper gh call list-components \
+  --data '{"queries":["curve length"],"searchFrom":"all","limit":5}' \
+  --json
 hopper gh call apply-graph --input graph.json --json
+
 hopper rh operations --json
+hopper rh schema query-objects --json
+hopper rh schema run-script --json
 hopper rh call query-objects --input query.json --json
 hopper rh call run-script --input script.json --json
 ```
 
-`status` and operation responses identify the connected Grasshopper document and the active Rhino document used by the backend. A Rhino script failure or a transport failure after a mutation starts returns exit code `5` with `outcome: "unknown"`. Inspect the document before retrying such a call.
+`operations` and `schema` work without Rhino. Calls that inspect or change a document require a running Hopper backend.
+
+### Supported operations
+
+| Operation | Purpose | Mutation behavior |
+| --- | --- | --- |
+| `gh_get_canvas` | Inspect the connected Grasshopper canvas | Read only |
+| `gh_list_components` | Search component types loaded by Grasshopper | Read only |
+| `gh_apply_graph` | Create and validate one Grasshopper subgraph | Backend rollback on known apply failures |
+| `rh_query_objects` | Inspect objects in the active Rhino document | Read only |
+| `rh_run_script` | Run Rhino command, Python, or C# items in order | Non-atomic mutation |
+
+The CLI does not expose the older Pi-only editing, viewport, screenshot, prompt, or progressive-loading tools.
+
+### Input
+
+Every `call` accepts exactly one JSON input source:
+
+```bash
+hopper gh call get-canvas --data '{}' --json
+hopper gh call apply-graph --input graph.json --json
+hopper rh call query-objects --input - --json < query.json
+```
+
+The JSON root must be an object. Input is limited to 1 MiB. The CLI rejects conflicting or repeated input flags, invalid UTF-8, trailing content, unknown fields, and schema errors before it contacts the backend.
+
+Use `schema` to get the exact draft 2020-12 input and output schemas. `gh_list_components` returns full component type GUIDs so a later process can pass them to `gh_apply_graph`.
+
+### Output and exit codes
+
+A successful response has this general shape:
+
+```json
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "gh.call",
+  "operation": "gh_get_canvas",
+  "outcome": "succeeded",
+  "message": "Connected Grasshopper canvas inspected",
+  "target": {},
+  "data": {},
+  "error": null
+}
+```
+
+Fields inside `target` identify the backend instance, connected Grasshopper document, and active Rhino document observed during execution.
+
+| Exit code | Meaning |
+| --- | --- |
+| `0` | Success |
+| `2` | Invalid command, input, schema, or operation |
+| `3` | Backend unavailable or authentication failed |
+| `4` | Known operation failure |
+| `5` | Mutation outcome unknown or possibly partial |
+| `70` | Internal CLI error before a mutation was sent |
+
+The CLI never retries a mutation. A timeout, interruption, dropped response, or malformed response after mutation send begins returns `outcome: "unknown"` and exit code `5`. Inspect the document with `gh_get_canvas` or `rh_query_objects` before deciding whether to retry.
+
+`rh_run_script` runs items in order. An earlier item or part of a failing script may have changed the Rhino document. The command does not promise one undo record across its items.
+
+## Document targeting
+
+The Grasshopper backend serves the document that owns the active `Hopper Code Backend` component. That document may differ from the Grasshopper window currently in front.
+
+Rhino operations use the active Rhino document at execution time. Run `hopper status --json` before a mutation and check the `target` returned afterward. Hopper does not yet lock a command to a saved document identity.
 
 ## Architecture
 
+```text
+agent or shell script
+  -> hopper CLI
+  -> typed operation registry
+  -> ZeroMQ REQ/REP
+  -> Hopper Code Backend in Grasshopper
+  -> connected Grasshopper document and active Rhino document
 ```
-Pi agent  →  hopper-pi (Node/TS)  →  ZMQ  →  Hopper Code Backend (Grasshopper in Rhino)
-```
 
-| Port | Pattern | Purpose |
-| ---- | ------- | ------- |
-| `5555` | PUB/SUB | Events: job status, canvas XML snapshots |
-| `5556` | PUSH/PULL | Commands: edits, scripts, widgets |
-| `5557` | REQ/REP | Queries plus synchronous atomic graph application |
+The CLI uses the request endpoint for all supported operations. The backend writes its current endpoints, instance metadata, and local authentication token to a user-local connection profile.
 
-The backend tries the legacy `5555`-`5557` ports first. If any are already in use, it automatically binds a free loopback port triplet and writes the live endpoints plus a local connection token to a user-local connection profile:
+New installs use:
 
-- Windows: `%APPDATA%\hopper-pi\connection.json`
-- macOS: `~/Library/Application Support/hopper-pi/connection.json`
-- Linux: `~/.local/share/hopper-pi/connection.json` (or `$XDG_DATA_HOME/hopper-pi/connection.json`)
+- Windows: `%APPDATA%\hoppercode\connection.json`
+- macOS: `~/Library/Application Support/hoppercode/connection.json`
+- Linux: `~/.local/share/hoppercode/connection.json`
+- Linux with XDG: `$XDG_DATA_HOME/hoppercode/connection.json`
 
-The token is generated once and reused across backend/frontend restarts, so normal restarts do not require re-pairing. Override discovery with `HOPPER_CONNECTION_PROFILE`, or override endpoints manually with `GH_ZMQ_PUB`, `GH_ZMQ_PUSH`, and `GH_ZMQ_REQ`. If you manually point at a token-protected backend, set `GH_ZMQ_TOKEN` as well.
+For one compatibility window, the CLI also reads the former `hopper-pi/connection.json` path when the new path does not exist. Set `HOPPER_CONNECTION_PROFILE` to choose an exact file and bypass default discovery.
 
-## Agent tools (overview)
-
-**Rhino document**
-
-| Tool | Role |
-| ---- | ---- |
-| `rh_run_script` | Rhino commands, Python, or C# on the active document |
-| `rh_query_objects` | List/count objects (short IDs for GH params) |
-| `rh_view_control` | Viewport, projection, camera, CPlane view, and zoom |
-| `rh_capture_view` | Optional consent-gated viewport screenshot for multimodal models |
-
-**Grasshopper canvas — edit**
-
-| Tool | Role |
-| ---- | ---- |
-| `gh_apply_graph` | Atomically create and validate a complete new subgraph |
-| `gh_edit_components` | Surgical add, move, or delete operations |
-| `gh_edit_param` | Inspect and edit GH script-component input/output ports |
-| `gh_edit_wire` | Connect / disconnect wires |
-| `gh_edit_group` | Groups |
-| `gh_edit_script` | Script component source |
-| `gh_create_widget` / `gh_mutate_widget` | Surgical widget creation or changes |
-| `gh_param_rhino` | Reference or internalize Rhino geometry on params |
-
-**Grasshopper canvas — query**
-
-| Tool | Role |
-| ---- | ---- |
-| `gh_get_canvas` | Canvas layout and component snapshot |
-| `gh_list_components` | Search component library by keyword |
-| `gh_get_canvas_errors` | Runtime messages plus component-overlap checks |
-
-**User clarification**
-
-| Tool | Role |
-| ---- | ---- |
-| `pick_option` | Ask the user to choose among informed options |
-| `ask_user` | Ask a free-text question when options are not practical |
-
-**Progressive loading (opt-in)**
-
-| Tool | Role |
-| ---- | ---- |
-| `hopper_search_tools` | Search the Hopper catalog and activate specialists (`HOPPER_PROGRESSIVE_TOOLS=1` / `--hopper-progressive-tools`) |
-
-Bundled Pi skills and progressive reference docs live under `mds/` (`gh-modeling-expert`, `rhino-document`, `gh-cookbook`, and `gh-reference`).
-
-For new Grasshopper builds, the canonical workflow is: resolve unusual or ambiguous types if needed, call `gh_apply_graph` once, inspect its integrated runtime/overlap validation, then use legacy tools only for surgical repair. `gh_get_canvas` remains for existing canvases, selections, and subgraphs.
-
-## Repo layout
-
-| Path | Role |
-| ---- | ---- |
-| `src/` | Pi extension: ZMQ client, tools, XML parsing |
-| `grasshopper-plugin/` | C# Grasshopper plugin (`rhino-zmq-poc.gha`) |
-| `scripts/install-grasshopper-plugin.mjs` | Build + install plugin to Libraries |
-| `mds/` | Skills and progressive reference docs for the agent |
+The profile token stays local. Hopper does not include it in JSON responses, errors, or diagnostics.
 
 ## Environment variables
 
 | Variable | Effect |
-| -------- | ------ |
-| `HOPPER_SKIP_GH_PLUGIN=1` | Skip plugin build/install on `pnpm install` |
-| `HOPPER_GH_LIBRARIES` | Override Grasshopper Libraries install path |
-| `HOPPER_GH_PLUGIN_DIR` | Subfolder under Libraries (default: `hopper-pi`) |
-| `HOPPER_GH_STRICT=1` | Fail install on build/copy errors (default: warn and continue) |
-| `GH_ZMQ_PUB` / `GH_ZMQ_PUSH` / `GH_ZMQ_REQ` | ZMQ endpoint overrides |
-| `GH_ZMQ_TOKEN` | Connection token override when manually setting endpoints |
-| `HOPPER_CONNECTION_PROFILE` | Connection profile path override |
-| `HOPPER_RHINO_CAPTURE_CONSENT=allow` | Pre-allow Rhino viewport screenshots for non-interactive/restricted UI sessions (`deny` forces off) |
-| `HOPPER_PROGRESSIVE_TOOLS=1` | Opt in to a small Hopper core + `hopper_search_tools` (specialists activate on demand). Off by default. Also `--hopper-progressive-tools`. |
+| --- | --- |
+| `HOPPER_SKIP_GH_PLUGIN=1` | Skip plugin build and installation during `pnpm install` |
+| `HOPPER_GH_LIBRARIES` | Override the Grasshopper Libraries directory |
+| `HOPPER_GH_PLUGIN_DIR` | Override the plugin subdirectory, which defaults to `hoppercode` |
+| `HOPPER_GH_STRICT=1` | Fail installation on build or copy errors instead of warning |
+| `HOPPER_CONNECTION_PROFILE` | Use an exact connection profile path |
+| `GH_ZMQ_REQ` | Override the ZeroMQ request endpoint |
+| `GH_ZMQ_TOKEN` | Supply the token for a manually configured endpoint |
+
+The plugin may still write publish and command endpoints into the profile for protocol compatibility. The CLI does not use them.
+
+## Development
+
+```bash
+pnpm install
+pnpm run build
+pnpm test
+node dist/cli/main.js --help
+```
+
+Useful plugin checks:
+
+```bash
+dotnet build grasshopper-plugin/rhino-zmq-poc.csproj -f net7.0 --no-restore
+dotnet build grasshopper-plugin/rhino-zmq-poc.csproj -f net7.0-windows --no-restore
+```
+
+Package checks:
+
+```bash
+npm pack --dry-run
+npm link
+hopper --version
+```
+
+## Repository layout
+
+| Path | Role |
+| --- | --- |
+| `src/cli/` | Command parsing, JSON input, output, and process lifecycle |
+| `src/core/` | Operation registry, contracts, schemas, and validation |
+| `src/infra/` | Connection profile and ZeroMQ request transport |
+| `src/services/` | Grasshopper and Rhino parsing, validation, and operation helpers |
+| `grasshopper-plugin/` | C# Grasshopper plugin and ZeroMQ backend |
+| `scripts/` | TypeScript build and plugin installation scripts |
 
 ## Troubleshooting
 
-- **Inspect tool schemas:** Run `/hopper-schemas` to browse the JSON schemas exposed to the agent for every registered tool (or `/hopper-schemas rh_run_script` / `/hopper-schemas all`). Dump them with `/hopper-schemas dump` (writes `tool-schemas.json` in the cwd). `/hopper-schemas sizes` reports catalog counts and compact schema bytes by group/tool.
-- **No backend / tools fail:** Ensure **Hopper Code Backend** is on the canvas and Rhino is running, then run `/hopper-backend` to refresh the connection. If ports 5555–5557 are busy, the backend should fall back to free loopback ports automatically and show the profile path in the component log.
-- **Invalid connection token:** Restart the frontend after the backend has started so it can reread the connection profile. If you are using manual endpoint env vars, also set `GH_ZMQ_TOKEN`.
-- **GH shows offline when Revit has focus (Rhino Inside):** The plugin marshals Grasshopper work onto Rhino's UI thread via `InvokeOnUiThread` (not `Idle`). Keep Grasshopper visible while the agent is working, or run `/hopper-backend` after refocusing. Liveness checks use a lightweight `ping` probe that does not touch the canvas. Older Rhino.Inside.Revit versions may still limit background Grasshopper — RiR 1.27+ improves this.
-- **Plugin did not install:** Install [.NET 7 SDK](https://dotnet.microsoft.com/download), then run `pnpm run build:gh-plugin`. On Windows, set `HOPPER_GH_LIBRARIES` if auto-detect fails.
-- **Stale plugin after `git pull`:** `node scripts/install-grasshopper-plugin.mjs --force`, then restart Rhino.
+### Backend unavailable
+
+Confirm that Rhino and Grasshopper are running and that the canvas contains an active `Hopper Code Backend` component. Then run:
+
+```bash
+hopper status --json
+```
+
+If the plugin selected a fallback port, the CLI reads it from the connection profile. Check `HOPPER_CONNECTION_PROFILE` and `GH_ZMQ_REQ` if you override discovery.
+
+### Authentication failed
+
+Restart the CLI command after the backend has started so it reads the current profile. If `GH_ZMQ_REQ` points at a token-protected backend, set `GH_ZMQ_TOKEN` too.
+
+### Plugin did not install
+
+Install the .NET 7 SDK, then run:
+
+```bash
+pnpm run build:gh-plugin
+```
+
+On Windows, set `HOPPER_GH_LIBRARIES` if automatic directory detection fails.
+
+### Plugin is stale after an update
+
+```bash
+node scripts/install-grasshopper-plugin.mjs --force
+```
+
+Restart Rhino after the copy completes.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
