@@ -32,13 +32,21 @@ namespace rhino_zmq_poc
 
     internal class ListAllComponentsHandler : IUiRequestHandler
     {
+        private readonly TargetIdentityProvider _targetIdentity;
+
+        public ListAllComponentsHandler(TargetIdentityProvider targetIdentity)
+        {
+            _targetIdentity = targetIdentity;
+        }
+
         public string Handle(GH_Document doc, JsonElement root)
         {
             return Utilities.RunOnUiThread(() => HandleOnUiThread(doc), TimeSpan.FromSeconds(5));
         }
 
-        private static string HandleOnUiThread(GH_Document doc)
+        private string HandleOnUiThread(GH_Document doc)
         {
+            var target = _targetIdentity.CaptureCurrent(doc);
             var components = new List<GhComponentInfo>();
 
             foreach (var proxy in Instances.ComponentServer.ObjectProxies)
@@ -81,19 +89,20 @@ namespace rhino_zmq_poc
 
                 components.Add(new GhComponentInfo
                 {
-                    Name = d.Name,
+                    Name = d.Name ?? "",
                     Guid = proxy.Guid.ToString(),
                     PluginName = pluginName,
                     AssemblyName = assemblyName,
-                    Category = d.Category,
-                    SubCategory = d.SubCategory,
-                    Description = d.Description
+                    Category = d.Category ?? "",
+                    SubCategory = d.SubCategory ?? "",
+                    Description = d.Description ?? ""
                 });
             }
 
             var response = new ListAllComponentsResponse
             {
                 Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                Target = target,
                 Components = components
             };
 
@@ -103,13 +112,21 @@ namespace rhino_zmq_poc
 
     internal class GetCurrentCanvasHandler : IUiRequestHandler
     {
+        private readonly TargetIdentityProvider _targetIdentity;
+
+        public GetCurrentCanvasHandler(TargetIdentityProvider targetIdentity)
+        {
+            _targetIdentity = targetIdentity;
+        }
+
         public string Handle(GH_Document doc, JsonElement root)
         {
             return Utilities.RunOnUiThread(() => HandleOnUiThread(doc, root), TimeSpan.FromSeconds(5));
         }
 
-        private static string HandleOnUiThread(GH_Document doc, JsonElement root)
+        private string HandleOnUiThread(GH_Document doc, JsonElement root)
         {
+            var target = _targetIdentity.CaptureCurrent(doc);
             string docName = doc?.FilePath ?? "Untitled";
             string xml = XmlPublisher.SerializeToXml(doc) ?? "";
 
@@ -119,6 +136,7 @@ namespace rhino_zmq_poc
             var canvasResponse = new GetCurrentCanvasResponse
             {
                 Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                Target = target,
                 DocName = docName,
                 Xml = xml
             };
@@ -132,18 +150,26 @@ namespace rhino_zmq_poc
 
     internal class GetCanvasErrorsHandler : IUiRequestHandler
     {
+		private readonly TargetIdentityProvider _targetIdentity;
+
+		public GetCanvasErrorsHandler(TargetIdentityProvider targetIdentity)
+		{
+			_targetIdentity = targetIdentity;
+		}
+
         public string Handle(GH_Document doc, JsonElement root)
         {
             return Utilities.RunOnUiThread(() => HandleOnUiThread(doc), TimeSpan.FromSeconds(5));
         }
 
-        private static string HandleOnUiThread(GH_Document doc)
+		private string HandleOnUiThread(GH_Document doc)
         {
             var messages = GhMessageReader.GetAllWarningsAndErrors(doc);
 
             var response = new GetCanvasErrorsResponse
             {
                 Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+				Target = _targetIdentity.CaptureCurrent(doc),
                 DocName = doc?.FilePath ?? "Untitled",
                 Errors = messages
             };
@@ -154,22 +180,42 @@ namespace rhino_zmq_poc
 
     internal class ApplyGraphHandler : IUiRequestHandler
     {
+        private readonly TargetIdentityProvider _targetIdentity;
+
+        public ApplyGraphHandler(TargetIdentityProvider targetIdentity)
+        {
+            _targetIdentity = targetIdentity;
+        }
+
         public string Handle(GH_Document doc, JsonElement root)
         {
+            DocumentTarget executionTarget = null;
             try
             {
                 return Utilities.RunOnUiThread(() =>
                 {
+                    executionTarget = _targetIdentity.CaptureCurrent(doc);
                     try
                     {
                         var request = JsonSerializer.Deserialize<ApplyGraphRequest>(root.GetRawText());
                         if (request == null)
-                            return JsonSerializer.Serialize(new { error = "Invalid applyGraph request" });
-                        return JsonSerializer.Serialize(GraphOperations.Apply(doc, request));
+                            return JsonSerializer.Serialize(new
+                            {
+                                error = "Invalid applyGraph request",
+                                target = executionTarget,
+                            });
+
+                        var response = GraphOperations.Apply(doc, request);
+                        response.Target = executionTarget;
+                        return JsonSerializer.Serialize(response);
                     }
                     catch (Exception ex)
                     {
-                        return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
+                        return JsonSerializer.Serialize(new
+                        {
+                            error = $"{ex.GetType().Name} - {ex.Message}",
+                            target = executionTarget,
+                        });
                     }
                 }, TimeSpan.FromSeconds(30));
             }
@@ -185,6 +231,7 @@ namespace rhino_zmq_poc
                 return JsonSerializer.Serialize(new ApplyGraphResponse
                 {
                     Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    Target = executionTarget,
                     Ok = false,
                     RolledBack = false,
                     TimedOut = true,
@@ -309,12 +356,22 @@ namespace rhino_zmq_poc
 
     internal class RunRhinoScriptHandler : IUiRequestHandler
     {
+        private readonly TargetIdentityProvider _targetIdentity;
+
+        public RunRhinoScriptHandler(TargetIdentityProvider targetIdentity)
+        {
+            _targetIdentity = targetIdentity;
+        }
+
         public string Handle(GH_Document doc, JsonElement root)
         {
             return Utilities.RunOnUiThread(() =>
             {
+                DocumentTarget executionTarget = null;
                 try
                 {
+                    var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
+                    executionTarget = _targetIdentity.Capture(doc, rhinoDoc);
                     var mode = root.TryGetProperty("mode", out var modeEl)
                         ? modeEl.GetString()
                         : null;
@@ -323,7 +380,7 @@ namespace rhino_zmq_poc
                         : null;
                     var echo = root.TryGetProperty("echo", out var echoEl) && echoEl.GetBoolean();
 
-                    var result = RhinoScriptExecutor.Run(new RunRhinoScriptParams
+                    var result = RhinoScriptExecutor.Run(rhinoDoc, new RunRhinoScriptParams
                     {
                         Mode = mode,
                         Source = source,
@@ -333,6 +390,7 @@ namespace rhino_zmq_poc
                     var response = new RunRhinoScriptResponse
                     {
                         Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        Target = executionTarget,
                         Ok = result.Ok,
                         Output = result.Output ?? "",
                         Error = result.Error ?? ""
@@ -345,6 +403,7 @@ namespace rhino_zmq_poc
                     return JsonSerializer.Serialize(new RunRhinoScriptResponse
                     {
                         Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        Target = executionTarget,
                         Ok = false,
                         Error = $"{ex.GetType().Name} - {ex.Message}"
                     });
@@ -392,12 +451,22 @@ namespace rhino_zmq_poc
 
     internal class QueryRhinoObjectsHandler : IUiRequestHandler
     {
+        private readonly TargetIdentityProvider _targetIdentity;
+
+        public QueryRhinoObjectsHandler(TargetIdentityProvider targetIdentity)
+        {
+            _targetIdentity = targetIdentity;
+        }
+
         public string Handle(GH_Document doc, JsonElement root)
         {
             return Utilities.RunOnUiThread(() =>
             {
+                DocumentTarget executionTarget = null;
                 try
                 {
+                    var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
+                    executionTarget = _targetIdentity.Capture(doc, rhinoDoc);
                     var query = new QueryRhinoObjectsParams();
                     if (root.TryGetProperty("selectionOnly", out var selEl))
                         query.SelectionOnly = selEl.GetBoolean();
@@ -416,12 +485,12 @@ namespace rhino_zmq_poc
                         }
                     }
 
-                    var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
                     var objects = RhinoObjectQuery.Query(rhinoDoc, query);
 
                     var response = new QueryRhinoObjectsResponse
                     {
                         Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        Target = executionTarget,
                         Objects = objects.Select(o => new RhinoObjectInfoDto
                         {
                             ObjectId = o.ObjectId,
@@ -435,7 +504,11 @@ namespace rhino_zmq_poc
                 }
                 catch (Exception ex)
                 {
-                    return JsonSerializer.Serialize(new { error = $"{ex.GetType().Name} - {ex.Message}" });
+                    return JsonSerializer.Serialize(new
+                    {
+                        error = $"{ex.GetType().Name} - {ex.Message}",
+                        target = executionTarget,
+                    });
                 }
             });
         }

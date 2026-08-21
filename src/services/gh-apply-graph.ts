@@ -180,6 +180,7 @@ export async function normalizeApplyGraphInput(
 	registryOverride?: { components: import("../types/messages.js").GhComponentInfo[] },
 ): Promise<{ request?: NormalizedApplyGraphRequest; errors: StructuralError[] }> {
 	const errors = validateApplyGraphInput(input);
+	if (errors.length > 0) return { errors };
 	const registry = registryOverride ??
 		((input.components?.length ?? 0) > 0
 			? await getCachedOrFetchComponents()

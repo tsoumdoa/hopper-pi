@@ -202,6 +202,9 @@ namespace rhino_zmq_poc
         [JsonPropertyName("timestamp")]
         public long Timestamp { get; set; }
 
+        [JsonPropertyName("target")]
+        public DocumentTarget Target { get; set; }
+
         [JsonPropertyName("ok")]
         public bool Ok { get; set; }
 

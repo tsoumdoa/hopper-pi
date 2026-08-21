@@ -7,18 +7,23 @@
 	],
 	"type": "module",
 	"files": [
+		"dist",
 		"src",
 		"mds",
 		"grasshopper-plugin",
 		"scripts"
 	],
+	"bin": {
+		"hopper": "dist/cli/main.js"
+	},
 	"scripts": {
 		"dev": "tsx src/index.ts",
-		"build": "tsc -p tsconfig.json",
+		"build": "node scripts/build.mjs",
 		"test": "vitest run",
 		"pi": "pi -e .",
 		"dump:components": "tsx src/scripts/dump-components.ts",
 		"postinstall": "node scripts/install-grasshopper-plugin.mjs",
+		"prepack": "npm run build",
 		"build:gh-plugin": "node scripts/install-grasshopper-plugin.mjs --build-only"
 	},
 	"devDependencies": {
@@ -31,7 +36,9 @@
 		"@earendil-works/pi-ai": "^0.82.0",
 		"@earendil-works/pi-coding-agent": "^0.82.0",
 		"@earendil-works/pi-tui": "^0.82.0",
+		"@sinclair/typebox": "^0.34.52",
 		"chalk": "^5.6.2",
+		"commander": "^14.0.3",
 		"fast-xml-parser": "^5.10.1",
 		"nanoid": "^5.1.16",
 		"zeromq": "^6.5.0"

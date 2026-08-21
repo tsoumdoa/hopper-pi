@@ -19,6 +19,12 @@ export type GhEventXml = {
 
 export type GhMessage = GhJobStatus | GhEventXml;
 
+export type DocumentTarget = {
+	backendInstanceId: string;
+	ghDocument: { path: string | null; runtimeId: string } | null;
+	rhinoDocument: { name: string; runtimeSerialNumber: number } | null;
+};
+
 export type GhComponentInfo = {
 	name: string;
 	typeGuid: string;
@@ -33,6 +39,7 @@ export type ListAllComponentsResponse = {
 	type: "listAllComponents.response";
 	timestamp: number;
 	components: GhComponentInfo[];
+	target?: DocumentTarget;
 };
 
 export type GetCurrentCanvasResponse = {
@@ -41,6 +48,7 @@ export type GetCurrentCanvasResponse = {
 	docName: string;
 	xml: string;
 	selectedInstanceGuids?: string[];
+	target?: DocumentTarget;
 };
 
 export type CanvasError = {
@@ -77,11 +85,14 @@ export type GetCanvasErrorsResponse = {
 	timestamp: number;
 	docName: string;
 	errors: CanvasError[];
+	target?: DocumentTarget;
 };
 
 export type PingResponse = {
 	type: "ping.response";
 	timestamp: number;
+	backendStartedAt?: number;
+	target?: DocumentTarget;
 };
 
 export type AuthErrorResponse = {
@@ -96,6 +107,7 @@ export type RunRhinoScriptResponse = {
 	ok: boolean;
 	output: string;
 	error: string;
+	target?: DocumentTarget;
 };
 
 export type RhinoObjectInfo = {
@@ -109,6 +121,7 @@ export type QueryRhinoObjectsResponse = {
 	type: "queryRhinoObjects.response";
 	timestamp: number;
 	objects: RhinoObjectInfo[];
+	target?: DocumentTarget;
 };
 
 export type RhinoPoint3d = {

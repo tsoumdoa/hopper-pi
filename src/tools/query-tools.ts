@@ -1,6 +1,5 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { createQueryExecute } from "./execute-factory.js";
 import { withRequester } from "../infra/request-helpers.js";
 import type {
 	GetCurrentCanvasResponse,
@@ -11,14 +10,18 @@ import {
 	fetchCanvasErrors,
 	getCachedOrFetchComponents,
 } from "./canvas-fetch.js";
-import { formatCanvasResponse } from "./canvas-formatters.js";
+import { formatCanvasData, type CanvasData } from "../presenters/canvas-formatter.js";
 import {
 	formatComponentsMultiQuery,
 	formatCanvasErrorsResponse,
 } from "./query-handlers.js";
 import { checkCanvasOverlaps } from "./canvas-checks.js";
-import { MAX_LIMIT as COMPONENT_MAX_LIMIT } from "../services/component-search.js";
-import { ResultOffsetSchema } from "./schemas.js";
+import { GhGetCanvasInputSchema, GhListComponentsInputSchema } from "../core/schemas.js";
+import { formatCoreFailure, operationDetails, operationSignal, prototypeOperation } from "./core-adapter.js";
+import { toShortTypeGuid } from "../services/guid-shortener.js";
+
+const getCanvasOperation = prototypeOperation("gh_get_canvas");
+const listComponentsOperation = prototypeOperation("gh_list_components");
 
 export const ghGetCanvasTool = defineTool({
 	name: "gh_get_canvas",
@@ -27,33 +30,25 @@ export const ghGetCanvasTool = defineTool({
 		"Fetch the live Grasshopper canvas. With no filters, returns a subgraph index summary; pass subgraph for one cluster or selectionOnly for the user's current selection. " +
 		"After placing a new build, make one unfiltered call to obtain all component and port GUIDs before wiring.",
 	promptSnippet: "Inspect Grasshopper canvas structure, selection, IDs, ports, and wires",
-	parameters: Type.Object({
-		subgraph: Type.Optional(
-			Type.String({
-				description: 'Show only this sub-graph (e.g. "subgraph_0"). Applied after selectionOnly when both are set.',
-			}),
-		),
-		selectionOnly: Type.Optional(
-			Type.Boolean({
-				description:
-					"Return only canvas objects currently selected in Grasshopper (groups expand to members). " +
-					"Includes internal wires between selected components only. Always returns detail view.",
-			}),
-		),
-	}),
+	parameters: GhGetCanvasInputSchema,
 
-	execute: createQueryExecute(
-		(params) => params.selectionOnly
-			? "Fetching selected canvas objects from backend..."
-			: "Fetching current canvas from backend...",
-		async (params) => {
-			const response = await withRequester<GetCurrentCanvasResponse>((req) =>
-				fetchCurrentCanvas(req, { selectionOnly: params.selectionOnly === true }),
-			);
-			const hasFilters = !!params.subgraph || params.selectionOnly === true;
-			return formatCanvasResponse(response, hasFilters ? params : undefined);
-		},
-	),
+	async execute(_toolCallId, params, signal, onUpdate) {
+		onUpdate?.({
+			content: [{ type: "text", text: params.selectionOnly ? "Fetching selected canvas objects from backend..." : "Fetching current canvas from backend..." }],
+			details: {},
+		});
+		const result = await getCanvasOperation.execute(params, operationSignal(signal));
+		if (result.outcome !== "succeeded") {
+			return { content: [{ type: "text", text: formatCoreFailure(result) }], details: operationDetails(result) };
+		}
+		const data = result.data as CanvasData;
+		const filters = params.subgraph || params.selectionOnly === true ? params : undefined;
+		const formatted = formatCanvasData(data, filters);
+		return {
+			content: formatted.content,
+			details: { ...formatted.details, target: result.target },
+		};
+	},
 });
 
 export const ghListComponentsTool = defineTool({
@@ -62,50 +57,28 @@ export const ghListComponentsTool = defineTool({
 	description:
 		"Search the Grasshopper component registry and return ranked typeGuids for gh_edit_components. " +
 		"One desired component per query string; multi-word queries disambiguate. Defaults to vanilla excluding Params.",
-	parameters: Type.Object({
-		queries: Type.Array(
-			Type.String({
-				description:
-					"One desired component per query string; use multiple words as disambiguating terms.",
-			}),
-			{ minItems: 1 },
-		),
-		searchFrom: Type.Optional(
-			Type.Union(
-				[
-					Type.Literal("vanilla"),
-					Type.Literal("plugin"),
-					Type.Literal("params"),
-				],
-				{
-					description:
-						"Source: 'vanilla' only, 'plugin' only, or 'params' only. Defaults to 'vanilla'.",
-				},
-			),
-		),
-		limit: Type.Optional(
-			Type.Integer({
-				minimum: 1,
-				maximum: COMPONENT_MAX_LIMIT,
-				description: `Results per query (default 10, max ${COMPONENT_MAX_LIMIT})`,
-			}),
-		),
-		offset: Type.Optional(ResultOffsetSchema),
-	}),
+	parameters: GhListComponentsInputSchema,
 
 	async execute(_toolCallId, params, _signal, onUpdate, _ctx) {
 		onUpdate?.({
 			content: [{ type: "text", text: "Fetching component registry..." }],
 			details: {},
 		});
-		const response = await getCachedOrFetchComponents();
-		return formatComponentsMultiQuery(
-			response,
-			params.queries,
-			params.limit,
-			params.offset,
-			params.searchFrom ?? "vanilla",
-		);
+		const result = await listComponentsOperation.execute(params, operationSignal(_signal));
+		if (result.outcome !== "succeeded") {
+			return { content: [{ type: "text", text: formatCoreFailure(result) }], details: operationDetails(result) };
+		}
+		const data = result.data as {
+			results: Array<{ query: string; candidates: Array<{ typeGuid: string; name: string; pluginName: string; category: string; subcategory: string; description: string }>; totalMatched: number; hasMore: boolean }>;
+			totalAvailable: number;
+		};
+		const text = data.results.map((entry) => {
+			const candidates = entry.candidates.map((candidate) =>
+				`${candidate.name} [${toShortTypeGuid(candidate.typeGuid)}] · ${candidate.category}/${candidate.subcategory}`,
+			).join("\n");
+			return `"${entry.query}" (${entry.totalMatched} matches):\n${candidates || "no matches"}`;
+		}).join("\n\n");
+		return { content: [{ type: "text", text }], details: operationDetails(result) };
 	},
 });
 
