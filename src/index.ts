@@ -26,7 +26,6 @@ import { probeBackend } from "./infra/backend-status.js";
 import { registerBackendStatusUI } from "./ui/backend-status.js";
 import { registerToolSchemasUI } from "./ui/tool-schemas.js";
 import {
-	ALL_TOOLS,
 	HOPPER_REGISTERED_CATALOG,
 	RH_CAPTURE_VIEW_CATALOG_ENTRY,
 	type HopperToolCatalogEntry,
@@ -80,8 +79,8 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 
 	// ── Register Grasshopper/Rhino tools + progressive loader ───────
 
-	for (const tool of ALL_TOOLS) {
-		pi.registerTool(withBackendGuard(tool));
+	for (const entry of HOPPER_REGISTERED_CATALOG) {
+		pi.registerTool(entry.requires === "backend" ? withBackendGuard(entry.tool) : entry.tool);
 	}
 
 	let catalog: readonly HopperToolCatalogEntry[] = HOPPER_REGISTERED_CATALOG;

@@ -23,6 +23,12 @@ Assess tier before building. When tier is ambiguous **and** the choice materiall
 
 **Default new-build workflow:** resolve unusual/ambiguous types if necessary → call `gh_apply_graph` once → inspect its integrated validation → use legacy tools only for surgical repair. Local refs replace the old placement readback. For existing-canvas edits, targeted reads (`selectionOnly`, `subgraph`) are appropriate.
 
+**Time-to-first-visible-result:** for open-ended creative/Tier 2–3 builds where final logic may take time, place a visible scaffold early with `gh_quick_scaffold` (sliders + placeholder output + single swatch-driven Custom Preview + status panel), then refine by patching `scaffoldScript` or replacing the grouped scaffold. Do not wait for perfect implementation before showing an initial preview when the user asks to explore or create something visual.
+
+**Scaffold replacement is not complete until the scaffold is gone.** When replacing (not patching) a scaffold with the final graph, delete the scaffold objects in the same turn — either before `gh_apply_graph`, or immediately after it within the same flow. Never leave the scaffold on the canvas across turns: the user sees two graphs stacked and reads it as the final build being ignored. If apply-graph validation reports overlaps naming scaffold objects, resolve them before doing anything else or reporting success.
+
+**Parallel planning:** after a scaffold is visible, use `hopper_delegate` for independent read-only planning/review tasks (geometry logic, script strategy, layout, validation). Delegates are tool-less and must not mutate Rhino/GH; the main agent merges their outputs and performs the actual `gh_*`/`rh_*` calls.
+
 ## Gaps and compact size table
 
 | Constant | Value | Use |
@@ -75,6 +81,10 @@ Full table, bounds math, pivot safety, worked examples → [layout-system.md](..
 - **Python tree/list boundary** — inspect the integrated `gh_apply_graph` runtime messages for a new graph, or run `gh_get_canvas_errors` for existing nodes, then follow [python-boilerplate.md](../../reference/python-boilerplate.md#list-vs-tree-access-types).
 - Extruded crvs result in open breps, you need to extrude them as srf or cap
   them.
+- `scriptParts.runScript` given as body only — it must include the full
+  `private void RunScript(...)` signature line. Body-only text is injected at
+  class level and yields dozens of errors like `Invalid token 'for' in class,
+  record, struct, or interface member declaration`.
 
 ## User clarification tools
 

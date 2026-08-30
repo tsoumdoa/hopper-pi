@@ -59,6 +59,12 @@ A port selector is a zero-based index or exact, case-sensitive port name/nicknam
 
 For C#, `scriptParts` contains namespace `references`, the complete `runScript` method, and optional `helpers`. Hopper assembles the class wrapper. Script port type hints are `object`, `double`, `int`, `string`, or `bool`.
 
+**Common mistakes**
+
+- `runScript` must start with the `private void RunScript(...)` signature line — it is a whole method, not a method body. Body-only text is injected at class level and produces cascading errors like `Invalid token 'for' in class, record, struct, or interface member declaration` and `The contextual keyword 'var' may only appear within a local variable declaration or in script code`.
+- Do not name local variables identically to output `ref` params: `colBase = colBase;` compiles but emits an `Assignment made to same variable` warning. Use a distinct local name.
+- A new graph must not overlap objects already on the canvas. When replacing a scaffold, delete its objects before applying (or in the same turn). Overlap validation entries naming old/scaffold objects are a blocker to resolve, not noise.
+
 ## Atomicity and validation
 
 Hopper resolves all component types and validates refs, coordinates, sources, and graph references before sending the request. On the Grasshopper UI thread it snapshots the document, creates all objects, resolves ports, connects without per-wire solutions, creates groups, then runs one solution.

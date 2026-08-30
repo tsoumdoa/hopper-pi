@@ -47,12 +47,14 @@ test("catalog covers every ALL_TOOLS entry exactly once", () => {
 	}
 });
 
-test("always-active core matches issue policy plus canvas errors", () => {
+test("always-active core matches issue policy plus early scaffold", () => {
 	const catalog = withSearchCatalog();
 	const core = getAlwaysActiveToolNames(catalog).sort();
 	assert.deepEqual(core, [
 		"gh_get_canvas",
 		"gh_get_canvas_errors",
+		"gh_quick_scaffold",
+		"hopper_delegate",
 		"hopper_search_tools",
 		"rh_query_objects",
 		"rh_run_script",
