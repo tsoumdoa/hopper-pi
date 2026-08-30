@@ -11,7 +11,7 @@ description: Rhino document and viewport workflow for geometry, layers, selectio
 |---------|------|
 | Change Rhino geometry, layers, selection, blocks, materials, or directly commit current geometry | `rh_run_script` |
 | Change viewport, projection, camera, CPlane view, or zoom | `rh_view_control` |
-| Inspect pixels for visual QA | `rh_capture_view` when available and consented |
+| Inspect pixels for visual QA | `rh_capture_view` when available |
 | List/count Rhino objects or obtain short IDs | `rh_query_objects` |
 | Reference/internalize Rhino objects on a GH geometry param | `gh_param_rhino` |
 | Build a reusable parametric bake pipeline in the GH definition | `gh_*` + [Cookbook Recipe 9](../gh-cookbook/reference/recipe-9-bake-geometry.md) |
@@ -36,7 +36,7 @@ Use `print()` in Python or `Console.WriteLine()` in C# for values the agent must
 
 - Prefer `rh_view_control` over scripts for normal view changes. Save a named view only when explicitly requested.
 - For a one-off standard or named-view screenshot, pass `view` to `rh_capture_view`; `restoreView` defaults to true. Use `rh_view_control` first only for custom camera/CPlane setup or a persistent view change.
-- Screenshots are optional, model-dependent, and consent-gated. If unavailable or denied, continue with object queries, canvas/errors, and scripts.
+- Screenshots are optional and model-dependent. If unavailable, continue with object queries, canvas/errors, and scripts.
 
 ## Rhino → Grasshopper geometry params
 

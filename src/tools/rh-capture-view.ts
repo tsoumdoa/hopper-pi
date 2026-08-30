@@ -2,7 +2,6 @@ import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { withRequester } from "../infra/request-helpers.js";
 import { describeModel, modelSupportsImages } from "../services/model-capabilities.js";
-import { isRhinoVisualCaptureAllowed, VISUAL_CAPTURE_ENV_VAR } from "../services/rhino-visual-consent.js";
 import type { CaptureRhinoViewResponse, RhinoViewMetadata } from "../types/messages.js";
 
 const DEFAULT_WIDTH = 1280;
@@ -32,12 +31,12 @@ export const rhCaptureViewTool = defineTool({
 	name: "rh_capture_view",
 	label: "Capture Rhino View",
 	description:
-		"Capture a Rhino viewport screenshot as PNG visual context when the selected model supports images and session consent (or HOPPER_RHINO_CAPTURE_CONSENT=allow) permits it. " +
+		"Capture a Rhino viewport screenshot as PNG visual context when the selected model supports images. " +
 		"Use view for a one-off active, standard, or named-view capture; restoreView defaults to true. Use rh_view_control first only for a custom camera/CPlane setup or an intentionally persistent view change.",
-	promptSnippet: "Capture a consent-gated Rhino viewport screenshot for visual QA",
+	promptSnippet: "Capture a Rhino viewport screenshot for visual QA",
 	promptGuidelines: [
-		"Use rh_capture_view only when pixels materially help visual QA and Rhino screenshot consent is allowed.",
-		"If rh_capture_view is unavailable or denied, continue with text and geometry tools instead of blocking the task.",
+		"Use rh_capture_view only when pixels materially help visual QA.",
+		"If rh_capture_view is unavailable because the model cannot accept images, continue with text and geometry tools instead of blocking the task.",
 	],
 	parameters: Type.Object({
 		view: Type.Optional(
@@ -85,23 +84,7 @@ export const rhCaptureViewTool = defineTool({
 							"Until then, continue with rh_view_control, rh_query_objects, gh_get_canvas, gh_get_canvas_errors, or rh_run_script.",
 					},
 				],
-				details: { allowed: false, reason: "model_not_multimodal" },
-			};
-		}
-
-		if (!isRhinoVisualCaptureAllowed()) {
-			return {
-				content: [
-					{
-						type: "text" as const,
-						text:
-							"Rhino viewport screenshot capture was not allowed for this Pi session. " +
-							"The user can explicitly ask to allow Rhino screenshots for this session, or set " +
-							`${VISUAL_CAPTURE_ENV_VAR}=allow before starting Pi to override the UI gate. ` +
-							"Continue without visual capture using rh_view_control, rh_query_objects, gh_get_canvas, gh_get_canvas_errors, or rh_run_script.",
-					},
-				],
-				details: { allowed: false },
+				details: { reason: "model_not_multimodal" },
 			};
 		}
 
@@ -127,14 +110,14 @@ export const rhCaptureViewTool = defineTool({
 		if ("error" in res && res.error) {
 			return {
 				content: [{ type: "text" as const, text: `FAILED: ${res.error}` }],
-				details: { allowed: true },
+				details: {},
 			};
 		}
 
 		if (!("ok" in res) || !res.ok) {
 			return {
 				content: [{ type: "text" as const, text: `FAILED: ${"error" in res ? res.error : "Rhino capture failed"}` }],
-				details: { allowed: true, response: res },
+				details: { response: res },
 			};
 		}
 
@@ -147,7 +130,7 @@ export const rhCaptureViewTool = defineTool({
 					mimeType: res.mediaType || "image/png",
 				},
 			],
-			details: { allowed: true, metadata: res.metadata },
+			details: { metadata: res.metadata },
 		};
 	},
 });

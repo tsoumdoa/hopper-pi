@@ -151,7 +151,7 @@ export const HOPPER_REGISTERED_CATALOG: readonly HopperToolCatalogEntry[] = [
 	},
 ];
 
-/** Dynamically registered; model/consent gated. Included in catalog for search + diagnostics. */
+/** Dynamically registered and model-gated. Included in catalog for search + diagnostics. */
 export const RH_CAPTURE_VIEW_CATALOG_ENTRY: HopperToolCatalogEntry = {
 	tool: rhCaptureViewTool,
 	group: "rhino",

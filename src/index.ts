@@ -39,21 +39,9 @@ import {
 import { withBackendGuard } from "./tools/with-backend-guard.js";
 import { ENV, isProgressiveToolsEnvEnabled } from "./config.js";
 import {
-	hasRhinoVisualCaptureDecision,
-	isRhinoVisualCaptureAllowed,
-	isRhinoVisualCaptureOverrideConfigured,
-	resetRhinoVisualCaptureState,
-	rhinoVisualCaptureGuidance,
-	setRhinoVisualCaptureConsent,
-	VISUAL_CAPTURE_ALLOW_SESSION_LABEL,
-	VISUAL_CAPTURE_DENY_LABEL,
-} from "./services/rhino-visual-consent.js";
-import {
 	createRhinoCaptureModelController,
-	promptOverridesVisualCaptureRestriction,
 	promptWantsVisualCapture,
 	rhinoCaptureUnavailableGuidance,
-	shouldAskVisualCapturePermission,
 } from "./services/rhino-capture-model.js";
 import {
 	promptTargetsGrasshopper,
@@ -112,8 +100,6 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 	// ── Lifecycle: notify on load ──────────────────────────────────
 
 	pi.on("session_start", async (event, ctx) => {
-		resetRhinoVisualCaptureState();
-
 		const progressive = isProgressiveToolsEnabled(pi);
 		if (progressive && shouldResetProgressiveTools(event.reason)) {
 			resetProgressiveActiveTools(pi, catalog);
@@ -140,28 +126,8 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 		}
 
 		const captureToolActive = captureModel.isCaptureToolActive();
-		const shouldReconsiderDeniedCapture =
-			!isRhinoVisualCaptureAllowed() && promptOverridesVisualCaptureRestriction(prompt);
-		if (shouldAskVisualCapturePermission({
-			captureToolActive,
-			hasDecision: hasRhinoVisualCaptureDecision(),
-			hasUI: ctx.hasUI,
-			requestingCapture: wantsVisualCapture,
-			allowReconsider: shouldReconsiderDeniedCapture,
-			overrideConfigured: isRhinoVisualCaptureOverrideConfigured(),
-		})) {
-			const choice = await ctx.ui.select(
-				"Allow Hopper to capture Rhino viewport screenshots?",
-				[VISUAL_CAPTURE_DENY_LABEL, VISUAL_CAPTURE_ALLOW_SESSION_LABEL],
-				{ signal: ctx.signal },
-			);
-			setRhinoVisualCaptureConsent(choice === VISUAL_CAPTURE_ALLOW_SESSION_LABEL);
-		}
-
 		const captureGuidance = wantsVisualCapture
-			? (captureToolActive
-				? rhinoVisualCaptureGuidance()
-				: rhinoCaptureUnavailableGuidance(ctx.model))
+			? (captureToolActive ? "" : rhinoCaptureUnavailableGuidance(ctx.model))
 			: "";
 		const guidance = [
 			rhinoRoutingGuidance(promptTargetsGrasshopper(prompt)),
@@ -191,7 +157,6 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("session_shutdown", async () => {
-		resetRhinoVisualCaptureState();
 		await cancelTransactionPair();
 	});
 }
