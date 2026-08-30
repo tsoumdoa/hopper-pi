@@ -4,10 +4,10 @@ allowBuilds:
   protobufjs: true
   zeromq: true
 minimumReleaseAgeExclude:
-  - '@earendil-works/pi-agent-core@0.77.0 || 0.79.1 || 0.80.6 || 0.80.10'
-  - '@earendil-works/pi-ai@0.77.0 || 0.79.1 || 0.80.6 || 0.80.10'
-  - '@earendil-works/pi-coding-agent@0.77.0 || 0.79.1 || 0.80.6 || 0.80.10'
-  - '@earendil-works/pi-tui@0.77.0 || 0.79.1 || 0.80.6 || 0.80.10'
+  - '@earendil-works/pi-agent-core@0.77.0 || 0.79.1 || 0.80.6 || 0.80.10 || 0.84.4'
+  - '@earendil-works/pi-ai@0.77.0 || 0.79.1 || 0.80.6 || 0.80.10 || 0.84.4'
+  - '@earendil-works/pi-coding-agent@0.77.0 || 0.79.1 || 0.80.6 || 0.80.10 || 0.84.4'
+  - '@earendil-works/pi-tui@0.77.0 || 0.79.1 || 0.80.6 || 0.80.10 || 0.84.4'
   - '@mariozechner/clipboard-darwin-arm64@0.3.9'
   - '@mariozechner/clipboard-darwin-universal@0.3.9'
   - '@mariozechner/clipboard-darwin-x64@0.3.9'
@@ -19,3 +19,4 @@ minimumReleaseAgeExclude:
   - '@mariozechner/clipboard-win32-arm64-msvc@0.3.9'
   - '@mariozechner/clipboard-win32-x64-msvc@0.3.9'
   - '@mariozechner/clipboard@0.3.9'
+  - tsx@4.23.13
