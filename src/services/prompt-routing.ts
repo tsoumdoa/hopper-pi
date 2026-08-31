@@ -4,7 +4,7 @@ const RHINO_CONTEXT_RE =
 const GRASSHOPPER_CONTEXT_RE =
 	/(?:^|[^\w])(?:grasshopper|gh\s+(?:definition|canvas|components?|wires?|sliders?|scripts?|params?)|gh_(?:get|list|edit|create|mutate|param)[a-z_]*)(?=[^\w]|$)/i;
 
-/** Require an explicit Rhino-domain anchor before injecting Rhino routing or capture consent. */
+/** Require an explicit Rhino-domain anchor before injecting Rhino routing or capture guidance. */
 export function promptTargetsRhino(prompt: string): boolean {
 	return RHINO_CONTEXT_RE.test(prompt);
 }

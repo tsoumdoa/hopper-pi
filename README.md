@@ -10,6 +10,10 @@ AI inside their real workflow — not locked behind a black-box SaaS.
 
 ## What's new
 
+### Unreleased — Direct viewport capture
+
+- **No screenshot permission prompt:** `rh_capture_view` can capture the Rhino viewport as soon as a multimodal model requests it. The per-session consent prompt and its environment override have been removed.
+
 ### 0.1.90 — Slim progressive tool catalog
 
 - **Opt-in progressive tools:** start with a small always-on Hopper core and activate specialists on demand. Enable with `HOPPER_PROGRESSIVE_TOOLS=1` or `--hopper-progressive-tools`. Off by default, so the current all-tools-active behavior stays.
@@ -126,7 +130,7 @@ The token is generated once and reused across backend/frontend restarts, so norm
 | `rh_run_script` | Rhino commands, Python, or C# on the active document |
 | `rh_query_objects` | List/count objects (short IDs for GH params) |
 | `rh_view_control` | Viewport, projection, camera, CPlane view, and zoom |
-| `rh_capture_view` | Optional consent-gated viewport screenshot for multimodal models |
+| `rh_capture_view` | Optional viewport screenshot for multimodal models |
 
 **Grasshopper canvas — edit**
 
@@ -186,7 +190,6 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 | `GH_ZMQ_PUB` / `GH_ZMQ_PUSH` / `GH_ZMQ_REQ` | ZMQ endpoint overrides |
 | `GH_ZMQ_TOKEN` | Connection token override when manually setting endpoints |
 | `HOPPER_CONNECTION_PROFILE` | Connection profile path override |
-| `HOPPER_RHINO_CAPTURE_CONSENT=allow` | Pre-allow Rhino viewport screenshots for non-interactive/restricted UI sessions (`deny` forces off) |
 | `HOPPER_PROGRESSIVE_TOOLS=1` | Opt in to a small Hopper core + `hopper_search_tools` (specialists activate on demand). Off by default. Also `--hopper-progressive-tools`. |
 
 ## Troubleshooting

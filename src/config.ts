@@ -8,7 +8,6 @@ export const ENV = {
 	GH_ZMQ_TOKEN: "GH_ZMQ_TOKEN",
 	HOPPER_CONNECTION_PROFILE: "HOPPER_CONNECTION_PROFILE",
 	HOPPER_MULTIMODAL_FALLBACK: "HOPPER_MULTIMODAL_FALLBACK",
-	HOPPER_RHINO_CAPTURE_CONSENT: "HOPPER_RHINO_CAPTURE_CONSENT",
 	/** When enabled (`1`/`true`/`yes`/`on`), start with a small Hopper core and load specialists via hopper_search_tools. Off by default (today's all-tools-active behavior). */
 	HOPPER_PROGRESSIVE_TOOLS: "HOPPER_PROGRESSIVE_TOOLS",
 } as const;

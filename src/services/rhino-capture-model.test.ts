@@ -2,10 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
 	createRhinoCaptureModelController,
-	promptOverridesVisualCaptureRestriction,
 	promptWantsVisualCapture,
 	rhinoCaptureUnavailableGuidance,
-	shouldAskVisualCapturePermission,
 } from "./rhino-capture-model.js";
 import { RH_CAPTURE_VIEW_TOOL } from "./model-capabilities.js";
 
@@ -14,57 +12,6 @@ test("promptWantsVisualCapture detects visual Rhino requests", () => {
 	assert.equal(promptWantsVisualCapture("use visual context to inspect the model"), true);
 	assert.equal(promptWantsVisualCapture("look at the view and fix the composition"), true);
 	assert.equal(promptWantsVisualCapture("list Rhino layers"), false);
-});
-
-test("promptOverridesVisualCaptureRestriction detects explicit opt-in phrasing", () => {
-	assert.equal(promptOverridesVisualCaptureRestriction("allow Rhino screenshots now"), true);
-	assert.equal(promptOverridesVisualCaptureRestriction("enable visual context for this session"), true);
-	assert.equal(promptOverridesVisualCaptureRestriction("screenshots are ok"), true);
-	assert.equal(promptOverridesVisualCaptureRestriction("take a screenshot if useful"), false);
-});
-
-test("shouldAskVisualCapturePermission requires an active requested capture path", () => {
-	assert.equal(shouldAskVisualCapturePermission({
-		captureToolActive: false,
-		hasDecision: false,
-		hasUI: true,
-	}), false);
-	assert.equal(shouldAskVisualCapturePermission({
-		captureToolActive: true,
-		hasDecision: true,
-		hasUI: true,
-	}), false);
-	assert.equal(shouldAskVisualCapturePermission({
-		captureToolActive: true,
-		hasDecision: false,
-		hasUI: false,
-	}), false);
-	assert.equal(shouldAskVisualCapturePermission({
-		captureToolActive: true,
-		hasDecision: false,
-		hasUI: true,
-		requestingCapture: false,
-	}), false);
-	assert.equal(shouldAskVisualCapturePermission({
-		captureToolActive: true,
-		hasDecision: false,
-		hasUI: true,
-		requestingCapture: true,
-	}), true);
-	assert.equal(shouldAskVisualCapturePermission({
-		captureToolActive: true,
-		hasDecision: true,
-		hasUI: true,
-		requestingCapture: true,
-		allowReconsider: true,
-	}), true);
-	assert.equal(shouldAskVisualCapturePermission({
-		captureToolActive: true,
-		hasDecision: false,
-		hasUI: true,
-		requestingCapture: true,
-		overrideConfigured: true,
-	}), false);
 });
 
 test("rhinoCaptureUnavailableGuidance points user to multimodal model", () => {
