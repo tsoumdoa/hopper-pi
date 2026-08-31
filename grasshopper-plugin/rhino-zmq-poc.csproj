@@ -8,18 +8,25 @@
     <TargetFrameworks>net7.0-windows;net7.0</TargetFrameworks>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <TargetExt>.gha</TargetExt>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <NoWarn>NU1701;NETSDK1086</NoWarn>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
   
   <PropertyGroup>
     <!-- Specifies information for Assembly and Yak -->
-    <Version>1.0</Version>
+    <Version>0.1.90</Version>
     <Title>rhino-zmq-poc</Title>
     <Company>hoppercode</Company>
     <Description>Hopper Code Backend — ZMQ bridge for AI-driven Grasshopper/Rhino control</Description>
   </PropertyGroup>
   
+  <ItemGroup>
+    <Compile Include="PluginIcon.cs" />
+    <Compile Include="rhino-zmq-pocComponent.cs" />
+    <Compile Include="rhino-zmq-pocInfo.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <EmbeddedResource Include="icon.png">
       <LogicalName>rhino_zmq_poc.icon.png</LogicalName>
@@ -28,7 +35,7 @@
 
   <ItemGroup>
     <PackageReference Include="Grasshopper" Version="8.0.23304.9001" ExcludeAssets="runtime" />
-    <PackageReference Include="NetMQ" Version="4.0.1.9" />
+    <ProjectReference Include="Hopper.Backend/Hopper.Backend.csproj" />
   </ItemGroup>
 
   <ItemGroup>

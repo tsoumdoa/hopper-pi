@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -36,12 +37,24 @@ namespace rhino_zmq_poc
         private const string AppDirectoryName = "hopper-pi";
         private const string ProfileFileName = "connection.json";
         private const string TokenFileName = "connection-token";
+        private const string InstancesDirectoryName = "instances";
 
         public static string DirectoryPath => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             AppDirectoryName);
 
         public static string ProfilePath => Path.Combine(DirectoryPath, ProfileFileName);
+
+        public static string CreateInstanceProfilePath(string instanceId)
+        {
+            var safeInstanceId = string.IsNullOrWhiteSpace(instanceId)
+                ? Guid.NewGuid().ToString("N")
+                : instanceId;
+            return Path.Combine(
+                DirectoryPath,
+                InstancesDirectoryName,
+                $"{Process.GetCurrentProcess().Id}-{safeInstanceId}.json");
+        }
 
         private static string TokenPath => Path.Combine(DirectoryPath, TokenFileName);
 
@@ -61,27 +74,49 @@ namespace rhino_zmq_poc
             return token;
         }
 
-        public static void Write(ConnectionProfile profile)
+        public static void Write(ConnectionProfile profile, string instanceProfilePath)
         {
             Directory.CreateDirectory(DirectoryPath);
             var json = JsonSerializer.Serialize(profile, new JsonSerializerOptions
             {
                 WriteIndented = true
             });
-            WriteAllTextAtomic(ProfilePath, json + Environment.NewLine);
-        }
-
-        public static void DeleteIfOwned(string instanceId)
-        {
-            if (string.IsNullOrEmpty(instanceId) || !File.Exists(ProfilePath))
-                return;
-
+            if (!string.IsNullOrWhiteSpace(instanceProfilePath))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(instanceProfilePath));
+                WriteAllTextAtomic(instanceProfilePath, json + Environment.NewLine);
+            }
             try
             {
-                var json = File.ReadAllText(ProfilePath);
+                // Compatibility pointer for standalone clients. The spawned host uses
+                // the instance-specific path above, so a second Rhino process racing
+                // this write must not prevent this backend from starting.
+                WriteAllTextAtomic(ProfilePath, json + Environment.NewLine);
+            }
+            catch
+            {
+            }
+        }
+
+        public static void DeleteIfOwned(string instanceId, string instanceProfilePath)
+        {
+            if (string.IsNullOrEmpty(instanceId))
+                return;
+
+            DeleteOneIfOwned(instanceProfilePath, instanceId);
+            DeleteOneIfOwned(ProfilePath, instanceId);
+        }
+
+        private static void DeleteOneIfOwned(string path, string instanceId)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                return;
+            try
+            {
+                var json = File.ReadAllText(path);
                 var profile = JsonSerializer.Deserialize<ConnectionProfile>(json);
                 if (profile?.InstanceId == instanceId)
-                    File.Delete(ProfilePath);
+                    File.Delete(path);
             }
             catch
             {
@@ -103,10 +138,7 @@ namespace rhino_zmq_poc
             var tempPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             File.WriteAllText(tempPath, contents);
 
-            if (File.Exists(path))
-                File.Delete(path);
-
-            File.Move(tempPath, path);
+            File.Move(tempPath, path, true);
             RestrictFilePermissions(path);
         }
 

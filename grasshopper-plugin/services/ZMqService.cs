@@ -30,7 +30,7 @@ namespace rhino_zmq_poc
         private Task _repTask;
         private int _stopped;
         private readonly JobQueue _jobQueue;
-        private readonly GH_Document _doc;
+        private readonly Func<GH_Document> _documentProvider;
         private readonly UiRequestDispatcher _requestDispatcher = new UiRequestDispatcher();
         private readonly ConcurrentQueue<(string topic, string json)> _publishQueue = new ConcurrentQueue<(string, string)>();
         private readonly Action<GhJobStatus> _jobStatusHandler;
@@ -39,6 +39,16 @@ namespace rhino_zmq_poc
         private string _repEndpoint;
         private string _connectionToken;
         private string _instanceId;
+        private static readonly HashSet<string> RequestsRequiringGrasshopperDocument =
+            new HashSet<string>(StringComparer.Ordinal)
+            {
+                "getCurrentCanvas",
+                "getCanvasErrors",
+                "applyGraph",
+                "listScriptParams",
+                "getScriptCode",
+                "getParamRhinoGeometry",
+            };
 
         public event Action<GhJobStatus> OnJobStatus;
         public event Action<string> OnDebugLog;
@@ -46,11 +56,12 @@ namespace rhino_zmq_poc
 
         public bool IsRunning { get; private set; }
         public ConnectionProfile Profile { get; private set; }
+        public string ProfilePath { get; private set; }
 
-        public ZMqService(JobQueue jobQueue, GH_Document doc)
+        public ZMqService(JobQueue jobQueue, Func<GH_Document> documentProvider)
         {
             _jobQueue = jobQueue;
-            _doc = doc;
+            _documentProvider = documentProvider ?? throw new ArgumentNullException(nameof(documentProvider));
             _requestDispatcher.Register("listAllComponents", new ListAllComponentsHandler());
             _requestDispatcher.Register("getCurrentCanvas", new GetCurrentCanvasHandler());
             _requestDispatcher.Register("getCanvasErrors", new GetCanvasErrorsHandler());
@@ -74,6 +85,7 @@ namespace rhino_zmq_poc
         {
             _connectionToken = ConnectionProfileStore.LoadOrCreateToken();
             _instanceId = Guid.NewGuid().ToString("N");
+            ProfilePath = ConnectionProfileStore.CreateInstanceProfilePath(_instanceId);
 
             if (TryStart(DefaultEndpoints(), "default"))
                 return;
@@ -122,7 +134,7 @@ namespace rhino_zmq_poc
                     Token = _connectionToken,
                     StartedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
                 };
-                ConnectionProfileStore.Write(Profile);
+                ConnectionProfileStore.Write(Profile, ProfilePath);
 
                 var token = _cts.Token;
                 _commandTask = Task.Run(() => CommandLoop(token));
@@ -279,7 +291,7 @@ namespace rhino_zmq_poc
                     if (ct.IsCancellationRequested)
                         break;
 
-                    var response = HandleRequest(message);
+                    var response = HandleRequest(message, ct);
 
                     if (ct.IsCancellationRequested || _repSocket == null)
                         break;
@@ -298,9 +310,9 @@ namespace rhino_zmq_poc
             }
         }
 
-        private string HandleRequest(string message)
+        private string HandleRequest(string message, CancellationToken ct)
         {
-            if (_cts.IsCancellationRequested)
+            if (ct.IsCancellationRequested)
                 return JsonSerializer.Serialize(new { error = "Service shutting down" });
 
             try
@@ -334,9 +346,23 @@ namespace rhino_zmq_poc
                     });
                 }
 
-                if (_requestDispatcher.TryDispatch(type, _doc, doc.RootElement, out var response))
+                GH_Document activeDocument = null;
+                if (RequestsRequiringGrasshopperDocument.Contains(type))
                 {
-                    if (_cts.IsCancellationRequested)
+                    activeDocument = Utilities.RunOnUiThread(
+                        _documentProvider,
+                        TimeSpan.FromSeconds(5));
+                    if (activeDocument == null)
+                        return JsonSerializer.Serialize(new
+                        {
+                            error = "No active Grasshopper document",
+                            code = "NO_ACTIVE_GRASSHOPPER_DOCUMENT"
+                        });
+                }
+
+                if (_requestDispatcher.TryDispatch(type, activeDocument, doc.RootElement, out var response))
+                {
+                    if (ct.IsCancellationRequested)
                         return JsonSerializer.Serialize(new { error = "Service shutting down" });
 
                     return response;
@@ -430,7 +456,7 @@ namespace rhino_zmq_poc
             ReleaseSocket(_pubSocket, _pubEndpoint);
             ReleaseSocket(_pullSocket, _pullEndpoint);
             ReleaseSocket(_repSocket, _repEndpoint);
-            ConnectionProfileStore.DeleteIfOwned(_instanceId);
+            ConnectionProfileStore.DeleteIfOwned(_instanceId, ProfilePath);
             _pubSocket = null;
             _pullSocket = null;
             _repSocket = null;
@@ -442,6 +468,7 @@ namespace rhino_zmq_poc
             _repTask = null;
             _cts = null;
             Profile = null;
+            ProfilePath = null;
 
             DrainBackgroundTasks(commandTask, repTask, cts);
         }

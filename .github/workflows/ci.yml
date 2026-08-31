@@ -14,17 +14,6 @@ jobs:
     name: TypeScript typecheck & tests
     runs-on: ubuntu-latest
 
-    # The Grasshopper plugin (grasshopper-plugin/**.cs) and its C# contract tests
-    # (grasshopper-plugin.Tests/ApplyGraphContractTests.cs) require the Rhino/Grasshopper
-    # runtime, which is Windows/macOS-only and not available on Linux runners. We
-    # therefore do NOT build or run the .NET project here. Instead, the TypeScript
-    # contract test (src/services/gh-apply-graph.contract.test.ts) statically asserts the
-    # C# source contract (atomicity, failure-safe restore, timeout-as-unknown-outcome,
-    # single-undo guard) so structural regressions are caught in CI.
-    #
-    # To run the C# contract tests locally on a Rhino-equipped machine:
-    #   dotnet test grasshopper-plugin.Tests/grasshopper-plugin.Tests.csproj
-
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,7 +27,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.22.3
           cache: pnpm
 
       - name: Install dependencies
@@ -51,3 +40,52 @@ jobs:
 
       - name: Test (incl. C# source contract checks)
         run: pnpm test
+
+      - name: Check browser and packaging scripts
+        run: |
+          node --check src/host/static/app.js
+          node --check scripts/install-grasshopper-plugin.mjs
+          node --check scripts/package-rhino.mjs
+
+  plugin-build:
+    name: Rhino plug-ins (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.3
+          cache: pnpm
+
+      - name: Install dependencies
+        env:
+          HOPPER_SKIP_GH_PLUGIN: "1"
+        run: pnpm install --frozen-lockfile
+
+      - name: Build backend, GHA, and RHP
+        run: dotnet build grasshopper-plugin/rhino-zmq-poc.sln -c Release
+
+      - name: Test host ownership and readiness
+        run: dotnet test grasshopper-plugin.Tests/grasshopper-plugin.Tests.csproj -c Release --filter "FullyQualifiedName~ConnectionProfileTests|FullyQualifiedName~HopperHostManagerTests|FullyQualifiedName~DocumentSnapshotsTests"
+
+      - name: Stage and smoke-test Rhino package
+        shell: bash
+        run: |
+          node scripts/package-rhino.mjs --output "$RUNNER_TEMP/hopper-yak-stage"
+          node scripts/smoke-staged-host.mjs "$RUNNER_TEMP/hopper-yak-stage"

@@ -33,9 +33,15 @@ namespace rhino_zmq_poc
         private readonly object _lock = new object();
         private readonly ManualResetEventSlim _jobAvailable = new ManualResetEventSlim(false);
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+        private readonly Func<GhCommand, string> _executeCommand;
         private Task _processingTask;
 
         public event Action<GhJobStatus> OnStatusChanged;
+
+        public JobQueue(Func<GhCommand, string> executeCommand)
+        {
+            _executeCommand = executeCommand ?? throw new ArgumentNullException(nameof(executeCommand));
+        }
 
         public void Enqueue(Job job)
         {
@@ -122,7 +128,7 @@ namespace rhino_zmq_poc
 
                 try
                 {
-                    var result = RhinoZmqPlugin.Instance?.Component?.ExecuteCommand(job.Command) ?? "";
+                    var result = _executeCommand(job.Command) ?? "";
                     if (result.IndexOf(" error:", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         job.State = JobState.Failed;

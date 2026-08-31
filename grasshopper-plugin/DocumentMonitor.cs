@@ -16,7 +16,11 @@ namespace rhino_zmq_poc
         public void EnsureSubscription(GH_Document doc)
         {
             var current = doc;
-            if (current == null) return;
+            if (current == null)
+            {
+                Unsubscribe();
+                return;
+            }
             if (_subscribedDoc != current)
             {
                 Unsubscribe();

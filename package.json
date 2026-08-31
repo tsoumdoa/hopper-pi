@@ -2,11 +2,16 @@
 	"name": "hopper-pi",
 	"license": "MIT",
 	"version": "0.1.90",
+	"packageManager": "pnpm@11.5.3",
+	"engines": {
+		"node": ">=22.19.0"
+	},
 	"keywords": [
 		"pi-package"
 	],
 	"type": "module",
 	"files": [
+		"dist",
 		"src",
 		"mds",
 		"grasshopper-plugin",
@@ -14,27 +19,33 @@
 	],
 	"scripts": {
 		"dev": "tsx src/index.ts",
-		"build": "tsc -p tsconfig.json",
+		"build": "tsc -p tsconfig.json && node scripts/copy-host-assets.mjs",
 		"test": "vitest run",
 		"pi": "pi -e .",
+		"host:dev": "tsx src/host/index.ts",
+		"host": "node dist/host/index.js",
 		"dump:components": "tsx src/scripts/dump-components.ts",
 		"postinstall": "node scripts/install-grasshopper-plugin.mjs",
-		"build:gh-plugin": "node scripts/install-grasshopper-plugin.mjs --build-only"
+		"build:gh-plugin": "node scripts/install-grasshopper-plugin.mjs --build-only",
+		"package:rhino": "node scripts/package-rhino.mjs",
+		"prepack": "pnpm build"
 	},
 	"devDependencies": {
 		"@types/node": "^20.19.43",
+		"@types/ws": "8.18.1",
 		"tsx": "^4.23.1",
 		"typescript": "^5.9.3",
 		"vitest": "^4.1.10"
 	},
 	"dependencies": {
-		"@earendil-works/pi-ai": "^0.84.3",
-		"@earendil-works/pi-coding-agent": "^0.84.3",
-		"@earendil-works/pi-tui": "^0.84.3",
+		"@earendil-works/pi-ai": "0.84.3",
+		"@earendil-works/pi-coding-agent": "0.84.3",
+		"@earendil-works/pi-tui": "0.84.3",
 		"chalk": "^5.6.2",
 		"fast-xml-parser": "^5.10.1",
 		"nanoid": "^5.1.16",
-		"zeromq": "^6.5.0"
+		"ws": "8.21.3",
+		"zeromq": "6.5.0"
 	},
 	"pi": {
 		"extensions": [

@@ -1,0 +1,42 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net7.0-windows;net7.0</TargetFrameworks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <NoWarn>NU1701;NETSDK1086</NoWarn>
+    <AssemblyName>Hopper.Backend</AssemblyName>
+    <RootNamespace>rhino_zmq_poc</RootNamespace>
+    <Version>1.0</Version>
+    <Description>Shared Hopper Rhino and Grasshopper backend runtime</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../*.cs"
+             Exclude="../PluginIcon.cs;../rhino-zmq-pocComponent.cs;../rhino-zmq-pocInfo.cs" />
+    <Compile Include="../Messages/**/*.cs" />
+    <Compile Include="../operations/**/*.cs" />
+    <Compile Include="../services/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grasshopper" Version="8.0.23304.9001" ExcludeAssets="runtime" />
+    <PackageReference Include="NetMQ" Version="4.0.1.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="rhino-zmq-poc.Tests" />
+    <InternalsVisibleTo Include="Hopper.Rhino" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="$(TargetFramework.Contains('-windows')) or $(TargetFramework.StartsWith('net4'))">
+    <UseWindowsForms>true</UseWindowsForms>
+  </PropertyGroup>
+
+  <ItemGroup Condition="!($(TargetFramework.Contains('-windows')) or $(TargetFramework.StartsWith('net4')))">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net48" Version="1.0.3" ExcludeAssets="all" GeneratePathProperty="true" />
+    <Reference Include="$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net48)\build\.NETFramework\v4.8\System.Windows.Forms.dll" Private="False" />
+    <PackageReference Include="System.Drawing.Common" Version="7.0.0" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+</Project>

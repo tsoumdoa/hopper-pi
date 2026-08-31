@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../grasshopper-plugin/rhino-zmq-poc.csproj" />
+    <ProjectReference Include="../grasshopper-plugin/Hopper.Backend/Hopper.Backend.csproj" />
   </ItemGroup>
 
 </Project>

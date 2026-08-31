@@ -5,7 +5,7 @@ AI inside their real workflow — not locked behind a black-box SaaS.
 
 > **Heads up:** This project was heavily vibe-coded and is super early in its own development. APIs, tools, and behavior will change without notice. **Use it at your own risk.**
 
-**hoppercode** (published as [`hopper-pi`](https://www.npmjs.com/package/hopper-pi)) is a [Pi](https://github.com/earendil-works/pi) extension plus a Grasshopper plugin that lets an AI agent inspect and edit a Grasshopper canvas—and run scripts against the Rhino document—over ZeroMQ while Rhino is open.
+**hoppercode** (published as [`hopper-pi`](https://www.npmjs.com/package/hopper-pi)) can run in two ways: as a normal Pi extension, or as a private Rhino-owned agent with a browser UI. Both use the same ZeroMQ backend to inspect and edit Grasshopper and Rhino.
 
 
 ## What's new
@@ -58,13 +58,34 @@ AI inside their real workflow — not locked behind a black-box SaaS.
 ## What you need
 
 - **Rhino 8** on Win or Mac
-- **[Pi](https://github.com/earendil-works/pi)** (the coding agent)
 - **.NET 7 SDK** (to build the Grasshopper plugin on install)
-- **Node.js** 20+ (for local development)
+- **Node.js** 22.19+ and pnpm 11.5.3 (for local development and packaging)
+- **[Pi](https://github.com/earendil-works/pi)** only if you want the legacy extension workflow
 
 ## Quick start
 
-### Install via Pi
+### Private browser host
+
+The Rhino package contains pinned Node 22.22.3 runtimes, exact Pi SDK dependencies, Hopper extensions, and the web UI. The macOS and Windows payloads each carry both x64 and arm64 Node executables, then select the native one when Rhino starts. It does not invoke or modify a globally installed Pi CLI.
+
+```bash
+git clone https://github.com/tsoumdoa/hoppercode.git
+cd hoppercode
+HOPPER_SKIP_GH_PLUGIN=1 pnpm install
+pnpm package:rhino -- --yak
+```
+
+The last command creates a platform-specific Rhino 8 package under `artifacts/`. Install the resulting `.yak` with Rhino's Package Manager, restart Rhino, then run:
+
+```text
+_Hopper
+```
+
+Rhino starts one private loopback host, waits for a validated ready message, and opens its tokenized localhost URL. Provider login, model choice, thinking level, conversations, extension dialogs, and tool progress stay in that browser tab. Run `_Hopper` again to reopen the same live host, or `_HopperStatus` to inspect it without starting anything.
+
+Build the staging folder without a `.yak` by omitting `--yak`. This is useful for inspecting the exact package contents or when Yak is not available on the build machine. Rhino's current package layout requires the `.rhp` and `.gha` at the package top level; the staging script follows that layout.
+
+### Existing Pi extension workflow
 
 ```bash
 pi install npm:hopper-pi
@@ -74,7 +95,9 @@ pi install npm:hopper-pi
 
 1. Restart Rhino / Grasshopper.
 2. On the canvas, add the **Hopper Code Backend** component (`GHZMQ`, under Params → Util).
-3. Start Pi and talk to the agent about Grasshopper or Rhino—the extension registers `gh_*` and `rh_*` tools automatically.
+3. Start Pi and talk to the agent about Grasshopper or Rhino. The extension registers `gh_*` and `rh_*` tools automatically.
+
+The GHZMQ component remains compatible with old definitions. In the browser-host workflow, `_Hopper` owns the backend lifecycle and no component is required.
 
 ### Clone and develop
 
@@ -104,8 +127,18 @@ node scripts/install-grasshopper-plugin.mjs --force
 ## Architecture
 
 ```
-Pi agent  →  hopper-pi (Node/TS)  →  ZMQ  →  Hopper Code Backend (Grasshopper in Rhino)
+Browser UI  ⇄  private Hopper host + embedded Pi SDK  ⇄  ZMQ  ⇄  Rhino-owned backend
+                         ↑                                  ↑
+                  exact local package                 active GH document
 ```
+
+- `Hopper.Rhino.rhp` owns `_Hopper`, the backend, host process, browser launch, health checks, and shutdown.
+- `Hopper.Backend.dll` owns ZMQ, queued UI-thread execution, active-document routing, and Rhino/Grasshopper operations.
+- `rhino-zmq-poc.gha` is a thin compatibility adapter for existing GHZMQ components.
+- The host binds only `127.0.0.1`, checks the browser origin, and requires a 256-bit token as the first WebSocket message. The token begins in the URL fragment and is removed from browser history.
+- Pi credentials and model settings live in Hopper's private user-data directory. Session and workspace state are separated per live Rhino backend instance.
+
+The command and query sockets require the connection-profile token. The PUB/SUB event socket is loopback-only but intentionally unauthenticated for legacy clients, so other processes running as the same local user can subscribe to canvas snapshots. Treat the workstation account as the confidentiality boundary and do not expose the ZMQ ports beyond loopback.
 
 | Port | Pattern | Purpose |
 | ---- | ------- | ------- |
@@ -119,7 +152,7 @@ The backend tries the legacy `5555`-`5557` ports first. If any are already in us
 - macOS: `~/Library/Application Support/hopper-pi/connection.json`
 - Linux: `~/.local/share/hopper-pi/connection.json` (or `$XDG_DATA_HOME/hopper-pi/connection.json`)
 
-The token is generated once and reused across backend/frontend restarts, so normal restarts do not require re-pairing. Override discovery with `HOPPER_CONNECTION_PROFILE`, or override endpoints manually with `GH_ZMQ_PUB`, `GH_ZMQ_PUSH`, and `GH_ZMQ_REQ`. If you manually point at a token-protected backend, set `GH_ZMQ_TOKEN` as well.
+Each backend also writes an instance-specific profile under `hopper-pi/instances/`. The Rhino-owned host receives that exact path, so two Rhino processes do not fight over the compatibility pointer. The token is generated once and reused across backend/frontend restarts. Override discovery with `HOPPER_CONNECTION_PROFILE`, or override endpoints manually with `GH_ZMQ_PUB`, `GH_ZMQ_PUSH`, and `GH_ZMQ_REQ`. If you manually point at a token-protected backend, set `GH_ZMQ_TOKEN` as well.
 
 ## Agent tools (overview)
 
@@ -174,9 +207,13 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 
 | Path | Role |
 | ---- | ---- |
-| `src/` | Pi extension: ZMQ client, tools, XML parsing |
-| `grasshopper-plugin/` | C# Grasshopper plugin (`rhino-zmq-poc.gha`) |
-| `scripts/install-grasshopper-plugin.mjs` | Build + install plugin to Libraries |
+| `src/host/` | Embedded Pi runtime, loopback server, protocol, and browser UI |
+| `src/` | Pi extension, ZMQ client, tools, and XML parsing |
+| `grasshopper-plugin/Hopper.Rhino/` | Rhino lifecycle plug-in and `_Hopper` command |
+| `grasshopper-plugin/Hopper.Backend/` | Shared backend assembly |
+| `grasshopper-plugin/` | Backward-compatible GHZMQ adapter |
+| `scripts/package-rhino.mjs` | Stage a platform package with official Node and production dependencies |
+| `docs/hopper-local-architecture.html` | Interactive architecture and implementation plan |
 | `mds/` | Skills and progressive reference docs for the agent |
 
 ## Environment variables
@@ -191,11 +228,15 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 | `GH_ZMQ_TOKEN` | Connection token override when manually setting endpoints |
 | `HOPPER_CONNECTION_PROFILE` | Connection profile path override |
 | `HOPPER_PROGRESSIVE_TOOLS=1` | Opt in to a small Hopper core + `hopper_search_tools` (specialists activate on demand). Off by default. Also `--hopper-progressive-tools`. |
+| `HOPPER_YAK` | Absolute path to Yak when `package:rhino -- --yak` cannot find Rhino 8 automatically |
+| `HOPPER_NODE_EXECUTABLE` / `HOPPER_HOST_ENTRY` | Absolute developer-only launch overrides; the packaged plug-in never searches `PATH` |
 
 ## Troubleshooting
 
 - **Inspect tool schemas:** Run `/hopper-schemas` to browse the JSON schemas exposed to the agent for every registered tool (or `/hopper-schemas rh_run_script` / `/hopper-schemas all`). Dump them with `/hopper-schemas dump` (writes `tool-schemas.json` in the cwd). `/hopper-schemas sizes` reports catalog counts and compact schema bytes by group/tool.
-- **No backend / tools fail:** Ensure **Hopper Code Backend** is on the canvas and Rhino is running, then run `/hopper-backend` to refresh the connection. If ports 5555–5557 are busy, the backend should fall back to free loopback ports automatically and show the profile path in the component log.
+- **`_Hopper` is unknown:** Install the generated `.yak`, rather than copying only the `.gha` to Grasshopper Libraries, then restart Rhino. A Rhino `.rhp` must be loaded for the command to exist.
+- **Browser host does not open:** Run `_HopperStatus`. It reports backend state, child PID, health, and startup errors without printing the secret URL.
+- **No backend / tools fail in legacy Pi mode:** Ensure **Hopper Code Backend** is on the canvas and Rhino is running, then run `/hopper-backend` to refresh the connection. If ports 5555–5557 are busy, the backend falls back to free loopback ports and shows the profile path in the component log.
 - **Invalid connection token:** Restart the frontend after the backend has started so it can reread the connection profile. If you are using manual endpoint env vars, also set `GH_ZMQ_TOKEN`.
 - **GH shows offline when Revit has focus (Rhino Inside):** The plugin marshals Grasshopper work onto Rhino's UI thread via `InvokeOnUiThread` (not `Idle`). Keep Grasshopper visible while the agent is working, or run `/hopper-backend` after refocusing. Liveness checks use a lightweight `ping` probe that does not touch the canvas. Older Rhino.Inside.Revit versions may still limit background Grasshopper — RiR 1.27+ improves this.
 - **Plugin did not install:** Install [.NET 7 SDK](https://dotnet.microsoft.com/download), then run `pnpm run build:gh-plugin`. On Windows, set `HOPPER_GH_LIBRARIES` if auto-detect fails.

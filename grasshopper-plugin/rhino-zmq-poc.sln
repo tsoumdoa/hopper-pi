@@ -4,6 +4,10 @@ VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "rhino-zmq-poc", "rhino-zmq-poc.csproj", "{07A0FD40-6E1C-169D-A33C-BD8292BE7337}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hopper.Backend", "Hopper.Backend\Hopper.Backend.csproj", "{5D9C8B64-BC7C-44A4-BC55-3156066EAF50}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hopper.Rhino", "Hopper.Rhino\Hopper.Rhino.csproj", "{9B3C31F7-221B-48E3-8CD0-F2386D851DA0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -14,6 +18,14 @@ Global
 		{07A0FD40-6E1C-169D-A33C-BD8292BE7337}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{07A0FD40-6E1C-169D-A33C-BD8292BE7337}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{07A0FD40-6E1C-169D-A33C-BD8292BE7337}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5D9C8B64-BC7C-44A4-BC55-3156066EAF50}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5D9C8B64-BC7C-44A4-BC55-3156066EAF50}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5D9C8B64-BC7C-44A4-BC55-3156066EAF50}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5D9C8B64-BC7C-44A4-BC55-3156066EAF50}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9B3C31F7-221B-48E3-8CD0-F2386D851DA0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9B3C31F7-221B-48E3-8CD0-F2386D851DA0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9B3C31F7-221B-48E3-8CD0-F2386D851DA0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9B3C31F7-221B-48E3-8CD0-F2386D851DA0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net7.0-windows;net7.0</TargetFrameworks>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <TargetExt>.rhp</TargetExt>
+    <NoWarn>NU1701;NETSDK1086</NoWarn>
+    <AssemblyName>Hopper.Rhino</AssemblyName>
+    <RootNamespace>rhino_zmq_poc</RootNamespace>
+    <Version>0.1.90</Version>
+    <Title>Hopper</Title>
+    <Company>hoppercode</Company>
+    <Description>Private Hopper host launcher and Rhino lifecycle owner</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="RhinoCommon" Version="8.0.23304.9001" ExcludeAssets="runtime" />
+    <ProjectReference Include="../Hopper.Backend/Hopper.Backend.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="rhino-zmq-poc.Tests" />
+  </ItemGroup>
+
+</Project>

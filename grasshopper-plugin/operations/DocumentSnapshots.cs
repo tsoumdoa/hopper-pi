@@ -23,9 +23,6 @@ namespace rhino_zmq_poc
             if (obj == null)
                 return false;
 
-            if (obj is rhino_zmq_pocComponent)
-                return true;
-
             if (obj is GH_Component component && component.ComponentGuid == GhzmqComponentTypeId)
                 return true;
 
