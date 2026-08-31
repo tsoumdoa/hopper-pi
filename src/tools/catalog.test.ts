@@ -10,6 +10,7 @@ import {
 } from "./catalog.js";
 import {
 	activateSearchMatches,
+	type ActivateSearchMatchesResult,
 	createHopperSearchToolsTool,
 	parseProgressiveResetReason,
 	rankHopperTools,
@@ -167,6 +168,31 @@ test("activateSearchMatches skips unregistered image-gated tools", () => {
 		limit: 5,
 	});
 	assert.ok(result.skippedUnregistered.includes("rh_capture_view"));
+	assert.ok(!active.includes("rh_capture_view"));
+});
+
+test("hopper_search_tools does not reactivate image-gated tools for text-only models", async () => {
+	const catalog = withSearchCatalog();
+	let active = ["hopper_search_tools"];
+	const pi = {
+		getAllTools: () => catalog.map((entry) => ({ name: entry.tool.name })),
+		getActiveTools: () => active,
+		setActiveTools(names: string[]) {
+			active = names;
+		},
+	};
+	const searchTool = createHopperSearchToolsTool(pi as never, () => catalog);
+
+	const result = await searchTool.execute(
+		"tool-call",
+		{ query: "screenshot viewport capture" },
+		undefined,
+		undefined,
+		{ model: { provider: "test", id: "text", input: ["text"] } } as never,
+	);
+
+	const details = result.details as ActivateSearchMatchesResult;
+	assert.ok(details.skippedUnregistered.includes("rh_capture_view"));
 	assert.ok(!active.includes("rh_capture_view"));
 });
 

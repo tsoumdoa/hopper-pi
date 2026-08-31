@@ -99,7 +99,7 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 
 	// ── Lifecycle: notify on load ──────────────────────────────────
 
-	pi.on("session_start", async (event, ctx) => {
+	pi.on("session_start", (event, ctx) => {
 		const progressive = isProgressiveToolsEnabled(pi);
 		if (progressive && shouldResetProgressiveTools(event.reason)) {
 			resetProgressiveActiveTools(pi, catalog);
@@ -125,9 +125,8 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 			await captureModel.maybeSwitchToMultimodalFallback(ctx);
 		}
 
-		const captureToolActive = captureModel.isCaptureToolActive();
-		const captureGuidance = wantsVisualCapture
-			? (captureToolActive ? "" : rhinoCaptureUnavailableGuidance(ctx.model))
+		const captureGuidance = wantsVisualCapture && !captureModel.isCaptureToolActive()
+			? rhinoCaptureUnavailableGuidance(ctx.model)
 			: "";
 		const guidance = [
 			rhinoRoutingGuidance(promptTargetsGrasshopper(prompt)),
@@ -139,7 +138,7 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 		return { systemPrompt: `${event.systemPrompt}\n\n${guidance}` };
 	});
 
-	pi.on("model_select", async (event) => {
+	pi.on("model_select", (event) => {
 		captureModel.syncCaptureToolForModel(event.model);
 	});
 

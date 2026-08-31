@@ -32,6 +32,7 @@ AI inside their real workflow — not locked behind a black-box SaaS.
 
 - **Less overthinking in Grasshopper/Rhino skills:** tighten clarification rules so the agent proceeds with documented defaults unless ambiguity materially changes output, risks data loss, or could edit the wrong target.
 - **Faster Grasshopper build guidance:** make “read once” a new-build default rather than a hard rule, remove verbose Tier 3 placement-math narration, allow confident multi-zone batching, and scope cleanup to touched components only.
+- **Screenshot permission override:** `HOPPER_RHINO_CAPTURE_CONSENT=allow` pre-allows Rhino viewport screenshots for restricted or non-interactive UI sessions; `deny` forces capture off. Users can also explicitly ask to allow screenshots later in a session.
 - **Tool schema cleanup:** `gh_list_components.searchFrom` now matches its documented default, and `gh_edit_components` uses action-specific required fields so agents can make shorter, more reliable tool calls.
 - **Package cleanup:** remove stale Pi skill/prompt paths that pointed at missing directories.
 
@@ -44,8 +45,9 @@ AI inside their real workflow — not locked behind a black-box SaaS.
 
 ### 0.1.5 — View capture & control
 
-- **`rh_capture_view`** — capture a Rhino viewport screenshot as PNG visual context for visual QA, composition, visibility, and display checks on models that accept image input.
+- **`rh_capture_view`** — capture a Rhino viewport screenshot as PNG visual context for visual QA, composition, visibility, and display checks. Permission-gated: only active after you allow Rhino viewport screenshots for the session, and only on models that accept image input.
 - **`rh_view_control`** — drive the viewport: switch active / standard / named / CPlane views, set the camera (location, target, lens length, projection), zoom (extents / selected / bounding box), and save named views.
+- New per-session viewport-capture consent flow so screenshots are opt-in.
 
 ### 0.1.4 — Agent can ask questions
 

@@ -7,6 +7,7 @@ import {
 	type HopperToolCatalogEntry,
 	type HopperToolGroup,
 } from "./catalog.js";
+import { modelSupportsImages } from "../services/model-capabilities.js";
 
 export const DEFAULT_SEARCH_LIMIT = 5;
 export const MAX_SEARCH_LIMIT = 10;
@@ -379,9 +380,14 @@ export function createHopperSearchToolsTool(
 				}),
 			),
 		}),
-		async execute(_toolCallId, params) {
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const catalog = getCatalog();
 			const registeredNames = new Set(pi.getAllTools().map((tool) => tool.name));
+			if (!modelSupportsImages(ctx.model)) {
+				for (const entry of catalog) {
+					if (entry.requires === "images") registeredNames.delete(entry.tool.name);
+				}
+			}
 			const limit = clampSearchLimit(params.limit);
 			const result = activateSearchMatches(pi, catalog, params.query, {
 				registeredNames,

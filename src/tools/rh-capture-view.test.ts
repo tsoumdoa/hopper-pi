@@ -24,29 +24,6 @@ beforeEach(() => {
 	mocks.request.mockReset();
 });
 
-test("rh_capture_view captures without a permission decision", async () => {
-	mocks.request.mockResolvedValue({
-		type: "captureRhinoView.response",
-		timestamp: 1,
-		ok: true,
-		imageBase64: "iVBORw0KGgo=",
-		mediaType: "image/png",
-		error: "",
-		metadata: null,
-	});
-
-	const result = await rhCaptureViewTool.execute(
-		"tool-call",
-		{ view: "active" },
-		undefined,
-		undefined,
-		multimodalCtx,
-	);
-
-	assert.equal(mocks.request.mock.calls.length, 1);
-	assert.equal(result.content[1]?.type, "image");
-});
-
 test("rh_capture_view refuses capture when model does not support images", async () => {
 	const result = await rhCaptureViewTool.execute(
 		"tool-call",
