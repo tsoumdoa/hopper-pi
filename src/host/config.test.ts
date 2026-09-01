@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultDataDirectory, resolveHostConfig } from "./config.js";
+import { defaultDataDirectory, defaultGlobalPiAuthPath, resolveHostConfig } from "./config.js";
 
 describe("host config", () => {
 	it("uses a private platform application directory", () => {
@@ -18,11 +18,12 @@ describe("host config", () => {
 			"--instance-id", "rhino-42-backend",
 			"--connection-profile", "rhino.json",
 			"--parent-pid", "42",
-		], { cwd: "/work", moduleDir: "/app/host" });
+		], { cwd: "/work", moduleDir: "/app/host", homeDir: "/Users/test", env: {} });
 
 		expect(config.paths).toEqual({
 			dataDir: "/work/private",
 			agentDir: "/work/private/agent",
+			authPath: "/Users/test/.pi/agent/auth.json",
 			sessionsDir: "/work/private/instances/rhino-42-backend/sessions",
 			workspaceDir: "/work/private/instances/rhino-42-backend/workspace",
 			staticDir: "/app/host/static",
@@ -31,6 +32,31 @@ describe("host config", () => {
 		expect(config.instanceId).toBe("rhino-42-backend");
 		expect(config.parentPid).toBe(42);
 		expect(config.host).toBe("127.0.0.1");
+	});
+
+	it("uses global Pi auth by default and honors its agent directory override", () => {
+		expect(defaultGlobalPiAuthPath({ homeDir: "/Users/test", env: {} }))
+			.toBe("/Users/test/.pi/agent/auth.json");
+		expect(defaultGlobalPiAuthPath({
+			homeDir: "/Users/test",
+			env: { PI_CODING_AGENT_DIR: "~/shared-pi" },
+		})).toBe("/Users/test/shared-pi/auth.json");
+	});
+
+	it("allows Hopper auth to be redirected explicitly", () => {
+		const fromEnvironment = resolveHostConfig([], {
+			cwd: "/work",
+			homeDir: "/Users/test",
+			env: { HOPPER_PI_AUTH_PATH: "~/hopper-auth.json" },
+		});
+		const fromArgument = resolveHostConfig(["--auth-path", "private/auth.json"], {
+			cwd: "/work",
+			homeDir: "/Users/test",
+			env: { HOPPER_PI_AUTH_PATH: "/ignored/auth.json" },
+		});
+
+		expect(fromEnvironment.paths.authPath).toBe("/Users/test/hopper-auth.json");
+		expect(fromArgument.paths.authPath).toBe("/work/private/auth.json");
 	});
 
 	it("rejects unsafe ports and malformed process ids", () => {

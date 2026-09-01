@@ -84,7 +84,7 @@ export class EmbeddedPiHost {
 		const bus = options.bus ?? new HostMessageBus();
 		const ui = new BrowserUiContext(bus);
 		const modelRuntime = await ModelRuntime.create({
-			authPath: join(paths.agentDir, "auth.json"),
+			authPath: paths.authPath,
 			modelsPath: join(paths.agentDir, "models.json"),
 			modelsStorePath: join(paths.agentDir, "models-store.json"),
 		});

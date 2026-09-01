@@ -144,7 +144,7 @@ Browser UI  ⇄  private Hopper host + embedded Pi SDK  ⇄  ZMQ  ⇄  Rhino-own
 - `Hopper.Backend.dll` owns ZMQ, queued UI-thread execution, active-document routing, and Rhino/Grasshopper operations.
 - `rhino-zmq-poc.gha` is a thin compatibility adapter for existing GHZMQ components.
 - The host binds only `127.0.0.1`, checks the browser origin, and requires a 256-bit token as the first WebSocket message. The token begins in the URL fragment and is removed from browser history.
-- Pi credentials and model settings live in Hopper's private user-data directory. Session and workspace state are separated per live Rhino backend instance.
+- Provider credentials use the global Pi auth file at `~/.pi/agent/auth.json` by default, including `PI_CODING_AGENT_DIR` overrides. Login, token refresh, and logout in Hopper update that shared file. Model settings remain in Hopper's private user-data directory. Session and workspace state are separated per live Rhino backend instance.
 
 The command and query sockets require the connection-profile token. The PUB/SUB event socket is loopback-only but intentionally unauthenticated for legacy clients, so other processes running as the same local user can subscribe to canvas snapshots. Treat the workstation account as the confidentiality boundary and do not expose the ZMQ ports beyond loopback.
 
@@ -235,6 +235,7 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 | `GH_ZMQ_PUB` / `GH_ZMQ_PUSH` / `GH_ZMQ_REQ` | ZMQ endpoint overrides |
 | `GH_ZMQ_TOKEN` | Connection token override when manually setting endpoints |
 | `HOPPER_CONNECTION_PROFILE` | Connection profile path override |
+| `HOPPER_PI_AUTH_PATH` | Override the auth file; defaults to the global Pi `auth.json` |
 | `HOPPER_PROGRESSIVE_TOOLS=1` | Opt in to a small Hopper core + `hopper_search_tools` (specialists activate on demand). Off by default. Also `--hopper-progressive-tools`. |
 | `HOPPER_YAK` | Absolute path to Yak when `package:rhino -- --yak` cannot find Rhino 8 automatically |
 | `HOPPER_NODE_EXECUTABLE` / `HOPPER_HOST_ENTRY` | Absolute developer-only launch overrides; the packaged plug-in never searches `PATH` |

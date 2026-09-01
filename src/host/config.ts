@@ -6,6 +6,7 @@ export const LOOPBACK_HOST = "127.0.0.1";
 export type HostPaths = {
 	dataDir: string;
 	agentDir: string;
+	authPath: string;
 	sessionsDir: string;
 	workspaceDir: string;
 	staticDir: string;
@@ -60,13 +61,33 @@ export function defaultDataDirectory(options: HostConfigEnvironment = {}): strin
 	return join(env.XDG_DATA_HOME || join(userHome, ".local", "share"), "hopper-pi", "host");
 }
 
+function expandUserPath(path: string, userHome: string): string {
+	if (path === "~") return userHome;
+	if (path.startsWith("~/")) return join(userHome, path.slice(2));
+	return path;
+}
+
+export function defaultGlobalPiAuthPath(options: HostConfigEnvironment = {}): string {
+	const env = options.env ?? process.env;
+	const userHome = options.homeDir ?? homedir();
+	const cwd = options.cwd ?? process.cwd();
+	const configuredAgentDir = env.PI_CODING_AGENT_DIR;
+	const agentDirValue = configuredAgentDir
+		? expandUserPath(configuredAgentDir, userHome)
+		: join(userHome, ".pi", "agent");
+	const agentDir = isAbsolute(agentDirValue) ? agentDirValue : resolve(cwd, agentDirValue);
+	return join(agentDir, "auth.json");
+}
+
 export function resolveHostConfig(
 	args: readonly string[],
 	options: HostConfigEnvironment = {},
 ): HostConfig {
 	const cwd = options.cwd ?? process.cwd();
 	const moduleDir = options.moduleDir ?? cwd;
+	const env = options.env ?? process.env;
 	const dataDirArg = readOption(args, "--data-dir");
+	const authPathArg = readOption(args, "--auth-path");
 	const staticDirArg = readOption(args, "--static-dir");
 	const profileArg = readOption(args, "--connection-profile");
 	const instanceId = readOption(args, "--instance-id") ?? "standalone";
@@ -81,6 +102,10 @@ export function resolveHostConfig(
 
 	const absolute = (path: string) => (isAbsolute(path) ? path : resolve(cwd, path));
 	const dataDir = dataDirArg ? absolute(dataDirArg) : defaultDataDirectory(options);
+	const configuredAuthPath = authPathArg ?? env.HOPPER_PI_AUTH_PATH;
+	const authPath = configuredAuthPath
+		? absolute(expandUserPath(configuredAuthPath, options.homeDir ?? homedir()))
+		: defaultGlobalPiAuthPath(options);
 	const instanceDir = join(dataDir, "instances", instanceId);
 
 	return {
@@ -92,6 +117,7 @@ export function resolveHostConfig(
 		paths: {
 			dataDir,
 			agentDir: join(dataDir, "agent"),
+			authPath,
 			sessionsDir: join(instanceDir, "sessions"),
 			workspaceDir: join(instanceDir, "workspace"),
 			staticDir: staticDirArg ? absolute(staticDirArg) : resolve(moduleDir, "static"),
