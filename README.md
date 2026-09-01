@@ -71,11 +71,19 @@ The Rhino package contains pinned Node 22.22.3 runtimes, exact Pi SDK dependenci
 ```bash
 git clone https://github.com/tsoumdoa/hoppercode.git
 cd hoppercode
+./scripts/install-rhino-mac.sh --open-rhino
+```
+
+The macOS script installs dependencies, builds and smoke-tests a fresh dual-architecture package, creates the Yak archive, and installs it from a local package source. If `hopper-pi` is already installed, it asks before replacing it. Quit Rhino before running the script.
+
+For manual packaging on macOS or Windows:
+
+```bash
 HOPPER_SKIP_GH_PLUGIN=1 pnpm install
 pnpm package:rhino -- --yak
 ```
 
-The last command creates a platform-specific Rhino 8 package under `artifacts/`. Install the resulting `.yak` with Rhino's Package Manager, restart Rhino, then run:
+Restart Rhino after installation, then run:
 
 ```text
 _Hopper

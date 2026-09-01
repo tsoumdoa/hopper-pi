@@ -27,6 +27,7 @@
 		"dump:components": "tsx src/scripts/dump-components.ts",
 		"postinstall": "node scripts/install-grasshopper-plugin.mjs",
 		"build:gh-plugin": "node scripts/install-grasshopper-plugin.mjs --build-only",
+		"install:rhino:mac": "bash scripts/install-rhino-mac.sh",
 		"package:rhino": "node scripts/package-rhino.mjs",
 		"prepack": "pnpm build"
 	},

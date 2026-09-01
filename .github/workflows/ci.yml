@@ -43,6 +43,7 @@ jobs:
 
       - name: Check browser and packaging scripts
         run: |
+          bash -n scripts/install-rhino-mac.sh
           node --check src/host/static/app.js
           node --check scripts/install-grasshopper-plugin.mjs
           node --check scripts/package-rhino.mjs
