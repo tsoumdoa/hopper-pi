@@ -12,4 +12,8 @@
     <InternalsVisibleTo Include="Hopper.Core.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="NetMQ" Version="4.0.1.9" />
+  </ItemGroup>
+
 </Project>
