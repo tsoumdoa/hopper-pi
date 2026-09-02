@@ -43,22 +43,22 @@ public sealed record DispatcherResult<T>
         _ => throw new InvalidOperationException($"Unknown dispatcher result kind: {Kind}"),
     };
 
-    internal static DispatcherResult<T> Completed(T? value) =>
+    public static DispatcherResult<T> Completed(T? value) =>
         new(DispatcherResultKind.Completed, value);
 
-    internal static DispatcherResult<T> Failed(Exception exception) =>
+    public static DispatcherResult<T> Failed(Exception exception) =>
         new(DispatcherResultKind.Failed, exception: exception);
 
-    internal static DispatcherResult<T> Busy(int depth, int capacity) =>
+    public static DispatcherResult<T> Busy(int depth, int capacity) =>
         new(DispatcherResultKind.Busy, depth: depth, capacity: capacity);
 
-    internal static DispatcherResult<T> DeadlineExceededBeforeStart() =>
+    public static DispatcherResult<T> DeadlineExceededBeforeStart() =>
         new(DispatcherResultKind.DeadlineExceededBeforeStart);
 
-    internal static DispatcherResult<T> CancelledBeforeStart() =>
+    public static DispatcherResult<T> CancelledBeforeStart() =>
         new(DispatcherResultKind.CancelledBeforeStart);
 
-    internal static DispatcherResult<T> ShuttingDown() =>
+    public static DispatcherResult<T> ShuttingDown() =>
         new(DispatcherResultKind.ShuttingDown);
 }
 

@@ -106,7 +106,12 @@ public interface INodeRuntimeProcessRunner
         CancellationToken cancellationToken);
 }
 
-public sealed class NodeRuntimeResolver
+public interface INodeRuntimeProvider
+{
+    Task<NodeRuntimeResolution> ResolveAsync(CancellationToken cancellationToken = default);
+}
+
+public sealed class NodeRuntimeResolver : INodeRuntimeProvider
 {
     public const string ExplicitExecutableEnvironmentVariable = "HOPPER_NODE_EXECUTABLE";
     public const string PathEnvironmentVariable = "PATH";

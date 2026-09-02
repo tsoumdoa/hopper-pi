@@ -7,7 +7,7 @@ namespace Hopper.Core.Dispatching;
 /// External work is bounded and FIFO. Lifecycle work has a separate reserved queue and
 /// runs immediately after the current callback, before queued external work.
 /// </summary>
-public sealed class OrderedDispatcher
+public sealed class OrderedDispatcher : ILifecycleDispatcher
 {
     public const int DefaultCapacity = 64;
     public const int DefaultLifecycleCapacity = 1;
@@ -73,6 +73,22 @@ public sealed class OrderedDispatcher
         CancellationToken cancellationToken = default)
     {
         return Submit(operation, startDeadlineAt, cancellationToken, lifecycleControl: true);
+    }
+
+    public Task<DispatcherResult<bool>> SubmitLifecycleControl(
+        Action operation,
+        DateTimeOffset? startDeadlineAt = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        return SubmitLifecycleControl(
+            () =>
+            {
+                operation();
+                return true;
+            },
+            startDeadlineAt,
+            cancellationToken);
     }
 
     public void CloseExternalAdmission()
