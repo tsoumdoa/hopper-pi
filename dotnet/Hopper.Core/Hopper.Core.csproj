@@ -8,4 +8,8 @@
     <RootNamespace>Hopper.Core</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Hopper.Core.Tests" />
+  </ItemGroup>
+
 </Project>
