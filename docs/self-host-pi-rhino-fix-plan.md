@@ -1,383 +1,414 @@
 # Self-host Pi Rhino fix plan
 
-This plan turns the decisions in [the review feedback](./self-host-pi-rhino-pr-review-feedback.md) into implementation work. It also includes unresolved findings from [the original PR review](./self-host-pi-rhino-pr-review.html) that were not called out in the feedback.
+This plan covers the smallest reliable version of the Rhino-owned HopperCode host. It fixes lifecycle, thread ownership, operation completion, Grasshopper readiness, and release packaging. It does not combine those fixes with a broad source-tree cleanup.
 
-## Goals
+## Scope
 
-- Make HopperCode startup, status, restart, and shutdown predictable.
-- Keep networking and process waits off Rhino's UI thread.
-- Give Rhino and Grasshopper work one ordered, bounded execution path with real completion results.
-- Let the agent detect and initialize Grasshopper before using Grasshopper tools.
-- Ship small, clean packages for each supported operating system and CPU.
-- Reorganize the proof-of-concept layout around the code's current responsibilities.
+The work must:
 
-The work is complete only when the runtime behavior, package contents, and test matrix meet the acceptance criteria at the end of this document.
+- Make `HopperCode`, stop, status, restart, and Rhino exit predictable.
+- Keep NetMQ ownership and process waits off Rhino's UI thread.
+- Run Rhino and Grasshopper work through one ordered, bounded dispatcher.
+- Resolve mutations only after the UI operation completes.
+- Load Grasshopper only when an agent requests a Grasshopper tool.
+- Require external Node `22.19.0` or newer.
+- Produce clean macOS arm64 and Windows x64 packages.
 
-## Decisions from the feedback
+This version deliberately leaves out:
 
-1. Rename the user-facing Rhino command from `Hopper` or `_Hopper` to `HopperCode`.
-2. Add `HopperCodeStop`, `HopperCodeStatus`, and `HopperCodeRestart`.
-3. Running `HopperCode` while the same instance is active must not start another backend or Node process. It should print an "already running" message and the current state.
-4. Node is a prerequisite. Do not include a Node executable in the Yak package.
-5. Document Node `22.19.0` as the minimum supported version, matching `package.json`. Startup must enforce the same version.
-6. Produce separate release payloads for macOS and Windows, split again by CPU. Each payload contains only its matching ZeroMQ native module.
-7. Do not ship tests, source maps, scripts used only by development, stale build output, lockfiles, workspace files, or unrelated compiled modules.
-8. Give all NetMQ sockets one dedicated owner thread.
-9. Move graceful shutdown waits and process joins off Rhino's UI thread.
-10. Add a typed `getRuntimeStatus` request and an idempotent, agent-callable way to load Grasshopper.
-11. Replace the current mutation and query split with one bounded, ordered main-thread dispatcher that reports actual completion.
-12. Adopt the folder and project split proposed in the review.
+- Automatic Node restart and recovery backoff. A dead or unhealthy child moves the lifecycle to `faulted`; the user runs `HopperCodeRestart`.
+- Windows arm64 and macOS x64 packages.
+- A general TypeScript folder reorganization.
+- Unrelated namespace and proof-of-concept renames.
+- Exact-once recovery across a Node process crash.
+- A checked-in hash for every file in `node_modules`.
+- CI changes.
 
-## Additions beyond the feedback
+## Preserve public identity
 
-The plan also keeps several findings that the feedback did not explicitly address:
+Renames and project moves must preserve all existing public identifiers:
 
-- Automatic recovery after a Node crash or repeated health-check failure.
-- A retention policy and safe cleanup for stale profiles and instance data.
-- Hermetic .NET unit tests plus a separate live Rhino integration suite.
-- Real macOS tests for code paths that currently use Windows-oriented drawing APIs.
-- A versioned C#/TypeScript contract with shared fixtures.
-- Package allowlist and size checks in CI.
-- Reliable Node discovery for GUI-launched Rhino, where the shell `PATH` may be unavailable.
-- A deliberate compatibility policy for the legacy Grasshopper component and its saved-file GUID.
+| Identity | Frozen value |
+| --- | --- |
+| `Hopper` command, renamed to `HopperCode` | `f4e34020-8f9a-4cc4-98ed-5b3596163859` |
+| `HopperStatus` command, renamed to `HopperCodeStatus` | `db50ad24-52d8-4e58-ae8a-5719994ad577` |
+| New `HopperCodeStop` command | `c26698e7-9893-4960-b158-f973cac41744` |
+| New `HopperCodeRestart` command | `af29e70b-389e-4430-bdda-ac40c33d0ab5` |
+| Rhino plug-in | `4c3eae5e-7e91-4d5c-9bbf-d95e981c5de9` |
+| Legacy Grasshopper component | `e07753b1-fdec-417a-b57a-83a95204a8dd` |
+| Grasshopper assembly info | `a41e7f39-12f0-4cc2-9f84-fd3d6bf3eaef` |
 
-## Phase 1: Define the lifecycle and wire contract
+Do not keep a `Hopper` command alias.
 
-Do this first because commands, recovery, the browser, and tests all depend on the same states.
+Update every user-facing `_Hopper` and `_HopperStatus` reference in the browser, README, installers, scripts, and diagnostics. The new command names are `_HopperCode` and `_HopperCodeStatus` when written as scripted Rhino commands.
 
-### Runtime state model
+## C# project boundary
 
-Create one lifecycle controller owned by `HopperRhinoPlugin`. It coordinates the backend transport and the Node host. Use explicit states rather than independent booleans:
+Use three production projects:
+
+```text
+dotnet/
+├── Hopper.Core/
+├── Hopper.Rhino/
+└── Hopper.Grasshopper/
+```
+
+`Hopper.Core` contains:
+
+- Protocol DTOs and validation.
+- Lifecycle policy.
+- The ROUTER and PUB transport owner.
+- Dispatcher and result-store policy.
+- Interfaces for time, process control, UI scheduling, and Grasshopper capability.
+
+It may reference NetMQ. It must not reference RhinoCommon or Grasshopper.
+
+`Hopper.Rhino` contains the RHP, commands, host process manager, Rhino operations, Rhino document tracking, and implementations of the Core interfaces. It references RhinoCommon and Core, but not Grasshopper.
+
+`Hopper.Grasshopper` contains the lazy Grasshopper adapter, Grasshopper operations, document tracking, and the existing compatibility component. The compatibility component keeps its saved-file identity and does not start HopperCode, the transport, or Node.
+
+Core defines the Grasshopper capability and adapter-registration interfaces. `Hopper.Grasshopper` registers one adapter from an assembly-load hook and unregisters that same adapter when it unloads. Registration is compare-and-set: a second adapter cannot replace a live one. The adapter owns Grasshopper operations and event subscriptions. Registration may move status from `loading` to `ready`; initialization or registration failure moves it to `failed`. The Rhino project observes only the Core interface and immutable status, so it never loads a Grasshopper type.
+
+Each project owns the source files below its directory. Remove parent-folder compile globs. Do not move unrelated TypeScript files as part of this work.
+
+## Lifecycle
+
+Rhino owns one lifecycle controller. Independent components do not keep competing `isRunning`, `isStopping`, or recovery flags.
+
+The top-level states are:
 
 ```text
 stopped -> starting -> running -> stopping -> stopped
-                \-> degraded
                 \-> faulted
-running -> degraded -> recovering -> running
-running -> exited
+running -> faulted
+faulted -> starting
 ```
 
-Every transition records a timestamp and a short error code or reason when applicable. The controller must serialize start, stop, and restart calls so two Rhino commands cannot race each other.
+Every transition records `changedAt`, a typed reason code, and a message.
+
+### State transitions
+
+| Current state | Trigger | Next state | Action |
+| --- | --- | --- | --- |
+| `stopped` | Start or restart | `starting` | Resolve Node, bind transport, write the instance profile, launch Node, and wait for its authenticated transport handshake. |
+| `starting` | Handshake succeeds | `running` | Publish the ready snapshot and open the browser. |
+| `starting` | Node resolution, bind, launch, or handshake fails | `faulted` | Clean up partial startup and record the failure. Do not retry automatically. |
+| `running` | Child exits or reaches the health-failure threshold | `faulted` | Reject new host work, clean up agent transactions, and stop the failed child if it still exists. |
+| Any state except `stopped` | Stop | `stopping` | Reject new work and start background cleanup. |
+| `stopping` | Cleanup succeeds | `stopped` | Clear live instance state and report completion in Rhino. |
+| `stopping` | Child or transport does not stop within its deadline | `faulted` | Record `CHILD_STILL_ALIVE` or `TRANSPORT_STOP_TIMEOUT`. Do not start a replacement. |
+| `faulted` | Start or restart | `starting` | Verify that the old child and transport are gone, then start. |
+
+`running` means the Rhino transport is ready and Node completed an authenticated protocol round trip for the current lifecycle instance. A plain HTTP 200 response is not enough.
+
+Transient HTTP health failures remain in the host status. Three consecutive failures move the lifecycle from `running` to `faulted`. There is no `degraded` or `recovering` state in this version.
 
 ### Command behavior
 
-| Command | Required behavior |
+| Command | Behavior |
 | --- | --- |
-| `HopperCode` | Start the bridge and host if stopped. If starting or running, do not launch anything else. Print the current state and existing browser URL when available. |
-| `HopperCodeStop` | Signal host and transport shutdown, return control to Rhino promptly, and finish bounded cleanup in the background. Repeated calls are safe. |
-| `HopperCodeStatus` | Print lifecycle state, Node PID and health, Rhino readiness, transport readiness, Grasshopper load state, active document state, queue depth, and the last error. It must not start anything. |
-| `HopperCodeRestart` | Serialize a stop followed by a fresh start. Never overlap the old and new transport or Node process. Report a typed failure if either half fails. |
-
-Give all four commands stable command GUIDs. Remove the old user-facing command name unless a compatibility requirement is found before release. Keep lifecycle logic out of the command classes so the same behavior can be component-tested.
-
-### Typed runtime status
-
-Add a versioned `getRuntimeStatus` protocol response with at least these fields:
-
-```ts
-type RuntimeStatus = {
-  protocolVersion: number;
-  lifecycle: "stopped" | "starting" | "running" | "stopping" |
-    "degraded" | "recovering" | "faulted" | "exited";
-  rhino: {
-    ready: boolean;
-    activeDocument: boolean;
-    documentName?: string;
-  };
-  transport: {
-    ready: boolean;
-    instanceId?: string;
-  };
-  grasshopper: {
-    installed: boolean;
-    state: "not_loaded" | "loading" | "loaded" | "failed";
-    componentServerReady: boolean;
-    activeDocument: boolean;
-    documentName?: string;
-  };
-  dispatcher: {
-    accepting: boolean;
-    depth: number;
-    capacity: number;
-  };
-  host: {
-    state: string;
-    processId?: number;
-    healthy?: boolean;
-  };
-  shuttingDown: boolean;
-  lastError?: { code: string; message: string };
-};
-```
-
-Rhino owns the Grasshopper status source. On Rhino's UI thread, a tracker checks the registered Grasshopper plug-in ID with `PlugIn.PlugInExists`, then checks `Grasshopper.Instances.IsComponentServer` and `ActiveCanvas?.Document` only when Rhino reports the plug-in as loaded. Canvas and document events update an immutable snapshot. `getRuntimeStatus` reads that snapshot without calling Rhino or Grasshopper APIs from the NetMQ thread. The Node host adds its process and health fields before returning the combined status to the agent or browser.
+| `HopperCode` | Start from `stopped` or `faulted`. In every other state, print the current state and do not launch another process or transport. |
+| `HopperCodeStop` | Enter `stopping` and return `stop accepted` without waiting on the UI thread. Repeated calls return the current state. |
+| `HopperCodeStatus` | Print lifecycle, host, transport, Rhino document, Grasshopper, dispatcher, Node path and version, and the latest error. It never starts anything. |
+| `HopperCodeRestart` | From `stopped`, act as start. Otherwise serialize stop and start. During `stopping`, queue one start after cleanup. Coalesce repeated restart requests. |
 
-The C# and TypeScript definitions must be generated from one schema or checked against shared protocol fixtures. Increment the protocol version for incompatible changes and fail with a clear version mismatch instead of trying to continue.
+The controller serializes commands through one asynchronous gate. Completion of stop, restart, and background failure cleanup writes one short message to the Rhino command line through the UI dispatcher.
 
-## Phase 2: Make Node an external prerequisite and clean the packages
+## Startup, health, and shutdown
 
-### Resolve and validate Node
+### Node startup order
 
-Replace bundled-runtime discovery in `HopperHostManager` with a `NodeRuntimeResolver` that:
+1. Resolve and validate the Node executable.
+2. Start the transport owner and bind all sockets.
+3. Write the instance-specific connection profile.
+4. Launch Node with that profile and the Rhino parent PID.
+5. Let Node connect its DEALER socket and complete an authenticated protocol handshake.
+6. Mark the lifecycle `running` and open the browser.
 
-1. Checks an explicit `HOPPER_NODE_EXECUTABLE` absolute path first.
-2. Checks a persisted HopperCode setting if one is added for GUI installations.
-3. Resolves `node` from the process environment and a small documented set of standard installation paths.
-4. Runs the resolved executable with `--version` off the UI thread.
-5. Rejects versions older than `22.19.0` with `NODE_VERSION_UNSUPPORTED`.
-6. Rejects a missing or non-executable path with `NODE_NOT_FOUND` and points the user to the correct installation section.
-7. Records the resolved absolute path and version in `HopperCodeStatus`.
+Any failure unwinds only resources created by that start attempt.
 
-The macOS fallback is necessary because an app started from Finder often has a different `PATH` from Terminal. Do not invoke Node through a shell. Launch the validated absolute executable directly.
+Node's ready message and `/health` response must include the current lifecycle instance and whether the Rhino protocol handshake is live. Rhino rejects a ready or health response for another instance.
 
-### Documentation
+### Controlled stop
 
-Add prerequisite and installation pages for:
+`HopperCodeStop` and the stop half of restart perform this work off the UI thread:
 
-- macOS arm64
-- macOS x64
-- Windows x64
-- Windows arm64, only if Rhino, the build toolchain, and ZeroMQ artifact are all verified on it
+1. Enter `stopping`, reject new external RPC work, and cancel queued external work.
+2. Schedule transaction cleanup through the dispatcher's reserved internal control path on Rhino's UI thread.
+3. Ask Node to shut down and allow up to three seconds.
+4. Kill the verified child process tree if it remains alive.
+5. Wait up to one second for the killed child to exit.
+6. Stop and join the transport owner with a two-second deadline.
+7. Delete only the owned instance profile.
+8. Enter `stopped` or a typed `faulted` state.
 
-Each page must show how to install Node, verify `node --version`, configure an explicit path when Rhino cannot find it, install the matching Yak, run `HopperCodeStatus`, and recover from version or CPU mismatch errors.
+Restart never launches a replacement until the old process handle has exited and the transport released its endpoints.
 
-### Target-specific release build
+The dispatcher accepts lifecycle control work after it closes external admission. This reserved internal path is ordered after any operation already running, does not share the external capacity limit, and is limited to transaction cleanup and short command-line completion messages. Controlled stop waits for transaction cleanup before tearing down the transport, subject to its own deadline. The Rhino closing path posts best-effort cleanup but never waits for it.
 
-Change `scripts/package-rhino.mjs` to require an explicit target such as `mac-arm64`, `mac-x64`, or `win-x64`. Then:
+### Rhino process exit
 
-- Remove Node download, checksum, extraction, manifest selection, and bundled binary code.
-- Start from an empty staging directory.
-- Run a release-only TypeScript build that excludes tests and source maps.
-- Copy files through an allowlist instead of copying all of `dist` and the repository metadata.
-- Copy only the ZeroMQ native artifact for the requested OS and CPU.
-- Keep `package.json` only where Node ESM or dependency resolution requires it.
-- Remove the unused direct `chalk` dependency.
-- Fail packaging if tests, maps, stale output, lockfiles, the workspace file, the Grasshopper installer, a Node executable, or a wrong-target native module appears.
-- Record total staged and Yak sizes in CI. Fail when either exceeds an agreed per-target budget.
+The Rhino closing event must not wait for HTTP, Node disposal, process exit, queue drain, or NetMQ shutdown.
 
-Do not attempt aggressive bundling of the Pi dependency tree in this change. Dynamic imports and native modules make that a separate, higher-risk optimization.
+It must:
 
-## Phase 3: Give NetMQ a single owner
+1. Reject new work and cancel queued items.
+2. Signal the transport owner.
+3. Kill the verified Node process tree without waiting.
+4. Return from the closing callback.
 
-Replace the current socket creation and worker-task split with one dedicated transport thread or one `NetMQPoller` thread. That owner must:
+Do not send a graceful Node shutdown request immediately before killing it.
 
-- Create, bind, poll, unbind, and dispose every PUB, request, and command socket.
-- Write the connection profile only after all required sockets bind successfully.
-- Receive commands and requests, validate authentication and protocol version, then hand admitted work to thread-safe queues.
-- Receive completion messages from the dispatcher through `NetMQQueue` or another thread-safe handoff and send responses from the owner thread.
-- Drain outbound events without another thread touching the PUB socket.
-- Delete only the connection profile owned by its verified instance.
-- Stop from a cancellation signal and enforce a short, measured join deadline outside the Rhino UI thread.
+The Node parent watchdog polls every two seconds. When it detects that Rhino is gone, it exits immediately or uses a force-exit deadline below one second. A child must not survive more than three seconds after abrupt Rhino termination.
 
-No NetMQ socket reference may escape the transport owner. Add assertions or internal ownership checks where practical.
+### Agent transaction cleanup
 
-## Phase 4: Replace `JobQueue` with one ordered dispatcher
+Host loss, stop, and restart can interrupt an agent turn after it opened a transaction.
 
-All mutations and document-sensitive queries must enter the same FIFO dispatcher. Health checks and immutable status snapshots may bypass it.
+- Cancel an open Grasshopper agent transaction on the UI thread, restoring its saved pre-turn snapshot.
+- Close an open Rhino undo record on the UI thread. Rhino operations already applied remain as one undoable record because the current Rhino transaction has no rollback implementation.
+- Record cleanup failure in runtime status without blocking process shutdown.
 
-Each work item contains:
+## RPC transport and dispatcher
 
-- a correlation ID
-- operation name and arguments
-- required capability, either Rhino or Grasshopper
-- enqueue time and deadline
-- cancellation state
-- a completion source for the result
+Use one ROUTER and one PUB socket. A dedicated owner thread creates, binds, polls, unbinds, and disposes both sockets. No socket reference may escape that owner.
 
-Use a bounded queue. Start with a capacity of 64 and keep it configurable for tests. Reject overflow immediately with `BUSY`, including current depth and capacity.
+Node owns one DEALER client and a pending-request map. Give the DEALER a stable identity for reconnects within the same Node process. Enable mandatory ROUTER delivery so a response to a disconnected client produces an observable error instead of disappearing.
 
-The Rhino UI pump executes one item per callback, then reposts if work remains. Do not drain the full queue in one callback. Measure callback duration in integration tests and add a small time-budget option only if single operations can safely yield.
+PUB carries advisory status and document events only. RPC replies are the authority for operation completion.
 
-Return explicit terminal results:
+### Request contract
 
-- `COMPLETED`
-- `FAILED`
-- `BUSY`
-- `CANCELLED_BEFORE_START`
-- `DEADLINE_EXCEEDED_BEFORE_START`
-- `OUTCOME_UNKNOWN` when the caller times out after execution began
-- `CAPABILITY_UNAVAILABLE`
-- `NO_ACTIVE_GRASSHOPPER_DOCUMENT`
-- `SHUTTING_DOWN`
+Every request contains:
 
-Node tool promises resolve or reject from that correlated completion, not when ZeroMQ accepts a send. A mutation followed by a document query must therefore observe the mutation.
+- `protocolVersion`
+- `lifecycleInstanceId`
+- `requestId`
+- authenticated operation name and arguments
+- `startDeadlineAt`, in Unix milliseconds
 
-Either use the existing subscriber code for completion events or remove it after the new response path lands. Do not leave two completion mechanisms in production.
+Mutations also contain an `operationId`. Queries do not.
 
-## Phase 5: Let the agent start Grasshopper on demand
+`startDeadlineAt` is the deadline for dispatcher execution to begin. Node owns the separate completion timeout. Responses echo `requestId` and, for mutations, `operationId`.
 
-`HopperCode` must not load or open Grasshopper. It starts only the bridge and Node host, so Rhino-only work does not pay Grasshopper's startup cost.
+The transport rejects invalid authentication, protocol mismatch, stale lifecycle instance, malformed contents, and an expired start deadline before dispatcher admission.
 
-Add an idempotent `startGrasshopper` operation in the Rhino bridge. It must schedule the supported `_Grasshopper` command on Rhino's command or UI thread and return one of `started`, `already_running`, or a typed failure. Do not call Rhino's command runner from an event callback.
+Check in one protocol schema and shared fixtures before replacing either transport endpoint. They define the exact request and response envelopes, authentication field, ROUTER multipart framing, operation classification, result and reason codes, and handshake, cancellation, and `getOperationResult` messages. C# and TypeScript contract tests must read the same fixtures.
 
-Before the agent invokes a `gh_*` tool, the Node side follows this flow:
+### Ordered dispatcher
 
-1. Call `getRuntimeStatus`.
-2. If `grasshopper.state` is `not_loaded`, call `startGrasshopper` once.
-3. Wait for the event-backed status to reach `loaded` with the component server ready, subject to a startup deadline.
-4. Recheck active-document state, then submit the original tool call or return a typed readiness error.
+All Rhino and Grasshopper object access enters one bounded FIFO dispatcher. Immutable runtime status and transport health may bypass it.
 
-The Node side must coalesce simultaneous starts so several `gh_*` calls produce one `startGrasshopper` request. This is lazy startup and recovery, not a polling loop.
+Start with a queue capacity of 64 and keep it configurable in tests. Overflow returns `BUSY` with current depth and capacity.
 
-Keep Grasshopper load state separate from active document state. Starting Grasshopper on demand is the agent's responsibility. Creating or selecting a Grasshopper document is user state, so the agent must not call `AddNewDocument` behind the user's back. When Grasshopper is loaded without an active document:
+The Rhino UI pump executes one item per callback and reposts if work remains. One operation remains atomic in this version. Record UI duration and warn after 250 milliseconds, but do not claim that a single long operation is time-bounded.
 
-- Rhino-only tools remain available.
-- Grasshopper tools return `NO_ACTIVE_GRASSHOPPER_DOCUMENT`.
-- The browser explains that the user must open or create a Grasshopper document.
-- Queued Grasshopper work expires at its deadline rather than waiting forever.
+The default start deadline is 30 seconds. Node waits up to 120 seconds for completion unless a tool declares a longer timeout. A caller timeout does not cancel work that already started.
 
-Update status from Grasshopper canvas and document lifecycle events. Use an idle fallback only for a state that has no reliable event.
+Support these result classes in the shared protocol:
 
-## Phase 6: Make shutdown and recovery safe
+- completed
+- failed
+- busy
+- deadline exceeded before start
+- cancelled before start
+- capability unavailable
+- no active Grasshopper document
+- shutting down
+- outcome unknown, which is Node-local and never a Rhino terminal result
 
-### Non-blocking shutdown
+Keep detailed reason codes in the shared schema rather than duplicating a long enum in this plan.
 
-On `HopperCodeStop` or Rhino closing:
+### Mutation-result recovery
 
-1. Atomically enter `stopping` and reject new work.
-2. Cancel queued items that have not started.
-3. Signal Node and the transport owner without waiting on the UI thread.
-4. Allow a short graceful-shutdown deadline on a background task.
-5. Kill the verified Node process tree if it misses the deadline.
-6. Join the transport thread off-main and dispose remaining resources on their owner threads.
-7. Publish the final stopped state when Rhino is still open.
+This version does not retry mutations and does not keep a process-lifetime deduplication ledger.
 
-Rhino's closing event must only signal shutdown and schedule bounded cleanup. It must not perform synchronous HTTP, `WaitForExit`, task joins, or socket disposal.
+Rhino keeps in-flight mutation state and bounded terminal mutation results so the same Node process can recover a reply lost during socket reconnect:
 
-### Host recovery
+- Retain terminal mutation results for 10 minutes.
+- Retain no more than 256 results or 16 MiB of serialized result bodies.
+- Limit each serialized mutation result to 64 KiB. Result producers must summarize or truncate diagnostic output to stay within that bound. Large canvas and document data belongs to queries and is never retained.
+- Reserve one 64 KiB result slot before admitting a mutation. If capacity is unavailable after expired entries are removed, return `BUSY`.
+- Never evict an in-flight mutation.
 
-Health failures must change lifecycle state. Add a bounded restart policy for unexpected Node exit or repeated failed health probes:
+`getOperationResult` is an internal protocol request. It returns pending, a terminal result, or not found. The Node tool layer calls it automatically after reconnect and continues until the operation finishes or the tool's completion budget expires. Do not register it as an agent-visible tool.
 
-- Use exponential backoff with jitter and a small maximum retry count.
-- Never recover while the user requested stop or Rhino is closing.
-- Never run more than one child process.
-- Reset the retry count after a stable healthy interval.
-- Move to `faulted` after retries are exhausted and show the next action in `HopperCodeStatus` and the browser.
+Cancellation is also internal. A queued operation may become cancelled before start. Once execution begins, cancellation is rejected and Rhino records the real result.
 
-`HopperCodeRestart` bypasses the automatic backoff only after it has fully stopped the prior instance.
+If Node itself crashes, the replacement process does not know the original operation ID. Exact-once recovery across that crash is outside this version. The browser and `HopperCodeStatus` must describe the interrupted turn as having a potentially unknown mutation outcome.
 
-### State retention and stale data
+## Runtime status and Grasshopper readiness
 
-Choose and document one session-continuity policy before release. The least surprising first version is to preserve user workspace data but start a fresh live session for each Rhino process. Clean connection profiles and temporary instance folders only after verifying that their owner PID is dead and the files exceed a retention age. Never delete an active instance's data based only on age.
+Rhino owns an immutable runtime snapshot. NetMQ reads it without calling Rhino or Grasshopper APIs from the transport thread.
 
-## Phase 7: Reorganize the code
+The shared status schema contains:
 
-Move files without changing saved Grasshopper component identity:
+- Protocol version, revision, and observation time.
+- Lifecycle state, change time, and latest reason.
+- Transport readiness and lifecycle instance ID.
+- Host state, PID, Node version, handshake state, and health-failure count.
+- Active Rhino document state and name.
+- Grasshopper installation, load, readiness, and active-document state.
+- Dispatcher acceptance, depth, and capacity.
+- The latest error for each component.
 
-```text
-src/
-├── host/                 process, HTTP and WebSocket, Pi session
-├── extension/
-│   ├── transport/        ZeroMQ clients
-│   ├── tools/            Pi tools
-│   ├── services/         tool behavior
-│   └── ui/               host-neutral adapters
-├── protocol/             versioned request, response, and status contract
-└── web/                  browser application
+Use `not_installed`, `not_loaded`, `loading`, `ready`, and `failed` for Grasshopper state. `ready` includes component-server readiness, so a second boolean cannot disagree with it.
 
-dotnet/
-├── Hopper.Backend/       transport, dispatcher, operations, status
-├── Hopper.Rhino/         plug-in and lifecycle commands
-├── Hopper.Grasshopper/   optional compatibility GHA
-└── Hopper.Tests/
-```
+Increment `revision` whenever any status field changes. Rhino document open, close, rename, and active-document events update the Rhino part. Grasshopper canvas and document events update the Grasshopper part on the UI thread.
 
-The projects must own the source files under their directories. Remove parent-folder compile globs. Rename `rhino_zmq_poc`, `GHZMQ`, and other proof-of-concept identities in new code. Preserve the old component GUID and a thin type shim only if existing Grasshopper files need it. Give that compatibility layer a stated deprecation policy or distribute it separately.
+Node returns Rhino's snapshot unchanged to the agent and browser. Node process details already present in the Rhino snapshot must not be replaced by a second Node-owned status model.
 
-Clean `dist` before every build. Delete stale compiled modules and any source that becomes unreachable after the transport and dispatcher changes.
+When Node is dead, only `HopperCodeStatus` can show current status. Do not promise that the dead process's browser will report the fault.
 
-## Test and release plan
+### Lazy Grasshopper start
 
-### Unit and contract tests
+`HopperCode` starts Rhino transport and Node only. Its startup assembly path must contain no static Grasshopper reference.
 
-- All lifecycle state transitions, including concurrent start, stop, and restart calls.
-- Node discovery, missing Node, invalid executable, minimum-version boundary, and newer supported versions.
-- Runtime status serialization and C#/TypeScript fixture compatibility.
-- Authentication and protocol-version rejection.
-- Queue capacity, FIFO ordering, cancellation before start, deadline before start, timeout during execution, and shutdown rejection.
-- Grasshopper load success, already loaded, failure, no active document, document opened, and document closed.
-- Stale profile cleanup with live and dead PID cases.
-- Package allowlist and wrong-target native-module detection.
+Before a `gh_*` tool runs, Node:
 
-Keep pure .NET unit tests independent of Rhino and Grasshopper assemblies. Put runtime-dependent tests in a separate integration project and document its runner.
+1. Subscribes to advisory status events.
+2. Reads the full runtime snapshot.
+3. Calls `startGrasshopper` once if the state is `not_loaded`.
+4. Reads status again to close the event-subscription race.
+5. Waits up to 60 seconds for `ready`, using events only as wakeups.
+6. Re-reads status after reconnect and at the deadline.
+7. Checks for an active Grasshopper document before submitting the original tool.
 
-### Rhino integration tests
+Coalesce simultaneous start requests per lifecycle instance.
 
-- Start Rhino with Grasshopper unloaded, run `HopperCode`, and verify that Grasshopper remains unloaded.
-- Request a Grasshopper tool, verify that the agent starts Grasshopper once, and verify that status changes before the tool runs.
-- Run `HopperCode` twice and verify that only one transport and one Node process exist.
-- Exercise all four commands in valid and repeated sequences.
-- Submit a mutation followed immediately by a query and verify that the query observes it.
-- Fill the queue and verify `BUSY` while Rhino remains responsive.
-- Close Rhino during active work and verify that the UI does not stall and the child process exits.
-- Kill Node and verify degraded state, bounded recovery, and no duplicate child.
-- Open, switch, and close Grasshopper documents and verify capability updates.
-- Exercise viewport capture and graph-object creation on a real macOS Rhino installation. Replace or isolate Windows-only drawing APIs if either path fails.
+`startGrasshopper` schedules the supported `_Grasshopper` command on Rhino's command or UI thread. This can open the Grasshopper editor and may create an untitled document as a command side effect. The browser must tell the user before triggering it. HopperCode itself does not call `AddNewDocument` or select a document.
 
-### Package matrix
+If Grasshopper is ready without an active document, Rhino tools remain available and Grasshopper tools return `NO_ACTIVE_GRASSHOPPER_DOCUMENT`.
 
-For every supported target, CI must build from a clean checkout, inspect the allowlist, install the Yak, resolve external Node, import ZeroMQ, start HopperCode, and complete one Rhino and one Grasshopper smoke operation.
+## External Node prerequisite
 
-| Target | Required before release |
-| --- | --- |
-| macOS arm64 | Build, package inspection, install, Node resolution, Rhino smoke test |
-| macOS x64 | Build, package inspection, install, Node resolution, Rhino smoke test |
-| Windows x64 | Build, package inspection, install, Node resolution, Rhino smoke test |
-| Windows arm64 | Release only after the full toolchain and live Rhino smoke test pass |
+Use a `NodeRuntimeResolver` with this order:
+
+1. `HOPPER_NODE_EXECUTABLE`, if it is an absolute path.
+2. `nodeExecutable` in the Hopper app-data `config.json` file.
+3. `node` resolved from the Rhino process environment.
+4. Standard installation paths for the current OS.
+
+The macOS standard paths are `/opt/homebrew/bin/node`, `/usr/local/bin/node`, and `/usr/bin/node`. The Windows paths include `%ProgramFiles%\nodejs\node.exe` and `%LocalAppData%\Programs\nodejs\node.exe`.
+
+Do not glob version-manager directories or invoke Node through a shell. Users of nvm, fnm, Volta, asdf, or mise can put the absolute executable path in `config.json`.
+
+Run `node --version` off the UI thread with a three-second timeout. Accept stable versions at or above `22.19.0`. Return typed errors for missing, non-executable, malformed, prerelease, and unsupported versions. Missing or unsupported Node goes directly to `faulted` without retry.
+
+Record the resolved path and version in `HopperCodeStatus`. Documentation must cover Node installation, the config file, version verification, Yak installation, status, and restart on macOS arm64 and Windows x64.
+
+## Release packaging
+
+Support `mac-arm64` and `win-x64`. The packaging script may stage either target on either supported build OS. Native OS and CPU machines are required for final verification, not for TypeScript or AnyCPU compilation.
+
+For each target:
+
+1. Start from an empty staging directory.
+2. Clean `dist` and run a release TypeScript build without tests or first-party source maps.
+3. Copy only runtime files.
+4. Copy `package.json`, the workspace file if installation needs it, and the lockfile into staging.
+5. Run `pnpm install --prod --frozen-lockfile` with the requested target OS and CPU configured so target-specific optional dependencies are installed.
+6. Remove the lockfile, workspace file, installer-only scripts, `.bin`, tests, maps, stale output, and development files after installation.
+7. Keep only the requested native artifacts.
+8. Stage the managed .NET release output and remove irrelevant runtime and satellite folders deliberately.
+9. Generate the Yak.
+10. Run the package verifier.
+
+Remove bundled Node download, checksum, extraction, manifest selection, and executable code. Remove the unused direct `chalk` dependency.
+
+### Package verifier
+
+`scripts/verify-rhino-package.mjs --target <target> <staging-path>` must:
+
+- Apply checked-in path allow rules and deny rules.
+- Reject tests, first-party source maps, stale builds, lockfiles, workspace files, development scripts, a Node executable, and known unrelated modules.
+- Inspect Mach-O, PE, ELF, `.node`, `.dylib`, `.so`, and `.dll` files.
+- Read the PE CLI header before classifying a `.dll` as native. Managed assemblies must not fail a native-target check.
+- Reject native files for another OS or CPU.
+- Write a sorted manifest with path, byte size, and SHA-256 hash as a release artifact.
+- Report staged and Yak sizes.
+
+Do not compare all dependency hashes against a committed `node_modules` manifest. Establish clean macOS arm64 and Windows x64 size baselines first, then set per-target ceilings with a documented margin.
+
+Build success is not release verification. On each native target, install the Yak, resolve external Node, import ZeroMQ, run `HopperCode`, and complete one Rhino and one Grasshopper operation.
+
+## Profiles and retained data
+
+Each instance profile contains owner PID, owner process start time, lifecycle instance ID, creation time, endpoints, and authentication data.
+
+The instance-specific profile is authoritative for the managed Node host. Keep `connection.json` only as a best-effort, last-started compatibility pointer for standalone clients. Document that two Rhino instances can race on this legacy pointer. Do not use it for the managed host.
+
+Delete an instance profile immediately when its owner is verified dead. Delete only when PID and process start time prove ownership. Keep malformed or uninspectable profiles.
+
+Keep user workspace and conversation data indefinitely in this version. Ephemeral instance directories may retain logs for seven days after their owner is verified dead. Never delete an active instance based on age.
+
+## Tests
+
+### Pure tests
+
+Run Core and Node tests without Rhino or Grasshopper installed. Cover:
+
+- Lifecycle transitions and concurrent start, stop, and restart calls.
+- Node resolution and version boundaries.
+- Protocol fixtures shared by C# and TypeScript.
+- ROUTER and DEALER multiplexing, reconnect, mandatory delivery, authentication, and version rejection.
+- FIFO ordering, queue capacity, cancellation before start, start deadlines, and shutdown rejection.
+- Mutation completion, lost-reply lookup, result TTL, count and byte limits, and query non-retention.
+- Status subscription races and dropped advisory events.
+- Profile ownership and legacy-pointer behavior.
+- Package rules and native-binary classification.
+
+The pure test output must contain neither RhinoCommon nor Grasshopper assemblies.
+
+### Live Rhino tests
+
+Use a controlled Rhino profile with Grasshopper configured for load on demand. Do not inherit a developer's plug-in startup setting.
+
+Automate the supported Windows scenarios where the available Rhino test harness permits it. Treat the macOS Rhino suite as a recorded manual checklist unless a reliable automation harness is added.
+
+The live suite covers:
+
+- `HopperCode` leaves Grasshopper unloaded.
+- The loaded assembly list excludes Grasshopper and `Hopper.Grasshopper` after Rhino-only startup.
+- A Grasshopper tool starts Grasshopper once and waits for readiness.
+- Repeated command sequences create one transport and one child.
+- A mutation followed by a query observes the mutation.
+- A lost mutation reply is recovered without resubmission.
+- Stop and restart clean queued work and open transactions without blocking the UI.
+- Abrupt Rhino exit leaves no child after three seconds.
+- Node exit or three failed health checks produces a visible `faulted` state.
+- Rhino and Grasshopper document events update status.
+- The native macOS and Windows packages pass one Rhino and one Grasshopper smoke operation.
+
+## Implementation order
+
+1. Add regression tests for all frozen GUIDs and command names.
+2. Create `Hopper.Core`; add the shared protocol schema and fixtures, dispatcher admission policy, Grasshopper adapter-registration contract, and pure tests. Then move ROUTER and PUB ownership and result policy into it.
+3. Replace PULL and REP with ROUTER and DEALER. Make all existing operations await correlated completion.
+4. Add the five-state lifecycle, external Node resolver, four commands, startup handshake, controlled stop, exit path, and transaction cleanup.
+5. Split Grasshopper code into `Hopper.Grasshopper`; add lazy startup, capability checks, and Rhino and Grasshopper document events.
+6. Add internal mutation-result lookup and Node reconnect polling.
+7. Remove bundled Node and implement cross-target staging and package verification.
+8. Run pure tests, controlled live Rhino tests, and both native package smoke tests.
+
+Keep commits small around transport and lifecycle code. Defer unrelated mechanical renames and folder moves until these changes are stable.
 
 ## Acceptance criteria
 
-### Commands and lifecycle
+The work is complete when:
 
-- The four `HopperCode*` commands exist and report consistent state.
-- Starting twice creates no duplicate socket, profile, or child process.
-- Stop and restart are idempotent and serialized.
-- Rhino closing does not synchronously wait on HTTP, child exit, queue drain, or NetMQ shutdown.
-- Unexpected child exit is visible and recovery is bounded.
-
-### Readiness
-
-- `getRuntimeStatus` distinguishes Rhino, transport, Grasshopper load, active document, dispatcher, and host state.
-- `HopperCode` does not initialize or open Grasshopper.
-- The agent checks readiness and attempts one lazy `startGrasshopper` call before a Grasshopper tool call.
-- Grasshopper tools cannot execute without an active Grasshopper document.
-- Rhino tools remain usable when Grasshopper has no document.
-
-### Ordering and responsiveness
-
-- Mutations resolve only after execution completes.
-- A query submitted after a mutation observes that mutation.
-- Queue overflow and every cancellation or timeout phase have distinct results.
-- A burst cannot execute as one unbounded UI callback.
-- Only Rhino and Grasshopper object access runs on the UI thread.
-- All NetMQ socket operations occur on their one owner thread.
-
-### Packaging
-
-- Node is absent from every Yak and documented as a prerequisite with minimum version `22.19.0`.
-- Each artifact contains only its target OS and CPU native dependencies.
-- No tests, maps, stale compiled files, development scripts, lockfiles, workspace files, or wrong-target binaries ship.
-- CI enforces the allowlist and per-target size budget.
-
-### Structure and quality
-
-- C# projects own their source trees and no longer compile parent-directory globs.
-- Host, extension, protocol, web, and compatibility responsibilities are separated.
-- Both sides of the wire contract pass the same fixtures.
-- Pure tests run without a local Grasshopper installation.
-- The supported macOS and Windows packages pass live Rhino smoke tests.
-
-## Recommended implementation order
-
-1. Land the state model, protocol schema, fixtures, and lifecycle controller seam.
-2. Add the four commands and non-blocking stop behavior.
-3. Move NetMQ to one owner thread.
-4. Land the bounded dispatcher and correlated completion protocol.
-5. Add runtime status, agent-triggered Grasshopper startup, and capability gates.
-6. Add host recovery and stale-state cleanup.
-7. Remove bundled Node and add prerequisite resolution and documentation.
-8. Build the target-specific release pipeline and package checks.
-9. Move the source trees and remove obsolete names and dead code.
-10. Run the full target package and live Rhino test matrix before marking the PR production-ready.
-
-Keep these changes in reviewable commits or small PRs. The protocol and lifecycle work should land before packaging and folder moves, otherwise large mechanical diffs will hide the concurrency changes that need the closest review.
+- The four commands report one consistent lifecycle and never create duplicate children or transports.
+- `running` requires an authenticated Node-to-Rhino protocol handshake.
+- Stop and restart do not wait on Rhino's UI thread.
+- Abrupt Rhino exit leaves no Node child after three seconds.
+- Host loss cleans open Rhino and Grasshopper transactions.
+- All NetMQ socket operations occur on one owner thread.
+- All document access uses one bounded FIFO UI dispatcher.
+- Mutations resolve on completion, and the same Node process can recover a lost reply without resubmitting the mutation.
+- Queries are never retained in the mutation-result store.
+- `HopperCode` does not load Grasshopper or statically reference it.
+- A Grasshopper tool performs one explicit lazy-start flow and requires an active document.
+- The status snapshot follows Rhino and Grasshopper document changes.
+- Node is absent from every Yak and the resolver enforces `22.19.0`.
+- The verifier distinguishes managed DLLs from native binaries and rejects wrong-target native files.
+- macOS arm64 and Windows x64 pass their native install and smoke tests.
