@@ -2,6 +2,7 @@
 using System.Drawing;
 using Grasshopper;
 using Grasshopper.Kernel;
+using Hopper.Core;
 
 namespace rhino_zmq_poc
 {
@@ -15,7 +16,7 @@ namespace rhino_zmq_poc
     //Return a short string describing the purpose of this GHA library.
     public override string Description => "";
 
-    public override Guid Id => new Guid("a41e7f39-12f0-4cc2-9f84-fd3d6bf3eaef");
+    public override Guid Id => new Guid(PublicIdentity.GrasshopperAssemblyId);
 
     //Return a string identifying you or your company.
     public override string AuthorName => "";

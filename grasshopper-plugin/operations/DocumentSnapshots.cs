@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using GH_IO.Serialization;
 using Grasshopper.Kernel;
+using Hopper.Core;
 
 namespace rhino_zmq_poc
 {
@@ -12,7 +13,7 @@ namespace rhino_zmq_poc
 
         /// <summary>GHZMQ component type guid (rhino-zmq-pocComponent).</summary>
         private static readonly Guid GhzmqComponentTypeId =
-            new Guid("e07753b1-fdec-417a-b57a-83a95204a8dd");
+            new Guid(PublicIdentity.LegacyGrasshopperComponentId);
 
         /// <summary>
         /// Infrastructure components must not be removed during undo restore; RemoveObject

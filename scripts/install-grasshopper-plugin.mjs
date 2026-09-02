@@ -199,6 +199,7 @@ function artifactSources(configuration) {
 		"Hopper.Rhino.deps.json",
 		"Hopper.Rhino.runtimeconfig.json",
 		"Hopper.Backend.dll",
+		"Hopper.Core.dll",
 		"AsyncIO.dll",
 		"Microsoft.Bcl.AsyncInterfaces.dll",
 		"Microsoft.Extensions.ObjectPool.dll",
@@ -350,7 +351,7 @@ function main() {
 	try {
 		const { copied } = copyArtifacts(configuration, installDir);
 		log(`Installed Hopper to ${installDir} (${copied.length} managed files)`);
-		log("Restart Rhino to load the GHZMQ compatibility component. Install the generated Yak package to use _Hopper.");
+		log("Restart Rhino to load the GHZMQ compatibility component. Install the generated Yak package to use _HopperCode.");
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		fail(`Failed to copy plugin: ${msg}`);
