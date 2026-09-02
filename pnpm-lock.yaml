@@ -17,9 +17,6 @@ importers:
       '@earendil-works/pi-tui':
         specifier: 0.84.3
         version: 0.84.3
-      chalk:
-        specifier: ^5.6.2
-        version: 5.6.2
       fast-xml-parser:
         specifier: ^5.10.1
         version: 5.10.1

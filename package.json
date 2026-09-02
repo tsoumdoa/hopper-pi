@@ -22,6 +22,7 @@
 	"scripts": {
 		"dev": "tsx src/index.ts",
 		"build": "tsc -p tsconfig.json && node scripts/copy-host-assets.mjs",
+		"build:release": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.release.json && node scripts/copy-host-assets.mjs",
 		"test": "vitest run",
 		"test:rpc-cross-language": "tsx scripts/cross-language-rpc-smoke.ts",
 		"pi": "pi -e .",
@@ -32,6 +33,7 @@
 		"build:gh-plugin": "node scripts/install-grasshopper-plugin.mjs --build-only",
 		"install:rhino:mac": "bash scripts/install-rhino-mac.sh",
 		"package:rhino": "node scripts/package-rhino.mjs",
+		"verify:rhino-package": "node scripts/verify-rhino-package.mjs",
 		"prepack": "pnpm build"
 	},
 	"devDependencies": {
@@ -45,7 +47,6 @@
 		"@earendil-works/pi-ai": "0.84.3",
 		"@earendil-works/pi-coding-agent": "0.84.3",
 		"@earendil-works/pi-tui": "0.84.3",
-		"chalk": "^5.6.2",
 		"fast-xml-parser": "^5.10.1",
 		"nanoid": "^5.1.16",
 		"ws": "8.21.3",
