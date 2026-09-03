@@ -62,9 +62,27 @@ public sealed record AuthenticatedRpcHandshake(
     string ClientIdentity,
     long StatusRevision);
 
+public enum RpcHandshakeObservationState
+{
+    Accepted,
+    Rejected,
+}
+
+public sealed record RpcHandshakeObservation(
+    RpcHandshakeObservationState State,
+    long StatusRevision,
+    string? Message)
+{
+    public static RpcHandshakeObservation Allow(long statusRevision) =>
+        new(RpcHandshakeObservationState.Accepted, statusRevision, null);
+
+    public static RpcHandshakeObservation Reject(string message) =>
+        new(RpcHandshakeObservationState.Rejected, 0, message);
+}
+
 public interface IRpcHandshakeObserver
 {
-    long OnAuthenticatedHandshake(LifecycleHandshakeArgsV2 handshake);
+    RpcHandshakeObservation OnAuthenticatedHandshake(LifecycleHandshakeArgsV2 handshake);
 }
 
 public enum RpcTransportStartState
@@ -497,12 +515,25 @@ public sealed class RpcTransportOwner : IDisposable
 
         try
         {
-            var statusRevision = _handshakeObserver?.OnAuthenticatedHandshake(args) ?? 0;
+            var observation = _handshakeObserver?.OnAuthenticatedHandshake(args)
+                ?? RpcHandshakeObservation.Allow(0);
+            if (observation.State == RpcHandshakeObservationState.Rejected)
+            {
+                QueueOperationResponse(
+                    routingIdentity,
+                    request,
+                    Result(
+                        RpcResultClass.failed,
+                        RpcReasonCode.HANDSHAKE_REJECTED,
+                        observation.Message ?? "The managed Node process did not accept this handshake."));
+                return;
+            }
+
             var handshake = new AuthenticatedRpcHandshake(
                 args.NodeProcessId,
                 args.NodeVersion,
                 args.ClientIdentity,
-                statusRevision);
+                observation.StatusRevision);
             _authenticatedHandshake.TrySetResult(handshake);
             QueueOperationResponse(
                 routingIdentity,
@@ -514,7 +545,7 @@ public sealed class RpcTransportOwner : IDisposable
                         new LifecycleHandshakeDataV2
                         {
                             Handshake = HandshakeState.live,
-                            StatusRevision = statusRevision,
+                            StatusRevision = observation.StatusRevision,
                         },
                         RpcV2Contract.JsonOptions)));
         }

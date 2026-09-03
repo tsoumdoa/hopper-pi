@@ -107,6 +107,25 @@ public sealed class LifecycleControllerTests
     }
 
     [Fact]
+    public async Task ChildExitAfterHandshakeCannotTransitionStartupToRunning()
+    {
+        var fixture = new LifecycleFixture();
+        fixture.Transport.HandshakeGate = NewGate<LifecycleActionResult>();
+        var start = fixture.Controller.StartAsync();
+        Assert.Equal(LifecycleState.Starting, fixture.Controller.Snapshot.State);
+
+        fixture.Child.SetAlive(false);
+        fixture.Transport.HandshakeGate.SetResult(LifecycleActionResult.Success());
+        var result = await start;
+
+        Assert.Equal(LifecycleState.Faulted, result.Snapshot.State);
+        Assert.Equal(LifecycleReasonCode.UnexpectedChildExit, result.Snapshot.Reason);
+        Assert.Equal(0, fixture.Dispatcher.ReopenCount);
+        Assert.Equal(1, fixture.Transport.StopCount);
+        Assert.Equal(1, fixture.Profiles.DeleteCount);
+    }
+
+    [Fact]
     public async Task FailedProfileWithoutCreatedFileDoesNotDeleteOrStartChild()
     {
         var fixture = new LifecycleFixture();

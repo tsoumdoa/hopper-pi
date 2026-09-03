@@ -25,6 +25,8 @@ public sealed record HostRuntimeStatusUpdate(
     HandshakeState Handshake,
     int HealthFailureCount);
 
+public sealed record HostHandshakeAcceptance(bool Accepted, long StatusRevision);
+
 /// <summary>
 /// Holds the shared RPC v2 status DTO itself. Writers replace the complete immutable
 /// value under a lock, and readers take one reference without calling host APIs.
@@ -134,6 +136,45 @@ public sealed class RuntimeStatusStore
             Handshake = HandshakeState.disconnected,
         },
     });
+
+    public HostHandshakeAcceptance TryAcceptInitialHostHandshake(
+        int nodeProcessId,
+        string nodeVersion)
+    {
+        if (nodeProcessId <= 0)
+            throw new ArgumentOutOfRangeException(nameof(nodeProcessId));
+        if (string.IsNullOrWhiteSpace(nodeVersion))
+            throw new ArgumentException("Node version is required.", nameof(nodeVersion));
+
+        lock (_gate)
+        {
+            var current = _current;
+            if (current.Host.Handshake == HandshakeState.live)
+                return new HostHandshakeAcceptance(true, current.Revision);
+
+            if (current.Lifecycle.State != ProtocolLifecycleState.starting
+                || current.Host.State != ProtocolLifecycleState.starting
+                || current.Host.Handshake != HandshakeState.connecting
+                || current.Host.ProcessId != nodeProcessId)
+            {
+                return new HostHandshakeAcceptance(false, current.Revision);
+            }
+
+            var changed = current with
+            {
+                ProtocolVersion = RpcV2Contract.ProtocolVersion,
+                Revision = checked(current.Revision + 1),
+                ObservedAt = ToUnixMilliseconds(_clock.UtcNow, nameof(_clock)),
+                Host = current.Host with
+                {
+                    NodeVersion = nodeVersion,
+                    Handshake = HandshakeState.live,
+                },
+            };
+            Volatile.Write(ref _current, changed);
+            return new HostHandshakeAcceptance(true, changed.Revision);
+        }
+    }
 
     public bool UpdateTransport(bool ready, string? lifecycleInstanceId)
     {

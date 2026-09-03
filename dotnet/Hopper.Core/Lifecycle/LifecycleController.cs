@@ -411,6 +411,15 @@ public sealed class LifecycleController
                         created)
                     .ConfigureAwait(false);
             }
+            if (!_child.IsAlive)
+            {
+                return await FailStartAsync(
+                        LifecycleReasonCode.UnexpectedChildExit,
+                        "The Node child exited before startup completed.",
+                        instanceId,
+                        created)
+                    .ConfigureAwait(false);
+            }
             if (IsClosing)
                 return await AbortStartForClosingAsync(instanceId, created).ConfigureAwait(false);
 

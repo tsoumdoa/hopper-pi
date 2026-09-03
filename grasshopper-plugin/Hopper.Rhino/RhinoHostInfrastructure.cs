@@ -296,17 +296,15 @@ namespace rhino_zmq_poc
             owner?.Stop(TimeSpan.Zero);
         }
 
-        public long OnAuthenticatedHandshake(LifecycleHandshakeArgsV2 handshake)
+        public RpcHandshakeObservation OnAuthenticatedHandshake(LifecycleHandshakeArgsV2 handshake)
         {
-            var host = _status.Read().Host;
-            _status.UpdateHost(new HostRuntimeStatusUpdate(
-                Hopper.Core.Lifecycle.LifecycleState.Starting,
+            var acceptance = _status.TryAcceptInitialHostHandshake(
                 handshake.NodeProcessId,
-                host.NodePath,
-                handshake.NodeVersion,
-                HandshakeState.live,
-                host.HealthFailureCount));
-            return _status.Read().Revision;
+                handshake.NodeVersion);
+            return acceptance.Accepted
+                ? RpcHandshakeObservation.Allow(acceptance.StatusRevision)
+                : RpcHandshakeObservation.Reject(
+                    "The handshake process ID does not match the managed Node child.");
         }
 
         public CancelOperationState Cancel(string operationId)
