@@ -230,18 +230,15 @@ function requiredRuntimeErrors(files, target) {
 	const errors = [];
 	for (const requiredPath of [
 		"manifest.yml",
+		"Hopper.Core.dll",
+		"Hopper.Grasshopper.gha",
+		"Hopper.Rhino.rhp",
 		"runtime/hopper-runtime.json",
 		"runtime/host/package.json",
 		"runtime/host/dist/host/index.js",
 		"runtime/host/node_modules/zeromq/build/manifest.json",
 	]) {
 		if (!paths.has(requiredPath)) errors.push(`${requiredPath}: required runtime file is missing`);
-	}
-	if (![...paths].some((path) => !path.includes("/") && path.toLowerCase().endsWith(".rhp"))) {
-		errors.push("*.rhp: a Rhino plug-in is required at the package root");
-	}
-	if (![...paths].some((path) => !path.includes("/") && path.toLowerCase().endsWith(".gha"))) {
-		errors.push("*.gha: a Grasshopper plug-in is required at the package root");
 	}
 	const expected = RHINO_PACKAGE_TARGETS[target];
 	const addonPrefix = `runtime/host/node_modules/zeromq/build/${expected.os}/${expected.cpu}/`;

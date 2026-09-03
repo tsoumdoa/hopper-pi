@@ -2,7 +2,7 @@ import { extname } from "node:path";
 
 export const RHINO_PACKAGE_TARGETS = Object.freeze({
 	"mac-arm64": Object.freeze({ os: "darwin", cpu: "arm64", maxStagedBytes: 83 * 1024 * 1024 }),
-	"win-x64": Object.freeze({ os: "win32", cpu: "x64", maxStagedBytes: 81 * 1024 * 1024 }),
+	"win-x64": Object.freeze({ os: "win32", cpu: "x64", maxStagedBytes: 82 * 1024 * 1024 }),
 });
 
 export const PACKAGE_MANIFEST_NAME = "rhino-package-manifest.json";
@@ -19,6 +19,11 @@ export const PACKAGE_DENY_RULES = Object.freeze([
 		test: (path) => path.split("/").some((part) => part === ".DS_Store" || part === "Thumbs.db"),
 	},
 	{
+		id: "retired-host-assembly",
+		description: "the Rhino host is part of Hopper.Rhino.rhp and must not ship as a separate assembly",
+		test: (path) => /(^|\/)Hopper\.Rhino\.Host\.dll$/i.test(path),
+	},
+	{
 		id: "tests",
 		description: "test files and test directories are not shipped",
 		test: (path) => /(^|\/)(__tests__|tests?)(\/|$)/i.test(path) || /\.(test|spec)\.[cm]?[jt]sx?$/i.test(path),
@@ -31,12 +36,18 @@ export const PACKAGE_DENY_RULES = Object.freeze([
 	{
 		id: "lockfile",
 		description: "package-manager lockfiles are installer inputs",
-		test: (path) => /(^|\/)(pnpm-lock\.yaml|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock)$/i.test(path),
+		test: (path) => /(^|\/)(pnpm-lock\.yaml|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock)$/i.test(path)
+			|| /(^|\/)\.pnpm\/lock\.yaml$/i.test(path),
 	},
 	{
 		id: "workspace-file",
 		description: "workspace configuration is an installer input",
-		test: (path) => /(^|\/)pnpm-workspace\.yaml$/i.test(path),
+		test: (path) => /(^|\/)(pnpm-workspace\.yaml|\.pnpm-workspace-state-v1\.json)$/i.test(path),
+	},
+	{
+		id: "package-manager-metadata",
+		description: "package-manager installation metadata is not needed at runtime",
+		test: (path) => /(^|\/)\.modules\.yaml$/i.test(path),
 	},
 	{
 		id: "development-tree",

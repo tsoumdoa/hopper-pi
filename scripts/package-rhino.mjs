@@ -109,11 +109,13 @@ function removeBinDirectories(directory) {
 function removeDependencyDevelopmentFiles(directory) {
 	for (const entry of readdirSync(directory, { withFileTypes: true })) {
 		const path = join(directory, entry.name);
-		if (entry.isDirectory() && /^(?:__tests__|tests?)$/i.test(entry.name)) {
+		if (entry.isDirectory() && (entry.name === ".pnpm" || /^(?:__tests__|tests?)$/i.test(entry.name))) {
 			rmSync(path, { recursive: true, force: true });
 		} else if (entry.isDirectory()) {
 			removeDependencyDevelopmentFiles(path);
 		} else if (/^(?:pnpm-lock\.yaml|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock)$/i.test(entry.name)
+			|| entry.name === ".modules.yaml"
+			|| entry.name === ".pnpm-workspace-state-v1.json"
 			|| entry.name.endsWith(".map")) {
 			rmSync(path, { force: true });
 		}
