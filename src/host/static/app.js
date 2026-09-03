@@ -95,7 +95,7 @@ function socketUrl() {
 function connect() {
   clearTimeout(state.reconnectTimer);
   if (!state.token) {
-    setConnection("error", "Session token missing", "Run _Hopper in Rhino to open a fresh link.");
+    setConnection("error", "Session token missing", "Run _HopperCode in Rhino to open a fresh link.");
     showBanner("This page has no Hopper session token. Reopen it from Rhino.");
     return;
   }
@@ -914,7 +914,7 @@ elements.newSessionButton.addEventListener("click", () => {
 elements.reconnectButton.addEventListener("click", reconnectNow);
 elements.bannerReconnectButton.addEventListener("click", reconnectNow);
 elements.shutdownButton.addEventListener("click", () => {
-  if (!window.confirm("Shut down this local Hopper host? Rhino can start it again with _Hopper.")) return;
+  if (!window.confirm("Shut down this local Hopper host? Rhino can start it again with _HopperCode.")) return;
   state.intentionalClose = true;
   send({ type: "shutdown" });
 });
