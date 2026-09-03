@@ -1,4 +1,6 @@
 using Hopper.Core.Grasshopper;
+using Hopper.Core.Protocol;
+using Hopper.Core.Operations;
 using Hopper.Core.Tests.TestDoubles;
 using Xunit;
 
@@ -123,5 +125,11 @@ public class GrasshopperCapabilityRegistryTests
 
     private sealed class TestAdapter : IGrasshopperAdapter
     {
+        public OperationDocumentStatus DocumentStatus => OperationDocumentStatus.None;
+        public bool CanExecute(RpcOperation operation) => false;
+        public OperationResultV2 Execute(RpcRequestV2 request) => new();
+        public void CleanupOpenTransactions()
+        {
+        }
     }
 }

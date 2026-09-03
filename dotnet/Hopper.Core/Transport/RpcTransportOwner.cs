@@ -62,9 +62,27 @@ public sealed record AuthenticatedRpcHandshake(
     string ClientIdentity,
     long StatusRevision);
 
+public enum RpcHandshakeObservationState
+{
+    Accepted,
+    Rejected,
+}
+
+public sealed record RpcHandshakeObservation(
+    RpcHandshakeObservationState State,
+    long StatusRevision,
+    string? Message)
+{
+    public static RpcHandshakeObservation Allow(long statusRevision) =>
+        new(RpcHandshakeObservationState.Accepted, statusRevision, null);
+
+    public static RpcHandshakeObservation Reject(string message) =>
+        new(RpcHandshakeObservationState.Rejected, 0, message);
+}
+
 public interface IRpcHandshakeObserver
 {
-    long OnAuthenticatedHandshake(LifecycleHandshakeArgsV2 handshake);
+    RpcHandshakeObservation OnAuthenticatedHandshake(LifecycleHandshakeArgsV2 handshake);
 }
 
 public enum RpcTransportStartState
@@ -159,6 +177,33 @@ public sealed class RpcTransportOwner : IDisposable
     }
 
     public MutationResultStoreSnapshot ResultStoreStatus => _resultStore.GetSnapshot();
+
+    public CancelOperationState CancelOperation(string operationId)
+    {
+        var lookup = _resultStore.Lookup(operationId);
+        if (lookup.State == MutationLookupState.NotFound)
+            return CancelOperationState.not_found;
+        if (lookup.State == MutationLookupState.Terminal)
+        {
+            var terminal = DeserializeRetained(lookup.TerminalResult!);
+            return terminal.ReasonCode == RpcReasonCode.CANCELLED_BEFORE_START
+                ? CancelOperationState.already_cancelled
+                : CancelOperationState.rejected_already_started;
+        }
+
+        return _dispatcher.CancelQueuedExternal(operationId) switch
+        {
+            DispatcherCancellationState.CancelledBeforeStart =>
+                CancelOperationState.cancelled_before_start,
+            DispatcherCancellationState.RejectedAlreadyStarted =>
+                CancelOperationState.rejected_already_started,
+            // An admitted pending operation that is no longer queued has started or
+            // is completing its terminal-result continuation.
+            DispatcherCancellationState.NotFound =>
+                CancelOperationState.rejected_already_started,
+            _ => throw new InvalidOperationException("Unexpected dispatcher cancellation state."),
+        };
+    }
 
     public async Task<AuthenticatedRpcHandshake?> WaitForAuthenticatedHandshakeAsync(
         TimeSpan timeout,
@@ -423,6 +468,15 @@ public sealed class RpcTransportOwner : IDisposable
                 return;
             }
 
+            if (request.Operation == RpcOperation.cancelOperation)
+            {
+                // Cancellation must run before the target reaches the UI queue head.
+                // The host handler for this control operation may only use thread-safe
+                // cancellation state and must not call Rhino or Grasshopper APIs.
+                QueueOperationResponse(routingIdentity, request, _handler.Execute(request));
+                return;
+            }
+
             if (request.Operation == RpcOperation.lifecycleHandshake)
             {
                 CompleteAuthenticatedHandshake(routingIdentity, request);
@@ -461,12 +515,25 @@ public sealed class RpcTransportOwner : IDisposable
 
         try
         {
-            var statusRevision = _handshakeObserver?.OnAuthenticatedHandshake(args) ?? 0;
+            var observation = _handshakeObserver?.OnAuthenticatedHandshake(args)
+                ?? RpcHandshakeObservation.Allow(0);
+            if (observation.State == RpcHandshakeObservationState.Rejected)
+            {
+                QueueOperationResponse(
+                    routingIdentity,
+                    request,
+                    Result(
+                        RpcResultClass.failed,
+                        RpcReasonCode.HANDSHAKE_REJECTED,
+                        observation.Message ?? "The managed Node process did not accept this handshake."));
+                return;
+            }
+
             var handshake = new AuthenticatedRpcHandshake(
                 args.NodeProcessId,
                 args.NodeVersion,
                 args.ClientIdentity,
-                statusRevision);
+                observation.StatusRevision);
             _authenticatedHandshake.TrySetResult(handshake);
             QueueOperationResponse(
                 routingIdentity,
@@ -478,7 +545,7 @@ public sealed class RpcTransportOwner : IDisposable
                         new LifecycleHandshakeDataV2
                         {
                             Handshake = HandshakeState.live,
-                            StatusRevision = statusRevision,
+                            StatusRevision = observation.StatusRevision,
                         },
                         RpcV2Contract.JsonOptions)));
         }
@@ -523,7 +590,10 @@ public sealed class RpcTransportOwner : IDisposable
         var deadline = request.StartDeadlineAt > MaximumUnixMilliseconds
             ? DateTimeOffset.MaxValue
             : DateTimeOffset.FromUnixTimeMilliseconds(request.StartDeadlineAt);
-        var completion = _dispatcher.SubmitExternal(() => _handler.Execute(request), deadline);
+        var completion = _dispatcher.SubmitExternal(
+            () => _handler.Execute(request),
+            deadline,
+            operationId: request.OperationId);
         _ = completion.ContinueWith(
             task => CompleteDispatch(routingIdentity, request, task),
             CancellationToken.None,

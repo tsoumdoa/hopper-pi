@@ -45,6 +45,8 @@ internal sealed class FakeChildProcess : IManagedChildProcess
     public bool GracefulStopResult { get; set; } = true;
     public bool WaitResult { get; set; } = true;
 
+    public void SetAlive(bool alive) => IsAlive = alive;
+
     public Task<ChildStartResult> StartAsync(
         NodeRuntime runtime,
         string profilePath,

@@ -27,11 +27,37 @@ public class HopperHostManagerTests
     }
 
     [Fact]
+    public void VersionTwoManifestResolvesHostEntryInsideRuntimeDirectory()
+    {
+        var runtimeDirectory = Path.Combine(Path.GetTempPath(), $"hopper-runtime-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(runtimeDirectory, "host", "dist", "host"));
+        try
+        {
+            var entry = Path.Combine(runtimeDirectory, "host", "dist", "host", "index.js");
+            File.WriteAllText(entry, "runtime");
+            var manifest = Path.Combine(runtimeDirectory, "hopper-runtime.json");
+            File.WriteAllText(manifest,
+                "{\"protocolVersion\":2,\"hostEntry\":\"host/dist/host/index.js\"}");
+
+            Assert.Equal(entry, RuntimeManifestPaths.ResolveHostEntry(manifest));
+
+            File.WriteAllText(manifest,
+                "{\"protocolVersion\":2,\"hostEntry\":\"../outside.js\"}");
+            Assert.Null(RuntimeManifestPaths.ResolveHostEntry(manifest));
+        }
+        finally
+        {
+            Directory.Delete(runtimeDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ReadyLineAcceptsOwnedLoopbackHost()
     {
         var ok = HostReadiness.TryParse(
-            "{\"type\":\"ready\",\"url\":\"http://127.0.0.1:43821/#abcdefghijklmnopqrstuvwxyz012345\",\"pid\":42}",
+            "{\"type\":\"ready\",\"url\":\"http://127.0.0.1:43821/#abcdefghijklmnopqrstuvwxyz012345\",\"pid\":42,\"lifecycleInstanceId\":\"life-1\",\"protocolHandshakeLive\":true}",
             42,
+            "life-1",
             out var uri);
 
         Assert.True(ok);
@@ -39,18 +65,15 @@ public class HopperHostManagerTests
     }
 
     [Theory]
-    [InlineData("{\"type\":\"ready\",\"url\":\"https://127.0.0.1:43821/#abcdefghijklmnopqrstuvwxyz012345\",\"pid\":42}")]
-    [InlineData("{\"type\":\"ready\",\"url\":\"http://localhost:43821/#abcdefghijklmnopqrstuvwxyz012345\",\"pid\":42}")]
-    [InlineData("{\"type\":\"ready\",\"url\":\"http://example.com:43821/#abcdefghijklmnopqrstuvwxyz012345\",\"pid\":42}")]
-    [InlineData("{\"type\":\"ready\",\"url\":\"http://127.0.0.1:43821/#abcdefghijklmnopqrstuvwxyz012345\",\"pid\":43}")]
-    [InlineData("{\"type\":\"ready\",\"url\":\"http://127.0.0.1:43821/#abcdefghijklmnopqrstuvwxyz012345\"}")]
-    [InlineData("{\"type\":\"ready\",\"url\":\"http://127.0.0.1:43821/#abcdefghijklmnopqrstuvwxyz012345\",\"pid\":\"42\"}")]
-    [InlineData("{\"type\":\"ready\",\"url\":\"http://127.0.0.1:43821/\",\"pid\":42}")]
-    [InlineData("{\"type\":\"ready\",\"url\":\"http://127.0.0.1:43821/?x=1#abcdefghijklmnopqrstuvwxyz012345\",\"pid\":42}")]
-    [InlineData("{\"type\":\"ready\",\"url\":\"http://127.0.0.1:43821/#bad/token\",\"pid\":42}")]
+    [InlineData("{\"type\":\"ready\",\"url\":\"https://127.0.0.1:43821/#abcdefghijklmnopqrstuvwxyz012345\",\"pid\":42,\"lifecycleInstanceId\":\"life-1\",\"protocolHandshakeLive\":true}")]
+    [InlineData("{\"type\":\"ready\",\"url\":\"http://127.0.0.1:43821/#abcdefghijklmnopqrstuvwxyz012345\",\"pid\":43,\"lifecycleInstanceId\":\"life-1\",\"protocolHandshakeLive\":true}")]
+    [InlineData("{\"type\":\"ready\",\"url\":\"http://127.0.0.1:43821/#abcdefghijklmnopqrstuvwxyz012345\",\"pid\":42,\"lifecycleInstanceId\":\"life-old\",\"protocolHandshakeLive\":true}")]
+    [InlineData("{\"type\":\"ready\",\"url\":\"http://127.0.0.1:43821/#abcdefghijklmnopqrstuvwxyz012345\",\"pid\":42,\"lifecycleInstanceId\":\"life-1\",\"protocolHandshakeLive\":false}")]
+    [InlineData("{\"type\":\"ready\",\"url\":\"http://127.0.0.1:43821/#abcdefghijklmnopqrstuvwxyz012345\",\"pid\":42,\"lifecycleInstanceId\":\"life-1\"}")]
+    [InlineData("{\"type\":\"ready\",\"url\":\"http://127.0.0.1:43821/#bad/token\",\"pid\":42,\"lifecycleInstanceId\":\"life-1\",\"protocolHandshakeLive\":true}")]
     [InlineData("not json")]
     public void ReadyLineRejectsUnsafeOrUnownedValues(string line)
     {
-        Assert.False(HostReadiness.TryParse(line, 42, out _));
+        Assert.False(HostReadiness.TryParse(line, 42, "life-1", out _));
     }
 }

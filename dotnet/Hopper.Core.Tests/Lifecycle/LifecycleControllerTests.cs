@@ -107,6 +107,25 @@ public sealed class LifecycleControllerTests
     }
 
     [Fact]
+    public async Task ChildExitAfterHandshakeCannotTransitionStartupToRunning()
+    {
+        var fixture = new LifecycleFixture();
+        fixture.Transport.HandshakeGate = NewGate<LifecycleActionResult>();
+        var start = fixture.Controller.StartAsync();
+        Assert.Equal(LifecycleState.Starting, fixture.Controller.Snapshot.State);
+
+        fixture.Child.SetAlive(false);
+        fixture.Transport.HandshakeGate.SetResult(LifecycleActionResult.Success());
+        var result = await start;
+
+        Assert.Equal(LifecycleState.Faulted, result.Snapshot.State);
+        Assert.Equal(LifecycleReasonCode.UnexpectedChildExit, result.Snapshot.Reason);
+        Assert.Equal(0, fixture.Dispatcher.ReopenCount);
+        Assert.Equal(1, fixture.Transport.StopCount);
+        Assert.Equal(1, fixture.Profiles.DeleteCount);
+    }
+
+    [Fact]
     public async Task FailedProfileWithoutCreatedFileDoesNotDeleteOrStartChild()
     {
         var fixture = new LifecycleFixture();
@@ -267,6 +286,7 @@ public sealed class LifecycleControllerTests
 
         Assert.Equal(LifecycleState.Faulted, fixture.Controller.Snapshot.State);
         Assert.Equal(LifecycleReasonCode.UnexpectedChildExit, fixture.Controller.Snapshot.Reason);
+        Assert.Contains("unknown outcome", fixture.Controller.Snapshot.Message, StringComparison.Ordinal);
         Assert.Equal(0, fixture.Child.GracefulStopCount);
         Assert.Equal(1, fixture.Transport.StopCount);
         Assert.Equal(1, fixture.Profiles.DeleteCount);
@@ -283,8 +303,16 @@ public sealed class LifecycleControllerTests
         Assert.Equal(LifecycleState.Stopping, fixture.Controller.Snapshot.State);
         Assert.Equal(LifecycleReasonCode.RhinoClosing, fixture.Controller.Snapshot.Reason);
         Assert.Equal(
-            ["dispatcher.close", "dispatcher.cancel", "transport.signal", "child.kill"],
+            [
+                "dispatcher.close",
+                "dispatcher.cancel",
+                "dispatcher.lifecycle",
+                "transactions.cleanup",
+                "transport.signal",
+                "child.kill",
+            ],
             fixture.Calls);
+        Assert.Equal(1, fixture.Transactions.Count);
         Assert.Equal(0, fixture.Child.GracefulStopCount);
         Assert.Equal(0, fixture.Child.WaitCount);
         Assert.Equal(0, fixture.Transport.StopCount);

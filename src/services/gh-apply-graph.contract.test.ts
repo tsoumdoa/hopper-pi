@@ -8,15 +8,15 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "../..");
 
 test("applyGraph is a synchronous request and not a queued command action", () => {
-	const service = readFileSync(join(root, "grasshopper-plugin/services/ZMqService.cs"), "utf8");
-	const registry = readFileSync(join(root, "grasshopper-plugin/CommandActionRegistry.cs"), "utf8");
-	assert.match(service, /_requestDispatcher\.Register\("applyGraph"/);
+	const adapter = readFileSync(join(root, "dotnet/Hopper.Grasshopper/GrasshopperOperationAdapter.cs"), "utf8");
+	const registry = readFileSync(join(root, "dotnet/Hopper.Grasshopper/CommandActionRegistry.cs"), "utf8");
+	assert.match(adapter, /dispatcher\.Register\("applyGraph"/);
 	assert.doesNotMatch(registry, /"applyGraph"/);
 });
 
 test("multi-wire graph solves once and selector wiring never solves", () => {
-	const graph = readFileSync(join(root, "grasshopper-plugin/operations/GraphOperations.cs"), "utf8");
-	const wire = readFileSync(join(root, "grasshopper-plugin/operations/WireOperations.cs"), "utf8");
+	const graph = readFileSync(join(root, "dotnet/Hopper.Grasshopper/Operations/GraphOperations.cs"), "utf8");
+	const wire = readFileSync(join(root, "dotnet/Hopper.Grasshopper/Operations/WireOperations.cs"), "utf8");
 	assert.equal((graph.match(/doc\.NewSolution\(false\)/g) ?? []).length, 1);
 
 	const selectorBody = wire.split("TryConnectBySelector")[1]?.split("public static")[0] ?? "";
@@ -24,7 +24,7 @@ test("multi-wire graph solves once and selector wiring never solves", () => {
 });
 
 test("mid-graph structural failures restore the serialized snapshot", () => {
-	const graph = readFileSync(join(root, "grasshopper-plugin/operations/GraphOperations.cs"), "utf8");
+	const graph = readFileSync(join(root, "dotnet/Hopper.Grasshopper/Operations/GraphOperations.cs"), "utf8");
 	assert.match(graph, /var snapshot = DocumentSnapshots\.Serialize\(doc\)/);
 	assert.match(graph, /DocumentSnapshots\.Apply\(doc, snapshot\)/);
 	assert.match(graph, /return Rollback\(\$"wires\[/);
@@ -32,7 +32,7 @@ test("mid-graph structural failures restore the serialized snapshot", () => {
 });
 
 test("snapshot restore is failure-safe: deserialize before mutating, with a fallback restore", () => {
-	const snapshots = readFileSync(join(root, "grasshopper-plugin/operations/DocumentSnapshots.cs"), "utf8");
+	const snapshots = readFileSync(join(root, "dotnet/Hopper.Grasshopper/Operations/DocumentSnapshots.cs"), "utf8");
 	// The replacement document is fully built before the live canvas is touched.
 	assert.match(snapshots, /var incoming = ExtractDocument\(snapshot\);/);
 	// A fallback of the current target is captured so a mid-merge failure can restore it.
@@ -45,7 +45,7 @@ test("snapshot restore is failure-safe: deserialize before mutating, with a fall
 });
 
 test("UI-thread timeout is surfaced as an unknown outcome, not a plain error", () => {
-	const handlers = readFileSync(join(root, "grasshopper-plugin/services/ZMqRequestHandlers.cs"), "utf8");
+	const handlers = readFileSync(join(root, "dotnet/Hopper.Grasshopper/GrasshopperRequestHandlers.cs"), "utf8");
 	// TimeoutException from RunOnUiThread is caught at the handler level...
 	assert.match(handlers, /catch \(TimeoutException\)/);
 	// ...and returned as a structured response that flags the unknown outcome, not { error }.
@@ -54,7 +54,7 @@ test("UI-thread timeout is surfaced as an unknown outcome, not a plain error", (
 });
 
 test("single-undo is recorded only when no turn transaction owns the undo stack", () => {
-	const graph = readFileSync(join(root, "grasshopper-plugin/operations/GraphOperations.cs"), "utf8");
+	const graph = readFileSync(join(root, "dotnet/Hopper.Grasshopper/Operations/GraphOperations.cs"), "utf8");
 	// Guarded by AgentTransaction.IsActive so it never nests under the turn transaction.
 	assert.match(graph, /if \(AgentTransaction\.IsActive\)\s+return;/);
 	// Records a single snapshot-based undo action on success.

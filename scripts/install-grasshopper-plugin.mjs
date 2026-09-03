@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Build Hopper's GHA, shared backend, and Rhino plug-in, then install them
+ * Build Hopper's Grasshopper and Rhino plug-ins, then install them
  * into Grasshopper Libraries/hopper-pi/. A small runtime manifest points the
  * Rhino plug-in at this package's compiled, dependency-local host.
  *
@@ -20,6 +20,7 @@ import {
 	readFileSync,
 	rmSync,
 	statSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { homedir, platform } from "node:os";
@@ -28,9 +29,10 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "..");
-const PLUGIN_PROJECT_DIR = join(PACKAGE_ROOT, "grasshopper-plugin");
-const GHA_PROJECT_FILE = join(PLUGIN_PROJECT_DIR, "rhino-zmq-poc.csproj");
-const RHP_PROJECT_FILE = join(PLUGIN_PROJECT_DIR, "Hopper.Rhino", "Hopper.Rhino.csproj");
+const GHA_PROJECT_DIR = join(PACKAGE_ROOT, "dotnet", "Hopper.Grasshopper");
+const GHA_PROJECT_FILE = join(GHA_PROJECT_DIR, "Hopper.Grasshopper.csproj");
+const RHP_PROJECT_DIR = join(PACKAGE_ROOT, "dotnet", "Hopper.Rhino");
+const RHP_PROJECT_FILE = join(RHP_PROJECT_DIR, "Hopper.Rhino.csproj");
 const HOST_ENTRY = join(PACKAGE_ROOT, "dist", "host", "index.js");
 const RUNTIME_MANIFEST = "hopper-runtime.json";
 
@@ -66,7 +68,7 @@ function targetFramework() {
 
 function ghaOutputDir(configuration = "Release") {
 	return join(
-		PLUGIN_PROJECT_DIR,
+		GHA_PROJECT_DIR,
 		"bin",
 		configuration,
 		targetFramework()
@@ -75,8 +77,7 @@ function ghaOutputDir(configuration = "Release") {
 
 function rhpOutputDir(configuration = "Release") {
 	return join(
-		PLUGIN_PROJECT_DIR,
-		"Hopper.Rhino",
+		RHP_PROJECT_DIR,
 		"bin",
 		configuration,
 		targetFramework()
@@ -175,13 +176,13 @@ function dotnetBuild(configuration) {
 		const first = spawnSync(
 			"dotnet",
 			[...buildArgs, "--no-restore"],
-			{ cwd: PLUGIN_PROJECT_DIR, encoding: "utf8", stdio: "inherit" }
+			{ cwd: PACKAGE_ROOT, encoding: "utf8", stdio: "inherit" }
 		);
 		if (first.status === 0) continue;
 		const restored = spawnSync(
 			"dotnet",
 			buildArgs,
-			{ cwd: PLUGIN_PROJECT_DIR, encoding: "utf8", stdio: "inherit" }
+			{ cwd: PACKAGE_ROOT, encoding: "utf8", stdio: "inherit" }
 		);
 		if (restored.status !== 0) fail(`dotnet build failed: ${projectFile}`);
 	}
@@ -192,13 +193,12 @@ function artifactSources(configuration) {
 	const rhpDir = rhpOutputDir(configuration);
 	const pluginExtensions = [".dll", ".gha", ".rhp", ".deps.json", ".runtimeconfig.json"];
 	const approvedArtifacts = new Set([
-		"rhino-zmq-poc.gha",
-		"rhino-zmq-poc.deps.json",
-		"rhino-zmq-poc.runtimeconfig.json",
+		"Hopper.Grasshopper.gha",
+		"Hopper.Grasshopper.deps.json",
+		"Hopper.Grasshopper.runtimeconfig.json",
 		"Hopper.Rhino.rhp",
 		"Hopper.Rhino.deps.json",
 		"Hopper.Rhino.runtimeconfig.json",
-		"Hopper.Backend.dll",
 		"Hopper.Core.dll",
 		"AsyncIO.dll",
 		"Microsoft.Bcl.AsyncInterfaces.dll",
@@ -228,15 +228,26 @@ function artifactSources(configuration) {
 
 function removePreviousInstallFiles(installDir) {
 	const stampPath = join(installDir, ".hopper-install.json");
-	if (!existsSync(stampPath)) return;
-	try {
-		const stamp = JSON.parse(readFileSync(stampPath, "utf8"));
-		for (const name of stamp.files ?? []) {
-			if (typeof name !== "string" || name.includes("..")) continue;
-			rmSync(join(installDir, name), { recursive: true, force: true });
+	if (existsSync(stampPath)) {
+		try {
+			const stamp = JSON.parse(readFileSync(stampPath, "utf8"));
+			for (const name of stamp.files ?? []) {
+				if (typeof name !== "string" || name.includes("..")) continue;
+				rmSync(join(installDir, name), { recursive: true, force: true });
+			}
+		} catch {
+			warn("Could not read the previous install stamp; existing Hopper files will be overwritten.");
 		}
-	} catch {
-		warn("Could not read the previous install stamp; existing Hopper files will be overwritten.");
+	}
+
+	for (const staleName of [
+		"rhino-zmq-poc.gha",
+		"rhino-zmq-poc.deps.json",
+		"rhino-zmq-poc.runtimeconfig.json",
+		"Hopper.Backend.dll",
+		"Hopper.Rhino.Host.dll",
+	]) {
+		rmSync(join(installDir, staleName), { force: true });
 	}
 }
 
@@ -246,15 +257,17 @@ function writeRuntimeManifest(installDir) {
 		return null;
 	}
 	const runtimeDir = join(installDir, "runtime");
+	rmSync(runtimeDir, { recursive: true, force: true });
 	mkdirSync(runtimeDir, { recursive: true });
+	const linkedHost = join(runtimeDir, "host");
+	symlinkSync(PACKAGE_ROOT, linkedHost, platform() === "win32" ? "junction" : "dir");
 	const manifestPath = join(runtimeDir, RUNTIME_MANIFEST);
 	writeFileSync(manifestPath, JSON.stringify({
-		protocolVersion: 1,
-		nodeExecutable: process.execPath,
-		hostEntry: HOST_ENTRY,
-		packageRoot: PACKAGE_ROOT,
+		protocolVersion: 2,
+		minimumNodeVersion: "22.19.0",
+		hostEntry: "host/dist/host/index.js",
 	}, null, 2) + "\n");
-	return join("runtime", RUNTIME_MANIFEST);
+	return [join("runtime", "host"), join("runtime", RUNTIME_MANIFEST)];
 }
 
 function copyArtifacts(configuration, installDir) {
@@ -270,8 +283,10 @@ function copyArtifacts(configuration, installDir) {
 		copyFileSync(source, join(installDir, name));
 		copied.push(name);
 	}
-	const runtimeManifest = writeRuntimeManifest(installDir);
-	if (runtimeManifest) copied.push(runtimeManifest);
+	const runtimeFiles = process.env.HOPPER_PACKAGE_STAGE === "1"
+		? []
+		: writeRuntimeManifest(installDir) ?? [];
+	copied.push(...runtimeFiles);
 
 	writeFileSync(
 		join(installDir, ".hopper-install.json"),

@@ -119,7 +119,7 @@ public sealed class LifecycleController
     public Task ReportUnexpectedChildExitAsync() =>
         RunBackgroundEventAsync(
             LifecycleReasonCode.UnexpectedChildExit,
-            "The Node child exited unexpectedly.",
+            "The Node child exited unexpectedly; an interrupted mutation may have an unknown outcome.",
             stopChild: false);
 
     public async Task ReportHealthCheckAsync(bool healthy)
@@ -192,6 +192,10 @@ public sealed class LifecycleController
         _dispatcher.CloseExternalAdmission();
         _dispatcher.CancelQueuedExternal();
         activeStart?.Cancel();
+
+        // Rhino shutdown must not wait for UI work, but a queued best-effort cleanup
+        // can still restore an open Grasshopper snapshot or close a Rhino undo record.
+        _ = _dispatcher.SubmitLifecycleControl(_transactions.CleanupOpenTransactions);
 
         try
         {
@@ -403,6 +407,15 @@ public sealed class LifecycleController
                 return await FailStartAsync(
                         failureReason,
                         NonEmpty(handshake.Message, "Authenticated transport handshake failed."),
+                        instanceId,
+                        created)
+                    .ConfigureAwait(false);
+            }
+            if (!_child.IsAlive)
+            {
+                return await FailStartAsync(
+                        LifecycleReasonCode.UnexpectedChildExit,
+                        "The Node child exited before startup completed.",
                         instanceId,
                         created)
                     .ConfigureAwait(false);
@@ -735,15 +748,18 @@ public sealed class LifecycleController
     {
         try
         {
+            using var startTimeout = new CancellationTokenSource(
+                _options.TransactionCleanupStartTimeout);
             var result = await _dispatcher.SubmitLifecycleControl(
                     _transactions.CleanupOpenTransactions,
                     _clock.UtcNow + _options.TransactionCleanupStartTimeout,
-                    cancellationToken: CancellationToken.None)
+                    cancellationToken: startTimeout.Token)
                 .ConfigureAwait(false);
             if (result.Kind == DispatcherResultKind.Completed)
                 return null;
 
-            var reason = result.Kind == DispatcherResultKind.DeadlineExceededBeforeStart
+            var reason = result.Kind is DispatcherResultKind.DeadlineExceededBeforeStart
+                or DispatcherResultKind.CancelledBeforeStart
                 ? LifecycleReasonCode.TransactionCleanupTimeout
                 : LifecycleReasonCode.TransactionCleanupFailed;
             return CleanupOutcome.Fatal(

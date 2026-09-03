@@ -169,6 +169,30 @@ public sealed class RpcTransportOwnerTests
     }
 
     [Fact]
+    public void KeyedCancellationRetainsTheCancelledMutationOutcome()
+    {
+        using var fixture = CreateFixture();
+        using var dealer = ConnectDealer(fixture.RouterEndpoint, "node-cancel");
+        dealer.SendFrame(Request("req-cancel-target", RpcOperation.setSliderValue, operationId: "op-cancel"));
+        fixture.Scheduler.WaitForPending();
+
+        Assert.Equal(
+            CancelOperationState.cancelled_before_start,
+            fixture.Owner.CancelOperation("op-cancel"));
+        var target = ReceiveResponse(dealer);
+
+        Assert.Equal(RpcResultClass.cancelled_before_start, target.Result.Class);
+        Assert.Equal(RpcReasonCode.CANCELLED_BEFORE_START, target.Result.ReasonCode);
+        Assert.Equal(
+            CancelOperationState.already_cancelled,
+            fixture.Owner.CancelOperation("op-cancel"));
+        Assert.Equal(
+            CancelOperationState.not_found,
+            fixture.Owner.CancelOperation("op-missing"));
+        Assert.Equal(0, fixture.Handler.CallCount);
+    }
+
+    [Fact]
     public void MutationRejectedBeforeStartIsRetainedForLostReplyLookup()
     {
         using var fixture = CreateFixture(dispatcherCapacity: 1);
@@ -252,6 +276,35 @@ public sealed class RpcTransportOwnerTests
     }
 
     [Fact]
+    public async Task RejectedHandshakeReturnsTypedFailureAndDoesNotSignalLifecycle()
+    {
+        var observer = new HandshakeObserver(
+            RpcHandshakeObservation.Reject("The process ID does not match."));
+        using var fixture = CreateFixture(handshakeObserver: observer);
+        using var dealer = ConnectDealer(fixture.RouterEndpoint, "hopper-node-9999");
+
+        dealer.SendFrame(Request(
+            "req-handshake-rejected",
+            RpcOperation.lifecycleHandshake,
+            args: new
+            {
+                nodeProcessId = 9999,
+                nodeVersion = "v22.19.0",
+                clientIdentity = "hopper-node-9999",
+            }));
+
+        var response = ReceiveResponse(dealer);
+        var handshake = await fixture.Owner.WaitForAuthenticatedHandshakeAsync(
+            TimeSpan.FromMilliseconds(20));
+
+        Assert.Equal(RpcResultClass.failed, response.Result.Class);
+        Assert.Equal(RpcReasonCode.HANDSHAKE_REJECTED, response.Result.ReasonCode);
+        Assert.Equal("The process ID does not match.", response.Result.Message);
+        Assert.Null(handshake);
+        Assert.Equal(1, observer.CallCount);
+    }
+
+    [Fact]
     public void StopJoinsOwnerThreadAndReleasesBothEndpoints()
     {
         using var fixture = CreateFixture(useInProcessEndpoints: true);
@@ -265,7 +318,10 @@ public sealed class RpcTransportOwnerTests
         AssertEventuallyBindable(() => new PublisherSocket(), fixture.PublisherEndpoint);
     }
 
-    private static Fixture CreateFixture(bool useInProcessEndpoints = false, int dispatcherCapacity = OrderedDispatcher.DefaultCapacity)
+    private static Fixture CreateFixture(
+        bool useInProcessEndpoints = false,
+        int dispatcherCapacity = OrderedDispatcher.DefaultCapacity,
+        IRpcHandshakeObserver? handshakeObserver = null)
     {
         var scheduler = new ThreadSafeUiCallbackScheduler();
         var clock = new ManualClock(Now);
@@ -288,7 +344,8 @@ public sealed class RpcTransportOwnerTests
             },
             dispatcher,
             handler,
-            clock);
+            clock,
+            handshakeObserver: handshakeObserver);
         var start = owner.Start();
         Assert.Equal(RpcTransportStartState.Started, start.State);
         return new Fixture(owner, dispatcher, scheduler, handler, routerEndpoint, publisherEndpoint);
@@ -422,6 +479,24 @@ public sealed class RpcTransportOwnerTests
                 ReasonCode = RpcReasonCode.OK,
                 Data = JsonSerializer.SerializeToElement(request.RequestId),
             };
+        }
+    }
+
+    private sealed class HandshakeObserver : IRpcHandshakeObserver
+    {
+        private readonly RpcHandshakeObservation _result;
+
+        public HandshakeObserver(RpcHandshakeObservation result)
+        {
+            _result = result;
+        }
+
+        public int CallCount { get; private set; }
+
+        public RpcHandshakeObservation OnAuthenticatedHandshake(LifecycleHandshakeArgsV2 handshake)
+        {
+            CallCount++;
+            return _result;
         }
     }
 
