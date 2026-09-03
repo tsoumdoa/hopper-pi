@@ -149,6 +149,34 @@ public sealed class RpcTransportOwnerTests
     }
 
     [Fact]
+    public void MutationRejectedBeforeStartIsRetainedForLostReplyLookup()
+    {
+        using var fixture = CreateFixture(dispatcherCapacity: 1);
+        using var dealer = ConnectDealer(fixture.RouterEndpoint, "node-busy-lookup");
+
+        dealer.SendFrame(Request("req-blocker", RpcOperation.getCurrentCanvas));
+        fixture.Scheduler.WaitForPending();
+        dealer.SendFrame(Request("req-mutation-busy", RpcOperation.setSliderValue, operationId: "op-busy-1"));
+
+        var rejected = ReceiveResponse(dealer);
+        Assert.Equal(RpcResultClass.busy, rejected.Result.Class);
+        Assert.Equal(RpcReasonCode.DISPATCHER_BUSY, rejected.Result.ReasonCode);
+        Assert.Equal(1, fixture.Owner.ResultStoreStatus.TerminalCount);
+
+        dealer.SendFrame(Request(
+            "req-busy-lookup",
+            RpcOperation.getOperationResult,
+            args: new { operationId = "op-busy-1" }));
+        var lookup = ReceiveResponse(dealer);
+        var data = lookup.Result.Data?.Deserialize<OperationLookupDataV2>(RpcV2Contract.JsonOptions);
+        Assert.Equal(OperationLookupState.terminal, data?.State);
+        Assert.Equal(RpcResultClass.busy, data?.Result?.Class);
+
+        fixture.Scheduler.RunNext();
+        _ = ReceiveResponse(dealer);
+    }
+
+    [Fact]
     public async Task AuthenticatedHandshakeBypassesClosedExternalAdmissionAndSignalsLifecycle()
     {
         using var fixture = CreateFixture();
@@ -217,11 +245,11 @@ public sealed class RpcTransportOwnerTests
         AssertEventuallyBindable(() => new PublisherSocket(), fixture.PublisherEndpoint);
     }
 
-    private static Fixture CreateFixture(bool useInProcessEndpoints = false)
+    private static Fixture CreateFixture(bool useInProcessEndpoints = false, int dispatcherCapacity = OrderedDispatcher.DefaultCapacity)
     {
         var scheduler = new ThreadSafeUiCallbackScheduler();
         var clock = new ManualClock(Now);
-        var dispatcher = new OrderedDispatcher(scheduler, clock);
+        var dispatcher = new OrderedDispatcher(scheduler, clock, dispatcherCapacity);
         var handler = new EchoHandler();
         var endpointSuffix = Guid.NewGuid().ToString("N");
         var routerEndpoint = useInProcessEndpoints

@@ -542,16 +542,11 @@ public sealed class RpcTransportOwner : IDisposable
         var isMutation = RpcV2Operations.Classify(request.Operation) == RpcOperationClass.Mutation;
         if (isMutation)
         {
-            if (completion.IsCompletedSuccessfully
-                && completion.Result.Kind is DispatcherResultKind.Completed or DispatcherResultKind.Failed)
-            {
-                var retained = _resultStore.Complete(request.OperationId!, result);
-                result = DeserializeRetained(retained.TerminalResult!);
-            }
-            else
-            {
-                _resultStore.ReleaseInFlight(request.OperationId!);
-            }
+            // Every dispatcher outcome is terminal for this admitted mutation,
+            // including rejection before start. Retaining it lets the same Node
+            // process recover a reply lost while the route was disconnected.
+            var retained = _resultStore.Complete(request.OperationId!, result);
+            result = DeserializeRetained(retained.TerminalResult!);
         }
         QueueOperationResponse(routingIdentity, request, result);
     }
