@@ -189,6 +189,15 @@ export function validateBinaryForTarget(binary, target) {
 	return null;
 }
 
+export function validateStagedSize(target, stagedSize) {
+	const maximum = RHINO_PACKAGE_TARGETS[target]?.maxStagedBytes;
+	if (maximum === undefined) return `unsupported target ${target}`;
+	if (stagedSize > maximum) {
+		return `staged payload is ${formatBytes(stagedSize)}, above the ${formatBytes(maximum)} ceiling`;
+	}
+	return null;
+}
+
 async function listFiles(root) {
 	const files = [];
 	async function visit(directory) {
@@ -263,6 +272,8 @@ export async function verifyRhinoPackage(options) {
 	manifestFiles.sort((left, right) => left.path.localeCompare(right.path));
 	yakFiles.sort((left, right) => left.path.localeCompare(right.path));
 	const stagedSize = manifestFiles.reduce((total, file) => total + file.size, 0);
+	const stagedSizeError = validateStagedSize(target, stagedSize);
+	if (stagedSizeError) throw new Error(`Rhino package verification failed: ${stagedSizeError}`);
 	const manifest = { target, stagedSize, files: manifestFiles };
 	await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 

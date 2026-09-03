@@ -1,8 +1,8 @@
 import { extname } from "node:path";
 
 export const RHINO_PACKAGE_TARGETS = Object.freeze({
-	"mac-arm64": Object.freeze({ os: "darwin", cpu: "arm64" }),
-	"win-x64": Object.freeze({ os: "win32", cpu: "x64" }),
+	"mac-arm64": Object.freeze({ os: "darwin", cpu: "arm64", maxStagedBytes: 83 * 1024 * 1024 }),
+	"win-x64": Object.freeze({ os: "win32", cpu: "x64", maxStagedBytes: 81 * 1024 * 1024 }),
 });
 
 export const PACKAGE_MANIFEST_NAME = "rhino-package-manifest.json";

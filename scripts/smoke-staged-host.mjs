@@ -2,15 +2,14 @@
 
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { arch, platform, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 const stage = resolve(process.argv[2] ?? "");
 if (!process.argv[2]) throw new Error("Usage: smoke-staged-host.mjs <staging-directory>");
 const runtimeDirectory = join(stage, "runtime");
 const manifest = JSON.parse(await readFile(join(runtimeDirectory, "hopper-runtime.json"), "utf8"));
-const runtimeKey = `${platform() === "darwin" ? "osx" : "win"}-${arch()}`;
-const nodeExecutable = resolve(runtimeDirectory, manifest.nodeExecutables?.[runtimeKey] ?? "");
+const nodeExecutable = process.env.HOPPER_NODE_EXECUTABLE || process.execPath;
 const hostEntry = resolve(runtimeDirectory, manifest.hostEntry ?? "");
 const dataDirectory = await mkdtemp(join(tmpdir(), "hopper-stage-smoke-"));
 const child = spawn(nodeExecutable, [
@@ -67,7 +66,7 @@ try {
 	});
 	if (!shutdown.ok) throw new Error(`Staged host shutdown returned ${shutdown.status}`);
 	await exited;
-	console.log(`[hopper-pi] Staged host smoke passed with ${runtimeKey}`);
+	console.log(`[hopper-pi] Staged host smoke passed with external Node ${process.version}`);
 } finally {
 	if (child.exitCode == null) child.kill("SIGKILL");
 	await rm(dataDirectory, { recursive: true, force: true });

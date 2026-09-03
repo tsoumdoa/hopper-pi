@@ -9,6 +9,7 @@ import { evaluatePackagePath } from "./rhino-package-rules.mjs";
 import {
 	classifyBinary,
 	validateBinaryForTarget,
+	validateStagedSize,
 	verifyRhinoPackage,
 } from "./verify-rhino-package.mjs";
 
@@ -175,6 +176,13 @@ describe("native binary classification", () => {
 });
 
 describe("Rhino package verifier", () => {
+	it("enforces the documented per-target size ceilings", () => {
+		expect(validateStagedSize("mac-arm64", 83 * 1024 * 1024)).toBeNull();
+		expect(validateStagedSize("mac-arm64", 83 * 1024 * 1024 + 1)).toContain("above");
+		expect(validateStagedSize("win-x64", 81 * 1024 * 1024)).toBeNull();
+		expect(validateStagedSize("win-x64", 81 * 1024 * 1024 + 1)).toContain("above");
+	});
+
 	it("writes a stable sorted manifest with sizes and SHA-256 hashes", async () => {
 		const stage = await minimalStage("mac-arm64");
 		await fixtureFile(stage, "runtime/host/dist/a.js", "a\n");
