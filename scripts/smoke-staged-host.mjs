@@ -1,74 +1,68 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { arch, platform, tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const stage = resolve(process.argv[2] ?? "");
 if (!process.argv[2]) throw new Error("Usage: smoke-staged-host.mjs <staging-directory>");
 const runtimeDirectory = join(stage, "runtime");
 const manifest = JSON.parse(await readFile(join(runtimeDirectory, "hopper-runtime.json"), "utf8"));
-const runtimeKey = `${platform() === "darwin" ? "osx" : "win"}-${arch()}`;
-const nodeExecutable = resolve(runtimeDirectory, manifest.nodeExecutables?.[runtimeKey] ?? "");
-const hostEntry = resolve(runtimeDirectory, manifest.hostEntry ?? "");
-const dataDirectory = await mkdtemp(join(tmpdir(), "hopper-stage-smoke-"));
-const child = spawn(nodeExecutable, [
-	hostEntry,
-	"--port", "0",
-	"--data-dir", dataDirectory,
-	"--instance-id", "package-smoke",
-	"--parent-pid", String(process.pid),
-], {
-	cwd: dirname(dirname(dirname(hostEntry))),
+if (manifest.protocolVersion !== 2 || typeof manifest.hostEntry !== "string") {
+	throw new Error("The staged runtime manifest must contain protocolVersion 2 and a hostEntry string.");
+}
+
+const hostEntry = resolve(runtimeDirectory, manifest.hostEntry);
+const relativeHostEntry = relative(runtimeDirectory, hostEntry);
+if (relativeHostEntry === "" || relativeHostEntry.startsWith("..") || isAbsolute(relativeHostEntry)) {
+	throw new Error("The staged host entry must remain inside the runtime directory.");
+}
+const hostDirectory = join(runtimeDirectory, "host");
+const nodeExecutable = process.env.HOPPER_NODE_EXECUTABLE || process.execPath;
+const smokeSource = [
+	`await import(${JSON.stringify(pathToFileURL(hostEntry).href)});`,
+	`await import("zeromq");`,
+	`process.stdout.write(process.version);`,
+].join("\n");
+const child = spawn(nodeExecutable, ["--input-type=module", "--eval", smokeSource], {
+	cwd: hostDirectory,
 	stdio: ["ignore", "pipe", "pipe"],
 });
 
-let stderr = "";
 let stdout = "";
-child.stderr.setEncoding("utf8");
+let stderr = "";
 child.stdout.setEncoding("utf8");
+child.stderr.setEncoding("utf8");
+child.stdout.on("data", (chunk) => { stdout += chunk; });
 child.stderr.on("data", (chunk) => { stderr += chunk; });
 
-try {
-	const ready = await new Promise((resolveReady, reject) => {
-		const timeout = setTimeout(() => reject(new Error(`Timed out waiting for staged host. ${stderr}`)), 70_000);
-		child.once("exit", (code) => reject(new Error(`Staged host exited ${code}. ${stderr}`)));
-		child.stdout.on("data", (chunk) => {
-			stdout += chunk;
-			const lineEnd = stdout.indexOf("\n");
-			if (lineEnd === -1) return;
-			try {
-				const message = JSON.parse(stdout.slice(0, lineEnd));
-				if (message.type !== "ready") return;
-				clearTimeout(timeout);
-				resolveReady(message);
-			} catch {
-				// Keep waiting for a valid readiness line.
-			}
-		});
+const exitCode = await new Promise((accept, reject) => {
+	const timeout = setTimeout(() => {
+		child.kill("SIGKILL");
+		reject(new Error("Staged runtime import timed out after 30 seconds."));
+	}, 30_000);
+	child.once("error", (error) => {
+		clearTimeout(timeout);
+		reject(error);
 	});
-	const url = new URL(ready.url);
-	const token = url.hash.slice(1);
-	const origin = url.origin;
-	const health = await fetch(`${origin}/health`);
-	if (!health.ok) throw new Error(`Staged host health returned ${health.status}`);
-	const exited = new Promise((resolveExit, reject) => {
-		const timeout = setTimeout(() => reject(new Error("Staged host did not exit after shutdown")), 8_000);
-		child.once("exit", (code) => {
-			clearTimeout(timeout);
-			if (code === 0) resolveExit();
-			else reject(new Error(`Staged host exited ${code}. ${stderr}`));
-		});
+	child.once("exit", (code) => {
+		clearTimeout(timeout);
+		accept(code);
 	});
-	const shutdown = await fetch(`${origin}/api/shutdown`, {
-		method: "POST",
-		headers: { Authorization: `Bearer ${token}` },
-	});
-	if (!shutdown.ok) throw new Error(`Staged host shutdown returned ${shutdown.status}`);
-	await exited;
-	console.log(`[hopper-pi] Staged host smoke passed with ${runtimeKey}`);
-} finally {
-	if (child.exitCode == null) child.kill("SIGKILL");
-	await rm(dataDirectory, { recursive: true, force: true });
+});
+
+if (exitCode !== 0) {
+	throw new Error(`Staged runtime import failed with exit code ${exitCode ?? "unknown"}. ${stderr.trim()}`);
 }
+const nodeVersion = stdout.trim();
+const versionMatch = /^v(\d+)\.(\d+)\.(\d+)$/.exec(nodeVersion);
+const version = versionMatch?.slice(1).map(Number);
+if (!version || version[0] < 22 || (version[0] === 22 && version[1] < 19)) {
+	throw new Error(`Staged runtime smoke requires stable Node 22.19.0 or newer; found ${nodeVersion || "no version"}.`);
+}
+
+// Starting the HTTP host without Rhino would fabricate lifecycle health. The
+// cross-language RPC smoke covers the authenticated handshake; native release
+// verification starts this staged host through HopperCode inside Rhino.
+console.log(`[hopper-pi] Staged host modules and native ZeroMQ loaded with external Node ${nodeVersion}`);

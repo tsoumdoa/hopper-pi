@@ -1,10 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
-	chmodSync,
-	copyFileSync,
 	cpSync,
 	existsSync,
 	lstatSync,
@@ -21,9 +18,23 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDirectory, "..");
 const packageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
-const bundledNodeVersion = "v22.22.3";
 const installer = join(scriptDirectory, "install-grasshopper-plugin.mjs");
+const verifier = join(scriptDirectory, "verify-rhino-package.mjs");
 const args = process.argv.slice(2);
+const targets = Object.freeze({
+	"mac-arm64": Object.freeze({
+		os: "darwin",
+		cpu: "arm64",
+		yakPlatform: "mac",
+		clipboardPackage: "clipboard-darwin-arm64",
+	}),
+	"win-x64": Object.freeze({
+		os: "win32",
+		cpu: "x64",
+		yakPlatform: "win",
+		clipboardPackage: "clipboard-win32-x64-msvc",
+	}),
+});
 
 function option(name) {
 	const index = args.indexOf(name);
@@ -51,10 +62,10 @@ function run(command, commandArgs, options = {}) {
 	}
 }
 
-function platformTag() {
-	if (platform() === "win32") return "win";
-	if (platform() === "darwin") return "mac";
-	fail("Rhino packages can only be staged on Windows or macOS");
+function defaultTarget() {
+	if (platform() === "darwin" && arch() === "arm64") return "mac-arm64";
+	if (platform() === "win32" && arch() === "x64") return "win-x64";
+	fail("--target is required when the build machine is not macOS arm64 or Windows x64");
 }
 
 function validateOutput(path) {
@@ -95,79 +106,86 @@ function removeBinDirectories(directory) {
 	}
 }
 
-async function downloadOfficialNode(runtimeDirectory, architecture) {
-	const version = bundledNodeVersion;
-	const platformName = platform() === "darwin" ? "darwin" : "win";
-	const archiveName = platform() === "win32"
-		? `node-${version}-win-${architecture}.zip`
-		: `node-${version}-darwin-${architecture}.tar.gz`;
-	const distributionRoot = archiveName.replace(/\.tar\.gz$|\.zip$/, "");
-	const downloadDirectory = join(runtimeDirectory, ".node-download");
-	const archivePath = join(downloadDirectory, archiveName);
-	mkdirSync(downloadDirectory, { recursive: true });
-
-	const baseUrl = `https://nodejs.org/dist/${version}`;
-	console.log(`[hopper-pi] Downloading official Node ${version} for ${platformName}-${architecture}`);
-	const [archiveResponse, checksumResponse] = await Promise.all([
-		fetch(`${baseUrl}/${archiveName}`),
-		fetch(`${baseUrl}/SHASUMS256.txt`),
-	]);
-	if (!archiveResponse.ok || !checksumResponse.ok) {
-		fail(`Could not download the official Node ${version} distribution`);
+function removeDependencyDevelopmentFiles(directory) {
+	for (const entry of readdirSync(directory, { withFileTypes: true })) {
+		const path = join(directory, entry.name);
+		if (entry.isDirectory() && (entry.name === ".pnpm" || /^(?:__tests__|tests?)$/i.test(entry.name))) {
+			rmSync(path, { recursive: true, force: true });
+		} else if (entry.isDirectory()) {
+			removeDependencyDevelopmentFiles(path);
+		} else if (/^(?:pnpm-lock\.yaml|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock)$/i.test(entry.name)
+			|| entry.name === ".modules.yaml"
+			|| entry.name === ".pnpm-workspace-state-v1.json"
+			|| entry.name.endsWith(".map")) {
+			rmSync(path, { force: true });
+		}
 	}
-	const archive = Buffer.from(await archiveResponse.arrayBuffer());
-	const checksumText = await checksumResponse.text();
-	const checksumLine = checksumText.split("\n").find((line) => line.endsWith(`  ${archiveName}`));
-	const expected = checksumLine?.split(/\s+/)[0];
-	const actual = createHash("sha256").update(archive).digest("hex");
-	if (!expected || actual !== expected) fail(`Node archive checksum mismatch for ${archiveName}`);
-	writeFileSync(archivePath, archive);
-
-	if (platform() === "win32") {
-		run("powershell.exe", [
-			"-NoProfile",
-			"-NonInteractive",
-			"-Command",
-			"Expand-Archive -LiteralPath $env:HOPPER_NODE_ARCHIVE -DestinationPath $env:HOPPER_NODE_DESTINATION",
-		], {
-			env: {
-				HOPPER_NODE_ARCHIVE: archivePath,
-				HOPPER_NODE_DESTINATION: downloadDirectory,
-			},
-		});
-	} else {
-		run("tar", ["-xzf", archivePath, "-C", downloadDirectory]);
-	}
-
-	const extracted = join(downloadDirectory, distributionRoot);
-	if (!existsSync(extracted)) fail(`Extracted Node directory is missing: ${extracted}`);
-	const nodeDirectory = join(runtimeDirectory, "node", `${platformName}-${architecture}`);
-	mkdirSync(nodeDirectory, { recursive: true });
-	const nodeRelative = platform() === "win32"
-		? join("node", `${platformName}-${architecture}`, "node.exe")
-		: join("node", `${platformName}-${architecture}`, "bin", "node");
-	const nodeExecutable = join(runtimeDirectory, nodeRelative);
-	mkdirSync(dirname(nodeExecutable), { recursive: true });
-	const extractedExecutable = platform() === "win32"
-		? join(extracted, "node.exe")
-		: join(extracted, "bin", "node");
-	copyFileSync(extractedExecutable, nodeExecutable);
-	if (platform() !== "win32") chmodSync(nodeExecutable, 0o755);
-	rmSync(downloadDirectory, { recursive: true, force: true });
-	return { nodeExecutable, nodeRelative };
 }
 
-const defaultOutput = join(packageRoot, "artifacts", `hopper-pi-${packageJson.version}-${platformTag()}`);
+function pruneNativeDependencies(nodeModules, targetConfig) {
+	const zeromqBuild = join(nodeModules, "zeromq", "build");
+	if (existsSync(zeromqBuild)) {
+		for (const entry of readdirSync(zeromqBuild, { withFileTypes: true })) {
+			if (!entry.isDirectory()) continue;
+			const operatingSystemPath = join(zeromqBuild, entry.name);
+			if (entry.name !== targetConfig.os) {
+				rmSync(operatingSystemPath, { recursive: true, force: true });
+				continue;
+			}
+			for (const cpuEntry of readdirSync(operatingSystemPath, { withFileTypes: true })) {
+				if (cpuEntry.isDirectory() && cpuEntry.name !== targetConfig.cpu) {
+					rmSync(join(operatingSystemPath, cpuEntry.name), { recursive: true, force: true });
+				}
+			}
+		}
+	}
+
+	const tuiNative = join(nodeModules, "@earendil-works", "pi-tui", "native");
+	if (existsSync(tuiNative)) {
+		for (const entry of readdirSync(tuiNative, { withFileTypes: true })) {
+			if (!entry.isDirectory()) continue;
+			const operatingSystemPath = join(tuiNative, entry.name);
+			if (entry.name !== targetConfig.os) {
+				rmSync(operatingSystemPath, { recursive: true, force: true });
+				continue;
+			}
+			const prebuilds = join(operatingSystemPath, "prebuilds");
+			if (!existsSync(prebuilds)) continue;
+			for (const prebuild of readdirSync(prebuilds)) {
+				if (prebuild !== `${targetConfig.os}-${targetConfig.cpu}`) {
+					rmSync(join(prebuilds, prebuild), { recursive: true, force: true });
+				}
+			}
+		}
+	}
+
+	const clipboardScope = join(nodeModules, "@mariozechner");
+	if (existsSync(clipboardScope)) {
+		for (const packageName of readdirSync(clipboardScope)) {
+			if (packageName.startsWith("clipboard-") && packageName !== targetConfig.clipboardPackage) {
+				rmSync(join(clipboardScope, packageName), { recursive: true, force: true });
+			}
+		}
+	}
+
+	rmSync(join(nodeModules, "@types"), { recursive: true, force: true });
+}
+
+const target = option("--target") ?? defaultTarget();
+const targetConfig = targets[target];
+if (!targetConfig) fail(`--target must be one of: ${Object.keys(targets).join(", ")}`);
+const defaultOutput = join(packageRoot, "artifacts", `hopper-pi-${packageJson.version}-${target}`);
 const output = resolve(option("--output") ?? defaultOutput);
 validateOutput(output);
 mkdirSync(output, { recursive: true });
 
-run("pnpm", ["build"]);
-run(process.execPath, [installer, "--force"], {
+run("pnpm", ["build:release"]);
+run(process.execPath, [installer, "--force", "--target", target], {
 	env: {
 		HOPPER_GH_LIBRARIES: output,
 		HOPPER_GH_STRICT: "1",
 		HOPPER_PACKAGE_STAGE: "1",
+		HOPPER_SKIP_GH_PLUGIN: "0",
 	},
 });
 // The installer stamp contains local absolute build paths. It is useful for a
@@ -179,38 +197,44 @@ const hostDirectory = join(runtimeDirectory, "host");
 mkdirSync(hostDirectory, { recursive: true });
 cpSync(join(packageRoot, "dist"), join(hostDirectory, "dist"), { recursive: true });
 cpSync(join(packageRoot, "mds"), join(hostDirectory, "mds"), { recursive: true });
-mkdirSync(join(hostDirectory, "scripts"), { recursive: true });
-cpSync(installer, join(hostDirectory, "scripts", "install-grasshopper-plugin.mjs"));
-for (const name of ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "LICENSE"]) {
+for (const name of ["pnpm-lock.yaml", "pnpm-workspace.yaml", "LICENSE"]) {
 	cpSync(join(packageRoot, name), join(hostDirectory, name));
 }
+writeFileSync(join(hostDirectory, "package.json"), JSON.stringify({
+	name: packageJson.name,
+	version: packageJson.version,
+	private: true,
+	type: packageJson.type,
+	engines: { node: ">=22.19.0" },
+	dependencies: packageJson.dependencies,
+	devDependencies: packageJson.devDependencies,
+}, null, 2) + "\n");
 
 run("pnpm", ["install", "--prod", "--frozen-lockfile"], {
 	cwd: hostDirectory,
-	env: { HOPPER_SKIP_GH_PLUGIN: "1", PNPM_CONFIG_NODE_LINKER: "hoisted" },
+	env: {
+		HOPPER_SKIP_GH_PLUGIN: "1",
+		PNPM_CONFIG_NODE_LINKER: "hoisted",
+		npm_config_platform: targetConfig.os,
+		npm_config_arch: targetConfig.cpu,
+		npm_config_target_platform: targetConfig.os,
+		npm_config_target_arch: targetConfig.cpu,
+	},
 });
 
-removeBinDirectories(join(hostDirectory, "node_modules"));
-const dependencyLink = findSymbolicLink(join(hostDirectory, "node_modules"));
+const nodeModules = join(hostDirectory, "node_modules");
+removeBinDirectories(nodeModules);
+removeDependencyDevelopmentFiles(nodeModules);
+pruneNativeDependencies(nodeModules, targetConfig);
+const dependencyLink = findSymbolicLink(nodeModules);
 if (dependencyLink) fail(`Production dependencies contain a non-portable link: ${dependencyLink}`);
-const targetArchitectures = ["x64", "arm64"];
-const nodeExecutables = {};
-let nativeNodeExecutable;
-for (const architecture of targetArchitectures) {
-	const { nodeExecutable, nodeRelative } = await downloadOfficialNode(runtimeDirectory, architecture);
-	const runtimeKey = `${platform() === "darwin" ? "osx" : "win"}-${architecture}`;
-	nodeExecutables[runtimeKey] = nodeRelative.replaceAll("\\", "/");
-	if (architecture === arch()) nativeNodeExecutable = nodeExecutable;
-}
-if (!nativeNodeExecutable) fail(`Unsupported build architecture: ${arch()}`);
-run(nativeNodeExecutable, ["--version"]);
-run(nativeNodeExecutable, ["--input-type=module", "--eval", "await import('zeromq')"], { cwd: hostDirectory });
+rmSync(join(hostDirectory, "pnpm-lock.yaml"), { force: true });
+rmSync(join(hostDirectory, "pnpm-workspace.yaml"), { force: true });
 
 writeFileSync(join(runtimeDirectory, "hopper-runtime.json"), JSON.stringify({
 	protocolVersion: 2,
-	nodeExecutables,
+	minimumNodeVersion: "22.19.0",
 	hostEntry: "host/dist/host/index.js",
-	nodeVersion: bundledNodeVersion,
 }, null, 2) + "\n");
 
 writeFileSync(join(output, "manifest.yml"), [
@@ -230,7 +254,8 @@ writeFileSync(join(output, "manifest.yml"), [
 if (args.includes("--yak")) {
 	const yak = findYak();
 	if (!yak) fail("Yak was not found. Set HOPPER_YAK to its absolute executable path.");
-	run(yak, ["build", "--platform", platformTag()], { cwd: output });
+	run(yak, ["build", "--platform", targetConfig.yakPlatform], { cwd: output });
 }
 
-console.log(`[hopper-pi] Staged Rhino package at ${output}`);
+run(process.execPath, [verifier, "--target", target, output]);
+console.log(`[hopper-pi] Staged ${target} Rhino package at ${output}`);

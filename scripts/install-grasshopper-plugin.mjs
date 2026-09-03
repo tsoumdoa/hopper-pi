@@ -36,9 +36,13 @@ const RHP_PROJECT_FILE = join(RHP_PROJECT_DIR, "Hopper.Rhino.csproj");
 const HOST_ENTRY = join(PACKAGE_ROOT, "dist", "host", "index.js");
 const RUNTIME_MANIFEST = "hopper-runtime.json";
 
-const args = new Set(process.argv.slice(2));
+const rawArgs = process.argv.slice(2);
+const args = new Set(rawArgs);
 const buildOnly = args.has("--build-only");
 const force = args.has("--force");
+const targetIndex = rawArgs.indexOf("--target");
+const packageTarget = targetIndex === -1 ? null : rawArgs[targetIndex + 1];
+if (targetIndex !== -1 && !packageTarget) fail("--target requires mac-arm64 or win-x64");
 
 function log(...parts) {
 	console.log("[hopper-pi]", ...parts);
@@ -63,6 +67,9 @@ function hasDotnet() {
 }
 
 function targetFramework() {
+	if (packageTarget === "mac-arm64") return "net7.0";
+	if (packageTarget === "win-x64") return "net7.0-windows";
+	if (packageTarget) fail("--target requires mac-arm64 or win-x64");
 	return platform() === "win32" ? "net7.0-windows" : "net7.0";
 }
 
