@@ -22,7 +22,11 @@ export function isBackendKnownOffline(): boolean {
 }
 
 export function formatBackendEndpoint(): string {
-	return formatEndpoint(resolveConnection().reqEndpoint);
+	try {
+		return formatEndpoint(resolveConnection().rpcEndpoint);
+	} catch {
+		return "RPC v2 profile unavailable";
+	}
 }
 
 export function backendOfflineMessage(): string {

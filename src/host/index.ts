@@ -5,6 +5,7 @@ import { resolveHostConfig } from "./config.js";
 import { HostShutdownCoordinator, watchParentProcess } from "./lifecycle.js";
 import { EmbeddedPiHost } from "./pi-runtime.js";
 import { startHopperServer, type HopperServer, validateStaticDirectory } from "./server.js";
+import { closeRuntimeRpc } from "../infra/runtime-rpc.js";
 
 export async function main(args = process.argv.slice(2)): Promise<void> {
 	const modulePath = fileURLToPath(import.meta.url);
@@ -20,6 +21,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 			stopParentWatcher();
 			await server?.close();
 			await runtime?.dispose();
+			await closeRuntimeRpc();
 		},
 		exit: (code) => process.exit(code),
 		getExitCode: () => typeof process.exitCode === "number"

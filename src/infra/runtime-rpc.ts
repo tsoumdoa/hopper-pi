@@ -1,0 +1,231 @@
+import {
+	type RpcCallOptions,
+	type RpcCallResult,
+	HopperRpcClient,
+	type NodeLocalOutcomeUnknown,
+} from "./rpc-client.js";
+import type {
+	JsonObject,
+	OperationName,
+	OperationResultSnapshot,
+	RequestArgsFor,
+	RpcOperationResponse,
+	RuntimeStatus,
+} from "../protocol/v2.js";
+import { resolveConnection } from "./connection.js";
+import {
+	GrasshopperReadinessCoordinator,
+	type ReadinessClock,
+	type RuntimeStatusEventSource,
+} from "./grasshopper-readiness.js";
+import { SubscriberStatusEventSource } from "./status-event-source.js";
+
+export interface RuntimeRpcTransport {
+	readonly identity: string;
+	connect(): Promise<void>;
+	call<O extends OperationName>(
+		operation: O,
+		args: RequestArgsFor<O>,
+		options?: RpcCallOptions,
+	): Promise<RpcCallResult>;
+	close(): Promise<void>;
+}
+
+export type RuntimeRpcOptions = {
+	lifecycleInstanceId: string;
+	transport: RuntimeRpcTransport;
+	events: RuntimeStatusEventSource;
+	readinessClock?: ReadinessClock;
+	readinessTimeoutMs?: number;
+	nodeProcessId?: number;
+	nodeVersion?: string;
+};
+
+export class RpcOperationError extends Error {
+	constructor(
+		public readonly operation: OperationName,
+		public readonly result: OperationResultSnapshot,
+	) {
+		super(result.message ?? `${operation} failed: ${result.reasonCode}`);
+		this.name = "RpcOperationError";
+	}
+}
+
+export class RpcOutcomeUnknownError extends Error {
+	constructor(public readonly outcome: NodeLocalOutcomeUnknown) {
+		super(outcome.result.message);
+		this.name = "RpcOutcomeUnknownError";
+	}
+}
+
+export class RuntimeRpc {
+	readonly lifecycleInstanceId: string;
+
+	private readonly transport: RuntimeRpcTransport;
+	private readonly readiness: GrasshopperReadinessCoordinator;
+	private readonly nodeProcessId: number;
+	private readonly nodeVersion: string;
+	private handshake: Promise<void> | null = null;
+	private handshakeComplete = false;
+
+	constructor(options: RuntimeRpcOptions) {
+		this.lifecycleInstanceId = options.lifecycleInstanceId;
+		this.transport = options.transport;
+		this.nodeProcessId = options.nodeProcessId ?? process.pid;
+		this.nodeVersion = options.nodeVersion ?? process.version;
+		this.readiness = new GrasshopperReadinessCoordinator({
+			lifecycleInstanceId: options.lifecycleInstanceId,
+			events: options.events,
+			clock: options.readinessClock,
+			timeoutMs: options.readinessTimeoutMs,
+			readStatus: (timeoutMs) => this.readRuntimeStatusDirect(timeoutMs),
+			startGrasshopper: (timeoutMs) => this.startGrasshopperDirect(timeoutMs),
+		});
+	}
+
+	async connect(): Promise<void> {
+		await this.ensureHandshake();
+	}
+
+	async invoke<O extends OperationName>(
+		operation: O,
+		args: RequestArgsFor<O>,
+		options: RpcCallOptions = {},
+	): Promise<RpcOperationResponse<O>> {
+		await this.ensureHandshake();
+		if (requiresGrasshopper(operation)) await this.readiness.ensureReady();
+		return this.invokeDirect(operation, args, options);
+	}
+
+	async request<T>(operation: OperationName, args: JsonObject): Promise<T> {
+		const response = await this.invoke(
+			operation,
+			args as RequestArgsFor<typeof operation>,
+		);
+		return response.result.data as T;
+	}
+
+	async getRuntimeStatus(completionTimeoutMs?: number): Promise<RuntimeStatus> {
+		await this.ensureHandshake(completionTimeoutMs);
+		return this.readRuntimeStatusDirect(completionTimeoutMs);
+	}
+
+	async ensureGrasshopperReady(): Promise<RuntimeStatus> {
+		await this.ensureHandshake();
+		return this.readiness.ensureReady();
+	}
+
+	async close(): Promise<void> {
+		await this.transport.close();
+	}
+
+	private async ensureHandshake(completionTimeoutMs?: number): Promise<void> {
+		if (this.handshakeComplete) return;
+		if (this.handshake) return this.handshake;
+
+		const pending = (async () => {
+			await this.transport.connect();
+			await this.invokeDirect(
+				"lifecycleHandshake",
+				{
+					nodeProcessId: this.nodeProcessId,
+					nodeVersion: this.nodeVersion,
+					clientIdentity: this.transport.identity,
+				},
+				completionTimeoutMs
+					? {
+						completionTimeoutMs,
+						startDeadlineMs: Math.min(30_000, completionTimeoutMs),
+					}
+					: {},
+			);
+			this.handshakeComplete = true;
+		})();
+		this.handshake = pending;
+		try {
+			await pending;
+		} finally {
+			if (this.handshake === pending) this.handshake = null;
+		}
+	}
+
+	private async readRuntimeStatusDirect(completionTimeoutMs?: number): Promise<RuntimeStatus> {
+		const response = await this.invokeDirect("getRuntimeStatus", {}, completionTimeoutMs
+			? {
+				completionTimeoutMs,
+				startDeadlineMs: Math.min(30_000, completionTimeoutMs),
+			}
+			: {});
+		return response.result.data as RuntimeStatus;
+	}
+
+	private async startGrasshopperDirect(completionTimeoutMs: number): Promise<void> {
+		await this.invokeDirect("startGrasshopper", {}, {
+			completionTimeoutMs,
+			startDeadlineMs: Math.min(30_000, completionTimeoutMs),
+		});
+	}
+
+	private async invokeDirect<O extends OperationName>(
+		operation: O,
+		args: RequestArgsFor<O>,
+		options: RpcCallOptions = {},
+	): Promise<RpcOperationResponse<O>> {
+		const response = await this.transport.call(operation, args, options);
+		if ("source" in response) throw new RpcOutcomeUnknownError(response);
+		if (response.result.class !== "completed") {
+			throw new RpcOperationError(operation, response.result);
+		}
+		return response as RpcOperationResponse<O>;
+	}
+}
+
+const operationsWithoutGrasshopper = new Set<OperationName>([
+	"lifecycleHandshake",
+	"getRuntimeStatus",
+	"getOperationResult",
+	"cancelOperation",
+	"startGrasshopper",
+	"runRhinoScript",
+	"controlRhinoView",
+	"queryRhinoObjects",
+	"captureRhinoView",
+	"beginAgentTransaction",
+	"commitAgentTransaction",
+	"cancelAgentTransaction",
+	"beginRhinoAgentTransaction",
+	"commitRhinoAgentTransaction",
+	"cancelRhinoAgentTransaction",
+]);
+
+export function requiresGrasshopper(operation: OperationName): boolean {
+	return !operationsWithoutGrasshopper.has(operation);
+}
+
+let sharedRuntime: RuntimeRpc | null = null;
+
+export function getRuntimeRpc(): RuntimeRpc {
+	if (sharedRuntime) return sharedRuntime;
+	const connection = resolveConnection();
+	const transport = new HopperRpcClient({
+		endpoint: connection.rpcEndpoint,
+		lifecycleInstanceId: connection.lifecycleInstanceId,
+		token: connection.token,
+	});
+	sharedRuntime = new RuntimeRpc({
+		lifecycleInstanceId: connection.lifecycleInstanceId,
+		transport,
+		events: new SubscriberStatusEventSource(connection.pubEndpoint),
+	});
+	return sharedRuntime;
+}
+
+export async function resetRuntimeRpcForTests(): Promise<void> {
+	await closeRuntimeRpc();
+}
+
+export async function closeRuntimeRpc(): Promise<void> {
+	const runtime = sharedRuntime;
+	sharedRuntime = null;
+	if (runtime) await runtime.close();
+}
