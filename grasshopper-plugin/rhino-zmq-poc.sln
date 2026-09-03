@@ -12,6 +12,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hopper.Core", "..\dotnet\Ho
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hopper.Core.Tests", "..\dotnet\Hopper.Core.Tests\Hopper.Core.Tests.csproj", "{87BBB4F7-18B2-4553-86E2-FA330BAA95F6}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hopper.Rhino.Host", "..\dotnet\Hopper.Rhino.Host\Hopper.Rhino.Host.csproj", "{7E667E87-82C6-40A7-92EB-29BA1F148937}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -38,6 +40,10 @@ Global
 		{87BBB4F7-18B2-4553-86E2-FA330BAA95F6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{87BBB4F7-18B2-4553-86E2-FA330BAA95F6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{87BBB4F7-18B2-4553-86E2-FA330BAA95F6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7E667E87-82C6-40A7-92EB-29BA1F148937}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7E667E87-82C6-40A7-92EB-29BA1F148937}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7E667E87-82C6-40A7-92EB-29BA1F148937}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7E667E87-82C6-40A7-92EB-29BA1F148937}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

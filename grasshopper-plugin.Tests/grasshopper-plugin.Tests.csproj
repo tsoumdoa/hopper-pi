@@ -17,6 +17,12 @@
 
   <ItemGroup>
     <ProjectReference Include="../grasshopper-plugin/Hopper.Backend/Hopper.Backend.csproj" />
+    <ProjectReference Include="../dotnet/Hopper.Rhino.Host/Hopper.Rhino.Host.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../grasshopper-plugin/HostReadiness.cs" Link="HostReadiness.cs" />
+    <Compile Include="../grasshopper-plugin/RuntimeManifestPaths.cs" Link="RuntimeManifestPaths.cs" />
   </ItemGroup>
 
 </Project>

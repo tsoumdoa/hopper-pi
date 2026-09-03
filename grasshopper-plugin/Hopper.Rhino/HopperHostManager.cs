@@ -32,6 +32,11 @@ namespace rhino_zmq_poc
         public string Message { get; }
     }
 
+    internal sealed record HopperManagedHostConnection(
+        bool IsRunning,
+        string InstanceId,
+        string ProfilePath);
+
     internal sealed class HopperHostManager : IDisposable
     {
         private sealed class RuntimeManifest
@@ -72,7 +77,7 @@ namespace rhino_zmq_poc
             _browser = browser ?? throw new ArgumentNullException(nameof(browser));
         }
 
-        public HopperHostStartResult StartOrOpen(HopperBackendStatus backend)
+        public HopperHostStartResult StartOrOpen(HopperManagedHostConnection backend)
         {
             if (backend == null || !backend.IsRunning || string.IsNullOrWhiteSpace(backend.ProfilePath))
                 return new HopperHostStartResult(false, "Hopper backend is not ready.");

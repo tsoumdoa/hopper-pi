@@ -1,7 +1,8 @@
 using System;
-using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Hopper.Core;
+using Hopper.Rhino.Host;
 using Rhino;
 using Rhino.PlugIns;
 
@@ -10,17 +11,25 @@ namespace rhino_zmq_poc
     [Guid(PublicIdentity.RhinoPluginId)]
     public sealed class HopperRhinoPlugin : PlugIn
     {
+        private static IHopperHostFacade _hostFacade;
+
         public HopperRhinoPlugin()
         {
             Instance = this;
-            var pluginDirectory = Path.GetDirectoryName(GetType().Assembly.Location)
-                ?? AppContext.BaseDirectory;
-            HostManager = new HopperHostManager(pluginDirectory, new BrowserLauncher());
         }
 
         public static HopperRhinoPlugin Instance { get; private set; }
 
-        internal HopperHostManager HostManager { get; }
+        internal static IHopperHostFacade HostFacade => Volatile.Read(ref _hostFacade);
+
+        internal static bool TryConfigureHostFacade(IHopperHostFacade facade)
+        {
+            if (facade == null)
+                throw new ArgumentNullException(nameof(facade));
+            return ReferenceEquals(
+                Interlocked.CompareExchange(ref _hostFacade, facade, null),
+                null);
+        }
 
         protected override LoadReturnCode OnLoad(ref string errorMessage)
         {
@@ -31,8 +40,7 @@ namespace rhino_zmq_poc
         private void OnRhinoClosing(object sender, EventArgs e)
         {
             RhinoApp.Closing -= OnRhinoClosing;
-            HostManager.Dispose();
-            HopperBackendRuntime.Shared.StopBackend();
+            HostFacade?.CloseForRhinoExit();
         }
     }
 }

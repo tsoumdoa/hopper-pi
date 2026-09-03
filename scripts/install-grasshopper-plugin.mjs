@@ -200,6 +200,7 @@ function artifactSources(configuration) {
 		"Hopper.Rhino.runtimeconfig.json",
 		"Hopper.Backend.dll",
 		"Hopper.Core.dll",
+		"Hopper.Rhino.Host.dll",
 		"AsyncIO.dll",
 		"Microsoft.Bcl.AsyncInterfaces.dll",
 		"Microsoft.Extensions.ObjectPool.dll",

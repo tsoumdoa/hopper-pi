@@ -1,0 +1,284 @@
+using Hopper.Core;
+using Hopper.Core.Dispatching;
+using Hopper.Core.Grasshopper;
+using Hopper.Core.Lifecycle;
+using Hopper.Core.Operations;
+using Hopper.Core.Protocol;
+using Hopper.Core.Time;
+using Hopper.Rhino.Host;
+using Xunit;
+
+namespace rhino_zmq_poc.Tests;
+
+public sealed class HopperHostFacadeTests
+{
+    [Fact]
+    public async Task StartIsAcceptedWithoutRunningWorkOnCommandThread()
+    {
+        var fixture = new FacadeFixture();
+
+        var receipt = fixture.Facade.RequestStart();
+
+        Assert.True(receipt.Accepted);
+        Assert.Equal("HopperCode start accepted.", receipt.Message);
+        Assert.Equal(Hopper.Core.Lifecycle.LifecycleState.Stopped, fixture.Controller.Snapshot.State);
+        Assert.Single(fixture.FacadeScheduler.Pending);
+
+        await fixture.FacadeScheduler.RunNext();
+        Assert.Equal(Hopper.Core.Lifecycle.LifecycleState.Running, fixture.Controller.Snapshot.State);
+    }
+
+    [Fact]
+    public async Task StopCancelsAStartThatHasNotEnteredLifecycleGate()
+    {
+        var fixture = new FacadeFixture();
+        fixture.Facade.RequestStart();
+
+        var stop = fixture.Facade.RequestStop();
+
+        Assert.True(stop.Accepted);
+        Assert.Equal("HopperCode queued start cancelled.", stop.Message);
+        await fixture.FacadeScheduler.RunNext();
+        Assert.Equal(Hopper.Core.Lifecycle.LifecycleState.Stopped, fixture.Controller.Snapshot.State);
+        Assert.Equal(0, fixture.Transport.StartCount);
+    }
+
+    [Fact]
+    public async Task StopAndRestartPublishImmediateIntentThenFinishOffThread()
+    {
+        var fixture = new FacadeFixture();
+        fixture.Facade.RequestStart();
+        await fixture.FacadeScheduler.RunNext();
+
+        var stop = fixture.Facade.RequestStop();
+
+        Assert.True(stop.Accepted);
+        Assert.Equal(Hopper.Core.Lifecycle.LifecycleState.Stopping, stop.Lifecycle.State);
+        Assert.Single(fixture.LifecycleScheduler.Pending);
+        await fixture.LifecycleScheduler.RunNext();
+        Assert.Equal(Hopper.Core.Lifecycle.LifecycleState.Stopped, fixture.Controller.Snapshot.State);
+
+        fixture.Facade.RequestStart();
+        await fixture.FacadeScheduler.RunNext();
+        var restart = fixture.Facade.RequestRestart();
+        Assert.True(restart.Accepted);
+        Assert.Equal(Hopper.Core.Lifecycle.LifecycleState.Stopping, restart.Lifecycle.State);
+        await fixture.LifecycleScheduler.RunAll();
+        Assert.Equal(Hopper.Core.Lifecycle.LifecycleState.Running, fixture.Controller.Snapshot.State);
+        Assert.Equal(3, fixture.Transport.StartCount);
+    }
+
+    [Fact]
+    public void StatusReadsOnlyCoreRegistryContracts()
+    {
+        var fixture = new FacadeFixture();
+        fixture.Rhino.TryRegister(new RhinoAdapter("Rhino Model"));
+        fixture.Grasshopper.TryRegister(new GrasshopperAdapter("Grasshopper Model"));
+
+        var status = fixture.Facade.GetStatus();
+
+        Assert.Equal("Rhino Model", status.RhinoDocument.DocumentName);
+        Assert.Equal("Grasshopper Model", status.GrasshopperDocument.DocumentName);
+        Assert.Equal(GrasshopperCapabilityState.Ready, status.Grasshopper.State);
+    }
+
+    [Fact]
+    public void RhinoAssemblyHasNoGrasshopperOrLegacyBackendReference()
+    {
+        var references = typeof(HopperHostFacade).Assembly
+            .GetReferencedAssemblies()
+            .Select(reference => reference.Name)
+            .ToArray();
+
+        Assert.DoesNotContain("Grasshopper", references);
+        Assert.DoesNotContain("Hopper.Backend", references);
+    }
+
+    private sealed class FacadeFixture
+    {
+        public FacadeFixture()
+        {
+            Grasshopper = new GrasshopperCapabilityRegistry(SystemHopperClock.Instance, installed: true);
+            Controller = new LifecycleController(
+                new NodeProvider(),
+                Transport,
+                new Profiles(),
+                new Child(),
+                new Dispatcher(),
+                new Transactions(),
+                new InstanceIds(),
+                LifecycleScheduler,
+                SystemHopperClock.Instance);
+            Facade = new HopperHostFacade(
+                Controller,
+                FacadeScheduler,
+                Rhino,
+                Grasshopper);
+        }
+
+        public QueuedScheduler FacadeScheduler { get; } = new();
+        public QueuedScheduler LifecycleScheduler { get; } = new();
+        public FakeTransport Transport { get; } = new();
+        public RhinoOperationRegistry Rhino { get; } = new();
+        public GrasshopperCapabilityRegistry Grasshopper { get; }
+        public LifecycleController Controller { get; }
+        public HopperHostFacade Facade { get; }
+    }
+
+    private sealed class QueuedScheduler : ILifecycleBackgroundScheduler
+    {
+        public Queue<Func<Task>> Pending { get; } = new();
+
+        public Task Schedule(Func<Task> operation)
+        {
+            Pending.Enqueue(operation);
+            return Task.CompletedTask;
+        }
+
+        public Task RunNext() => Pending.Dequeue()();
+
+        public async Task RunAll()
+        {
+            while (Pending.Count > 0)
+                await RunNext();
+        }
+    }
+
+    private sealed class NodeProvider : INodeRuntimeProvider
+    {
+        public Task<NodeRuntimeResolution> ResolveAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(NodeRuntimeResolution.Success(
+                new NodeRuntime("/node", new NodeRuntimeVersion(22, 19, 0), NodeRuntimeSource.StandardPath)));
+    }
+
+    private sealed class FakeTransport : ILifecycleTransport
+    {
+        public bool IsRunning { get; private set; }
+        public int StartCount { get; private set; }
+
+        public Task<TransportStartResult> StartAsync(
+            string lifecycleInstanceId,
+            CancellationToken cancellationToken)
+        {
+            StartCount++;
+            IsRunning = true;
+            return Task.FromResult(new TransportStartResult(
+                true,
+                true,
+                new LifecycleTransportConnection("router", "publisher", "token"),
+                ""));
+        }
+
+        public Task<LifecycleActionResult> WaitForAuthenticatedHandshakeAsync(
+            string lifecycleInstanceId,
+            TimeSpan timeout,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(LifecycleActionResult.Success());
+
+        public Task<bool> StopAsync(TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            IsRunning = false;
+            return Task.FromResult(true);
+        }
+
+        public void SignalStopNoWait() => IsRunning = false;
+    }
+
+    private sealed class Profiles : IInstanceProfileStore
+    {
+        public Task<ProfileWriteResult> WriteAsync(
+            string lifecycleInstanceId,
+            LifecycleTransportConnection connection,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new ProfileWriteResult(true, true, "/profile", ""));
+
+        public Task<LifecycleActionResult> DeleteOwnedAsync(
+            string lifecycleInstanceId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(LifecycleActionResult.Success());
+    }
+
+    private sealed class Child : IManagedChildProcess
+    {
+        public bool IsAlive { get; private set; }
+
+        public Task<ChildStartResult> StartAsync(
+            NodeRuntime runtime,
+            string profilePath,
+            string lifecycleInstanceId,
+            CancellationToken cancellationToken)
+        {
+            IsAlive = true;
+            return Task.FromResult(new ChildStartResult(true, true, ""));
+        }
+
+        public Task<bool> RequestGracefulStopAsync(TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            IsAlive = false;
+            return Task.FromResult(true);
+        }
+
+        public void KillVerifiedTreeNoWait() => IsAlive = false;
+        public Task<bool> WaitForExitAsync(TimeSpan timeout, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+    }
+
+    private sealed class Dispatcher : ILifecycleDispatcher
+    {
+        public void CloseExternalAdmission()
+        {
+        }
+
+        public bool ReopenExternalAdmission() => true;
+        public int CancelQueuedExternal() => 0;
+
+        public Task<DispatcherResult<bool>> SubmitLifecycleControl(
+            Action operation,
+            DateTimeOffset? startDeadlineAt = null,
+            CancellationToken cancellationToken = default)
+        {
+            operation();
+            return Task.FromResult(DispatcherResult<bool>.Completed(true));
+        }
+    }
+
+    private sealed class Transactions : IAgentTransactionCleanup
+    {
+        public void CleanupOpenTransactions()
+        {
+        }
+    }
+
+    private sealed class InstanceIds : ILifecycleInstanceIdSource
+    {
+        private int _next;
+        public string Create() => $"instance-{++_next}";
+    }
+
+    private sealed class RhinoAdapter : IRhinoOperationAdapter
+    {
+        public RhinoAdapter(string documentName)
+        {
+            DocumentStatus = new OperationDocumentStatus(true, documentName);
+        }
+
+        public OperationDocumentStatus DocumentStatus { get; }
+        public bool CanExecute(RpcOperation operation) => false;
+        public OperationResultV2 Execute(RpcRequestV2 request) => new();
+    }
+
+    private sealed class GrasshopperAdapter : IGrasshopperAdapter
+    {
+        public GrasshopperAdapter(string documentName)
+        {
+            DocumentStatus = new OperationDocumentStatus(true, documentName);
+        }
+
+        public OperationDocumentStatus DocumentStatus { get; }
+        public bool CanExecute(RpcOperation operation) => false;
+        public OperationResultV2 Execute(RpcRequestV2 request) => new();
+        public void CleanupOpenTransactions()
+        {
+        }
+    }
+}

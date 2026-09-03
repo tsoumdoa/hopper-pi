@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using Hopper.Core;
+using Hopper.Rhino.Host;
 using Rhino;
 using Rhino.Commands;
 
@@ -13,21 +14,14 @@ namespace rhino_zmq_poc
 
         protected override Result RunCommand(RhinoDoc doc, RunMode mode)
         {
-            var plugin = HopperRhinoPlugin.Instance;
-            if (plugin == null)
+            var facade = HopperRhinoPlugin.HostFacade;
+            if (facade == null)
             {
-                RhinoApp.WriteLine("Hopper plug-in is not loaded.");
+                RhinoApp.WriteLine("Hopper runtime adapters are not configured.");
                 return Result.Failure;
             }
 
-            var runtime = HopperBackendRuntime.Shared;
-            if (!runtime.StartBackend())
-            {
-                RhinoApp.WriteLine($"Hopper backend failed: {runtime.GetStatus().LastError}");
-                return Result.Failure;
-            }
-
-            var result = plugin.HostManager.StartOrOpen(runtime.GetStatus());
+            var result = facade.RequestStart();
             RhinoApp.WriteLine(result.Message);
             return result.Accepted ? Result.Success : Result.Failure;
         }
@@ -40,29 +34,61 @@ namespace rhino_zmq_poc
 
         protected override Result RunCommand(RhinoDoc doc, RunMode mode)
         {
-            var backend = HopperBackendRuntime.Shared.GetStatus();
-            var host = HopperRhinoPlugin.Instance?.HostManager.GetStatus();
-
-            RhinoApp.WriteLine($"Hopper backend: {(backend.IsRunning ? "running" : "stopped")}");
-            if (backend.IsRunning)
+            var facade = HopperRhinoPlugin.HostFacade;
+            if (facade == null)
             {
-                RhinoApp.WriteLine($"  ZMQ: {backend.PubEndpoint}, {backend.PushEndpoint}, {backend.ReqEndpoint}");
-                RhinoApp.WriteLine($"  Profile: {backend.ProfilePath}");
+                RhinoApp.WriteLine("Hopper runtime adapters are not configured.");
+                return Result.Failure;
             }
-            if (!string.IsNullOrWhiteSpace(backend.LastError))
-                RhinoApp.WriteLine($"  Backend error: {backend.LastError}");
 
-            RhinoApp.WriteLine($"Hopper host: {host?.State ?? "not loaded"}");
-            if (host?.ProcessId is int processId)
-                RhinoApp.WriteLine($"  PID: {processId}");
-            if (!string.IsNullOrWhiteSpace(host?.Origin))
-                RhinoApp.WriteLine($"  Origin: {host.Origin}");
-            if (!string.IsNullOrWhiteSpace(host?.LastError))
-                RhinoApp.WriteLine($"  Host error: {host.LastError}");
-
-            RhinoApp.WriteLine($"Rhino document: {doc?.Name ?? "none"}");
-            RhinoApp.WriteLine($"Grasshopper document: {(string.IsNullOrWhiteSpace(backend.ActiveGrasshopperDocument) ? "none" : backend.ActiveGrasshopperDocument)}");
+            var status = facade.GetStatus();
+            RhinoApp.WriteLine($"Hopper lifecycle: {status.Lifecycle.State.ToString().ToLowerInvariant()}");
+            RhinoApp.WriteLine($"Rhino document: {DocumentName(status.RhinoDocument)}");
+            RhinoApp.WriteLine($"Grasshopper: {status.Grasshopper.StateName}");
+            RhinoApp.WriteLine($"Grasshopper document: {DocumentName(status.GrasshopperDocument)}");
             return Result.Success;
+        }
+
+        private static string DocumentName(Hopper.Core.Operations.OperationDocumentStatus document) =>
+            document.HasActiveDocument ? document.DocumentName ?? "unnamed" : "none";
+    }
+
+    [Guid(PublicIdentity.HopperCodeStopCommandId)]
+    public sealed class HopperCodeStopCommand : Command
+    {
+        public override string EnglishName => PublicIdentity.HopperCodeStopCommandName;
+
+        protected override Result RunCommand(RhinoDoc doc, RunMode mode) =>
+            Run(HopperRhinoPlugin.HostFacade?.RequestStop());
+
+        private static Result Run(HopperCommandReceipt result)
+        {
+            if (result == null)
+            {
+                RhinoApp.WriteLine("Hopper runtime adapters are not configured.");
+                return Result.Failure;
+            }
+            RhinoApp.WriteLine(result.Message);
+            return result.Accepted ? Result.Success : Result.Nothing;
+        }
+    }
+
+    [Guid(PublicIdentity.HopperCodeRestartCommandId)]
+    public sealed class HopperCodeRestartCommand : Command
+    {
+        public override string EnglishName => PublicIdentity.HopperCodeRestartCommandName;
+
+        protected override Result RunCommand(RhinoDoc doc, RunMode mode)
+        {
+            var facade = HopperRhinoPlugin.HostFacade;
+            if (facade == null)
+            {
+                RhinoApp.WriteLine("Hopper runtime adapters are not configured.");
+                return Result.Failure;
+            }
+            var result = facade.RequestRestart();
+            RhinoApp.WriteLine(result.Message);
+            return result.Accepted ? Result.Success : Result.Nothing;
         }
     }
 }
