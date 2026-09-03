@@ -149,6 +149,30 @@ public sealed class RpcTransportOwnerTests
     }
 
     [Fact]
+    public void KeyedCancellationRetainsTheCancelledMutationOutcome()
+    {
+        using var fixture = CreateFixture();
+        using var dealer = ConnectDealer(fixture.RouterEndpoint, "node-cancel");
+        dealer.SendFrame(Request("req-cancel-target", RpcOperation.setSliderValue, operationId: "op-cancel"));
+        fixture.Scheduler.WaitForPending();
+
+        Assert.Equal(
+            CancelOperationState.cancelled_before_start,
+            fixture.Owner.CancelOperation("op-cancel"));
+        var target = ReceiveResponse(dealer);
+
+        Assert.Equal(RpcResultClass.cancelled_before_start, target.Result.Class);
+        Assert.Equal(RpcReasonCode.CANCELLED_BEFORE_START, target.Result.ReasonCode);
+        Assert.Equal(
+            CancelOperationState.already_cancelled,
+            fixture.Owner.CancelOperation("op-cancel"));
+        Assert.Equal(
+            CancelOperationState.not_found,
+            fixture.Owner.CancelOperation("op-missing"));
+        Assert.Equal(0, fixture.Handler.CallCount);
+    }
+
+    [Fact]
     public void MutationRejectedBeforeStartIsRetainedForLostReplyLookup()
     {
         using var fixture = CreateFixture(dispatcherCapacity: 1);

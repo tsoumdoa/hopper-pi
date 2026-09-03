@@ -160,6 +160,33 @@ public sealed class RpcTransportOwner : IDisposable
 
     public MutationResultStoreSnapshot ResultStoreStatus => _resultStore.GetSnapshot();
 
+    public CancelOperationState CancelOperation(string operationId)
+    {
+        var lookup = _resultStore.Lookup(operationId);
+        if (lookup.State == MutationLookupState.NotFound)
+            return CancelOperationState.not_found;
+        if (lookup.State == MutationLookupState.Terminal)
+        {
+            var terminal = DeserializeRetained(lookup.TerminalResult!);
+            return terminal.ReasonCode == RpcReasonCode.CANCELLED_BEFORE_START
+                ? CancelOperationState.already_cancelled
+                : CancelOperationState.rejected_already_started;
+        }
+
+        return _dispatcher.CancelQueuedExternal(operationId) switch
+        {
+            DispatcherCancellationState.CancelledBeforeStart =>
+                CancelOperationState.cancelled_before_start,
+            DispatcherCancellationState.RejectedAlreadyStarted =>
+                CancelOperationState.rejected_already_started,
+            // An admitted pending operation that is no longer queued has started or
+            // is completing its terminal-result continuation.
+            DispatcherCancellationState.NotFound =>
+                CancelOperationState.rejected_already_started,
+            _ => throw new InvalidOperationException("Unexpected dispatcher cancellation state."),
+        };
+    }
+
     public async Task<AuthenticatedRpcHandshake?> WaitForAuthenticatedHandshakeAsync(
         TimeSpan timeout,
         CancellationToken cancellationToken = default)
@@ -423,6 +450,15 @@ public sealed class RpcTransportOwner : IDisposable
                 return;
             }
 
+            if (request.Operation == RpcOperation.cancelOperation)
+            {
+                // Cancellation must run before the target reaches the UI queue head.
+                // The host handler for this control operation may only use thread-safe
+                // cancellation state and must not call Rhino or Grasshopper APIs.
+                QueueOperationResponse(routingIdentity, request, _handler.Execute(request));
+                return;
+            }
+
             if (request.Operation == RpcOperation.lifecycleHandshake)
             {
                 CompleteAuthenticatedHandshake(routingIdentity, request);
@@ -523,7 +559,10 @@ public sealed class RpcTransportOwner : IDisposable
         var deadline = request.StartDeadlineAt > MaximumUnixMilliseconds
             ? DateTimeOffset.MaxValue
             : DateTimeOffset.FromUnixTimeMilliseconds(request.StartDeadlineAt);
-        var completion = _dispatcher.SubmitExternal(() => _handler.Execute(request), deadline);
+        var completion = _dispatcher.SubmitExternal(
+            () => _handler.Execute(request),
+            deadline,
+            operationId: request.OperationId);
         _ = completion.ContinueWith(
             task => CompleteDispatch(routingIdentity, request, task),
             CancellationToken.None,

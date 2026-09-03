@@ -21,6 +21,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="HopperHostManager.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="../HostReadiness.cs" Link="HostReadiness.cs" />
     <Compile Include="../RuntimeManifestPaths.cs" Link="RuntimeManifestPaths.cs" />
   </ItemGroup>

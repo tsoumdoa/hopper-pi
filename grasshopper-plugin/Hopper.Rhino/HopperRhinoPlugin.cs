@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Hopper.Core;
@@ -12,6 +13,7 @@ namespace rhino_zmq_poc
     public sealed class HopperRhinoPlugin : PlugIn
     {
         private static IHopperHostFacade _hostFacade;
+        private RhinoHostComposition _composition;
 
         public HopperRhinoPlugin()
         {
@@ -31,16 +33,52 @@ namespace rhino_zmq_poc
                 null);
         }
 
+        internal static bool TryClearHostFacade(IHopperHostFacade facade) =>
+            ReferenceEquals(
+                Interlocked.CompareExchange(ref _hostFacade, null, facade),
+                facade);
+
         protected override LoadReturnCode OnLoad(ref string errorMessage)
         {
-            RhinoApp.Closing += OnRhinoClosing;
-            return LoadReturnCode.Success;
+            try
+            {
+                var pluginDirectory = Path.GetDirectoryName(GetType().Assembly.Location)
+                    ?? AppContext.BaseDirectory;
+                _composition = RhinoHostComposition.Create(pluginDirectory);
+                if (!TryConfigureHostFacade(_composition.Facade))
+                    throw new InvalidOperationException("A different Hopper host facade is already configured.");
+                RhinoApp.Closing += OnRhinoClosing;
+                return LoadReturnCode.Success;
+            }
+            catch (Exception exception)
+            {
+                _composition?.Dispose();
+                _composition = null;
+                errorMessage = $"Could not compose HopperCode: {exception.Message}";
+                return LoadReturnCode.ErrorShowDialog;
+            }
+        }
+
+        protected override void OnShutdown()
+        {
+            RhinoApp.Closing -= OnRhinoClosing;
+            var composition = _composition;
+            _composition = null;
+            if (composition == null)
+                return;
+            TryClearHostFacade(composition.Facade);
+            composition.Dispose();
         }
 
         private void OnRhinoClosing(object sender, EventArgs e)
         {
             RhinoApp.Closing -= OnRhinoClosing;
-            HostFacade?.CloseForRhinoExit();
+            var composition = _composition;
+            _composition = null;
+            if (composition == null)
+                return;
+            TryClearHostFacade(composition.Facade);
+            composition.CloseForRhinoExit();
         }
     }
 }

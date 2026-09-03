@@ -5,7 +5,11 @@ namespace rhino_zmq_poc
 {
     public static class HostReadiness
     {
-        public static bool TryParse(string line, int expectedPid, out Uri url)
+        public static bool TryParse(
+            string line,
+            int expectedPid,
+            string expectedLifecycleInstanceId,
+            out Uri url)
         {
             url = null;
             if (string.IsNullOrWhiteSpace(line))
@@ -31,6 +35,17 @@ namespace rhino_zmq_poc
                 if (!root.TryGetProperty("pid", out var pid) ||
                     pid.ValueKind != JsonValueKind.Number ||
                     pid.GetInt32() != expectedPid)
+                    return false;
+                if (!root.TryGetProperty("lifecycleInstanceId", out var lifecycleInstanceId)
+                    || lifecycleInstanceId.ValueKind != JsonValueKind.String
+                    || !string.Equals(
+                        lifecycleInstanceId.GetString(),
+                        expectedLifecycleInstanceId,
+                        StringComparison.Ordinal))
+                    return false;
+                if (!root.TryGetProperty("protocolHandshakeLive", out var handshake)
+                    || handshake.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+                    || !handshake.GetBoolean())
                     return false;
 
                 url = parsed;

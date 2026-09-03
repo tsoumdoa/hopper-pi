@@ -177,6 +177,46 @@ public class OrderedDispatcherTests
     }
 
     [Fact]
+    public async Task KeyedCancellationRemovesOnlyTheMatchingQueuedOperation()
+    {
+        var scheduler = new ManualUiCallbackScheduler();
+        var clock = new ManualClock(InitialTime);
+        var dispatcher = new OrderedDispatcher(scheduler, clock);
+        var deadline = clock.UtcNow.AddMinutes(1);
+        var first = dispatcher.SubmitExternal(() => 1, deadline, operationId: "op-first");
+        var second = dispatcher.SubmitExternal(() => 2, deadline, operationId: "op-second");
+
+        var cancellation = dispatcher.CancelQueuedExternal("op-second");
+
+        Assert.Equal(DispatcherCancellationState.CancelledBeforeStart, cancellation);
+        Assert.Equal(DispatcherResultKind.CancelledBeforeStart, (await second).Kind);
+        Assert.False(first.IsCompleted);
+        scheduler.RunNext();
+        Assert.Equal(1, (await first).Value);
+    }
+
+    [Fact]
+    public void KeyedCancellationDistinguishesRunningAndMissingOperations()
+    {
+        var scheduler = new ManualUiCallbackScheduler();
+        var clock = new ManualClock(InitialTime);
+        var dispatcher = new OrderedDispatcher(scheduler, clock);
+        var deadline = clock.UtcNow.AddMinutes(1);
+        var observed = DispatcherCancellationState.NotFound;
+        dispatcher.SubmitExternal(
+            () => observed = dispatcher.CancelQueuedExternal("op-running"),
+            deadline,
+            operationId: "op-running");
+
+        scheduler.RunNext();
+
+        Assert.Equal(DispatcherCancellationState.RejectedAlreadyStarted, observed);
+        Assert.Equal(
+            DispatcherCancellationState.NotFound,
+            dispatcher.CancelQueuedExternal("op-missing"));
+    }
+
+    [Fact]
     public void LifecycleControlRunsAfterCurrentItemAndBeforeQueuedExternalWork()
     {
         var scheduler = new ManualUiCallbackScheduler();

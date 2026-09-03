@@ -2,6 +2,13 @@ using Hopper.Core.Time;
 
 namespace Hopper.Core.Dispatching;
 
+public enum DispatcherCancellationState
+{
+    CancelledBeforeStart,
+    RejectedAlreadyStarted,
+    NotFound,
+}
+
 /// <summary>
 /// Owns admission and ordering for atomic work that must execute on a host UI thread.
 /// External work is bounded and FIFO. Lifecycle work has a separate reserved queue and
@@ -23,6 +30,7 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
     private bool _shutdown;
     private bool _pumpPosted;
     private bool _running;
+    private WorkItem? _runningItem;
 
     public OrderedDispatcher(
         IUiCallbackScheduler scheduler,
@@ -62,9 +70,10 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
     public Task<DispatcherResult<T>> SubmitExternal<T>(
         Func<T> operation,
         DateTimeOffset startDeadlineAt,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? operationId = null)
     {
-        return Submit(operation, startDeadlineAt, cancellationToken, lifecycleControl: false);
+        return Submit(operation, startDeadlineAt, cancellationToken, lifecycleControl: false, operationId);
     }
 
     public Task<DispatcherResult<T>> SubmitLifecycleControl<T>(
@@ -72,7 +81,7 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
         DateTimeOffset? startDeadlineAt = null,
         CancellationToken cancellationToken = default)
     {
-        return Submit(operation, startDeadlineAt, cancellationToken, lifecycleControl: true);
+        return Submit(operation, startDeadlineAt, cancellationToken, lifecycleControl: true, operationId: null);
     }
 
     public Task<DispatcherResult<bool>> SubmitLifecycleControl(
@@ -122,6 +131,34 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
         return cancelled.Count;
     }
 
+    public DispatcherCancellationState CancelQueuedExternal(string operationId)
+    {
+        if (string.IsNullOrWhiteSpace(operationId))
+            throw new ArgumentException("An operation ID is required.", nameof(operationId));
+
+        WorkItem? cancelled = null;
+        lock (_gate)
+        {
+            if (string.Equals(_runningItem?.OperationId, operationId, StringComparison.Ordinal))
+                return DispatcherCancellationState.RejectedAlreadyStarted;
+
+            for (var node = _externalQueue.First; node != null; node = node.Next)
+            {
+                if (!string.Equals(node.Value.OperationId, operationId, StringComparison.Ordinal))
+                    continue;
+                cancelled = node.Value;
+                _externalQueue.Remove(node);
+                cancelled.Node = null;
+                break;
+            }
+        }
+
+        if (cancelled == null)
+            return DispatcherCancellationState.NotFound;
+        cancelled.CompleteBeforeStart(DispatcherResultKind.CancelledBeforeStart);
+        return DispatcherCancellationState.CancelledBeforeStart;
+    }
+
     public void Shutdown()
     {
         List<WorkItem> rejected;
@@ -144,7 +181,8 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
         Func<T> operation,
         DateTimeOffset? startDeadlineAt,
         CancellationToken cancellationToken,
-        bool lifecycleControl)
+        bool lifecycleControl,
+        string? operationId)
     {
         ArgumentNullException.ThrowIfNull(operation);
 
@@ -176,7 +214,7 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
                 }
                 else
                 {
-                    item = new WorkItem<T>(operation, startDeadlineAt, cancellationToken);
+                    item = new WorkItem<T>(operation, startDeadlineAt, cancellationToken, operationId);
                     item.Node = queue.AddLast(item);
                     if (!_running && !_pumpPosted)
                     {
@@ -234,7 +272,10 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
                 else if (IsExpired(item.StartDeadlineAt))
                     rejection = DispatcherResultKind.DeadlineExceededBeforeStart;
                 else
+                {
                     item.Started = _running = true;
+                    _runningItem = item;
+                }
             }
         }
 
@@ -254,7 +295,10 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
 
         item.Execute();
         lock (_gate)
+        {
             _running = false;
+            _runningItem = null;
+        }
         PostNextIfNeeded();
     }
 
@@ -329,14 +373,19 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
         private bool _registrationAssigned;
         private bool _registrationDisposed;
 
-        protected WorkItem(DateTimeOffset? startDeadlineAt, CancellationToken cancellationToken)
+        protected WorkItem(
+            DateTimeOffset? startDeadlineAt,
+            CancellationToken cancellationToken,
+            string? operationId)
         {
             StartDeadlineAt = startDeadlineAt;
             CancellationToken = cancellationToken;
+            OperationId = operationId;
         }
 
         public DateTimeOffset? StartDeadlineAt { get; }
         public CancellationToken CancellationToken { get; }
+        public string? OperationId { get; }
         public LinkedListNode<WorkItem>? Node { get; set; }
         public bool Started { get; set; }
 
@@ -397,8 +446,9 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
         public WorkItem(
             Func<T> operation,
             DateTimeOffset? startDeadlineAt,
-            CancellationToken cancellationToken)
-            : base(startDeadlineAt, cancellationToken)
+            CancellationToken cancellationToken,
+            string? operationId)
+            : base(startDeadlineAt, cancellationToken, operationId)
         {
             _operation = operation;
         }

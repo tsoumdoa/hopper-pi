@@ -4,8 +4,10 @@ using Hopper.Core.Grasshopper;
 using Hopper.Core.Lifecycle;
 using Hopper.Core.Operations;
 using Hopper.Core.Protocol;
+using Hopper.Core.Runtime;
 using Hopper.Core.Time;
 using Hopper.Rhino.Host;
+using System.Text.Json;
 using Xunit;
 
 namespace rhino_zmq_poc.Tests;
@@ -56,6 +58,7 @@ public sealed class HopperHostFacadeTests
         Assert.Equal(Hopper.Core.Lifecycle.LifecycleState.Stopping, stop.Lifecycle.State);
         Assert.Single(fixture.LifecycleScheduler.Pending);
         await fixture.LifecycleScheduler.RunNext();
+        await fixture.FacadeScheduler.RunNext();
         Assert.Equal(Hopper.Core.Lifecycle.LifecycleState.Stopped, fixture.Controller.Snapshot.State);
 
         fixture.Facade.RequestStart();
@@ -94,6 +97,47 @@ public sealed class HopperHostFacadeTests
         Assert.DoesNotContain("Hopper.Backend", references);
     }
 
+    [Fact]
+    public void InternalGrasshopperStartIsCoalescedAndPublishesLoadingStatus()
+    {
+        var fixture = new FacadeFixture();
+        var request = Request(RpcOperation.startGrasshopper);
+
+        var first = fixture.Facade.Execute(request);
+        var second = fixture.Facade.Execute(request);
+
+        Assert.Equal(RpcResultClass.completed, first.Class);
+        Assert.Equal(StartGrasshopperState.start_requested,
+            first.Data?.Deserialize<StartGrasshopperDataV2>(RpcV2Contract.JsonOptions)?.State);
+        Assert.Equal(RpcResultClass.completed, second.Class);
+        Assert.Equal(1, fixture.GrasshopperStart.CallCount);
+        Assert.Equal(GrasshopperCapabilityState.Loading, fixture.Grasshopper.Status.State);
+        Assert.Equal(GrasshopperState.loading, fixture.Facade.GetStatus().Runtime.Grasshopper.State);
+    }
+
+    [Fact]
+    public void InternalCancellationReturnsTheExactProtocolState()
+    {
+        var fixture = new FacadeFixture();
+        fixture.Cancellation.Next = CancelOperationState.rejected_already_started;
+
+        var response = fixture.Facade.Execute(Request(
+            RpcOperation.cancelOperation,
+            new OperationReferenceArgsV2 { OperationId = "op-running" }));
+
+        Assert.Equal(RpcResultClass.failed, response.Class);
+        Assert.Equal(RpcReasonCode.CANCELLATION_REJECTED_ALREADY_STARTED, response.ReasonCode);
+        Assert.Equal("op-running", fixture.Cancellation.LastOperationId);
+        Assert.Equal(CancelOperationState.rejected_already_started,
+            response.Data?.Deserialize<CancelOperationDataV2>(RpcV2Contract.JsonOptions)?.State);
+    }
+
+    private static RpcRequestV2 Request(RpcOperation operation, object args = null) => new()
+    {
+        Operation = operation,
+        Args = JsonSerializer.SerializeToElement(args ?? new { }, RpcV2Contract.JsonOptions),
+    };
+
     private sealed class FacadeFixture
     {
         public FacadeFixture()
@@ -113,7 +157,13 @@ public sealed class HopperHostFacadeTests
                 Controller,
                 FacadeScheduler,
                 Rhino,
-                Grasshopper);
+                Grasshopper,
+                new RuntimeStatusStore(
+                    SystemHopperClock.Instance,
+                    new DispatcherStatus(true, false, false, 0, 64, 0, 1),
+                    Grasshopper.Status),
+                GrasshopperStart,
+                Cancellation);
         }
 
         public QueuedScheduler FacadeScheduler { get; } = new();
@@ -121,8 +171,33 @@ public sealed class HopperHostFacadeTests
         public FakeTransport Transport { get; } = new();
         public RhinoOperationRegistry Rhino { get; } = new();
         public GrasshopperCapabilityRegistry Grasshopper { get; }
+        public GrasshopperStarter GrasshopperStart { get; } = new();
+        public OperationCancellation Cancellation { get; } = new();
         public LifecycleController Controller { get; }
         public HopperHostFacade Facade { get; }
+    }
+
+    private sealed class GrasshopperStarter : IGrasshopperStartController
+    {
+        public int CallCount { get; private set; }
+
+        public bool StartGrasshopper()
+        {
+            CallCount++;
+            return true;
+        }
+    }
+
+    private sealed class OperationCancellation : IHopperOperationCancellation
+    {
+        public CancelOperationState Next { get; set; } = CancelOperationState.not_found;
+        public string LastOperationId { get; private set; }
+
+        public CancelOperationState Cancel(string operationId)
+        {
+            LastOperationId = operationId;
+            return Next;
+        }
     }
 
     private sealed class QueuedScheduler : ILifecycleBackgroundScheduler
