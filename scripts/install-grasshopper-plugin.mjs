@@ -361,7 +361,7 @@ function main() {
 	try {
 		const { copied } = copyArtifacts(configuration, installDir);
 		log(`Installed Hopper to ${installDir} (${copied.length} managed files)`);
-		log("Restart Rhino to load the GHZMQ compatibility component. Install the generated Yak package to use _HopperCode.");
+		log("Install the generated Yak package, restart Rhino, then run HopperCode. GHZMQ is compatibility-only.");
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		fail(`Failed to copy plugin: ${msg}`);
