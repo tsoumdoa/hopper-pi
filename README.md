@@ -160,7 +160,7 @@ The backend tries the legacy `5555`-`5557` ports first. If any are already in us
 - macOS: `~/Library/Application Support/hopper-pi/connection.json`
 - Linux: `~/.local/share/hopper-pi/connection.json` (or `$XDG_DATA_HOME/hopper-pi/connection.json`)
 
-Each backend also writes an instance-specific profile under `hopper-pi/instances/`. The Rhino-owned host receives that exact path, so two Rhino processes do not fight over the compatibility pointer. The token is generated once and reused across backend/frontend restarts. Override discovery with `HOPPER_CONNECTION_PROFILE`, or override endpoints manually with `GH_ZMQ_PUB`, `GH_ZMQ_PUSH`, and `GH_ZMQ_REQ`. If you manually point at a token-protected backend, set `GH_ZMQ_TOKEN` as well.
+Each Rhino-owned host also writes an authoritative instance profile under `hopper-pi/runtime/profiles/<lifecycle-instance-id>.json` and passes that exact path to its Node child, so concurrent Rhino processes do not depend on the last-writer-wins compatibility pointer. On later launches, Hopper deletes profiles only after verifying that the recorded PID and process start time no longer identify a live owner; malformed or uninspectable profiles are retained. Ephemeral logs use the sibling `<lifecycle-instance-id>.logs/` directory and are eligible for deletion seven days after death is verified.
 
 ## Agent tools (overview)
 

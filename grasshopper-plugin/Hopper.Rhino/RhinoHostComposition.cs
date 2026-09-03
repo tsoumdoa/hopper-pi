@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using Hopper.Core;
 using Hopper.Core.Dispatching;
 using Hopper.Core.Grasshopper;
@@ -156,8 +157,9 @@ namespace rhino_zmq_poc
             var applicationData = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "hopper-pi");
+            var profileFiles = new SystemInstanceProfileFileSystem();
             var profiles = new RhinoInstanceProfileStore(
-                new SystemInstanceProfileFileSystem(),
+                profileFiles,
                 new UniqueAtomicWritePathProvider(),
                 applicationData);
             var child = new ManagedNodeChildProcess(
@@ -171,6 +173,11 @@ namespace rhino_zmq_poc
                 SystemNodeRuntimeOsPathProvider.ForCurrentOperatingSystem(environment),
                 new SystemNodeRuntimeProcessRunner());
             var lifecycleBackground = new ThreadPoolLifecycleBackgroundScheduler();
+            _ = lifecycleBackground.Schedule(() =>
+            {
+                profiles.CleanupStaleProfiles();
+                return Task.CompletedTask;
+            });
             var lifecycle = new LifecycleController(
                 node,
                 transport,

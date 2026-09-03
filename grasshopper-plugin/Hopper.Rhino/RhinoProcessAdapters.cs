@@ -18,6 +18,7 @@ namespace rhino_zmq_poc
     {
         private readonly object _gate = new object();
         private readonly InstanceProfileStore _store;
+        private readonly InstanceProfileDirectoryScanner _retention;
         private readonly IInstanceProfileFileSystem _files;
         private readonly string _profilesDirectory;
         private readonly string _compatibilityPointer;
@@ -32,6 +33,11 @@ namespace rhino_zmq_poc
         {
             _files = files ?? throw new ArgumentNullException(nameof(files));
             _store = new InstanceProfileStore(files, temporaryPaths);
+            _retention = new InstanceProfileDirectoryScanner(
+                files,
+                new SystemProcessIdentityInspector(),
+                new SystemInstanceProfileClock(),
+                temporaryPaths);
             if (string.IsNullOrWhiteSpace(applicationDataDirectory))
                 throw new ArgumentException("Application data directory is required.", nameof(applicationDataDirectory));
             _profilesDirectory = Path.Combine(applicationDataDirectory, "runtime", "profiles");
@@ -40,6 +46,9 @@ namespace rhino_zmq_poc
             _ownerProcessId = process.Id;
             _ownerProcessStartedAt = process.StartTime.ToUniversalTime();
         }
+
+        public InstanceProfileScanReport CleanupStaleProfiles() =>
+            _retention.Scan(_profilesDirectory);
 
         public Task<ProfileWriteResult> WriteAsync(
             string lifecycleInstanceId,

@@ -101,6 +101,7 @@ public interface IInstanceProfileFileSystem
 {
     bool FileExists(string path);
     bool DirectoryExists(string path);
+    IEnumerable<string> EnumerateFiles(string path, string searchPattern);
     string ReadAllText(string path);
     void CreateDirectory(string path);
     void WriteAllText(string path, string contents);
@@ -113,6 +114,8 @@ public sealed class SystemInstanceProfileFileSystem : IInstanceProfileFileSystem
 {
     public bool FileExists(string path) => File.Exists(path);
     public bool DirectoryExists(string path) => Directory.Exists(path);
+    public IEnumerable<string> EnumerateFiles(string path, string searchPattern) =>
+        Directory.EnumerateFiles(path, searchPattern, SearchOption.TopDirectoryOnly);
     public string ReadAllText(string path) => File.ReadAllText(path);
     public void CreateDirectory(string path) => Directory.CreateDirectory(path);
     public void WriteAllText(string path, string contents) => File.WriteAllText(path, contents);
@@ -225,6 +228,33 @@ public sealed class SystemInstanceProfileClock : IInstanceProfileClock
     public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
 }
 
+public sealed class SystemProcessIdentityInspector : IProcessIdentityInspector
+{
+    public ProcessIdentityObservation Inspect(int processId)
+    {
+        if (processId < 1)
+            throw new ArgumentOutOfRangeException(nameof(processId));
+
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            if (process.HasExited)
+                return new ProcessIdentityObservation(ProcessInspectionState.NotRunning);
+            return new ProcessIdentityObservation(
+                ProcessInspectionState.Running,
+                process.StartTime.ToUniversalTime());
+        }
+        catch (ArgumentException)
+        {
+            return new ProcessIdentityObservation(ProcessInspectionState.NotRunning);
+        }
+        catch
+        {
+            return new ProcessIdentityObservation(ProcessInspectionState.Uninspectable);
+        }
+    }
+}
+
 public enum ProcessInspectionState
 {
     Running,
@@ -262,6 +292,120 @@ public sealed record InstanceProfileCleanupResult(
     bool LogsDeleted,
     bool VerifiedDeadMarkerWritten,
     string? Error);
+
+public sealed record InstanceProfileScanEntry(
+    string LifecycleInstanceId,
+    InstanceProfileCleanupResult Cleanup);
+
+public sealed record InstanceProfileScanReport(
+    IReadOnlyList<InstanceProfileScanEntry> Entries,
+    string? Error);
+
+/// <summary>
+/// Scans only the production profile directory. File names are reduced to validated
+/// lifecycle IDs and recomposed below that directory before the retention policy runs.
+/// </summary>
+public sealed class InstanceProfileDirectoryScanner
+{
+    public const string ProfileSuffix = ".json";
+    public const string VerifiedDeadMarkerSuffix = ".verified-dead.json";
+    public const string EphemeralLogsSuffix = ".logs";
+
+    private readonly IInstanceProfileFileSystem _fileSystem;
+    private readonly InstanceProfileRetentionPolicy _policy;
+
+    public InstanceProfileDirectoryScanner(
+        IInstanceProfileFileSystem fileSystem,
+        IProcessIdentityInspector processes,
+        IInstanceProfileClock clock,
+        IAtomicWritePathProvider temporaryPaths)
+    {
+        _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+        _policy = new InstanceProfileRetentionPolicy(fileSystem, processes, clock, temporaryPaths);
+    }
+
+    public InstanceProfileScanReport Scan(string profilesDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(profilesDirectory))
+            throw new ArgumentException("A profiles directory is required.", nameof(profilesDirectory));
+        if (!_fileSystem.DirectoryExists(profilesDirectory))
+            return new InstanceProfileScanReport(Array.Empty<InstanceProfileScanEntry>(), null);
+
+        string[] candidates;
+        try
+        {
+            candidates = _fileSystem.EnumerateFiles(profilesDirectory, $"*{ProfileSuffix}")
+                .ToArray();
+        }
+        catch (Exception exception)
+        {
+            return new InstanceProfileScanReport(
+                Array.Empty<InstanceProfileScanEntry>(),
+                exception.Message);
+        }
+
+        var lifecycleIds = candidates
+            .Select(TryGetLifecycleId)
+            .Where(identifier => identifier != null)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(identifier => identifier, StringComparer.Ordinal)
+            .ToArray();
+        var results = new List<InstanceProfileScanEntry>(lifecycleIds.Length);
+        foreach (var lifecycleId in lifecycleIds)
+        {
+            try
+            {
+                results.Add(new InstanceProfileScanEntry(
+                    lifecycleId!,
+                    _policy.Cleanup(Paths(profilesDirectory, lifecycleId!))));
+            }
+            catch (Exception exception)
+            {
+                results.Add(new InstanceProfileScanEntry(
+                    lifecycleId!,
+                    new InstanceProfileCleanupResult(
+                        InstanceProfileOwnershipState.Uninspectable,
+                        false,
+                        false,
+                        false,
+                        exception.Message)));
+            }
+        }
+
+        return new InstanceProfileScanReport(results, null);
+    }
+
+    public static InstanceProfilePaths Paths(string profilesDirectory, string lifecycleInstanceId)
+    {
+        RequireLifecycleId(lifecycleInstanceId);
+        return new InstanceProfilePaths(
+            Path.Combine(profilesDirectory, lifecycleInstanceId + ProfileSuffix),
+            Path.Combine(profilesDirectory, lifecycleInstanceId + EphemeralLogsSuffix),
+            Path.Combine(profilesDirectory, lifecycleInstanceId + VerifiedDeadMarkerSuffix));
+    }
+
+    private static string? TryGetLifecycleId(string path)
+    {
+        var fileName = Path.GetFileName(path);
+        var lifecycleId = fileName.EndsWith(VerifiedDeadMarkerSuffix, StringComparison.Ordinal)
+            ? fileName[..^VerifiedDeadMarkerSuffix.Length]
+            : fileName.EndsWith(ProfileSuffix, StringComparison.Ordinal)
+                ? fileName[..^ProfileSuffix.Length]
+                : null;
+        return IsLifecycleId(lifecycleId) ? lifecycleId : null;
+    }
+
+    private static void RequireLifecycleId(string lifecycleInstanceId)
+    {
+        if (!IsLifecycleId(lifecycleInstanceId))
+            throw new ArgumentException("Lifecycle instance ID is invalid.", nameof(lifecycleInstanceId));
+    }
+
+    private static bool IsLifecycleId(string? value) =>
+        !string.IsNullOrWhiteSpace(value)
+        && value.Length <= 128
+        && value.All(character => char.IsLetterOrDigit(character) || character is '-' or '_');
+}
 
 public sealed class InstanceProfileRetentionPolicy
 {
