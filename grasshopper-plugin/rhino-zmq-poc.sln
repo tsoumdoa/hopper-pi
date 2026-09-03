@@ -2,7 +2,7 @@
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hopper.Rhino", "Hopper.Rhino\Hopper.Rhino.csproj", "{9B3C31F7-221B-48E3-8CD0-F2386D851DA0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hopper.Rhino", "..\dotnet\Hopper.Rhino\Hopper.Rhino.csproj", "{9B3C31F7-221B-48E3-8CD0-F2386D851DA0}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hopper.Core", "..\dotnet\Hopper.Core\Hopper.Core.csproj", "{377C0649-04FA-415C-95BD-40D40BBFEAD6}"
 EndProject

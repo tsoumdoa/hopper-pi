@@ -28,10 +28,10 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "..");
-const PLUGIN_PROJECT_DIR = join(PACKAGE_ROOT, "grasshopper-plugin");
 const GHA_PROJECT_DIR = join(PACKAGE_ROOT, "dotnet", "Hopper.Grasshopper");
 const GHA_PROJECT_FILE = join(GHA_PROJECT_DIR, "Hopper.Grasshopper.csproj");
-const RHP_PROJECT_FILE = join(PLUGIN_PROJECT_DIR, "Hopper.Rhino", "Hopper.Rhino.csproj");
+const RHP_PROJECT_DIR = join(PACKAGE_ROOT, "dotnet", "Hopper.Rhino");
+const RHP_PROJECT_FILE = join(RHP_PROJECT_DIR, "Hopper.Rhino.csproj");
 const HOST_ENTRY = join(PACKAGE_ROOT, "dist", "host", "index.js");
 const RUNTIME_MANIFEST = "hopper-runtime.json";
 
@@ -76,8 +76,7 @@ function ghaOutputDir(configuration = "Release") {
 
 function rhpOutputDir(configuration = "Release") {
 	return join(
-		PLUGIN_PROJECT_DIR,
-		"Hopper.Rhino",
+		RHP_PROJECT_DIR,
 		"bin",
 		configuration,
 		targetFramework()
@@ -176,13 +175,13 @@ function dotnetBuild(configuration) {
 		const first = spawnSync(
 			"dotnet",
 			[...buildArgs, "--no-restore"],
-			{ cwd: PLUGIN_PROJECT_DIR, encoding: "utf8", stdio: "inherit" }
+			{ cwd: PACKAGE_ROOT, encoding: "utf8", stdio: "inherit" }
 		);
 		if (first.status === 0) continue;
 		const restored = spawnSync(
 			"dotnet",
 			buildArgs,
-			{ cwd: PLUGIN_PROJECT_DIR, encoding: "utf8", stdio: "inherit" }
+			{ cwd: PACKAGE_ROOT, encoding: "utf8", stdio: "inherit" }
 		);
 		if (restored.status !== 0) fail(`dotnet build failed: ${projectFile}`);
 	}

@@ -8,7 +8,7 @@ public sealed class ProjectBoundaryTests
     [Fact]
     public void RhinoPluginProjectHasNoGrasshopperReference()
     {
-        var project = LoadProject("grasshopper-plugin", "Hopper.Rhino", "Hopper.Rhino.csproj");
+        var project = LoadProject("dotnet", "Hopper.Rhino", "Hopper.Rhino.csproj");
         var references = Includes(project, "ProjectReference")
             .Concat(Includes(project, "PackageReference"))
             .ToArray();

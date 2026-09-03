@@ -18,7 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="../dotnet/Hopper.Grasshopper/Hopper.Grasshopper.csproj"
                       AdditionalProperties="TargetExt=.dll" />
-    <ProjectReference Include="../grasshopper-plugin/Hopper.Rhino/Hopper.Rhino.csproj"
+    <ProjectReference Include="../dotnet/Hopper.Rhino/Hopper.Rhino.csproj"
                       AdditionalProperties="TargetExt=.dll" />
   </ItemGroup>
 

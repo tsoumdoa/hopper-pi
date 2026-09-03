@@ -217,7 +217,7 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 | ---- | ---- |
 | `src/host/` | Embedded Pi runtime, loopback server, protocol, and browser UI |
 | `src/` | Pi extension, ZMQ client, tools, and XML parsing |
-| `grasshopper-plugin/Hopper.Rhino/` | Rhino lifecycle plug-in and `_HopperCode` command |
+| `dotnet/Hopper.Rhino/` | Rhino lifecycle plug-in and `_HopperCode` command |
 | `dotnet/Hopper.Grasshopper/` | Lazy Grasshopper operation adapter and passive GHZMQ compatibility component |
 | `dotnet/Hopper.Core/` | Rhino/Grasshopper-free protocol, lifecycle, dispatch, and transport policies |
 | `scripts/package-rhino.mjs` | Stage a platform package with official Node and production dependencies |
