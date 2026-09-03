@@ -95,6 +95,8 @@ namespace rhino_zmq_poc
     {
         private readonly RhinoOperationRegistry _rhinoRegistry;
         private readonly RhinoOperationAdapter _rhinoAdapter;
+        private readonly HostDocumentStatusCoordinator _documentStatus;
+        private readonly RhinoDocumentStatusMonitor _rhinoDocuments;
         private readonly RpcLifecycleTransport _transport;
         private readonly LifecycleController _lifecycle;
         private readonly ManagedNodeChildProcess _child;
@@ -107,6 +109,8 @@ namespace rhino_zmq_poc
             HopperHostFacade facade,
             RhinoOperationRegistry rhinoRegistry,
             RhinoOperationAdapter rhinoAdapter,
+            HostDocumentStatusCoordinator documentStatus,
+            RhinoDocumentStatusMonitor rhinoDocuments,
             RpcLifecycleTransport transport,
             LifecycleController lifecycle,
             ManagedNodeChildProcess child,
@@ -117,6 +121,8 @@ namespace rhino_zmq_poc
             Facade = facade;
             _rhinoRegistry = rhinoRegistry;
             _rhinoAdapter = rhinoAdapter;
+            _documentStatus = documentStatus;
+            _rhinoDocuments = rhinoDocuments;
             _transport = transport;
             _lifecycle = lifecycle;
             _child = child;
@@ -203,10 +209,35 @@ namespace rhino_zmq_poc
             if (!rhino.TryRegister(rhinoAdapter))
                 throw new InvalidOperationException("A different Rhino operation adapter is already registered.");
 
+            var documentStatus = new HostDocumentStatusCoordinator(status, grasshopper, transport);
+            if (!HostOperationRegistries.DocumentStatus.TryRegister(documentStatus))
+            {
+                rhino.TryUnregister(rhinoAdapter);
+                throw new InvalidOperationException("A different document status owner is already registered.");
+            }
+            var rhinoDocuments = new RhinoDocumentStatusMonitor(
+                HostOperationRegistries.DocumentStatus);
+            try
+            {
+                // Create runs on Rhino's UI thread. If Grasshopper was already loaded,
+                // its earlier report had no status owner and must be sampled once here.
+                documentStatus.ReportRegisteredGrasshopperDocument();
+                rhinoDocuments.Start();
+            }
+            catch
+            {
+                rhinoDocuments.Dispose();
+                HostOperationRegistries.DocumentStatus.TryUnregister(documentStatus);
+                rhino.TryUnregister(rhinoAdapter);
+                throw;
+            }
+
             var composition = new RhinoHostComposition(
                 facade,
                 rhino,
                 rhinoAdapter,
+                documentStatus,
+                rhinoDocuments,
                 transport,
                 lifecycle,
                 child,
@@ -228,6 +259,8 @@ namespace rhino_zmq_poc
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
                 return;
             _child.UnexpectedExit -= OnUnexpectedChildExit;
+            _rhinoDocuments.Dispose();
+            HostOperationRegistries.DocumentStatus.TryUnregister(_documentStatus);
             _rhinoRegistry.TryUnregister(_rhinoAdapter);
             _healthMonitor.Dispose();
             _healthProbe.Dispose();

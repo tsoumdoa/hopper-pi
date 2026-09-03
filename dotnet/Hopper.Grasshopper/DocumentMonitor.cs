@@ -12,7 +12,7 @@ namespace rhino_zmq_poc
         private GH_Document _subscribedDocument;
         private int _disposed;
 
-        public event Action<GH_Document> SolutionEnded;
+        public event Action<GH_Document> Changed;
 
         public void EnsureSubscription(GH_Document document)
         {
@@ -24,13 +24,20 @@ namespace rhino_zmq_poc
                 return;
 
             document.SolutionEnd += OnSolutionEnd;
+            document.FilePathChanged += OnFilePathChanged;
             _subscribedDocument = document;
         }
 
         private void OnSolutionEnd(object sender, EventArgs args)
         {
             if (_disposed == 0 && sender is GH_Document document)
-                SolutionEnded?.Invoke(document);
+                Changed?.Invoke(document);
+        }
+
+        private void OnFilePathChanged(object sender, GH_DocFilePathEventArgs args)
+        {
+            if (_disposed == 0 && sender is GH_Document document)
+                Changed?.Invoke(document);
         }
 
         private void Unsubscribe()
@@ -39,6 +46,7 @@ namespace rhino_zmq_poc
                 return;
 
             _subscribedDocument.SolutionEnd -= OnSolutionEnd;
+            _subscribedDocument.FilePathChanged -= OnFilePathChanged;
             _subscribedDocument = null;
         }
 

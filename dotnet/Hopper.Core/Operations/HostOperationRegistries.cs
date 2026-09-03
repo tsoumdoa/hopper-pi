@@ -1,4 +1,5 @@
 using Hopper.Core.Grasshopper;
+using Hopper.Core.Runtime;
 using Hopper.Core.Time;
 
 namespace Hopper.Core.Operations;
@@ -13,4 +14,6 @@ public static class HostOperationRegistries
 
     public static GrasshopperCapabilityRegistry Grasshopper { get; } =
         new(SystemHopperClock.Instance, installed: false);
+
+    public static HostDocumentStatusRegistry DocumentStatus { get; } = new();
 }

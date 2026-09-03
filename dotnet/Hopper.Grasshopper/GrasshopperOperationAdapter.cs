@@ -6,6 +6,7 @@ using Grasshopper.Kernel;
 using Hopper.Core.Grasshopper;
 using Hopper.Core.Operations;
 using Hopper.Core.Protocol;
+using Hopper.Core.Runtime;
 
 namespace rhino_zmq_poc
 {
@@ -72,10 +73,26 @@ namespace rhino_zmq_poc
 
         private readonly CommandExecutor _commands = new CommandExecutor(_ => { });
         private readonly UiRequestDispatcher _queries = CreateQueryDispatcher();
-        private readonly ActiveGrasshopperDocumentTracker _documents =
-            new ActiveGrasshopperDocumentTracker();
+        private readonly IHostDocumentStatusSink _documentStatus;
+        private ActiveGrasshopperDocumentTracker _documents;
 
-        internal void Start() => _documents.Start();
+        public GrasshopperOperationAdapter()
+            : this(HostOperationRegistries.DocumentStatus)
+        {
+        }
+
+        internal GrasshopperOperationAdapter(IHostDocumentStatusSink documentStatus)
+        {
+            _documentStatus = documentStatus ?? throw new ArgumentNullException(nameof(documentStatus));
+        }
+
+        internal void Start()
+        {
+            if (_documents != null)
+                return;
+            _documents = new ActiveGrasshopperDocumentTracker(_documentStatus);
+            _documents.Start();
+        }
 
         public OperationDocumentStatus DocumentStatus
         {
@@ -161,10 +178,14 @@ namespace rhino_zmq_poc
                 AgentTransaction.Cancel(document);
         }
 
-        private GH_Document ActiveDocument => _documents.ActiveDocument
+        private GH_Document ActiveDocument => _documents?.ActiveDocument
             ?? Instances.ActiveCanvas?.Document;
 
-        public void Dispose() => _documents.Dispose();
+        public void Dispose()
+        {
+            _documents?.Dispose();
+            _documents = null;
+        }
 
         private static UiRequestDispatcher CreateQueryDispatcher()
         {

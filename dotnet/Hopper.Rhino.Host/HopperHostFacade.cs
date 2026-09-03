@@ -154,19 +154,20 @@ namespace Hopper.Rhino.Host
 
         public HopperFacadeStatus GetStatus()
         {
-            var rhinoDocument = _rhino.TryGetAdapter(out var rhino)
-                ? rhino!.DocumentStatus
-                : OperationDocumentStatus.None;
-            var grasshopperDocument = _grasshopper.TryGetAdapter(out var grasshopper)
-                ? grasshopper!.DocumentStatus
-                : OperationDocumentStatus.None;
-            SyncStatus(rhinoDocument, grasshopperDocument);
+            SyncStatus();
+            var runtime = _status.Read();
+            var rhinoDocument = new OperationDocumentStatus(
+                runtime.Rhino.ActiveDocument,
+                runtime.Rhino.DocumentName);
+            var grasshopperDocument = new OperationDocumentStatus(
+                runtime.Grasshopper.ActiveDocument,
+                runtime.Grasshopper.DocumentName);
             return new HopperFacadeStatus(
                 _lifecycle.Snapshot,
                 _grasshopper.Status,
                 rhinoDocument,
                 grasshopperDocument,
-                _status.Read());
+                runtime);
         }
 
         public OperationResultV2 Execute(RpcRequestV2 request)
@@ -288,27 +289,15 @@ namespace Hopper.Rhino.Host
 
         private void SyncStatus()
         {
-            var rhinoDocument = _rhino.TryGetAdapter(out var rhino)
-                ? rhino!.DocumentStatus
-                : OperationDocumentStatus.None;
-            var grasshopperDocument = _grasshopper.TryGetAdapter(out var grasshopper)
-                ? grasshopper!.DocumentStatus
-                : OperationDocumentStatus.None;
-            SyncStatus(rhinoDocument, grasshopperDocument);
-        }
-
-        private void SyncStatus(
-            OperationDocumentStatus rhinoDocument,
-            OperationDocumentStatus grasshopperDocument)
-        {
             _status.UpdateLifecycle(_lifecycle.Snapshot);
-            _status.UpdateRhinoDocument(
-                rhinoDocument.HasActiveDocument,
-                rhinoDocument.DocumentName);
+            var current = _status.Read().Grasshopper;
+            var capability = _grasshopper.Status;
+            var activeDocument = capability.State == GrasshopperCapabilityState.Ready
+                && current.ActiveDocument;
             _status.UpdateGrasshopper(
-                _grasshopper.Status,
-                grasshopperDocument.HasActiveDocument,
-                grasshopperDocument.DocumentName);
+                capability,
+                activeDocument,
+                activeDocument ? current.DocumentName : null);
         }
 
         private bool CancelPendingStart()

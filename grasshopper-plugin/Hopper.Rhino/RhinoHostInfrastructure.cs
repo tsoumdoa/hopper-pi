@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Hopper.Core;
@@ -106,6 +107,7 @@ namespace rhino_zmq_poc
         ILifecycleTransport,
         IRpcHandshakeObserver,
         IHopperOperationCancellation,
+        IRuntimeStatusWakeupPublisher,
         IDisposable
     {
         private readonly object _gate = new object();
@@ -279,6 +281,26 @@ namespace rhino_zmq_poc
             return owner == null
                 ? CancelOperationState.not_found
                 : owner.CancelOperation(operationId);
+        }
+
+        public void PublishStatusChanged(long revision)
+        {
+            if (revision < 0)
+                throw new ArgumentOutOfRangeException(nameof(revision));
+
+            RpcTransportOwner owner;
+            lock (_gate)
+                owner = _owner;
+            if (owner == null)
+                return;
+
+            owner.Publish(
+                RuntimeStatusWakeup.Topic,
+                JsonSerializer.Serialize(new RuntimeStatusWakeupV2
+                {
+                    ProtocolVersion = RpcV2Contract.ProtocolVersion,
+                    Revision = revision,
+                }, RpcV2Contract.JsonOptions));
         }
 
         public void Dispose()

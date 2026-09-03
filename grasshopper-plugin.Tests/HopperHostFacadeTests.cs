@@ -72,11 +72,23 @@ public sealed class HopperHostFacadeTests
     }
 
     [Fact]
-    public void StatusReadsOnlyCoreRegistryContracts()
+    public void StatusReadsOnlyTheEventFedCoreSnapshot()
     {
         var fixture = new FacadeFixture();
-        fixture.Rhino.TryRegister(new RhinoAdapter("Rhino Model"));
-        fixture.Grasshopper.TryRegister(new GrasshopperAdapter("Grasshopper Model"));
+        fixture.Rhino.TryRegister(new RhinoAdapter());
+        fixture.Grasshopper.TryRegister(new GrasshopperAdapter());
+        var coordinator = new HostDocumentStatusCoordinator(
+            fixture.Status,
+            fixture.Grasshopper,
+            new Wakeups());
+        coordinator.Report(new HostDocumentStatusChange(
+            HostDocumentKind.Rhino,
+            true,
+            "Rhino Model"));
+        coordinator.Report(new HostDocumentStatusChange(
+            HostDocumentKind.Grasshopper,
+            true,
+            "Grasshopper Model"));
 
         var status = fixture.Facade.GetStatus();
 
@@ -165,15 +177,16 @@ public sealed class HopperHostFacadeTests
                 new InstanceIds(),
                 LifecycleScheduler,
                 SystemHopperClock.Instance);
+            Status = new RuntimeStatusStore(
+                SystemHopperClock.Instance,
+                new DispatcherStatus(true, false, false, 0, 64, 0, 1),
+                Grasshopper.Status);
             Facade = new HopperHostFacade(
                 Controller,
                 FacadeScheduler,
                 Rhino,
                 Grasshopper,
-                new RuntimeStatusStore(
-                    SystemHopperClock.Instance,
-                    new DispatcherStatus(true, false, false, 0, 64, 0, 1),
-                    Grasshopper.Status),
+                Status,
                 GrasshopperStart,
                 Cancellation,
                 RunningObserver);
@@ -184,11 +197,19 @@ public sealed class HopperHostFacadeTests
         public FakeTransport Transport { get; } = new();
         public RhinoOperationRegistry Rhino { get; } = new();
         public GrasshopperCapabilityRegistry Grasshopper { get; }
+        public RuntimeStatusStore Status { get; }
         public GrasshopperStarter GrasshopperStart { get; } = new();
         public OperationCancellation Cancellation { get; } = new();
         public RunningObserver RunningObserver { get; } = new();
         public LifecycleController Controller { get; }
         public HopperHostFacade Facade { get; }
+    }
+
+    private sealed class Wakeups : IRuntimeStatusWakeupPublisher
+    {
+        public void PublishStatusChanged(long revision)
+        {
+        }
     }
 
     private sealed class RunningObserver : IHopperRunningObserver
@@ -357,24 +378,16 @@ public sealed class HopperHostFacadeTests
 
     private sealed class RhinoAdapter : IRhinoOperationAdapter
     {
-        public RhinoAdapter(string documentName)
-        {
-            DocumentStatus = new OperationDocumentStatus(true, documentName);
-        }
-
-        public OperationDocumentStatus DocumentStatus { get; }
+        public OperationDocumentStatus DocumentStatus =>
+            throw new InvalidOperationException("Status must come from host events.");
         public bool CanExecute(RpcOperation operation) => false;
         public OperationResultV2 Execute(RpcRequestV2 request) => new();
     }
 
     private sealed class GrasshopperAdapter : IGrasshopperAdapter
     {
-        public GrasshopperAdapter(string documentName)
-        {
-            DocumentStatus = new OperationDocumentStatus(true, documentName);
-        }
-
-        public OperationDocumentStatus DocumentStatus { get; }
+        public OperationDocumentStatus DocumentStatus =>
+            throw new InvalidOperationException("Status must come from host events.");
         public bool CanExecute(RpcOperation operation) => false;
         public OperationResultV2 Execute(RpcRequestV2 request) => new();
         public void CleanupOpenTransactions()
