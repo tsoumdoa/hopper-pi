@@ -8,6 +8,11 @@ import type { HostRuntime } from "./pi-runtime.js";
 import type { HostSnapshot, ServerMessage } from "./protocol.js";
 import { startHopperServer, type HopperServer } from "./server.js";
 
+const protocolHandshake = {
+	lifecycleInstanceId: "life-server-test",
+	protocolHandshakeLive: true,
+} as const;
+
 const tempDirs: string[] = [];
 const servers: HopperServer[] = [];
 
@@ -74,16 +79,28 @@ describe("Hopper loopback server", () => {
 	it("fails before listening when the web UI is missing", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "hopper-host-missing-ui-"));
 		tempDirs.push(directory);
-		await expect(startHopperServer({ runtime: fakeRuntime(), staticDir: directory }))
+		await expect(startHopperServer({
+			runtime: fakeRuntime(),
+			staticDir: directory,
+			protocolHandshake,
+		}))
 			.rejects.toThrow("web UI is missing");
 	});
 
 	it("serves health and static assets on loopback", async () => {
-		const server = await startHopperServer({ runtime: fakeRuntime(), staticDir: await staticDirectory() });
+		const server = await startHopperServer({
+			runtime: fakeRuntime(),
+			staticDir: await staticDirectory(),
+			protocolHandshake,
+		});
 		servers.push(server);
 
 		await expect(fetch(`http://${server.host}:${server.port}/health`).then((response) => response.json()))
-			.resolves.toEqual({ ok: true });
+			.resolves.toEqual({
+				ok: true,
+				lifecycleInstanceId: "life-server-test",
+				protocolHandshakeLive: true,
+			});
 		await expect(fetch(`http://${server.host}:${server.port}/`).then((response) => response.text()))
 			.resolves.toContain("<title>Hopper</title>");
 		expect(server.url).toBe(`http://127.0.0.1:${server.port}/#${server.token}`);
@@ -91,7 +108,12 @@ describe("Hopper loopback server", () => {
 
 	it("authenticates a socket, sends a snapshot, and dispatches commands", async () => {
 		const runtime = fakeRuntime();
-		const server = await startHopperServer({ runtime, staticDir: await staticDirectory(), token: "known-token" });
+		const server = await startHopperServer({
+			runtime,
+			staticDir: await staticDirectory(),
+			token: "known-token",
+			protocolHandshake,
+		});
 		servers.push(server);
 		const socket = await openSocket(server);
 
@@ -108,7 +130,12 @@ describe("Hopper loopback server", () => {
 	});
 
 	it("rejects the wrong browser origin or token", async () => {
-		const server = await startHopperServer({ runtime: fakeRuntime(), staticDir: await staticDirectory(), token: "right" });
+		const server = await startHopperServer({
+			runtime: fakeRuntime(),
+			staticDir: await staticDirectory(),
+			token: "right",
+			protocolHandshake,
+		});
 		servers.push(server);
 
 		const socket = await openSocket(server);
@@ -125,6 +152,7 @@ describe("Hopper loopback server", () => {
 			runtime: fakeRuntime(),
 			staticDir: await staticDirectory(),
 			token: "shutdown-token",
+			protocolHandshake,
 			onShutdownRequest,
 		});
 		servers.push(server);
@@ -140,7 +168,11 @@ describe("Hopper loopback server", () => {
 	});
 
 	it("rejects a WebSocket from another browser origin", async () => {
-		const server = await startHopperServer({ runtime: fakeRuntime(), staticDir: await staticDirectory() });
+		const server = await startHopperServer({
+			runtime: fakeRuntime(),
+			staticDir: await staticDirectory(),
+			protocolHandshake,
+		});
 		servers.push(server);
 		const status = await new Promise<number>((resolve) => {
 			const socket = new WebSocket(`ws://${server.host}:${server.port}/ws`, {

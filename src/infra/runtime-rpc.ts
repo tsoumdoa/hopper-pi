@@ -41,6 +41,11 @@ export type RuntimeRpcOptions = {
 	nodeVersion?: string;
 };
 
+export type LiveProtocolHandshake = {
+	lifecycleInstanceId: string;
+	protocolHandshakeLive: true;
+};
+
 export class RpcOperationError extends Error {
 	constructor(
 		public readonly operation: OperationName,
@@ -83,8 +88,12 @@ export class RuntimeRpc {
 		});
 	}
 
-	async connect(): Promise<void> {
+	async connect(): Promise<LiveProtocolHandshake> {
 		await this.ensureHandshake();
+		return {
+			lifecycleInstanceId: this.lifecycleInstanceId,
+			protocolHandshakeLive: true,
+		};
 	}
 
 	async invoke<O extends OperationName>(

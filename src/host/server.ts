@@ -7,12 +7,14 @@ import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { LOOPBACK_HOST } from "./config.js";
 import type { HostRuntime } from "./pi-runtime.js";
 import { parseClientMessage, type ClientMessage, type ServerMessage } from "./protocol.js";
+import type { LiveProtocolHandshake } from "../infra/runtime-rpc.js";
 
 export type HopperServerOptions = {
 	runtime: HostRuntime;
 	staticDir: string;
 	port?: number;
 	token?: string;
+	protocolHandshake: LiveProtocolHandshake;
 	onShutdownRequest?: () => void;
 };
 
@@ -21,6 +23,8 @@ export type HopperServer = {
 	port: number;
 	token: string;
 	url: string;
+	lifecycleInstanceId: string;
+	protocolHandshakeLive: true;
 	close(): Promise<void>;
 };
 
@@ -146,7 +150,11 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 	const httpServer = createHttpServer((request, response) => {
 		const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
 		if (pathname === "/health") {
-			writeJson(response, 200, { ok: true });
+			writeJson(response, 200, {
+				ok: true,
+				lifecycleInstanceId: options.protocolHandshake.lifecycleInstanceId,
+				protocolHandshakeLive: options.protocolHandshake.protocolHandshakeLive,
+			});
 			return;
 		}
 		if (pathname === "/api/shutdown") {
@@ -249,6 +257,8 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 		port,
 		token,
 		url: `http://${LOOPBACK_HOST}:${port}/#${token}`,
+		lifecycleInstanceId: options.protocolHandshake.lifecycleInstanceId,
+		protocolHandshakeLive: options.protocolHandshake.protocolHandshakeLive,
 		close: async () => {
 			unsubscribe();
 			for (const socket of webSockets.clients) socket.terminate();

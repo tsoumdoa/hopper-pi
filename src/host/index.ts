@@ -5,7 +5,7 @@ import { resolveHostConfig } from "./config.js";
 import { HostShutdownCoordinator, watchParentProcess } from "./lifecycle.js";
 import { EmbeddedPiHost } from "./pi-runtime.js";
 import { startHopperServer, type HopperServer, validateStaticDirectory } from "./server.js";
-import { closeRuntimeRpc } from "../infra/runtime-rpc.js";
+import { closeRuntimeRpc, getRuntimeRpc } from "../infra/runtime-rpc.js";
 
 export async function main(args = process.argv.slice(2)): Promise<void> {
 	const modulePath = fileURLToPath(import.meta.url);
@@ -37,6 +37,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 	});
 
 	try {
+		const protocolHandshake = await getRuntimeRpc().connect();
 		runtime = await EmbeddedPiHost.create({
 			paths: config.paths,
 			onShutdownRequest: () => { void shutdown.request("normal"); },
@@ -45,6 +46,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 			runtime,
 			staticDir: config.paths.staticDir,
 			port: config.port,
+			protocolHandshake,
 			onShutdownRequest: () => { void shutdown.request("normal"); },
 		});
 	} catch (error) {
@@ -55,7 +57,13 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 	}
 	process.once("SIGINT", () => { void shutdown.request("normal"); });
 	process.once("SIGTERM", () => { void shutdown.request("normal"); });
-	process.stdout.write(`${JSON.stringify({ type: "ready", url: server.url, pid: process.pid })}\n`);
+	process.stdout.write(`${JSON.stringify({
+		type: "ready",
+		url: server.url,
+		pid: process.pid,
+		lifecycleInstanceId: server.lifecycleInstanceId,
+		protocolHandshakeLive: server.protocolHandshakeLive,
+	})}\n`);
 }
 
 const isEntrypoint = process.argv[1]
