@@ -10,6 +10,7 @@ using Hopper.Core;
 using Hopper.Core.Lifecycle;
 using Hopper.Core.Protocol;
 using Hopper.Core.Runtime;
+using Hopper.Rhino.Host;
 
 namespace rhino_zmq_poc
 {
@@ -143,7 +144,10 @@ namespace rhino_zmq_poc
         }
     }
 
-    internal sealed class ManagedNodeChildProcess : IManagedChildProcess, IDisposable
+    internal sealed class ManagedNodeChildProcess :
+        IManagedChildProcess,
+        INodeHealthEndpointSource,
+        IDisposable
     {
         private readonly object _gate = new object();
         private readonly HopperHostEntryResolver _hostEntry;
@@ -184,6 +188,19 @@ namespace rhino_zmq_poc
             {
                 lock (_gate)
                     return _process != null && !SafeHasExited(_process);
+            }
+        }
+
+        public Uri GetReadyUri(string lifecycleInstanceId)
+        {
+            lock (_gate)
+            {
+                return string.Equals(
+                        _lifecycleInstanceId,
+                        lifecycleInstanceId,
+                        StringComparison.Ordinal)
+                    ? _readyUri
+                    : null;
             }
         }
 

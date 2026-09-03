@@ -182,6 +182,7 @@ namespace Hopper.Rhino.Host
 
         public void CloseForRhinoExit()
         {
+            _runningObserver?.Reset();
             CancelPendingStart();
             _lifecycle.CloseForRhinoExit();
         }

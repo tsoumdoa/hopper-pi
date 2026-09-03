@@ -99,6 +99,8 @@ namespace rhino_zmq_poc
         private readonly LifecycleController _lifecycle;
         private readonly ManagedNodeChildProcess _child;
         private readonly BrowserAfterRunningCoordinator _browser;
+        private readonly HttpNodeHealthProbe _healthProbe;
+        private readonly NodeHealthMonitor _healthMonitor;
         private int _disposed;
 
         private RhinoHostComposition(
@@ -108,7 +110,9 @@ namespace rhino_zmq_poc
             RpcLifecycleTransport transport,
             LifecycleController lifecycle,
             ManagedNodeChildProcess child,
-            BrowserAfterRunningCoordinator browser)
+            BrowserAfterRunningCoordinator browser,
+            HttpNodeHealthProbe healthProbe,
+            NodeHealthMonitor healthMonitor)
         {
             Facade = facade;
             _rhinoRegistry = rhinoRegistry;
@@ -117,6 +121,8 @@ namespace rhino_zmq_poc
             _lifecycle = lifecycle;
             _child = child;
             _browser = browser;
+            _healthProbe = healthProbe;
+            _healthMonitor = healthMonitor;
         }
 
         public HopperHostFacade Facade { get; }
@@ -171,6 +177,14 @@ namespace rhino_zmq_poc
                 child,
                 new BrowserLauncher(),
                 status);
+            var healthProbe = new HttpNodeHealthProbe(child, TimeSpan.FromSeconds(2));
+            var healthMonitor = new NodeHealthMonitor(
+                lifecycle,
+                status,
+                healthProbe,
+                SystemHealthPollDelay.Instance,
+                lifecycleBackground);
+            var runningObservers = new CompositeHopperRunningObserver(browser, healthMonitor);
             var facade = new HopperHostFacade(
                 lifecycle,
                 lifecycleBackground,
@@ -179,7 +193,7 @@ namespace rhino_zmq_poc
                 status,
                 new RhinoGrasshopperStartController(),
                 transport,
-                browser,
+                runningObservers,
                 new RhinoCommandCompletionSink());
             deferredOperations.SetTarget(facade);
 
@@ -194,7 +208,9 @@ namespace rhino_zmq_poc
                 transport,
                 lifecycle,
                 child,
-                browser);
+                browser,
+                healthProbe,
+                healthMonitor);
             child.UnexpectedExit += composition.OnUnexpectedChildExit;
             return composition;
         }
@@ -211,6 +227,8 @@ namespace rhino_zmq_poc
                 return;
             _child.UnexpectedExit -= OnUnexpectedChildExit;
             _rhinoRegistry.TryUnregister(_rhinoAdapter);
+            _healthMonitor.Dispose();
+            _healthProbe.Dispose();
             _browser.Dispose();
             _transport.SignalStopNoWait();
             _child.KillVerifiedTreeNoWait();

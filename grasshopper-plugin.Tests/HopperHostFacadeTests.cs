@@ -98,6 +98,18 @@ public sealed class HopperHostFacadeTests
     }
 
     [Fact]
+    public void RhinoCloseResetsRunningObserverAndDoesNotScheduleAWait()
+    {
+        var fixture = new FacadeFixture();
+
+        fixture.Facade.CloseForRhinoExit();
+
+        Assert.Equal(1, fixture.RunningObserver.ResetCount);
+        Assert.Empty(fixture.FacadeScheduler.Pending);
+        Assert.Equal(LifecycleReasonCode.RhinoClosing, fixture.Controller.Snapshot.Reason);
+    }
+
+    [Fact]
     public void InternalGrasshopperStartIsCoalescedAndPublishesLoadingStatus()
     {
         var fixture = new FacadeFixture();
@@ -163,7 +175,8 @@ public sealed class HopperHostFacadeTests
                     new DispatcherStatus(true, false, false, 0, 64, 0, 1),
                     Grasshopper.Status),
                 GrasshopperStart,
-                Cancellation);
+                Cancellation,
+                RunningObserver);
         }
 
         public QueuedScheduler FacadeScheduler { get; } = new();
@@ -173,8 +186,20 @@ public sealed class HopperHostFacadeTests
         public GrasshopperCapabilityRegistry Grasshopper { get; }
         public GrasshopperStarter GrasshopperStart { get; } = new();
         public OperationCancellation Cancellation { get; } = new();
+        public RunningObserver RunningObserver { get; } = new();
         public LifecycleController Controller { get; }
         public HopperHostFacade Facade { get; }
+    }
+
+    private sealed class RunningObserver : IHopperRunningObserver
+    {
+        public int ResetCount { get; private set; }
+
+        public void Reset() => ResetCount++;
+
+        public void OnRunning()
+        {
+        }
     }
 
     private sealed class GrasshopperStarter : IGrasshopperStartController
