@@ -41,6 +41,10 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 	try {
 		const runtimeRpc = getRuntimeRpc();
 		const protocolHandshake = await runtimeRpc.connect();
+		if (!protocolHandshake.protocolHandshakeLive
+			|| protocolHandshake.lifecycleInstanceId !== runtimeRpc.lifecycleInstanceId) {
+			throw new Error("RPC handshake is not live for the current lifecycle instance");
+		}
 		runtime = await EmbeddedPiHost.create({
 			paths: config.paths,
 			onShutdownRequest: () => { void shutdown.request("normal"); },
@@ -57,7 +61,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 			staticDir: config.paths.staticDir,
 			port: config.port,
 			protocolHandshake,
-			getRuntimeStatus: () => runtimeRpc.getRuntimeStatus(8_000),
+			getRuntimeStatus: (completionTimeoutMs = 8_000) => runtimeRpc.getRuntimeStatus(completionTimeoutMs),
 			onShutdownRequest: () => { void shutdown.request("normal"); },
 		});
 	} catch (error) {

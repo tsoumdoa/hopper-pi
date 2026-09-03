@@ -112,11 +112,12 @@ describe("Hopper loopback server", () => {
 	});
 
 	it("serves health and static assets on loopback", async () => {
+		const readStatus = vi.fn(async () => runtimeStatus);
 		const server = await startHopperServer({
 			runtime: fakeRuntime(),
 			staticDir: await staticDirectory(),
 			protocolHandshake,
-			getRuntimeStatus,
+			getRuntimeStatus: readStatus,
 		});
 		servers.push(server);
 
@@ -126,9 +127,71 @@ describe("Hopper loopback server", () => {
 				lifecycleInstanceId: "life-server-test",
 				protocolHandshakeLive: true,
 			});
+		expect(readStatus).toHaveBeenCalledWith(1_500);
 		await expect(fetch(`http://${server.host}:${server.port}/`).then((response) => response.text()))
 			.resolves.toContain("<title>Hopper</title>");
 		expect(server.url).toBe(`http://127.0.0.1:${server.port}/#${server.token}`);
+	});
+
+	it.each([
+		{
+			name: "transport is not ready",
+			status: {
+				...runtimeStatus,
+				transport: { ready: false, lifecycleInstanceId: "life-server-test" },
+			},
+			expectedInstance: "life-server-test",
+		},
+		{
+			name: "runtime status belongs to a stale lifecycle",
+			status: {
+				...runtimeStatus,
+				transport: { ready: true, lifecycleInstanceId: "life-stale" },
+			},
+			expectedInstance: "life-stale",
+		},
+		{
+			name: "Rhino marks the handshake failed",
+			status: {
+				...runtimeStatus,
+				host: { ...runtimeStatus.host, handshake: "failed" as const },
+			},
+			expectedInstance: "life-server-test",
+		},
+	])("reports non-live health when $name", async ({ status, expectedInstance }) => {
+		const server = await startHopperServer({
+			runtime: fakeRuntime(),
+			staticDir: await staticDirectory(),
+			protocolHandshake,
+			getRuntimeStatus: async () => status,
+		});
+		servers.push(server);
+
+		const response = await fetch(`http://${server.host}:${server.port}/health`);
+		expect(response.status).toBe(503);
+		await expect(response.json()).resolves.toEqual({
+			ok: false,
+			lifecycleInstanceId: expectedInstance,
+			protocolHandshakeLive: false,
+		});
+	});
+
+	it("does not claim handshake liveness when Rhino status cannot be read", async () => {
+		const server = await startHopperServer({
+			runtime: fakeRuntime(),
+			staticDir: await staticDirectory(),
+			protocolHandshake,
+			getRuntimeStatus: async () => { throw new Error("RPC disconnected"); },
+		});
+		servers.push(server);
+
+		const response = await fetch(`http://${server.host}:${server.port}/health`);
+		expect(response.status).toBe(503);
+		await expect(response.json()).resolves.toEqual({
+			ok: false,
+			lifecycleInstanceId: "life-server-test",
+			protocolHandshakeLive: false,
+		});
 	});
 
 	it("authenticates a socket, sends a snapshot, and dispatches commands", async () => {

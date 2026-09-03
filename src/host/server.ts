@@ -16,7 +16,7 @@ export type HopperServerOptions = {
 	port?: number;
 	token?: string;
 	protocolHandshake: LiveProtocolHandshake;
-	getRuntimeStatus: () => Promise<RuntimeStatus>;
+	getRuntimeStatus: (completionTimeoutMs?: number) => Promise<RuntimeStatus>;
 	onShutdownRequest?: () => void;
 };
 
@@ -152,11 +152,26 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 	const httpServer = createHttpServer((request, response) => {
 		const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
 		if (pathname === "/health") {
-			writeJson(response, 200, {
-				ok: true,
-				lifecycleInstanceId: options.protocolHandshake.lifecycleInstanceId,
-				protocolHandshakeLive: options.protocolHandshake.protocolHandshakeLive,
-			});
+			// Rhino's health monitor has a two-second HTTP deadline. Leave room for
+			// response serialization after the authenticated status round trip.
+			void options.getRuntimeStatus(1_500).then(
+				(status) => {
+					const lifecycleInstanceId = status.transport.lifecycleInstanceId;
+					const protocolHandshakeLive = status.transport.ready
+						&& lifecycleInstanceId === options.protocolHandshake.lifecycleInstanceId
+						&& status.host.handshake === "live";
+					writeJson(response, protocolHandshakeLive ? 200 : 503, {
+						ok: protocolHandshakeLive,
+						lifecycleInstanceId,
+						protocolHandshakeLive,
+					});
+				},
+				() => writeJson(response, 503, {
+					ok: false,
+					lifecycleInstanceId: options.protocolHandshake.lifecycleInstanceId,
+					protocolHandshakeLive: false,
+				}),
+			);
 			return;
 		}
 		if (pathname === "/api/runtime-status") {

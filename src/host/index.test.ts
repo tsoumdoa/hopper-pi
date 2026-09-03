@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+	lifecycleInstanceId: "life-from-profile",
 	connect: vi.fn(),
 	getRuntimeStatus: vi.fn(),
 	subscribeNotices: vi.fn(),
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../infra/runtime-rpc.js", () => ({
 	getRuntimeRpc: () => ({
+		get lifecycleInstanceId() { return mocks.lifecycleInstanceId; },
 		connect: mocks.connect,
 		getRuntimeStatus: mocks.getRuntimeStatus,
 		subscribeNotices: mocks.subscribeNotices,
@@ -43,6 +45,7 @@ describe("host protocol startup", () => {
 		originalSigint = new Set(process.listeners("SIGINT"));
 		originalSigterm = new Set(process.listeners("SIGTERM"));
 		vi.clearAllMocks();
+		mocks.lifecycleInstanceId = "life-from-profile";
 		mocks.closeRuntimeRpc.mockResolvedValue(undefined);
 		mocks.subscribeNotices.mockReturnValue(() => { });
 		mocks.validateStaticDirectory.mockImplementation((path: string) => path);
@@ -103,6 +106,32 @@ describe("host protocol startup", () => {
 		expect(mocks.startServer).not.toHaveBeenCalled();
 		expect(stdout).not.toHaveBeenCalled();
 		expect(mocks.closeRuntimeRpc).toHaveBeenCalledOnce();
+		expect(process.exitCode).toBe(1);
+	});
+
+	it.each([
+		{
+			name: "non-live",
+			handshake: { lifecycleInstanceId: "life-from-profile", protocolHandshakeLive: false },
+		},
+		{
+			name: "stale",
+			handshake: { lifecycleInstanceId: "life-stale", protocolHandshakeLive: true },
+		},
+	])("does not report ready for a $name handshake result", async ({ handshake }) => {
+		mocks.connect.mockResolvedValue(handshake);
+		const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+		vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+		await main([
+			"--instance-id", "host-instance",
+			"--connection-profile", "/profiles/current.json",
+			"--static-dir", "/static",
+		]);
+
+		expect(mocks.createRuntime).not.toHaveBeenCalled();
+		expect(mocks.startServer).not.toHaveBeenCalled();
+		expect(stdout).not.toHaveBeenCalled();
 		expect(process.exitCode).toBe(1);
 	});
 
