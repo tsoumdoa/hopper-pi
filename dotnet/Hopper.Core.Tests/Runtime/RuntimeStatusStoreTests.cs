@@ -133,6 +133,77 @@ public sealed class RuntimeStatusStoreTests
     }
 
     [Fact]
+    public void LifecycleStateTracksHostAndOnlyProvenExitClearsLiveProcessIdentity()
+    {
+        var store = CreateStore(out var clock);
+        store.UpdateHost(new HostRuntimeStatusUpdate(
+            DomainLifecycleState.Running,
+            4242,
+            "/opt/homebrew/bin/node",
+            "22.19.0",
+            HandshakeState.live,
+            0));
+        clock.Advance(TimeSpan.FromSeconds(1));
+
+        store.UpdateLifecycle(new LifecycleSnapshot(
+            1,
+            clock.UtcNow,
+            DomainLifecycleState.Stopping,
+            LifecycleReasonCode.StopRequested,
+            "Stopping.",
+            "life-status-1",
+            0));
+
+        Assert.Equal(ProtocolLifecycleState.stopping, store.Read().Host.State);
+        Assert.Equal(4242, store.Read().Host.ProcessId);
+        Assert.Equal(HandshakeState.live, store.Read().Host.Handshake);
+
+        store.UpdateHostProcessExited();
+        store.UpdateLifecycle(new LifecycleSnapshot(
+            2,
+            clock.UtcNow,
+            DomainLifecycleState.Faulted,
+            LifecycleReasonCode.UnexpectedChildExit,
+            "Exited.",
+            "life-status-1",
+            0));
+
+        Assert.Equal(ProtocolLifecycleState.faulted, store.Read().Host.State);
+        Assert.Null(store.Read().Host.ProcessId);
+        Assert.Equal(HandshakeState.disconnected, store.Read().Host.Handshake);
+        Assert.Equal("/opt/homebrew/bin/node", store.Read().Host.NodePath);
+        Assert.Equal("22.19.0", store.Read().Host.NodeVersion);
+    }
+
+    [Fact]
+    public void StoppedLifecycleUnconditionallyClearsProcessIdentityButRetainsNodeDiagnostics()
+    {
+        var store = CreateStore(out var clock);
+        store.UpdateHost(new HostRuntimeStatusUpdate(
+            DomainLifecycleState.Running,
+            4242,
+            "/opt/homebrew/bin/node",
+            "22.19.0",
+            HandshakeState.live,
+            0));
+
+        store.UpdateLifecycle(new LifecycleSnapshot(
+            1,
+            clock.UtcNow,
+            DomainLifecycleState.Stopped,
+            LifecycleReasonCode.Stopped,
+            "Stopped.",
+            null,
+            0));
+
+        Assert.Equal(ProtocolLifecycleState.stopped, store.Read().Host.State);
+        Assert.Null(store.Read().Host.ProcessId);
+        Assert.Equal(HandshakeState.disconnected, store.Read().Host.Handshake);
+        Assert.Equal("/opt/homebrew/bin/node", store.Read().Host.NodePath);
+        Assert.Equal("22.19.0", store.Read().Host.NodeVersion);
+    }
+
+    [Fact]
     public void ComponentErrorsAndDocumentsRejectInconsistentInput()
     {
         var store = CreateStore(out _);

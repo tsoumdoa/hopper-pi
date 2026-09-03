@@ -114,10 +114,26 @@ public sealed class RuntimeStatusStore
             },
             Host = current.Host with
             {
+                State = state,
+                ProcessId = state == ProtocolLifecycleState.stopped
+                    ? null
+                    : current.Host.ProcessId,
+                Handshake = state == ProtocolLifecycleState.stopped
+                    ? HandshakeState.disconnected
+                    : current.Host.Handshake,
                 HealthFailureCount = lifecycle.ConsecutiveHealthFailures,
             },
         });
     }
+
+    public bool UpdateHostProcessExited() => Update(current => current with
+    {
+        Host = current.Host with
+        {
+            ProcessId = null,
+            Handshake = HandshakeState.disconnected,
+        },
+    });
 
     public bool UpdateTransport(bool ready, string? lifecycleInstanceId)
     {

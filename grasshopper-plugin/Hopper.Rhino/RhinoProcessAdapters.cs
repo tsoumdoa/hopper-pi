@@ -162,6 +162,7 @@ namespace rhino_zmq_poc
         private readonly HopperHostEntryResolver _hostEntry;
         private readonly string _dataDirectory;
         private readonly RuntimeStatusStore _status;
+        private readonly ChildProcessStatusCoordinator _childStatus;
         private readonly HttpClient _http = new HttpClient();
         private Process _process;
         private DateTime _startedAt;
@@ -177,6 +178,7 @@ namespace rhino_zmq_poc
             _hostEntry = hostEntry ?? throw new ArgumentNullException(nameof(hostEntry));
             _dataDirectory = dataDirectory ?? throw new ArgumentNullException(nameof(dataDirectory));
             _status = status ?? throw new ArgumentNullException(nameof(status));
+            _childStatus = new ChildProcessStatusCoordinator(status);
         }
 
         public event Action<Uri> Ready;
@@ -268,13 +270,15 @@ namespace rhino_zmq_poc
                 _startedAt = process.StartTime;
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
-                _status.UpdateHost(new HostRuntimeStatusUpdate(
-                    Hopper.Core.Lifecycle.LifecycleState.Starting,
-                    process.Id,
-                    runtime.ExecutablePath,
-                    runtime.Version.ToString(),
-                    HandshakeState.connecting,
-                    0));
+                _childStatus.MarkStarted(
+                    new HostRuntimeStatusUpdate(
+                        Hopper.Core.Lifecycle.LifecycleState.Starting,
+                        process.Id,
+                        runtime.ExecutablePath,
+                        runtime.Version.ToString(),
+                        HandshakeState.connecting,
+                        0),
+                    () => SafeHasExited(process));
                 return Task.FromResult(new ChildStartResult(true, true, ""));
             }
             catch (Exception exception)
@@ -419,6 +423,7 @@ namespace rhino_zmq_poc
                     return;
                 unexpected = !_intentionalStop;
             }
+            _childStatus.MarkExited();
             if (unexpected)
                 UnexpectedExit?.Invoke();
         }

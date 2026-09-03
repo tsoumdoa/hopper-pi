@@ -30,11 +30,47 @@ namespace rhino_zmq_poc
 
     internal sealed class RhinoCommandCompletionSink : IHopperCommandCompletionSink
     {
+        private readonly ILifecycleDispatcher _dispatcher;
+
+        public RhinoCommandCompletionSink(ILifecycleDispatcher dispatcher)
+        {
+            _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+        }
+
         public void Write(string message)
         {
             if (string.IsNullOrWhiteSpace(message))
                 return;
-            RhinoApp.InvokeOnUiThread((Action)(() => RhinoApp.WriteLine(message)));
+            _ = _dispatcher.SubmitLifecycleControl(() => RhinoApp.WriteLine(message));
+        }
+    }
+
+    internal sealed class RhinoDispatcherExecutionObserver
+    {
+        private readonly RuntimeStatusStore _status;
+
+        public RhinoDispatcherExecutionObserver(RuntimeStatusStore status)
+        {
+            _status = status ?? throw new ArgumentNullException(nameof(status));
+        }
+
+        public void Record(DispatcherExecutionRecord execution)
+        {
+            if (!execution.IsSlow)
+                return;
+
+            var milliseconds = Math.Ceiling(execution.Duration.TotalMilliseconds);
+            var work = execution.IsLifecycleControl ? "lifecycle" : "external";
+            var operation = string.IsNullOrWhiteSpace(execution.OperationId)
+                ? string.Empty
+                : $" ({execution.OperationId})";
+            var message = $"Hopper UI dispatcher {work} callback{operation} took {milliseconds} ms.";
+            _status.UpdateError(RuntimeStatusComponent.Dispatcher, new RuntimeErrorV2
+            {
+                Code = RpcReasonCode.OPERATION_FAILED,
+                Message = message,
+            });
+            RhinoApp.WriteLine($"Warning: {message}");
         }
     }
 

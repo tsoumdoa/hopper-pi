@@ -18,10 +18,12 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
 {
     public const int DefaultCapacity = 64;
     public const int DefaultLifecycleCapacity = 1;
+    public static readonly TimeSpan SlowExecutionWarningThreshold = TimeSpan.FromMilliseconds(250);
 
     private readonly object _gate = new();
     private readonly IUiCallbackScheduler _scheduler;
     private readonly IHopperClock _clock;
+    private readonly IDispatcherDurationClock _durationClock;
     private readonly int _externalCapacity;
     private readonly int _lifecycleCapacity;
     private readonly LinkedList<WorkItem> _externalQueue = new();
@@ -33,15 +35,18 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
     private WorkItem? _runningItem;
 
     public event Action<DispatcherStatus>? StatusChanged;
+    public event Action<DispatcherExecutionRecord>? ExecutionRecorded;
 
     public OrderedDispatcher(
         IUiCallbackScheduler scheduler,
         IHopperClock clock,
         int capacity = DefaultCapacity,
-        int lifecycleCapacity = DefaultLifecycleCapacity)
+        int lifecycleCapacity = DefaultLifecycleCapacity,
+        IDispatcherDurationClock? durationClock = null)
     {
         _scheduler = scheduler ?? throw new ArgumentNullException(nameof(scheduler));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        _durationClock = durationClock ?? StopwatchDispatcherDurationClock.Instance;
         if (capacity <= 0)
             throw new ArgumentOutOfRangeException(nameof(capacity), "Capacity must be positive.");
         if (lifecycleCapacity <= 0)
@@ -236,7 +241,12 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
                 }
                 else
                 {
-                    item = new WorkItem<T>(operation, startDeadlineAt, cancellationToken, operationId);
+                    item = new WorkItem<T>(
+                        operation,
+                        startDeadlineAt,
+                        cancellationToken,
+                        operationId,
+                        lifecycleControl);
                     item.Node = queue.AddLast(item);
                     if (!_running && !_pumpPosted)
                     {
@@ -320,7 +330,9 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
             return;
         }
 
+        var startedAt = _durationClock.GetTimestamp();
         item.Execute();
+        RecordExecution(item, startedAt);
         lock (_gate)
         {
             _running = false;
@@ -384,6 +396,38 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
 
     private void NotifyStatusChanged() => StatusChanged?.Invoke(Status);
 
+    private void RecordExecution(WorkItem item, long startedAt)
+    {
+        try
+        {
+            var duration = _durationClock.GetElapsedTime(startedAt);
+            if (duration < TimeSpan.Zero)
+                duration = TimeSpan.Zero;
+            var record = new DispatcherExecutionRecord(
+                duration,
+                item.IsLifecycleControl,
+                item.OperationId);
+            var observers = ExecutionRecorded;
+            if (observers == null)
+                return;
+            foreach (Action<DispatcherExecutionRecord> observer in observers.GetInvocationList())
+            {
+                try
+                {
+                    observer(record);
+                }
+                catch
+                {
+                    // Diagnostics must never prevent the next UI callback from running.
+                }
+            }
+        }
+        catch
+        {
+            // Duration instrumentation must never affect operation completion.
+        }
+    }
+
     private static List<WorkItem> DrainQueue(LinkedList<WorkItem> queue)
     {
         var items = new List<WorkItem>(queue.Count);
@@ -407,16 +451,19 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
         protected WorkItem(
             DateTimeOffset? startDeadlineAt,
             CancellationToken cancellationToken,
-            string? operationId)
+            string? operationId,
+            bool isLifecycleControl)
         {
             StartDeadlineAt = startDeadlineAt;
             CancellationToken = cancellationToken;
             OperationId = operationId;
+            IsLifecycleControl = isLifecycleControl;
         }
 
         public DateTimeOffset? StartDeadlineAt { get; }
         public CancellationToken CancellationToken { get; }
         public string? OperationId { get; }
+        public bool IsLifecycleControl { get; }
         public LinkedListNode<WorkItem>? Node { get; set; }
         public bool Started { get; set; }
 
@@ -478,8 +525,9 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
             Func<T> operation,
             DateTimeOffset? startDeadlineAt,
             CancellationToken cancellationToken,
-            string? operationId)
-            : base(startDeadlineAt, cancellationToken, operationId)
+            string? operationId,
+            bool isLifecycleControl)
+            : base(startDeadlineAt, cancellationToken, operationId, isLifecycleControl)
         {
             _operation = operation;
         }

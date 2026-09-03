@@ -124,9 +124,16 @@ public sealed class HopperHostFacadeTests
     [Fact]
     public void InternalGrasshopperStartIsCoalescedAndPublishesLoadingStatus()
     {
-        var fixture = new FacadeFixture();
+        var pluginDirectory = Path.Combine("root", "plugins");
+        var expectedAssembly = Path.Combine(
+            pluginDirectory,
+            GrasshopperInstallationProbe.AssemblyFileName);
+        var fixture = new FacadeFixture(GrasshopperInstallationProbe.IsInstalled(
+            pluginDirectory,
+            path => string.Equals(path, expectedAssembly, StringComparison.Ordinal)));
         var request = Request(RpcOperation.startGrasshopper);
 
+        Assert.Equal(GrasshopperCapabilityState.NotLoaded, fixture.Grasshopper.Status.State);
         var first = fixture.Facade.Execute(request);
         var second = fixture.Facade.Execute(request);
 
@@ -137,6 +144,19 @@ public sealed class HopperHostFacadeTests
         Assert.Equal(1, fixture.GrasshopperStart.CallCount);
         Assert.Equal(GrasshopperCapabilityState.Loading, fixture.Grasshopper.Status.State);
         Assert.Equal(GrasshopperState.loading, fixture.Facade.GetStatus().Runtime.Grasshopper.State);
+    }
+
+    [Fact]
+    public void MissingPackagedGrasshopperAssemblyRemainsNotInstalled()
+    {
+        var installed = GrasshopperInstallationProbe.IsInstalled(
+            Path.Combine("root", "plugins"),
+            _ => false);
+        var fixture = new FacadeFixture(installed);
+
+        Assert.Equal(GrasshopperCapabilityState.NotInstalled, fixture.Grasshopper.Status.State);
+        Assert.Equal(GrasshopperState.not_installed, fixture.Facade.GetStatus().Runtime.Grasshopper.State);
+        Assert.Equal(0, fixture.GrasshopperStart.CallCount);
     }
 
     [Fact]
@@ -164,9 +184,11 @@ public sealed class HopperHostFacadeTests
 
     private sealed class FacadeFixture
     {
-        public FacadeFixture()
+        public FacadeFixture(bool grasshopperInstalled = true)
         {
-            Grasshopper = new GrasshopperCapabilityRegistry(SystemHopperClock.Instance, installed: true);
+            Grasshopper = new GrasshopperCapabilityRegistry(
+                SystemHopperClock.Instance,
+                installed: grasshopperInstalled);
             Controller = new LifecycleController(
                 new NodeProvider(),
                 Transport,

@@ -143,10 +143,13 @@ namespace rhino_zmq_poc
             var uiScheduler = new RhinoUiCallbackScheduler();
             var dispatcher = new OrderedDispatcher(uiScheduler, clock);
             var grasshopper = HostOperationRegistries.Grasshopper;
+            grasshopper.SetInstalled(GrasshopperInstallationProbe.IsInstalled(pluginDirectory));
             var rhino = HostOperationRegistries.Rhino;
             var rhinoAdapter = new RhinoOperationAdapter(new RhinoOperationExecutor(), clock);
             var status = new RuntimeStatusStore(clock, dispatcher.Status, grasshopper.Status);
             dispatcher.StatusChanged += dispatcherStatus => status.UpdateDispatcher(dispatcherStatus);
+            var dispatcherDiagnostics = new RhinoDispatcherExecutionObserver(status);
+            dispatcher.ExecutionRecorded += dispatcherDiagnostics.Record;
             var deferredOperations = new DeferredRpcOperationHandler();
             var transport = new RpcLifecycleTransport(
                 dispatcher,
@@ -211,7 +214,7 @@ namespace rhino_zmq_poc
                 new RhinoGrasshopperStartController(),
                 transport,
                 runningObservers,
-                new RhinoCommandCompletionSink());
+                new RhinoCommandCompletionSink(dispatcher));
             deferredOperations.SetTarget(facade);
 
             if (!rhino.TryRegister(rhinoAdapter))
@@ -279,7 +282,13 @@ namespace rhino_zmq_poc
 
         private void OnUnexpectedChildExit()
         {
-            _ = _lifecycle.ReportUnexpectedChildExitAsync();
+            _ = ObserveUnexpectedChildExitAsync();
+        }
+
+        private async Task ObserveUnexpectedChildExitAsync()
+        {
+            await _lifecycle.ReportUnexpectedChildExitAsync().ConfigureAwait(false);
+            Facade.GetStatus();
         }
     }
 }
