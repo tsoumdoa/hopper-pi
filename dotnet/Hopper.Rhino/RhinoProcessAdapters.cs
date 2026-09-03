@@ -163,6 +163,7 @@ namespace rhino_zmq_poc
         private readonly string _dataDirectory;
         private readonly RuntimeStatusStore _status;
         private readonly ChildProcessStatusCoordinator _childStatus;
+        private readonly HostStartupErrorBuffer _startupErrors = new HostStartupErrorBuffer();
         private readonly HttpClient _http = new HttpClient();
         private Process _process;
         private DateTime _startedAt;
@@ -261,6 +262,7 @@ namespace rhino_zmq_poc
                 _readyUri = null;
                 _lifecycleInstanceId = lifecycleInstanceId;
                 _intentionalStop = false;
+                _startupErrors.Reset();
             }
 
             try
@@ -268,8 +270,6 @@ namespace rhino_zmq_poc
                 if (!process.Start())
                     throw new InvalidOperationException("Process.Start returned false.");
                 _startedAt = process.StartTime;
-                process.BeginOutputReadLine();
-                process.BeginErrorReadLine();
                 _childStatus.MarkStarted(
                     new HostRuntimeStatusUpdate(
                         Hopper.Core.Lifecycle.LifecycleState.Starting,
@@ -279,6 +279,8 @@ namespace rhino_zmq_poc
                         HandshakeState.connecting,
                         0),
                     () => SafeHasExited(process));
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
                 return Task.FromResult(new ChildStartResult(true, true, ""));
             }
             catch (Exception exception)
@@ -407,10 +409,17 @@ namespace rhino_zmq_poc
         {
             if (string.IsNullOrWhiteSpace(args.Data))
                 return;
+            string message;
+            lock (_gate)
+            {
+                if (!ReferenceEquals(_process, sender))
+                    return;
+                message = _startupErrors.Append(args.Data);
+            }
             _status.UpdateError(RuntimeStatusComponent.Host, new RuntimeErrorV2
             {
                 Code = RpcReasonCode.INTERNAL_ERROR,
-                Message = args.Data,
+                Message = message,
             });
         }
 

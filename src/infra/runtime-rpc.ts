@@ -39,6 +39,14 @@ export type RuntimeRpcOptions = {
 	readinessTimeoutMs?: number;
 	nodeProcessId?: number;
 	nodeVersion?: string;
+	handshakeRetry?: Partial<HandshakeRetryPolicy>;
+};
+
+export type HandshakeRetryPolicy = {
+	windowMs: number;
+	delayMs: number;
+	now: () => number;
+	sleep: (delayMs: number) => Promise<void>;
 };
 
 export type LiveProtocolHandshake = {
@@ -76,12 +84,16 @@ export class RpcOutcomeUnknownError extends Error {
 }
 
 export class RuntimeRpc {
+	private static readonly defaultHandshakeRetryWindowMs = 2_000;
+	private static readonly defaultHandshakeRetryDelayMs = 50;
+
 	readonly lifecycleInstanceId: string;
 
 	private readonly transport: RuntimeRpcTransport;
 	private readonly readiness: GrasshopperReadinessCoordinator;
 	private readonly nodeProcessId: number;
 	private readonly nodeVersion: string;
+	private readonly handshakeRetry: HandshakeRetryPolicy;
 	private handshake: Promise<void> | null = null;
 	private handshakeComplete = false;
 	private readonly noticeListeners = new Set<(notice: RuntimeRpcNotice) => void>();
@@ -91,6 +103,18 @@ export class RuntimeRpc {
 		this.transport = options.transport;
 		this.nodeProcessId = options.nodeProcessId ?? process.pid;
 		this.nodeVersion = options.nodeVersion ?? process.version;
+		this.handshakeRetry = {
+			windowMs: options.handshakeRetry?.windowMs ?? RuntimeRpc.defaultHandshakeRetryWindowMs,
+			delayMs: options.handshakeRetry?.delayMs ?? RuntimeRpc.defaultHandshakeRetryDelayMs,
+			now: options.handshakeRetry?.now ?? Date.now,
+			sleep: options.handshakeRetry?.sleep ?? ((delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs))),
+		};
+		if (!Number.isFinite(this.handshakeRetry.windowMs) || this.handshakeRetry.windowMs <= 0) {
+			throw new Error("handshake retry window must be positive");
+		}
+		if (!Number.isFinite(this.handshakeRetry.delayMs) || this.handshakeRetry.delayMs <= 0) {
+			throw new Error("handshake retry delay must be positive");
+		}
 		this.readiness = new GrasshopperReadinessCoordinator({
 			lifecycleInstanceId: options.lifecycleInstanceId,
 			events: options.events,
@@ -163,20 +187,7 @@ export class RuntimeRpc {
 
 		const pending = (async () => {
 			await this.transport.connect();
-			await this.invokeDirect(
-				"lifecycleHandshake",
-				{
-					nodeProcessId: this.nodeProcessId,
-					nodeVersion: this.nodeVersion,
-					clientIdentity: this.transport.identity,
-				},
-				completionTimeoutMs
-					? {
-						completionTimeoutMs,
-						startDeadlineMs: Math.min(30_000, completionTimeoutMs),
-					}
-					: {},
-			);
+			await this.completeInitialHandshake(completionTimeoutMs);
 			this.handshakeComplete = true;
 		})();
 		this.handshake = pending;
@@ -185,6 +196,46 @@ export class RuntimeRpc {
 		} finally {
 			if (this.handshake === pending) this.handshake = null;
 		}
+	}
+
+	private async completeInitialHandshake(completionTimeoutMs?: number): Promise<void> {
+		const windowMs = completionTimeoutMs
+			? Math.min(completionTimeoutMs, this.handshakeRetry.windowMs)
+			: this.handshakeRetry.windowMs;
+		const deadlineAt = this.handshakeRetry.now() + windowMs;
+		let lastRejection: RpcOperationError | null = null;
+
+		while (this.handshakeRetry.now() < deadlineAt) {
+			const remainingMs = Math.max(1, deadlineAt - this.handshakeRetry.now());
+			try {
+				await this.invokeDirect(
+					"lifecycleHandshake",
+					{
+						nodeProcessId: this.nodeProcessId,
+						nodeVersion: this.nodeVersion,
+						clientIdentity: this.transport.identity,
+					},
+					{
+						completionTimeoutMs: remainingMs,
+						startDeadlineMs: Math.min(30_000, remainingMs),
+					},
+				);
+				return;
+			} catch (error) {
+				if (!(error instanceof RpcOperationError)
+					|| error.operation !== "lifecycleHandshake"
+					|| error.result.reasonCode !== "HANDSHAKE_REJECTED") {
+					throw error;
+				}
+				lastRejection = error;
+			}
+
+			const retryRemainingMs = deadlineAt - this.handshakeRetry.now();
+			if (retryRemainingMs < this.handshakeRetry.delayMs) break;
+			await this.handshakeRetry.sleep(this.handshakeRetry.delayMs);
+		}
+
+		throw lastRejection ?? new Error("RPC handshake retry window expired");
 	}
 
 	private async readRuntimeStatusDirect(completionTimeoutMs?: number): Promise<RuntimeStatus> {

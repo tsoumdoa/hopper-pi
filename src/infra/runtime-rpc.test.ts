@@ -36,6 +36,72 @@ describe("RuntimeRpc", () => {
 		expect(result).toBe(snapshot);
 	});
 
+	it("retries only transient handshake identity registration rejections", async () => {
+		let now = 0;
+		let attempts = 0;
+		const sleeps: number[] = [];
+		const transport = new FakeTransport((operation) => {
+			if (operation !== "lifecycleHandshake") return response(operation, {});
+			attempts++;
+			return attempts < 3
+				? failedResponse(operation, "HANDSHAKE_REJECTED", "Managed PID is not registered yet")
+				: response(operation, { handshake: "live", statusRevision: 4 });
+		});
+		const runtime = runtimeWith(transport, new FakeEvents(), {
+			windowMs: 200,
+			delayMs: 25,
+			now: () => now,
+			sleep: async (delayMs) => {
+				sleeps.push(delayMs);
+				now += delayMs;
+			},
+		});
+
+		await expect(runtime.connect()).resolves.toEqual({
+			lifecycleInstanceId: LIFE,
+			protocolHandshakeLive: true,
+		});
+		expect(attempts).toBe(3);
+		expect(sleeps).toEqual([25, 25]);
+	});
+
+	it("bounds handshake rejection retries and preserves the typed failure", async () => {
+		let now = 0;
+		const transport = new FakeTransport((operation) =>
+			failedResponse(operation, "HANDSHAKE_REJECTED", "Managed PID is not registered yet"));
+		const runtime = runtimeWith(transport, new FakeEvents(), {
+			windowMs: 100,
+			delayMs: 40,
+			now: () => now,
+			sleep: async (delayMs) => { now += delayMs; },
+		});
+
+		await expect(runtime.connect()).rejects.toMatchObject({
+			operation: "lifecycleHandshake",
+			result: { reasonCode: "HANDSHAKE_REJECTED" },
+		});
+		expect(transport.calls).toHaveLength(3);
+		expect(now).toBe(80);
+	});
+
+	it("does not retry non-registration handshake failures", async () => {
+		const sleep = vi.fn(async () => {});
+		const transport = new FakeTransport((operation) =>
+			failedResponse(operation, "AUTH_INVALID", "Bad token"));
+		const runtime = runtimeWith(transport, new FakeEvents(), {
+			windowMs: 200,
+			delayMs: 25,
+			now: () => 0,
+			sleep,
+		});
+
+		await expect(runtime.connect()).rejects.toMatchObject({
+			result: { reasonCode: "AUTH_INVALID" },
+		});
+		expect(transport.calls).toHaveLength(1);
+		expect(sleep).not.toHaveBeenCalled();
+	});
+
 	it("rereads after a readiness reconnect and submits the original mutation once", async () => {
 		const events = new FakeEvents();
 		let statusReads = 0;
@@ -162,13 +228,18 @@ describe("Requester RPC v2 facade", () => {
 	});
 });
 
-function runtimeWith(transport: FakeTransport, events: FakeEvents): RuntimeRpc {
+function runtimeWith(
+	transport: FakeTransport,
+	events: FakeEvents,
+	handshakeRetry?: ConstructorParameters<typeof RuntimeRpc>[0]["handshakeRetry"],
+): RuntimeRpc {
 	return new RuntimeRpc({
 		lifecycleInstanceId: LIFE,
 		transport,
 		events,
 		nodeProcessId: 42,
 		nodeVersion: "v22.19.0",
+		handshakeRetry,
 	});
 }
 
@@ -216,6 +287,20 @@ function response(
 		operation,
 		...(operationId ? { operationId } : {}),
 		result: { class: "completed", reasonCode: "OK", data: data as never },
+	};
+}
+
+function failedResponse(
+	operation: OperationName,
+	reasonCode: "HANDSHAKE_REJECTED" | "AUTH_INVALID",
+	message: string,
+): RpcOperationResponse {
+	return {
+		protocolVersion: 2,
+		lifecycleInstanceId: LIFE,
+		requestId: `req-${operation}`,
+		operation,
+		result: { class: "failed", reasonCode, message },
 	};
 }
 
