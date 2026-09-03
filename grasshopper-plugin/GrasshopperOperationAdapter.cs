@@ -184,12 +184,23 @@ namespace rhino_zmq_poc
                     RpcReasonCode.OPERATION_FAILED,
                     error.GetString() ?? "Grasshopper operation failed.");
             }
+            if (root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("ok", out var ok)
+                && ok.ValueKind == JsonValueKind.False)
+            {
+                return Failure(
+                    RpcResultClass.failed,
+                    RpcReasonCode.OPERATION_FAILED,
+                    "Grasshopper operation did not complete successfully.",
+                    root.Clone());
+            }
 
             return Completed(root.Clone());
         }
 
         private static bool IsFailure(string result) =>
             result.IndexOf(" error", StringComparison.OrdinalIgnoreCase) >= 0
+            || result.IndexOf(": invalid", StringComparison.OrdinalIgnoreCase) >= 0
             || result.StartsWith("Invalid ", StringComparison.OrdinalIgnoreCase)
             || result.StartsWith("Unknown ", StringComparison.OrdinalIgnoreCase);
 
@@ -208,6 +219,18 @@ namespace rhino_zmq_poc
             Class = resultClass,
             ReasonCode = reason,
             Message = message,
+        };
+
+        private static OperationResultV2 Failure(
+            RpcResultClass resultClass,
+            RpcReasonCode reason,
+            string message,
+            JsonElement data) => new OperationResultV2
+        {
+            Class = resultClass,
+            ReasonCode = reason,
+            Message = message,
+            Data = data,
         };
     }
 }
