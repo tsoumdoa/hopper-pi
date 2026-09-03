@@ -56,6 +56,17 @@ public interface IRpcOperationHandler
     OperationResultV2 Execute(RpcRequestV2 request);
 }
 
+public sealed record AuthenticatedRpcHandshake(
+    int NodeProcessId,
+    string NodeVersion,
+    string ClientIdentity,
+    long StatusRevision);
+
+public interface IRpcHandshakeObserver
+{
+    long OnAuthenticatedHandshake(LifecycleHandshakeArgsV2 handshake);
+}
+
 public enum RpcTransportStartState
 {
     Started,
@@ -97,12 +108,15 @@ public sealed class RpcTransportOwner : IDisposable
     private readonly RpcTransportOwnerOptions _options;
     private readonly OrderedDispatcher _dispatcher;
     private readonly IRpcOperationHandler _handler;
+    private readonly IRpcHandshakeObserver? _handshakeObserver;
     private readonly IHopperClock _clock;
     private readonly MutationResultStore<OperationResultV2> _resultStore;
     private readonly ConcurrentQueue<OutboundResponse> _responses = new();
     private readonly ConcurrentQueue<Publication> _publications = new();
     private readonly ManualResetEventSlim _started = new(false);
     private readonly ManualResetEventSlim _stopped = new(true);
+    private readonly TaskCompletionSource<AuthenticatedRpcHandshake> _authenticatedHandshake =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource _stop = new();
     private Thread? _thread;
     private Exception? _startFailure;
@@ -117,12 +131,14 @@ public sealed class RpcTransportOwner : IDisposable
         OrderedDispatcher dispatcher,
         IRpcOperationHandler handler,
         IHopperClock clock,
-        MutationResultStore<OperationResultV2>? resultStore = null)
+        MutationResultStore<OperationResultV2>? resultStore = null,
+        IRpcHandshakeObserver? handshakeObserver = null)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _options.Validate();
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _handler = handler ?? throw new ArgumentNullException(nameof(handler));
+        _handshakeObserver = handshakeObserver;
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _resultStore = resultStore ?? CreateResultStore(clock);
     }
@@ -143,6 +159,23 @@ public sealed class RpcTransportOwner : IDisposable
     }
 
     public MutationResultStoreSnapshot ResultStoreStatus => _resultStore.GetSnapshot();
+
+    public async Task<AuthenticatedRpcHandshake?> WaitForAuthenticatedHandshakeAsync(
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default)
+    {
+        if (timeout <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(timeout));
+        try
+        {
+            return await _authenticatedHandshake.Task.WaitAsync(timeout, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            return null;
+        }
+    }
 
     public RpcTransportStartResult Start()
     {
@@ -390,6 +423,12 @@ public sealed class RpcTransportOwner : IDisposable
                 return;
             }
 
+            if (request.Operation == RpcOperation.lifecycleHandshake)
+            {
+                CompleteAuthenticatedHandshake(routingIdentity, request);
+                return;
+            }
+
             if (RpcV2Operations.Classify(request.Operation) == RpcOperationClass.Mutation
                 && !AdmitMutation(routingIdentity, request))
                 return;
@@ -404,6 +443,51 @@ public sealed class RpcTransportOwner : IDisposable
         {
             lock (_stateGate)
                 _lastDeliveryError = exception.Message;
+        }
+    }
+
+    private void CompleteAuthenticatedHandshake(byte[] routingIdentity, RpcRequestV2 request)
+    {
+        var args = request.Args.Deserialize<LifecycleHandshakeArgsV2>(RpcV2Contract.JsonOptions)!;
+        var routedIdentity = Encoding.UTF8.GetString(routingIdentity);
+        if (!FixedTimeEquals(args.ClientIdentity, routedIdentity))
+        {
+            QueueOperationResponse(
+                routingIdentity,
+                request,
+                Result(RpcResultClass.failed, RpcReasonCode.AUTH_INVALID, "Handshake identity does not match the DEALER route."));
+            return;
+        }
+
+        try
+        {
+            var statusRevision = _handshakeObserver?.OnAuthenticatedHandshake(args) ?? 0;
+            var handshake = new AuthenticatedRpcHandshake(
+                args.NodeProcessId,
+                args.NodeVersion,
+                args.ClientIdentity,
+                statusRevision);
+            _authenticatedHandshake.TrySetResult(handshake);
+            QueueOperationResponse(
+                routingIdentity,
+                request,
+                Result(
+                    RpcResultClass.completed,
+                    RpcReasonCode.OK,
+                    data: JsonSerializer.SerializeToElement(
+                        new LifecycleHandshakeDataV2
+                        {
+                            Handshake = HandshakeState.live,
+                            StatusRevision = statusRevision,
+                        },
+                        RpcV2Contract.JsonOptions)));
+        }
+        catch (Exception exception)
+        {
+            QueueOperationResponse(
+                routingIdentity,
+                request,
+                Result(RpcResultClass.failed, RpcReasonCode.INTERNAL_ERROR, exception.Message));
         }
     }
 

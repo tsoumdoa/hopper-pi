@@ -149,6 +149,61 @@ public sealed class RpcTransportOwnerTests
     }
 
     [Fact]
+    public async Task AuthenticatedHandshakeBypassesClosedExternalAdmissionAndSignalsLifecycle()
+    {
+        using var fixture = CreateFixture();
+        fixture.Dispatcher.CloseExternalAdmission();
+        using var dealer = ConnectDealer(fixture.RouterEndpoint, "hopper-node-4242");
+
+        dealer.SendFrame(Request(
+            "req-handshake",
+            RpcOperation.lifecycleHandshake,
+            args: new
+            {
+                nodeProcessId = 4242,
+                nodeVersion = "v22.19.0",
+                clientIdentity = "hopper-node-4242",
+            }));
+
+        var response = ReceiveResponse(dealer);
+        var data = response.Result.Data?.Deserialize<LifecycleHandshakeDataV2>(RpcV2Contract.JsonOptions);
+        var handshake = await fixture.Owner.WaitForAuthenticatedHandshakeAsync(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(RpcResultClass.completed, response.Result.Class);
+        Assert.Equal(HandshakeState.live, data?.Handshake);
+        Assert.Equal("hopper-node-4242", handshake?.ClientIdentity);
+        Assert.Equal(4242, handshake?.NodeProcessId);
+        Assert.Equal(0, fixture.Scheduler.PendingCount);
+        Assert.Equal(0, fixture.Handler.CallCount);
+    }
+
+    [Fact]
+    public async Task HandshakeRejectsAnIdentityThatDoesNotMatchTheDealerRoute()
+    {
+        using var fixture = CreateFixture();
+        using var dealer = ConnectDealer(fixture.RouterEndpoint, "actual-route");
+
+        dealer.SendFrame(Request(
+            "req-handshake-mismatch",
+            RpcOperation.lifecycleHandshake,
+            args: new
+            {
+                nodeProcessId = 4242,
+                nodeVersion = "v22.19.0",
+                clientIdentity = "claimed-route",
+            }));
+
+        var response = ReceiveResponse(dealer);
+        var handshake = await fixture.Owner.WaitForAuthenticatedHandshakeAsync(TimeSpan.FromMilliseconds(20));
+
+        Assert.Equal(RpcResultClass.failed, response.Result.Class);
+        Assert.Equal(RpcReasonCode.AUTH_INVALID, response.Result.ReasonCode);
+        Assert.Null(handshake);
+        Assert.Equal(0, fixture.Scheduler.PendingCount);
+        Assert.Equal(0, fixture.Handler.CallCount);
+    }
+
+    [Fact]
     public void StopJoinsOwnerThreadAndReleasesBothEndpoints()
     {
         using var fixture = CreateFixture(useInProcessEndpoints: true);
@@ -188,7 +243,7 @@ public sealed class RpcTransportOwnerTests
             clock);
         var start = owner.Start();
         Assert.Equal(RpcTransportStartState.Started, start.State);
-        return new Fixture(owner, scheduler, handler, routerEndpoint, publisherEndpoint);
+        return new Fixture(owner, dispatcher, scheduler, handler, routerEndpoint, publisherEndpoint);
     }
 
     private static DealerSocket ConnectDealer(string endpoint, string identity)
@@ -355,6 +410,7 @@ public sealed class RpcTransportOwnerTests
 
     private sealed record Fixture(
         RpcTransportOwner Owner,
+        OrderedDispatcher Dispatcher,
         ThreadSafeUiCallbackScheduler Scheduler,
         EchoHandler Handler,
         string RouterEndpoint,
