@@ -15,6 +15,5 @@ export {
 
 export {
 	submitCommand,
-	buildJobRequest,
 	type SubmitResult,
 } from "../infra/command-dispatch.js";

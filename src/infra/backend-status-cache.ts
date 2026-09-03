@@ -22,14 +22,18 @@ export function isBackendKnownOffline(): boolean {
 }
 
 export function formatBackendEndpoint(): string {
-	return formatEndpoint(resolveConnection().reqEndpoint);
+	try {
+		return formatEndpoint(resolveConnection().rpcEndpoint);
+	} catch {
+		return "RPC v2 profile unavailable";
+	}
 }
 
 export function backendOfflineMessage(): string {
 	const endpoint = formatBackendEndpoint();
 	return (
-		`Grasshopper backend is offline (${endpoint}). ` +
-		"Please check that Rhino is running, Grasshopper is open, and the Hopper connection profile/token is current."
+		`Hopper/Rhino runtime is offline (${endpoint}). ` +
+		"Please check that Rhino and HopperCode are running and that the connection profile is current."
 	);
 }
 

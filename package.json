@@ -23,6 +23,7 @@
 		"dev": "tsx src/index.ts",
 		"build": "tsc -p tsconfig.json && node scripts/copy-host-assets.mjs",
 		"test": "vitest run",
+		"test:rpc-cross-language": "tsx scripts/cross-language-rpc-smoke.ts",
 		"pi": "pi -e .",
 		"host:dev": "tsx src/host/index.ts",
 		"host": "node dist/host/index.js",

@@ -7,6 +7,34 @@ import { HostMessageBus } from "./message-bus.js";
 import type { HostRuntime } from "./pi-runtime.js";
 import type { HostSnapshot, ServerMessage } from "./protocol.js";
 import { startHopperServer, type HopperServer } from "./server.js";
+import type { RuntimeStatus } from "../protocol/v2.js";
+
+const protocolHandshake = {
+	lifecycleInstanceId: "life-server-test",
+	protocolHandshakeLive: true,
+} as const;
+
+const runtimeStatus: RuntimeStatus = {
+	protocolVersion: 2,
+	revision: 7,
+	observedAt: 123,
+	lifecycle: { state: "running", changedAt: 100, reason: null },
+	transport: { ready: true, lifecycleInstanceId: "life-server-test" },
+	host: {
+		state: "running",
+		processId: 42,
+		nodePath: "/usr/local/bin/node",
+		nodeVersion: "22.19.0",
+		handshake: "live",
+		healthFailureCount: 0,
+	},
+	rhino: { activeDocument: true, documentName: "model.3dm" },
+	grasshopper: { state: "ready", activeDocument: true, documentName: "definition.gh" },
+	dispatcher: { acceptingExternalWork: true, depth: 2, capacity: 64 },
+	errors: { transport: null, host: null, rhino: null, grasshopper: null, dispatcher: null },
+};
+
+const getRuntimeStatus = async () => runtimeStatus;
 
 const tempDirs: string[] = [];
 const servers: HopperServer[] = [];
@@ -74,24 +102,123 @@ describe("Hopper loopback server", () => {
 	it("fails before listening when the web UI is missing", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "hopper-host-missing-ui-"));
 		tempDirs.push(directory);
-		await expect(startHopperServer({ runtime: fakeRuntime(), staticDir: directory }))
+		await expect(startHopperServer({
+			runtime: fakeRuntime(),
+			staticDir: directory,
+			protocolHandshake,
+			getRuntimeStatus,
+		}))
 			.rejects.toThrow("web UI is missing");
 	});
 
 	it("serves health and static assets on loopback", async () => {
-		const server = await startHopperServer({ runtime: fakeRuntime(), staticDir: await staticDirectory() });
+		const readStatus = vi.fn(async () => runtimeStatus);
+		const server = await startHopperServer({
+			runtime: fakeRuntime(),
+			staticDir: await staticDirectory(),
+			protocolHandshake,
+			getRuntimeStatus: readStatus,
+		});
 		servers.push(server);
 
 		await expect(fetch(`http://${server.host}:${server.port}/health`).then((response) => response.json()))
-			.resolves.toEqual({ ok: true });
+			.resolves.toEqual({
+				ok: true,
+				lifecycleInstanceId: "life-server-test",
+				protocolHandshakeLive: true,
+			});
+		expect(readStatus).toHaveBeenCalledWith(1_500);
 		await expect(fetch(`http://${server.host}:${server.port}/`).then((response) => response.text()))
 			.resolves.toContain("<title>Hopper</title>");
 		expect(server.url).toBe(`http://127.0.0.1:${server.port}/#${server.token}`);
 	});
 
+	it.each([
+		...(["stopped", "faulted"] as const).map((state) => ({
+			name: `lifecycle is ${state}`,
+			status: {
+				...runtimeStatus,
+				lifecycle: { ...runtimeStatus.lifecycle, state },
+			},
+			expectedInstance: "life-server-test",
+		})),
+		...(["starting", "stopping", "faulted"] as const).map((state) => ({
+			name: `host is ${state}`,
+			status: {
+				...runtimeStatus,
+				host: { ...runtimeStatus.host, state },
+			},
+			expectedInstance: "life-server-test",
+		})),
+		{
+			name: "transport is not ready",
+			status: {
+				...runtimeStatus,
+				transport: { ready: false, lifecycleInstanceId: "life-server-test" },
+			},
+			expectedInstance: "life-server-test",
+		},
+		{
+			name: "runtime status belongs to a stale lifecycle",
+			status: {
+				...runtimeStatus,
+				transport: { ready: true, lifecycleInstanceId: "life-stale" },
+			},
+			expectedInstance: "life-stale",
+		},
+		{
+			name: "Rhino marks the handshake failed",
+			status: {
+				...runtimeStatus,
+				host: { ...runtimeStatus.host, handshake: "failed" as const },
+			},
+			expectedInstance: "life-server-test",
+		},
+	])("reports non-live health when $name", async ({ status, expectedInstance }) => {
+		const server = await startHopperServer({
+			runtime: fakeRuntime(),
+			staticDir: await staticDirectory(),
+			protocolHandshake,
+			getRuntimeStatus: async () => status,
+		});
+		servers.push(server);
+
+		const response = await fetch(`http://${server.host}:${server.port}/health`);
+		expect(response.status).toBe(503);
+		await expect(response.json()).resolves.toEqual({
+			ok: false,
+			lifecycleInstanceId: expectedInstance,
+			protocolHandshakeLive: false,
+		});
+	});
+
+	it("does not claim handshake liveness when Rhino status cannot be read", async () => {
+		const server = await startHopperServer({
+			runtime: fakeRuntime(),
+			staticDir: await staticDirectory(),
+			protocolHandshake,
+			getRuntimeStatus: async () => { throw new Error("RPC disconnected"); },
+		});
+		servers.push(server);
+
+		const response = await fetch(`http://${server.host}:${server.port}/health`);
+		expect(response.status).toBe(503);
+		await expect(response.json()).resolves.toEqual({
+			ok: false,
+			lifecycleInstanceId: "life-server-test",
+			protocolHandshakeLive: false,
+		});
+	});
+
 	it("authenticates a socket, sends a snapshot, and dispatches commands", async () => {
 		const runtime = fakeRuntime();
-		const server = await startHopperServer({ runtime, staticDir: await staticDirectory(), token: "known-token" });
+		const server = await startHopperServer({
+			runtime,
+			staticDir: await staticDirectory(),
+			token: "known-token",
+			protocolHandshake,
+			getRuntimeStatus,
+		});
 		servers.push(server);
 		const socket = await openSocket(server);
 
@@ -108,7 +235,13 @@ describe("Hopper loopback server", () => {
 	});
 
 	it("rejects the wrong browser origin or token", async () => {
-		const server = await startHopperServer({ runtime: fakeRuntime(), staticDir: await staticDirectory(), token: "right" });
+		const server = await startHopperServer({
+			runtime: fakeRuntime(),
+			staticDir: await staticDirectory(),
+			token: "right",
+			protocolHandshake,
+			getRuntimeStatus,
+		});
 		servers.push(server);
 
 		const socket = await openSocket(server);
@@ -125,6 +258,8 @@ describe("Hopper loopback server", () => {
 			runtime: fakeRuntime(),
 			staticDir: await staticDirectory(),
 			token: "shutdown-token",
+			protocolHandshake,
+			getRuntimeStatus,
 			onShutdownRequest,
 		});
 		servers.push(server);
@@ -140,7 +275,12 @@ describe("Hopper loopback server", () => {
 	});
 
 	it("rejects a WebSocket from another browser origin", async () => {
-		const server = await startHopperServer({ runtime: fakeRuntime(), staticDir: await staticDirectory() });
+		const server = await startHopperServer({
+			runtime: fakeRuntime(),
+			staticDir: await staticDirectory(),
+			protocolHandshake,
+			getRuntimeStatus,
+		});
 		servers.push(server);
 		const status = await new Promise<number>((resolve) => {
 			const socket = new WebSocket(`ws://${server.host}:${server.port}/ws`, {
@@ -149,5 +289,31 @@ describe("Hopper loopback server", () => {
 			socket.once("unexpected-response", (_request, response) => resolve(response.statusCode ?? 0));
 		});
 		expect(status).toBe(403);
+	});
+
+	it("returns Rhino's runtime snapshot unchanged only to an authenticated request", async () => {
+		const readStatus = vi.fn(async () => runtimeStatus);
+		const server = await startHopperServer({
+			runtime: fakeRuntime(),
+			staticDir: await staticDirectory(),
+			token: "runtime-token",
+			protocolHandshake,
+			getRuntimeStatus: readStatus,
+		});
+		servers.push(server);
+		const endpoint = `http://${server.host}:${server.port}/api/runtime-status`;
+
+		await expect(fetch(endpoint)).resolves.toMatchObject({ status: 403 });
+		expect(readStatus).not.toHaveBeenCalled();
+		const response = await fetch(endpoint, {
+			headers: { Authorization: "Bearer runtime-token" },
+		});
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual(runtimeStatus);
+		expect(readStatus).toHaveBeenCalledOnce();
+		await expect(fetch(endpoint, {
+			method: "POST",
+			headers: { Authorization: "Bearer runtime-token" },
+		})).resolves.toMatchObject({ status: 405 });
 	});
 });

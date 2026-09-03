@@ -18,10 +18,10 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
-	beginTransactionPair,
-	cancelTransactionPair,
-	commitTransactionPair,
-} from "./services/transaction-lifecycle.js";
+	beginRuntimeAgentTurn,
+	cancelRuntimeAgentTurn,
+	commitRuntimeAgentTurn,
+} from "./infra/runtime-rpc.js";
 import { probeBackend } from "./infra/backend-status.js";
 import { registerBackendStatusUI } from "./ui/backend-status.js";
 import { registerToolSchemasUI } from "./ui/tool-schemas.js";
@@ -144,18 +144,18 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 
 	// ── Agent undo (one GH undo step + one Rhino undo step per prompt) ─
 
-	pi.on("agent_start", async () => {
-		await beginTransactionPair();
+	pi.on("agent_start", () => {
+		beginRuntimeAgentTurn();
 	});
 
 	pi.on("agent_end", async (event) => {
 		if ("willRetry" in event && event.willRetry) {
 			return;
 		}
-		await commitTransactionPair();
+		await commitRuntimeAgentTurn();
 	});
 
 	pi.on("session_shutdown", async () => {
-		await cancelTransactionPair();
+		await cancelRuntimeAgentTurn();
 	});
 }

@@ -14,6 +14,10 @@ usage() {
 	cat <<'EOF'
 Build and install the local Hopper Rhino package on macOS.
 
+Requires macOS arm64, Rhino 8, stable Node 22.19.0 or newer, pnpm, and the .NET 7 SDK.
+The Yak package does not bundle Node.
+HopperCode validates the Node executable and version when Rhino starts Hopper.
+
 Usage:
   ./scripts/install-rhino-mac.sh [options]
 
@@ -112,7 +116,7 @@ fi
 echo
 echo "[hopper-pi] Installed $PACKAGE_NAME $PACKAGE_VERSION"
 echo "[hopper-pi] Package files: $STAGE_DIR"
-echo "[hopper-pi] In Rhino, open Grasshopper and run _HopperCode"
+echo "[hopper-pi] In Rhino, run HopperCode. Grasshopper loads only when the first gh_* tool needs it."
 
 if [[ "$OPEN_RHINO" -eq 1 ]]; then
 	echo "[hopper-pi] Opening Rhino 8"

@@ -17,15 +17,15 @@ function renderStatusLine(
 	if (status.online) {
 		return (
 			theme.fg("success", "● ") +
-			theme.fg("accent", "Grasshopper") +
-			theme.fg("dim", ` backend online (${endpoint})`)
+			theme.fg("accent", "Hopper/Rhino") +
+			theme.fg("dim", ` runtime online (${endpoint})`)
 		);
 	}
 	const detail = status.error ? ` — ${status.error}` : "";
 	return (
 		theme.fg("error", "○ ") +
-		theme.fg("warning", "Grasshopper") +
-		theme.fg("dim", ` backend offline (${endpoint})${detail}`)
+		theme.fg("warning", "Hopper/Rhino") +
+		theme.fg("dim", ` runtime offline (${endpoint})${detail}`)
 	);
 }
 
@@ -43,8 +43,8 @@ export function registerBackendStatusUI(pi: ExtensionAPI): void {
 			ctx.ui.setStatus(
 				STATUS_KEY,
 				status.online
-					? ctx.ui.theme.fg("success", "GH ● online")
-					: ctx.ui.theme.fg("error", "GH ○ offline")
+					? ctx.ui.theme.fg("success", "Hopper ● online")
+					: ctx.ui.theme.fg("error", "Hopper ○ offline")
 			);
 		} finally {
 			probing = false;
@@ -54,6 +54,7 @@ export function registerBackendStatusUI(pi: ExtensionAPI): void {
 	pi.on("session_start", async (_event, ctx) => {
 		if (!ctx.hasUI) return;
 
+		if (pollTimer) clearInterval(pollTimer);
 		await refresh(ctx);
 
 		pollTimer = setInterval(() => {
@@ -72,7 +73,7 @@ export function registerBackendStatusUI(pi: ExtensionAPI): void {
 	});
 
 	pi.registerCommand("hopper-backend", {
-		description: "Refresh Grasshopper backend connection status",
+		description: "Refresh Hopper/Rhino runtime connection status",
 		handler: async (_args, ctx) => {
 			await refresh(ctx);
 			ctx.ui.notify("Backend status refreshed", "info");
