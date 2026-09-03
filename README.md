@@ -136,6 +136,7 @@ The token is generated once and reused across backend/frontend restarts, so norm
 
 | Tool | Role |
 | ---- | ---- |
+| `gh_quick_scaffold` | Quickly place a visible placeholder preview graph for early feedback |
 | `gh_apply_graph` | Atomically create and validate a complete new subgraph |
 | `gh_edit_components` | Surgical add, move, or delete operations |
 | `gh_edit_param` | Inspect and edit GH script-component input/output ports |
@@ -153,10 +154,11 @@ The token is generated once and reused across backend/frontend restarts, so norm
 | `gh_list_components` | Search component library by keyword |
 | `gh_get_canvas_errors` | Runtime messages plus component-overlap checks |
 
-**User clarification**
+**Planning / user clarification**
 
 | Tool | Role |
 | ---- | ---- |
+| `hopper_delegate` | Run parallel tool-less subagents for read-only planning/review |
 | `pick_option` | Ask the user to choose among informed options |
 | `ask_user` | Ask a free-text question when options are not practical |
 

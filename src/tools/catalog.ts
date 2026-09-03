@@ -17,6 +17,8 @@ import { ghCreateWidgetTool } from "./edit-tools/gh-create-widget.js";
 import { ghMutateWidgetTool } from "./edit-tools/gh-mutate-widget.js";
 import { ghEditScriptTool } from "./edit-tools/gh-edit-script.js";
 import { ghApplyGraphTool } from "./gh-apply-graph.js";
+import { ghQuickScaffoldTool } from "./gh-quick-scaffold.js";
+import { hopperDelegateTool } from "./hopper-delegate.js";
 
 export const HOPPER_TOOL_GROUPS = [
 	"rhino",
@@ -74,6 +76,19 @@ export const HOPPER_REGISTERED_CATALOG: readonly HopperToolCatalogEntry[] = [
 		group: "rhino",
 		keywords: ["viewport", "camera", "named view", "cplane", "zoom"],
 		requires: "backend",
+	},
+	{
+		tool: ghQuickScaffoldTool,
+		group: "gh-edit",
+		keywords: ["quick scaffold", "early preview", "placeholder", "time to first visible"],
+		alwaysActive: true,
+		requires: "backend",
+	},
+	{
+		tool: hopperDelegateTool,
+		group: "interaction",
+		keywords: ["subagent", "delegate", "parallel planning", "review"],
+		alwaysActive: true,
 	},
 	{
 		tool: ghApplyGraphTool,

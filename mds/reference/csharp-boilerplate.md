@@ -30,7 +30,7 @@ Do **not** emit the class wrapper or `using` lines. For a new node use `gh_apply
 ```
 
 - `references`: namespace strings only (no `using`, no `;`). Omit to use the default GH set.
-- `runScript`: the full `private void RunScript(...)` method.
+- `runScript`: the full `private void RunScript(...)` method — **including the signature line**, as in the example above. A body-only string is the most common integration mistake: the body lands at class level and throws dozens of syntax errors (`Invalid token 'for' in class, record, struct, or interface member declaration`). Also avoid naming local variables identically to output `ref` params — `colBase = colBase;` triggers an `Assignment made to same variable` warning.
 - `helpers`: optional methods placed below `RunScript` inside the class.
 
 ### Small edits
