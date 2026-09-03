@@ -145,6 +145,7 @@ namespace rhino_zmq_poc
             var rhino = HostOperationRegistries.Rhino;
             var rhinoAdapter = new RhinoOperationAdapter(new RhinoOperationExecutor(), clock);
             var status = new RuntimeStatusStore(clock, dispatcher.Status, grasshopper.Status);
+            dispatcher.StatusChanged += dispatcherStatus => status.UpdateDispatcher(dispatcherStatus);
             var deferredOperations = new DeferredRpcOperationHandler();
             var transport = new RpcLifecycleTransport(
                 dispatcher,

@@ -293,6 +293,33 @@ public class OrderedDispatcherTests
         Assert.Equal(42, (await next).Value);
     }
 
+    [Fact]
+    public void StatusChangedTracksAdmissionQueueDepthAndExecution()
+    {
+        var scheduler = new ManualUiCallbackScheduler();
+        var clock = new ManualClock(InitialTime);
+        var dispatcher = new OrderedDispatcher(scheduler, clock, capacity: 2);
+        var snapshots = new List<DispatcherStatus>();
+        dispatcher.StatusChanged += snapshots.Add;
+
+        dispatcher.SubmitExternal(() => 1, clock.UtcNow.AddMinutes(1));
+        dispatcher.SubmitExternal(() => 2, clock.UtcNow.AddMinutes(1));
+        dispatcher.CloseExternalAdmission();
+
+        Assert.Equal(2, snapshots[^1].ExternalDepth);
+        Assert.False(snapshots[^1].AcceptingExternalWork);
+
+        scheduler.RunNext();
+
+        Assert.Equal(1, snapshots[^1].ExternalDepth);
+        Assert.False(snapshots[^1].IsRunning);
+
+        dispatcher.CancelQueuedExternal();
+
+        Assert.Equal(0, snapshots[^1].ExternalDepth);
+        Assert.False(snapshots[^1].AcceptingExternalWork);
+    }
+
     private static T Record<T>(ICollection<T> order, T value)
     {
         order.Add(value);

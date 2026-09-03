@@ -32,6 +32,8 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
     private bool _running;
     private WorkItem? _runningItem;
 
+    public event Action<DispatcherStatus>? StatusChanged;
+
     public OrderedDispatcher(
         IUiCallbackScheduler scheduler,
         IHopperClock clock,
@@ -102,20 +104,36 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
 
     public void CloseExternalAdmission()
     {
+        var changed = false;
         lock (_gate)
-            _acceptingExternalWork = false;
+        {
+            if (_acceptingExternalWork)
+            {
+                _acceptingExternalWork = false;
+                changed = true;
+            }
+        }
+        if (changed)
+            NotifyStatusChanged();
     }
 
     public bool ReopenExternalAdmission()
     {
+        var changed = false;
         lock (_gate)
         {
             if (_shutdown)
                 return false;
 
-            _acceptingExternalWork = true;
-            return true;
+            if (!_acceptingExternalWork)
+            {
+                _acceptingExternalWork = true;
+                changed = true;
+            }
         }
+        if (changed)
+            NotifyStatusChanged();
+        return true;
     }
 
     public int CancelQueuedExternal()
@@ -128,6 +146,8 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
 
         foreach (var item in cancelled)
             item.CompleteBeforeStart(DispatcherResultKind.CancelledBeforeStart);
+        if (cancelled.Count > 0)
+            NotifyStatusChanged();
         return cancelled.Count;
     }
 
@@ -156,6 +176,7 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
         if (cancelled == null)
             return DispatcherCancellationState.NotFound;
         cancelled.CompleteBeforeStart(DispatcherResultKind.CancelledBeforeStart);
+        NotifyStatusChanged();
         return DispatcherCancellationState.CancelledBeforeStart;
     }
 
@@ -175,6 +196,7 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
 
         foreach (var item in rejected)
             item.CompleteBeforeStart(DispatcherResultKind.ShuttingDown);
+        NotifyStatusChanged();
     }
 
     private Task<DispatcherResult<T>> Submit<T>(
@@ -229,6 +251,7 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
             return Task.FromResult(rejection);
 
         item!.RegisterCancellation(() => CancelBeforeStart(item));
+        NotifyStatusChanged();
         if (shouldPost)
             PostPump();
         return item.Completion;
@@ -253,7 +276,10 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
         }
 
         if (cancelled)
+        {
             item.CompleteBeforeStart(DispatcherResultKind.CancelledBeforeStart);
+            NotifyStatusChanged();
+        }
     }
 
     private void PumpOne()
@@ -285,6 +311,7 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
             return;
         }
 
+        NotifyStatusChanged();
         item.DisposeCancellationRegistration();
         if (rejection.HasValue)
         {
@@ -299,6 +326,7 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
             _running = false;
             _runningItem = null;
         }
+        NotifyStatusChanged();
         PostNextIfNeeded();
     }
 
@@ -350,8 +378,11 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
 
             foreach (var item in failed)
                 item.Fail(exception);
+            NotifyStatusChanged();
         }
     }
+
+    private void NotifyStatusChanged() => StatusChanged?.Invoke(Status);
 
     private static List<WorkItem> DrainQueue(LinkedList<WorkItem> queue)
     {

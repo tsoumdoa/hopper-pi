@@ -4,83 +4,85 @@ namespace rhino_zmq_poc
 {
     internal static class AgentTransaction
     {
-        private static GH_Document _doc;
-        private static byte[] _beforeSnapshot;
+        private static readonly BoundTransactionState<GH_Document, byte[]> State =
+            new BoundTransactionState<GH_Document, byte[]>();
         private static string _transactionName;
-        private static bool _active;
 
-        public static bool IsActive => _active;
+        public static bool IsActive => State.IsActive;
 
         public static string Begin(GH_Document doc, string name = "Hopper agent")
         {
             if (doc == null)
                 return "beginAgentTransaction error: document is null";
 
-            if (_active)
+            if (State.IsActive)
             {
-                if (_doc == doc)
+                if (State.IsBoundTo(doc))
                     return "beginAgentTransaction: transaction already active";
-                Cancel(_doc);
+                CancelActive();
             }
 
             var snapshot = DocumentSnapshots.Serialize(doc);
             if (snapshot == null)
                 return "beginAgentTransaction error: failed to snapshot document";
 
-            _doc = doc;
-            _beforeSnapshot = snapshot;
+            State.Begin(doc, snapshot);
             _transactionName = string.IsNullOrWhiteSpace(name) ? "Hopper agent" : name;
-            _active = true;
             return "beginAgentTransaction: started";
         }
 
         public static string Commit(GH_Document doc)
         {
-            if (!_active || _doc != doc)
+            if (!State.IsBoundTo(doc))
                 return "commitAgentTransaction: no active transaction";
 
             try
             {
-                var afterSnapshot = DocumentSnapshots.Serialize(doc);
-                if (afterSnapshot == null)
-                    return "commitAgentTransaction error: failed to snapshot document";
+                return State.Complete((boundDocument, beforeSnapshot) =>
+                {
+                    var afterSnapshot = DocumentSnapshots.Serialize(boundDocument);
+                    if (afterSnapshot == null)
+                        return "commitAgentTransaction error: failed to snapshot document";
 
-                if (DocumentSnapshots.AreEqual(_beforeSnapshot, afterSnapshot))
-                    return "commitAgentTransaction: no canvas changes";
+                    if (DocumentSnapshots.AreEqual(beforeSnapshot, afterSnapshot))
+                        return "commitAgentTransaction: no canvas changes";
 
-                var action = new DocumentSnapshotUndoAction(_beforeSnapshot, afterSnapshot);
-                doc.UndoUtil.RecordEvent(_transactionName, action);
-                return "commitAgentTransaction: recorded undo";
+                    var action = new DocumentSnapshotUndoAction(beforeSnapshot, afterSnapshot);
+                    boundDocument.UndoUtil.RecordEvent(_transactionName, action);
+                    return "commitAgentTransaction: recorded undo";
+                });
             }
             finally
             {
-                Reset();
+                _transactionName = null;
             }
         }
 
         public static string Cancel(GH_Document doc)
         {
-            if (!_active || _doc != doc)
+            if (!State.IsBoundTo(doc))
+                return "cancelAgentTransaction: no active transaction";
+
+            return CancelActive();
+        }
+
+        public static string CancelActive()
+        {
+            if (!State.IsActive)
                 return "cancelAgentTransaction: no active transaction";
 
             try
             {
-                if (_beforeSnapshot != null)
-                    DocumentSnapshots.Apply(doc, _beforeSnapshot);
-                return "cancelAgentTransaction: reverted canvas";
+                return State.Complete((document, beforeSnapshot) =>
+                {
+                    DocumentSnapshots.Apply(document, beforeSnapshot);
+                    return "cancelAgentTransaction: reverted canvas";
+                });
             }
             finally
             {
-                Reset();
+                _transactionName = null;
             }
-        }
-
-        private static void Reset()
-        {
-            _active = false;
-            _doc = null;
-            _beforeSnapshot = null;
-            _transactionName = null;
         }
     }
 }

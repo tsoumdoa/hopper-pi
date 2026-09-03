@@ -42,15 +42,10 @@ namespace rhino_zmq_poc
             }
 
             var status = facade.GetStatus();
-            RhinoApp.WriteLine($"Hopper lifecycle: {status.Lifecycle.State.ToString().ToLowerInvariant()}");
-            RhinoApp.WriteLine($"Rhino document: {DocumentName(status.RhinoDocument)}");
-            RhinoApp.WriteLine($"Grasshopper: {status.Grasshopper.StateName}");
-            RhinoApp.WriteLine($"Grasshopper document: {DocumentName(status.GrasshopperDocument)}");
+            foreach (var line in HopperStatusFormatter.Format(status.Runtime))
+                RhinoApp.WriteLine(line);
             return Result.Success;
         }
-
-        private static string DocumentName(Hopper.Core.Operations.OperationDocumentStatus document) =>
-            document.HasActiveDocument ? document.DocumentName ?? "unnamed" : "none";
     }
 
     [Guid(PublicIdentity.HopperCodeStopCommandId)]

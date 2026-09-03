@@ -173,9 +173,7 @@ namespace rhino_zmq_poc
 
         public void CleanupOpenTransactions()
         {
-            var document = ActiveDocument;
-            if (document != null)
-                AgentTransaction.Cancel(document);
+            AgentTransaction.CancelActive();
         }
 
         private GH_Document ActiveDocument => _documents?.ActiveDocument

@@ -67,7 +67,7 @@ namespace rhino_zmq_poc
             if (composition == null)
                 return;
             TryClearHostFacade(composition.Facade);
-            composition.Dispose();
+            composition.CloseForRhinoExit();
         }
 
         private void OnRhinoClosing(object sender, EventArgs e)
