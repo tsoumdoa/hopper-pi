@@ -216,16 +216,29 @@ function ProviderDialog({
   send(message: Record<string, unknown>): boolean;
   providers: Array<{ id: string; name: string; authenticated: boolean }>;
 }) {
-  const [provider, setProvider] = useState("openai");
+  const [provider, setProvider] = useState("");
   const [authType, setAuthType] = useState("api_key");
   const [apiKey, setApiKey] = useState("");
+  const providerOptions = providers.length
+    ? providers
+    : [
+        { id: "anthropic", name: "Anthropic", authenticated: false },
+        { id: "openai", name: "OpenAI", authenticated: false },
+        { id: "openai-codex", name: "OpenAI Codex", authenticated: false },
+        { id: "google", name: "Google", authenticated: false },
+      ];
+  const selectedProvider =
+    provider ||
+    providerOptions.find((item) => item.authenticated)?.id ||
+    providerOptions[0]?.id ||
+    "";
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (authType === "api_key" && !apiKey.trim()) return;
+    if (!selectedProvider || (authType === "api_key" && !apiKey.trim())) return;
     if (
       send({
         type: "login",
-        provider,
+        provider: selectedProvider,
         authType,
         ...(authType === "api_key" ? { apiKey: apiKey.trim() } : {}),
       })
@@ -237,26 +250,18 @@ function ProviderDialog({
       <DialogContent>
         <DialogTitle>Model provider</DialogTitle>
         <DialogDescription>
-          Credentials use the global Pi auth store by default. Hopper keeps
-          sessions and settings separate.
+          Hopper reads Pi's global auth file by default. Sessions and model
+          settings stay separate.
         </DialogDescription>
         <form className="mt-6 grid gap-4" onSubmit={submit}>
           <label className="grid gap-1.5 text-sm font-semibold">
             Provider
-            <Select value={provider} onValueChange={setProvider}>
+            <Select value={selectedProvider} onValueChange={setProvider}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {(providers.length
-                  ? providers
-                  : [
-                      { id: "anthropic", name: "Anthropic" },
-                      { id: "openai", name: "OpenAI" },
-                      { id: "openai-codex", name: "OpenAI Codex" },
-                      { id: "google", name: "Google" },
-                    ]
-                ).map((item) => (
+                {providerOptions.map((item) => (
                   <SelectItem key={item.id} value={item.id}>
                     {item.name}
                   </SelectItem>
@@ -294,9 +299,10 @@ function ProviderDialog({
               type="button"
               variant="destructive"
               disabled={
-                !providers.find((item) => item.id === provider)?.authenticated
+                !providerOptions.find((item) => item.id === selectedProvider)
+                  ?.authenticated
               }
-              onClick={() => send({ type: "logout", provider })}
+              onClick={() => send({ type: "logout", provider: selectedProvider })}
             >
               Log out
             </Button>
@@ -462,6 +468,9 @@ export function App() {
     const [provider, id] = value.split("/");
     send({ type: "set_model", provider, id });
   };
+  const authenticatedProviders = state.providers.filter(
+    (provider) => provider.authenticated,
+  );
   return (
     <div className="grid min-h-dvh bg-white lg:grid-cols-[264px_minmax(0,1fr)]">
       <aside className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-zinc-200 bg-white p-3.5 lg:flex lg:min-h-dvh lg:flex-col lg:items-stretch lg:gap-5 lg:border-b-0 lg:border-r lg:p-4">
@@ -534,8 +543,8 @@ export function App() {
               Provider
             </p>
             <span className="font-mono text-[11px] text-zinc-500">
-              {state.providers.some((provider) => provider.authenticated)
-                ? "Connected"
+              {authenticatedProviders.length
+                ? `${authenticatedProviders[0]?.name}${authenticatedProviders.length > 1 ? ` +${authenticatedProviders.length - 1}` : ""}`
                 : "Not configured"}
             </span>
           </div>
