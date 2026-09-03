@@ -3,12 +3,10 @@ import {
   ChevronDown,
   CircleAlert,
   LogIn,
-  Plus,
   Power,
   RefreshCw,
   Send,
   Square,
-  Wrench,
   X,
 } from "lucide-react";
 import { useHopperConnection } from "./hooks/use-hopper-connection";
@@ -47,10 +45,10 @@ function RuntimeStatus({
 }) {
   if (error)
     return (
-      <p className="text-xs text-red-700">Rhino status unavailable: {error}</p>
+      <p className="font-mono text-[11px] text-red-600">Rhino status unavailable: {error}</p>
     );
   if (!status)
-    return <p className="text-xs text-stone-500">Waiting for Rhino status</p>;
+    return <p className="font-mono text-[11px] text-zinc-500">Waiting for Rhino status</p>;
   const lifecycle = status.lifecycle as Record<string, unknown> | undefined;
   const transport = status.transport as Record<string, unknown> | undefined;
   const host = status.host as Record<string, unknown> | undefined;
@@ -90,21 +88,21 @@ function RuntimeStatus({
   ).filter(([, value]) => value);
   return (
     <div className="grid gap-3">
-      <dl className="grid gap-2 text-[11px]">
+      <dl className="grid gap-px border border-zinc-200 bg-zinc-200 font-mono text-[11px]">
         {rows.map(([label, value]) => (
           <div
-            className="grid grid-cols-[78px_minmax(0,1fr)] gap-2"
+            className="grid grid-cols-[72px_minmax(0,1fr)] gap-2 bg-white px-2 py-1"
             key={label}
           >
-            <dt className="text-stone-500">{label}</dt>
-            <dd className="m-0 break-words text-stone-700">{value}</dd>
+            <dt className="text-zinc-500">{label}</dt>
+            <dd className="m-0 break-words text-zinc-700">{value}</dd>
           </div>
         ))}
       </dl>
-      <div className="text-[11px]">
-        <p className="font-semibold text-stone-500">Latest component errors</p>
+      <div className="font-mono text-[11px]">
+        <p className="font-medium uppercase tracking-[.08em] text-zinc-500">Component errors</p>
         {errors.length ? (
-          <ul className="mt-1 grid gap-1 text-red-700">
+          <ul className="mt-1 grid gap-1 text-red-600">
             {errors.map(([component, value]) => (
               <li key={component}>
                 {titleCase(component)} · {value?.code}: {value?.message}
@@ -112,7 +110,7 @@ function RuntimeStatus({
             ))}
           </ul>
         ) : (
-          <p className="mt-1 text-stone-500">None</p>
+          <p className="mt-1 text-zinc-500">None</p>
         )}
       </div>
     </div>
@@ -131,27 +129,26 @@ function ToolCard({ tool }: { tool: ConversationMessage["tools"][number] }) {
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className="overflow-hidden rounded-lg border border-stone-200 bg-white"
+      className="overflow-hidden border border-zinc-200 bg-white hover:border-zinc-300"
     >
-      <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left">
-        <span className="flex min-w-0 items-center gap-2 font-mono text-xs font-semibold text-emerald-900">
-          <Wrench className="size-3.5 shrink-0" />
+      <CollapsibleTrigger className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-2.5 py-2 text-left before:content-['+'] data-[state=open]:before:content-['−']">
+        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px] text-black">
           {tool.name}
         </span>
         <span
           className={
             tool.status === "error"
-              ? "text-xs font-semibold text-red-700"
+              ? "font-mono text-[11px] font-medium uppercase tracking-[.08em] text-red-600"
               : tool.status === "running"
-                ? "text-xs font-semibold text-orange-700"
-                : "text-xs text-stone-500"
+                ? "animate-pulse font-mono text-[11px] font-medium uppercase tracking-[.08em] text-black"
+                : "font-mono text-[11px] font-medium uppercase tracking-[.08em] text-zinc-500"
           }
         >
           {label}
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <pre className="max-h-64 overflow-auto border-t border-stone-200 bg-stone-50 p-3 text-[11px] leading-relaxed text-stone-600">
+        <pre className="max-h-64 overflow-auto border-t border-zinc-200 bg-zinc-50 p-2.5 font-mono text-[11px] leading-relaxed text-zinc-600">
           {formatValue(tool.detail)}
         </pre>
       </CollapsibleContent>
@@ -162,23 +159,14 @@ function ToolCard({ tool }: { tool: ConversationMessage["tools"][number] }) {
 function Message({ message }: { message: ConversationMessage }) {
   const assistant = message.role === "assistant";
   return (
-    <article className="grid grid-cols-[32px_minmax(0,1fr)] gap-3">
-      <div
-        className={
-          assistant
-            ? "grid size-8 place-items-center rounded-lg bg-emerald-950 text-[10px] font-black text-white"
-            : "grid size-8 place-items-center rounded-lg bg-orange-100 text-[10px] font-black text-stone-800"
-        }
-      >
-        {assistant ? "H" : "You"}
-      </div>
-      <div className="min-w-0 pt-0.5">
-        <div className="mb-1 flex items-baseline gap-2">
-          <span className="text-sm font-bold">
+    <article className="mb-8">
+      <div className="min-w-0">
+        <div className="mb-2 flex items-baseline gap-2.5 font-mono text-[11px]">
+          <span className={assistant ? "font-medium uppercase tracking-[.08em] text-zinc-500" : "font-medium uppercase tracking-[.08em] text-black"}>
             {assistant ? "Hopper" : "You"}
           </span>
           {message.streaming && (
-            <span className="text-xs text-orange-700">Working</span>
+            <span className="text-zinc-500 before:mr-2.5 before:content-['·']">Working</span>
           )}
         </div>
         {message.text && (
@@ -186,28 +174,27 @@ function Message({ message }: { message: ConversationMessage }) {
             className={
               assistant
                 ? "whitespace-pre-wrap text-[15px] leading-6"
-                : "inline-block whitespace-pre-wrap rounded-2xl rounded-tl-sm border border-stone-200 bg-white px-4 py-3 text-[15px] leading-6"
+                : "inline-block whitespace-pre-wrap border border-black px-3.5 py-3 text-[15px] leading-6"
             }
           >
             {message.text}
             {message.streaming && (
-              <span className="ml-1 inline-block h-4 w-0.5 animate-pulse bg-orange-600 align-[-3px]" />
+              <span className="ml-1 inline-block h-4 w-0.5 animate-pulse bg-black align-[-3px]" />
             )}
           </div>
         )}
         {message.thinking && (
-          <Collapsible className="mt-3 text-sm text-stone-600">
-            <CollapsibleTrigger className="flex items-center gap-1 font-semibold">
-              <ChevronDown className="size-4" />
+          <Collapsible className="my-3 text-[13px] text-zinc-500">
+            <CollapsibleTrigger className="flex items-center gap-1 font-mono text-[11px] before:inline-block before:w-3 before:content-['+'] data-[state=open]:before:content-['−']">
               Thinking
             </CollapsibleTrigger>
-            <CollapsibleContent className="mt-2 whitespace-pre-wrap border-l-2 border-stone-300 pl-3 text-xs leading-5">
+            <CollapsibleContent className="mt-2 whitespace-pre-wrap border-l border-zinc-300 pl-3 text-[13px] leading-5">
               {message.thinking}
             </CollapsibleContent>
           </Collapsible>
         )}
         {message.tools.length > 0 && (
-          <div className="mt-3 grid gap-2">
+          <div className="mt-3 grid gap-1.5">
             {message.tools.map((tool) => (
               <ToolCard key={tool.id} tool={tool} />
             ))}
@@ -297,7 +284,7 @@ function ProviderDialog({
                 autoComplete="off"
                 value={apiKey}
                 onChange={(event) => setApiKey(event.target.value)}
-                className="h-10 rounded-md border border-stone-300 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-emerald-800/25"
+                className="h-8 rounded-[3px] border border-zinc-300 bg-white px-2.5 text-sm outline-none focus:ring-1 focus:ring-black"
                 placeholder="Paste an API key"
               />
             </label>
@@ -385,8 +372,8 @@ function UiRequestDialog({
                   key={option.id}
                   className={
                     value === option.value
-                      ? "cursor-pointer rounded-lg border border-emerald-800 bg-emerald-50 p-3"
-                      : "cursor-pointer rounded-lg border border-stone-200 bg-white p-3"
+                      ? "cursor-pointer bg-black p-3 text-white"
+                      : "cursor-pointer border border-zinc-200 bg-white p-3 hover:bg-zinc-50"
                   }
                 >
                   <input
@@ -396,11 +383,11 @@ function UiRequestDialog({
                     checked={value === option.value}
                     onChange={(event) => setValue(event.target.value)}
                   />
-                  <span className="block text-sm font-semibold">
+                    <span className="block text-[13px] font-medium">
                     {option.label}
                   </span>
                   {option.description && (
-                    <span className="mt-0.5 block text-xs text-stone-500">
+                    <span className={value === option.value ? "mt-0.5 block text-xs text-zinc-300" : "mt-0.5 block text-xs text-zinc-500"}>
                       {option.description}
                     </span>
                   )}
@@ -408,7 +395,7 @@ function UiRequestDialog({
               ))}
             </div>
           ) : request.kind === "confirm" ? (
-            <p className="rounded-lg bg-orange-50 p-4 text-sm text-stone-700">
+            <p className="border border-zinc-200 p-3 text-sm text-zinc-600">
               {request.description}
             </p>
           ) : request.kind === "editor" ? (
@@ -425,7 +412,7 @@ function UiRequestDialog({
               value={value}
               onChange={(event) => setValue(event.target.value)}
               placeholder={request.placeholder}
-              className="h-10 rounded-md border border-stone-300 px-3 text-sm outline-none focus:ring-2 focus:ring-emerald-800/25"
+              className="h-8 rounded-[3px] border border-zinc-300 px-2.5 text-sm outline-none focus:ring-1 focus:ring-black"
             />
           )}
           <div className="flex justify-end gap-2">
@@ -452,6 +439,7 @@ export function App() {
   const [draft, setDraft] = useState("");
   const [mode, setMode] = useState<"prompt" | "steer" | "follow_up">("prompt");
   const [providerOpen, setProviderOpen] = useState(false);
+  const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
   const conversation = useRef<HTMLDivElement>(null);
   useRuntimeStatus(
     token,
@@ -475,35 +463,21 @@ export function App() {
     send({ type: "set_model", provider, id });
   };
   return (
-    <div className="grid min-h-dvh bg-[radial-gradient(circle_at_top_right,_rgba(23,79,59,.06),_transparent_27rem)] lg:grid-cols-[286px_minmax(0,1fr)]">
-      <aside className="flex flex-col gap-5 border-b border-stone-200 bg-[#faf8f1]/95 p-4 lg:min-h-dvh lg:border-b-0 lg:border-r lg:p-5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="grid size-9 place-items-center rounded-xl bg-emerald-950 font-black text-white shadow-lg shadow-emerald-950/15">
-              H
-            </div>
-            <div>
-              <p className="text-sm font-extrabold tracking-tight">Hopper</p>
-              <p className="text-xs text-stone-500">Rhino local agent</p>
-            </div>
-          </div>
-          <Badge className={isMockMode ? "bg-orange-100 text-orange-800" : ""}>
-            {isMockMode
-              ? "Mock mode"
-              : state.connection.status === "connected"
-                ? "Connected"
-                : titleCase(state.connection.status)}
-          </Badge>
+    <div className="grid min-h-dvh bg-white lg:grid-cols-[264px_minmax(0,1fr)]">
+      <aside className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-zinc-200 bg-white p-3.5 lg:flex lg:min-h-dvh lg:flex-col lg:items-stretch lg:gap-5 lg:border-b-0 lg:border-r lg:p-4">
+        <div className="flex items-baseline justify-between gap-2 lg:border-b lg:border-black lg:pb-5">
+          <p className="text-[15px] font-semibold tracking-tight">Hopper</p>
+          <p className="hidden font-mono text-[11px] tracking-[.02em] text-zinc-500 lg:block">Rhino local agent</p>
         </div>
-        <Button onClick={() => send({ type: "new_session" })}>
-          <Plus className="size-4" />
-          New session
-        </Button>
-        <div className="grid gap-3 border-t border-stone-200 pt-5">
-          <p className="text-[11px] font-extrabold uppercase tracking-[.1em] text-stone-500">
+        <div className="flex gap-2 lg:grid">
+          <Button className="max-lg:px-2.5" onClick={() => send({ type: "new_session" })}>New session</Button>
+          <Button className="lg:hidden" variant={mobileSettingsOpen ? "default" : "secondary"} onClick={() => setMobileSettingsOpen((open) => !open)}>Settings</Button>
+        </div>
+        <div className={`col-span-2 grid gap-2 ${mobileSettingsOpen ? "" : "max-lg:hidden"}`}>
+          <p className="font-mono text-[11px] font-medium uppercase tracking-[.08em] text-zinc-500">
             Agent
           </p>
-          <label className="grid gap-1.5 text-xs font-semibold text-stone-600">
+          <label className="mt-1 grid gap-2 font-mono text-[11px] font-medium uppercase tracking-[.08em] text-zinc-500">
             Model
             <Select
               disabled={
@@ -531,7 +505,7 @@ export function App() {
               </SelectContent>
             </Select>
           </label>
-          <label className="grid gap-1.5 text-xs font-semibold text-stone-600">
+          <label className="mt-1 grid gap-2 font-mono text-[11px] font-medium uppercase tracking-[.08em] text-zinc-500">
             Thinking
             <Select
               disabled={state.connection.status !== "connected"}
@@ -554,27 +528,27 @@ export function App() {
             </Select>
           </label>
         </div>
-        <div className="grid gap-3 border-t border-stone-200 pt-5">
+        <div className={`col-span-2 grid gap-3 border-t border-zinc-200 pt-5 ${mobileSettingsOpen ? "" : "max-lg:hidden"}`}>
           <div className="flex items-center justify-between">
-            <p className="text-[11px] font-extrabold uppercase tracking-[.1em] text-stone-500">
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[.08em] text-zinc-500">
               Provider
             </p>
-            <span className="text-xs text-emerald-800">
+            <span className="font-mono text-[11px] text-zinc-500">
               {state.providers.some((provider) => provider.authenticated)
                 ? "Connected"
                 : "Not configured"}
             </span>
           </div>
-          <p className="text-xs leading-5 text-stone-500">
+          <p className="text-xs text-zinc-500">
             Connect a model provider using Hopper's private settings.
           </p>
           <Button variant="secondary" onClick={() => setProviderOpen(true)}>
             Manage provider
           </Button>
         </div>
-        <div className="mt-auto grid gap-3 border-t border-stone-200 pt-5">
+        <div className="col-span-2 mt-auto hidden gap-3 border-t border-zinc-200 pt-5 lg:grid">
           <div className="flex items-center justify-between">
-            <p className="text-[11px] font-extrabold uppercase tracking-[.1em] text-stone-500">
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[.08em] text-zinc-500">
               Rhino runtime
             </p>
             <Button size="sm" variant="ghost" onClick={reconnect}>
@@ -586,43 +560,28 @@ export function App() {
             status={state.runtimeStatus}
             error={state.runtimeStatusError}
           />
-          <div className="rounded-lg border border-stone-200 bg-[#fffdf8] p-3">
-            <div className="flex items-start gap-2">
-              <span
-                className={
-                  state.connection.status === "connected"
-                    ? "mt-1.5 size-2 rounded-full bg-emerald-600"
-                    : "mt-1.5 size-2 rounded-full bg-orange-500"
-                }
-              />
-              <div>
-                <p className="text-xs font-bold">
-                  {titleCase(state.connection.status)}
-                </p>
-                <p className="mt-0.5 text-[11px] leading-4 text-stone-500">
-                  {state.connection.detail}
-                </p>
-                <p className="mt-1 text-[11px] leading-4 text-stone-500">
-                  {state.backendDetail}
-                </p>
-              </div>
-            </div>
+        </div>
+        <div className="col-span-2 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 border-t border-black pt-3 lg:pt-4">
+          <span
+            className={
+              state.connection.status === "connected"
+                ? "mt-1.5 size-2 border border-black bg-black"
+                : "mt-1.5 size-2 animate-pulse border border-black bg-white"
+            }
+          />
+          <div>
+            <p className="text-[13px] font-medium">{titleCase(state.connection.status)}</p>
+            <p className="mt-0.5 font-mono text-[11px] leading-4 text-zinc-500 max-lg:hidden">{state.connection.detail}</p>
+            <p className="mt-1 font-mono text-[11px] leading-4 text-zinc-500 max-lg:hidden">{state.backendDetail}</p>
           </div>
         </div>
       </aside>
       <main className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]">
-        <header className="flex items-center justify-between border-b border-stone-200 bg-[#f4f1e8]/85 px-5 py-4 backdrop-blur lg:px-10">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[.1em] text-orange-700">
-              Active conversation
-            </p>
-            <h1 className="mt-1 text-xl font-extrabold tracking-tight">
-              {state.session.name}
-            </h1>
-          </div>
+        <header className="flex min-h-[52px] items-center justify-between gap-4 border-b border-zinc-200 px-4 lg:px-8">
+          <h1 className="min-w-0 overflow-hidden text-[13px] font-medium text-ellipsis whitespace-nowrap">{state.session.name}</h1>
           <div className="flex items-center gap-2">
             {state.session.isStreaming && (
-              <Badge className="bg-orange-100 text-orange-800">Working</Badge>
+              <Badge>Working</Badge>
             )}
             <Button
               size="sm"
@@ -636,22 +595,21 @@ export function App() {
         </header>
         <ScrollArea className="min-h-0">
           <div
-            className="mx-auto flex w-full max-w-4xl flex-col gap-7 px-5 py-8 lg:px-10"
+            className="mx-auto flex w-full max-w-[760px] flex-col px-4 py-10 lg:px-8"
             ref={conversation}
           >
             {state.session.messages.length === 0 ? (
-              <section className="mx-auto mt-[max(4vh,1rem)] max-w-2xl rounded-3xl border border-stone-200 bg-[#fffdf8]/90 p-8 shadow-xl shadow-stone-950/5 lg:p-11">
-                <p className="text-xs font-bold uppercase tracking-[.12em] text-orange-700">
+              <section className="mt-[max(8vh,1.5rem)] grid max-w-[600px] gap-4">
+                <p className="border-b border-black pb-3 font-mono text-[11px] font-medium uppercase tracking-[.08em] text-zinc-500">
                   Ready when Rhino is
                 </p>
-                <h2 className="mt-3 text-3xl font-extrabold tracking-tight lg:text-4xl">
+                <h2 className="text-[clamp(28px,4vw,40px)] font-medium tracking-[-.03em] leading-[1.1]">
                   Build in Grasshopper by describing what you need.
                 </h2>
-                <p className="mt-4 max-w-xl text-stone-600">
-                  Hopper can inspect the active canvas, add and wire components,
-                  run Rhino scripts, and explain each tool call as it works.
+                <p className="max-w-[520px] text-sm text-zinc-600">
+                  Hopper inspects the active canvas, adds and wires components, runs Rhino scripts, and shows each tool call as it works.
                 </p>
-                <div className="mt-6 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                   {[
                     "Inspect the active Grasshopper canvas and summarize its structure and any errors.",
                     "Create a simple parametric pavilion on the active Grasshopper canvas.",
@@ -675,14 +633,14 @@ export function App() {
             )}
           </div>
         </ScrollArea>
-        <footer className="bg-gradient-to-t from-canvas via-canvas to-transparent px-5 pb-4 pt-8 lg:px-10">
+        <footer className="px-4 pb-4 lg:px-8">
           <form
-            className="mx-auto w-full max-w-3xl rounded-2xl border border-stone-300 bg-white p-3 shadow-xl shadow-stone-950/10 focus-within:ring-2 focus-within:ring-emerald-900/15"
+            className="mx-auto w-full max-w-[760px] rounded-[3px] border border-black bg-white focus-within:ring-1 focus-within:ring-black"
             onSubmit={submit}
           >
             <Textarea
-              rows={2}
-              className="min-h-16 resize-none border-0 shadow-none focus:ring-0"
+              rows={1}
+              className="min-h-12 resize-none border-0 px-3.5 pt-3.5 pb-1.5 shadow-none focus:ring-0"
               disabled={state.connection.status !== "connected"}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
@@ -700,12 +658,12 @@ export function App() {
               }}
               placeholder="Ask Hopper to work in Rhino or Grasshopper"
             />
-            <div className="flex items-center gap-2 border-t border-stone-100 pt-2">
+            <div className="flex items-center gap-2 px-2 pb-2">
               <Select
                 value={mode}
                 onValueChange={(value) => setMode(value as typeof mode)}
               >
-                <SelectTrigger className="h-8 w-40 border-0 bg-stone-50 text-xs">
+                <SelectTrigger className="h-7 w-40 border-0 bg-white px-1 font-mono text-[11px] text-zinc-500">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -716,8 +674,8 @@ export function App() {
                   </SelectItem>
                 </SelectContent>
               </Select>
-              <span className="hidden flex-1 text-xs text-stone-500 sm:block">
-                Enter to send, Shift+Enter for a new line
+              <span className="hidden flex-1 text-right font-mono text-[11px] text-zinc-400 sm:block">
+                Enter to send · Shift+Enter for a new line
               </span>
               <Button
                 type="button"
@@ -741,7 +699,7 @@ export function App() {
               </Button>
             </div>
           </form>
-          <p className="mx-auto mt-2 max-w-3xl text-center text-[11px] text-stone-500">
+          <p className="mx-auto mt-2 max-w-[760px] font-mono text-[11px] text-zinc-400">
             Hopper can change the active Rhino document and Grasshopper canvas.
             Review important edits.
           </p>
@@ -764,10 +722,10 @@ export function App() {
             key={notice.id}
             className={
               notice.level === "error"
-                ? "rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 shadow-lg"
+                ? "border border-red-600 bg-red-600 p-3 text-xs text-white"
                 : notice.level === "warning"
-                  ? "rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900 shadow-lg"
-                  : "rounded-lg border border-stone-200 bg-white p-3 text-sm text-stone-700 shadow-lg"
+                  ? "border border-amber-600 bg-white p-3 text-xs text-black"
+                  : "border border-black bg-white p-3 text-xs text-black"
             }
           >
             <div className="flex gap-2">
@@ -786,7 +744,7 @@ export function App() {
                 )}
               </div>
               <button
-                className="text-stone-500"
+                className="text-zinc-500"
                 onClick={() =>
                   dispatch({ type: "dismiss-toast", id: notice.id })
                 }

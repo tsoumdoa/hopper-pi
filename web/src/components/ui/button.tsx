@@ -3,15 +3,15 @@ import { cva, type VariantProps } from "class-variance-authority";
 import type { ButtonHTMLAttributes } from "react";
 import { cn } from "../../lib/utils";
 
-const buttonVariants = cva("inline-flex items-center justify-center gap-2 rounded-md text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-800/35 disabled:pointer-events-none disabled:opacity-45", {
+const buttonVariants = cva("inline-flex items-center justify-center gap-2 rounded-[3px] border text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/25 disabled:pointer-events-none disabled:opacity-40", {
 	variants: {
 		variant: {
-			default: "bg-emerald-950 text-white hover:bg-emerald-900",
-			secondary: "border border-stone-300 bg-white text-stone-900 hover:border-emerald-900",
-			ghost: "text-stone-600 hover:bg-stone-200 hover:text-stone-950",
-			destructive: "border border-red-200 bg-red-50 text-red-800 hover:bg-red-100",
+			default: "border-black bg-black text-white hover:bg-white hover:text-black",
+			secondary: "border-zinc-300 bg-white text-black hover:border-black hover:bg-black hover:text-white",
+			ghost: "border-transparent bg-transparent text-black hover:border-zinc-300",
+			destructive: "border-zinc-300 bg-white text-red-600 hover:border-red-600 hover:bg-red-600 hover:text-white",
 		},
-		size: { default: "h-10 px-4", sm: "h-8 px-3 text-xs", icon: "size-9" },
+		size: { default: "h-8 px-3", sm: "h-7 px-3 text-xs", icon: "size-8" },
 	},
 	defaultVariants: { variant: "default", size: "default" },
 });
