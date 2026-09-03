@@ -42,6 +42,7 @@ describe("host protocol startup", () => {
 	});
 
 	afterEach(() => {
+		vi.useRealTimers();
 		if (originalProfile === undefined) delete process.env.HOPPER_CONNECTION_PROFILE;
 		else process.env.HOPPER_CONNECTION_PROFILE = originalProfile;
 		process.exitCode = originalExitCode;
@@ -52,6 +53,32 @@ describe("host protocol startup", () => {
 			if (!originalSigterm.has(listener)) process.removeListener("SIGTERM", listener);
 		}
 		vi.restoreAllMocks();
+	});
+
+	it("arms the parent-loss deadline while the protocol handshake is still blocked", async () => {
+		vi.useFakeTimers();
+		mocks.connect.mockReturnValue(new Promise(() => { }));
+		mocks.closeRuntimeRpc.mockReturnValue(new Promise(() => { }));
+		const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+		vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+		void main([
+			"--instance-id", "host-instance",
+			"--connection-profile", "/profiles/current.json",
+			"--static-dir", "/static",
+			"--parent-pid", "2147483647",
+		]);
+
+		await vi.advanceTimersByTimeAsync(1_999);
+		expect(exit).not.toHaveBeenCalled();
+		await vi.advanceTimersByTimeAsync(1);
+		await vi.advanceTimersByTimeAsync(749);
+		expect(exit).not.toHaveBeenCalled();
+		await vi.advanceTimersByTimeAsync(1);
+
+		expect(exit).toHaveBeenCalledWith(0);
+		expect(mocks.createRuntime).not.toHaveBeenCalled();
+		expect(mocks.startServer).not.toHaveBeenCalled();
 	});
 
 	it("does not create the host or print ready when the protocol handshake fails", async () => {
