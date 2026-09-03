@@ -30,6 +30,9 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 			process.stderr.write(`[hopper-host] shutdown failed: ${error instanceof Error ? error.message : String(error)}\n`);
 		},
 	});
+	stopParentWatcher = watchParentProcess(config.parentPid, () => {
+		void shutdown.request("parent_gone");
+	});
 
 	try {
 		runtime = await EmbeddedPiHost.create({
@@ -48,10 +51,6 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 		await shutdown.request("normal");
 		return;
 	}
-	stopParentWatcher = watchParentProcess(config.parentPid, () => {
-		void shutdown.request("parent_gone");
-	});
-
 	process.once("SIGINT", () => { void shutdown.request("normal"); });
 	process.once("SIGTERM", () => { void shutdown.request("normal"); });
 	process.stdout.write(`${JSON.stringify({ type: "ready", url: server.url, pid: process.pid })}\n`);
