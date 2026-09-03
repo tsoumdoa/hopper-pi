@@ -13,7 +13,7 @@
 
   <ItemGroup>
     <Compile Include="../*.cs"
-             Exclude="../HostReadiness.cs;../PluginIcon.cs;../RuntimeManifestPaths.cs;../rhino-zmq-pocComponent.cs;../rhino-zmq-pocInfo.cs" />
+             Exclude="../HopperGrasshopperAssemblyPriority.cs;../HostReadiness.cs;../PluginIcon.cs;../RuntimeManifestPaths.cs;../rhino-zmq-pocComponent.cs;../rhino-zmq-pocInfo.cs" />
     <Compile Include="../Messages/**/*.cs" />
     <Compile Include="../operations/**/*.cs" />
     <Compile Include="../services/**/*.cs" />
