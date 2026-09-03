@@ -40,3 +40,17 @@ test("TS Grasshopper command actions are handled by the Grasshopper executor", (
 		);
 	}
 });
+
+test("TS Rhino transaction actions are handled by the Rhino adapter", () => {
+	const adapterSource = readFileSync(
+		join(repoRoot, "dotnet/Hopper.Rhino.Host/RhinoOperationAdapter.cs"),
+		"utf8",
+	);
+
+	for (const action of RHINO_COMMAND_ACTIONS) {
+		assert.ok(
+			adapterSource.includes(`RpcOperation.${action}`),
+			`Missing Rhino adapter handler for action "${action}"`,
+		);
+	}
+});

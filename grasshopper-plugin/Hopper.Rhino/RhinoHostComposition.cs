@@ -137,6 +137,7 @@ namespace rhino_zmq_poc
             var dispatcher = new OrderedDispatcher(uiScheduler, clock);
             var grasshopper = HostOperationRegistries.Grasshopper;
             var rhino = HostOperationRegistries.Rhino;
+            var rhinoAdapter = new RhinoOperationAdapter(new RhinoOperationExecutor(), clock);
             var status = new RuntimeStatusStore(clock, dispatcher.Status, grasshopper.Status);
             var deferredOperations = new DeferredRpcOperationHandler();
             var transport = new RpcLifecycleTransport(
@@ -169,7 +170,9 @@ namespace rhino_zmq_poc
                 profiles,
                 child,
                 dispatcher,
-                new RegisteredGrasshopperTransactionCleanup(grasshopper),
+                new CompositeAgentTransactionCleanup(
+                    rhinoAdapter,
+                    new RegisteredGrasshopperTransactionCleanup(grasshopper)),
                 new GuidLifecycleInstanceIdSource(),
                 lifecycleBackground,
                 clock);
@@ -197,7 +200,6 @@ namespace rhino_zmq_poc
                 new RhinoCommandCompletionSink());
             deferredOperations.SetTarget(facade);
 
-            var rhinoAdapter = new RhinoOperationAdapter(new RhinoOperationExecutor(), clock);
             if (!rhino.TryRegister(rhinoAdapter))
                 throw new InvalidOperationException("A different Rhino operation adapter is already registered.");
 

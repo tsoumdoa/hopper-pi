@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Hopper.Core.Operations;
+using Hopper.Core.Lifecycle;
 using Hopper.Core.Protocol;
 using Hopper.Core.Time;
 
@@ -37,9 +38,15 @@ public interface IRhinoOperationExecutor
     OperationDocumentStatus DocumentStatus { get; }
     RhinoObjectQueryExecution QueryObjects(RhinoObjectQueryArguments arguments);
     RhinoScriptExecution RunScript(RhinoScriptArguments arguments);
+    RhinoCaptureExecution CaptureView(RhinoCaptureArguments arguments);
+    RhinoControlExecution ControlView(RhinoControlArguments arguments);
+    RhinoTransactionExecution BeginTransaction(string? name);
+    RhinoTransactionExecution CommitTransaction();
+    RhinoTransactionExecution CancelTransaction();
+    void CleanupOpenTransactions();
 }
 
-public sealed class RhinoOperationAdapter : IRhinoOperationAdapter
+public sealed class RhinoOperationAdapter : IRhinoOperationAdapter, IAgentTransactionCleanup
 {
     private readonly IRhinoOperationExecutor _executor;
     private readonly IHopperClock _clock;
@@ -53,7 +60,13 @@ public sealed class RhinoOperationAdapter : IRhinoOperationAdapter
     public OperationDocumentStatus DocumentStatus => _executor.DocumentStatus;
 
     public bool CanExecute(RpcOperation operation) =>
-        operation is RpcOperation.queryRhinoObjects or RpcOperation.runRhinoScript;
+        operation is RpcOperation.queryRhinoObjects
+            or RpcOperation.runRhinoScript
+            or RpcOperation.captureRhinoView
+            or RpcOperation.controlRhinoView
+            or RpcOperation.beginRhinoAgentTransaction
+            or RpcOperation.commitRhinoAgentTransaction
+            or RpcOperation.cancelRhinoAgentTransaction;
 
     public OperationResultV2 Execute(RpcRequestV2 request)
     {
@@ -64,6 +77,11 @@ public sealed class RhinoOperationAdapter : IRhinoOperationAdapter
             {
                 RpcOperation.queryRhinoObjects => QueryObjects(request.Args),
                 RpcOperation.runRhinoScript => RunScript(request.Args),
+                RpcOperation.captureRhinoView => CaptureView(request.Args),
+                RpcOperation.controlRhinoView => ControlView(request.Args),
+                RpcOperation.beginRhinoAgentTransaction => BeginTransaction(request.Args),
+                RpcOperation.commitRhinoAgentTransaction => Transaction(_executor.CommitTransaction()),
+                RpcOperation.cancelRhinoAgentTransaction => Transaction(_executor.CancelTransaction()),
                 _ => Failure($"Rhino operation '{request.Operation}' is not supported by this adapter."),
             };
         }
@@ -106,6 +124,65 @@ public sealed class RhinoOperationAdapter : IRhinoOperationAdapter
             ? Completed(data)
             : Failure(execution.Error, data);
     }
+
+    private OperationResultV2 CaptureView(JsonElement args)
+    {
+        var arguments = args.Deserialize<RhinoCaptureArguments>(RpcV2Contract.JsonOptions)
+            ?? throw new InvalidOperationException("Capture arguments are required.");
+        var execution = _executor.CaptureView(arguments);
+        var data = new
+        {
+            type = "captureRhinoView.response",
+            timestamp = _clock.UtcNow.ToUnixTimeMilliseconds(),
+            ok = execution.Succeeded,
+            imageBase64 = execution.ImageBase64,
+            mediaType = execution.MediaType,
+            error = execution.Error,
+            metadata = execution.Metadata,
+        };
+        return execution.Succeeded
+            ? Completed(data)
+            : Failure(execution.Error ?? "Rhino view capture failed.", data);
+    }
+
+    private OperationResultV2 ControlView(JsonElement args)
+    {
+        var arguments = args.Deserialize<RhinoControlArguments>(RpcV2Contract.JsonOptions)
+            ?? throw new InvalidOperationException("View control arguments are required.");
+        var execution = _executor.ControlView(arguments);
+        var data = new
+        {
+            type = "controlRhinoView.response",
+            timestamp = _clock.UtcNow.ToUnixTimeMilliseconds(),
+            ok = execution.Succeeded,
+            error = execution.Error,
+            message = execution.Message,
+            metadata = execution.Metadata,
+        };
+        return execution.Succeeded
+            ? Completed(data)
+            : Failure(execution.Error ?? "Rhino view control failed.", data);
+    }
+
+    private OperationResultV2 BeginTransaction(JsonElement args)
+    {
+        var name = args.ValueKind == JsonValueKind.Object
+            && args.TryGetProperty("name", out var nameProperty)
+            && nameProperty.ValueKind == JsonValueKind.String
+                ? nameProperty.GetString()
+                : null;
+        return Transaction(_executor.BeginTransaction(name));
+    }
+
+    private static OperationResultV2 Transaction(RhinoTransactionExecution execution)
+    {
+        var data = new { result = execution.Result };
+        return execution.Succeeded
+            ? Completed(data)
+            : Failure(execution.Error ?? execution.Result, data);
+    }
+
+    public void CleanupOpenTransactions() => _executor.CleanupOpenTransactions();
 
     private static OperationResultV2 Completed<T>(T data) => new()
     {

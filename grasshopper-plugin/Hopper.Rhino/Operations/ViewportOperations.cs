@@ -2,7 +2,8 @@ using System;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
-using System.Text.Json.Serialization;
+using System.Text;
+using Hopper.Rhino.Host;
 using Rhino;
 using Rhino.Display;
 using Rhino.DocObjects;
@@ -10,113 +11,23 @@ using Rhino.Geometry;
 
 namespace rhino_zmq_poc
 {
-    internal sealed class CaptureRhinoViewParams
-    {
-        [JsonPropertyName("view")]
-        public string View { get; set; }
-
-        [JsonPropertyName("width")]
-        public int? Width { get; set; }
-
-        [JsonPropertyName("height")]
-        public int? Height { get; set; }
-
-        [JsonPropertyName("displayMode")]
-        public string DisplayMode { get; set; }
-
-        [JsonPropertyName("transparentBackground")]
-        public bool? TransparentBackground { get; set; }
-
-        [JsonPropertyName("restoreView")]
-        public bool? RestoreView { get; set; }
-    }
-
-    internal class RhinoPointInput
-    {
-        [JsonPropertyName("x")]
-        public double X { get; set; }
-
-        [JsonPropertyName("y")]
-        public double Y { get; set; }
-
-        [JsonPropertyName("z")]
-        public double Z { get; set; }
-    }
-
-    internal class RhinoCameraControlParams
-    {
-        [JsonPropertyName("location")]
-        public RhinoPointInput Location { get; set; }
-
-        [JsonPropertyName("target")]
-        public RhinoPointInput Target { get; set; }
-
-        [JsonPropertyName("lensLength")]
-        public double? LensLength { get; set; }
-
-        [JsonPropertyName("projection")]
-        public string Projection { get; set; }
-    }
-
-    internal class RhinoZoomControlParams
-    {
-        [JsonPropertyName("mode")]
-        public string Mode { get; set; }
-
-        [JsonPropertyName("min")]
-        public RhinoPointInput Min { get; set; }
-
-        [JsonPropertyName("max")]
-        public RhinoPointInput Max { get; set; }
-    }
-
-    internal class ControlRhinoViewParams
-    {
-        [JsonPropertyName("action")]
-        public string Action { get; set; }
-
-        [JsonPropertyName("viewName")]
-        public string ViewName { get; set; }
-
-        [JsonPropertyName("standardView")]
-        public string StandardView { get; set; }
-
-        [JsonPropertyName("namedView")]
-        public string NamedView { get; set; }
-
-        [JsonPropertyName("cplaneName")]
-        public string CPlaneName { get; set; }
-
-        [JsonPropertyName("camera")]
-        public RhinoCameraControlParams Camera { get; set; }
-
-        [JsonPropertyName("zoom")]
-        public RhinoZoomControlParams Zoom { get; set; }
-    }
-
-    internal static class ViewportCaptureOps
+    internal static class ViewportOperations
     {
         private const int DefaultWidth = 1280;
         private const int DefaultHeight = 720;
         private const int MaxDimension = 2000;
 
-        public static CaptureRhinoViewResponse Capture(RhinoDoc doc, CaptureRhinoViewParams param)
+        public static RhinoCaptureExecution Capture(RhinoDoc doc, RhinoCaptureArguments param)
         {
-            var response = new CaptureRhinoViewResponse
-            {
-                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                MediaType = "image/png"
-            };
-
             try
             {
                 if (doc == null)
-                    return CaptureFail(response, "No active Rhino document");
+                    return CaptureFail("No active Rhino document");
 
                 var viewName = string.IsNullOrWhiteSpace(param?.View) ? "active" : param.View.Trim();
                 var view = ResolveView(doc, viewName) ?? doc.Views.ActiveView;
                 if (view == null)
-                    return CaptureFail(response, "No active Rhino view");
+                    return CaptureFail("No active Rhino view");
 
                 var viewport = view.ActiveViewport;
                 var restoreView = param?.RestoreView != false;
@@ -130,13 +41,13 @@ namespace rhino_zmq_poc
 
                     var changedProjection = ApplyViewSelector(doc, viewport, viewName);
                     if (!changedProjection && !IsActiveSelector(viewName) && !IsExistingView(doc, viewName))
-                        return CaptureFail(response, $"View '{viewName}' was not found as a viewport, standard view, or named view");
+                        return CaptureFail($"View '{viewName}' was not found as a viewport, standard view, or named view");
 
                     if (!string.IsNullOrWhiteSpace(param?.DisplayMode))
                     {
                         var displayMode = DisplayModeDescription.FindByName(param.DisplayMode.Trim());
                         if (displayMode == null)
-                            return CaptureFail(response, $"Display mode '{param.DisplayMode}' was not found");
+                            return CaptureFail($"Display mode '{param.DisplayMode}' was not found");
                         previousDisplayMode = viewport.DisplayMode;
                         viewport.DisplayMode = displayMode;
                     }
@@ -159,15 +70,17 @@ namespace rhino_zmq_poc
 
                     using var bitmap = capture.CaptureToBitmap(view);
                     if (bitmap == null)
-                        return CaptureFail(response, "Rhino returned no bitmap for the view capture");
+                        return CaptureFail("Rhino returned no bitmap for the view capture");
 
                     using var stream = new MemoryStream();
                     bitmap.Save(stream, ImageFormat.Png);
 
-                    response.Ok = true;
-                    response.ImageBase64 = Convert.ToBase64String(stream.ToArray());
-                    response.Metadata = BuildMetadata(viewport, width, height);
-                    return response;
+                    return new RhinoCaptureExecution(
+                        true,
+                        Convert.ToBase64String(stream.ToArray()),
+                        "image/png",
+                        null,
+                        BuildMetadata(viewport, width, height));
                 }
                 finally
                 {
@@ -184,27 +97,22 @@ namespace rhino_zmq_poc
             }
             catch (Exception ex)
             {
-                return CaptureFail(response, $"{ex.GetType().Name}: {ex.Message}");
+                return CaptureFail($"{ex.GetType().Name}: {ex.Message}");
             }
         }
 
-        public static ControlRhinoViewResponse Control(RhinoDoc doc, ControlRhinoViewParams param)
+        public static RhinoControlExecution Control(RhinoDoc doc, RhinoControlArguments param)
         {
-            var response = new ControlRhinoViewResponse
-            {
-                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-            };
-
             try
             {
                 if (doc == null)
-                    return ControlFail(response, "No active Rhino document");
+                    return ControlFail("No active Rhino document");
                 if (param == null || string.IsNullOrWhiteSpace(param.Action))
-                    return ControlFail(response, "action is required");
+                    return ControlFail("action is required");
 
                 var view = doc.Views.ActiveView;
                 if (view == null)
-                    return ControlFail(response, "No active Rhino view");
+                    return ControlFail("No active Rhino view");
 
                 var viewport = view.ActiveViewport;
                 var action = param.Action.Trim();
@@ -215,24 +123,24 @@ namespace rhino_zmq_poc
                     case "setActiveView":
                         view = ResolveView(doc, param.ViewName);
                         if (view == null)
-                            return ControlFail(response, $"View '{param.ViewName}' was not found");
+                            return ControlFail($"View '{param.ViewName}' was not found");
                         SetActiveViewport(doc, view);
                         viewport = view.ActiveViewport;
                         message = $"Active Rhino view set to '{viewport.Name}'.";
                         break;
                     case "standardView":
                         if (!ApplyStandardView(viewport, param.StandardView))
-                            return ControlFail(response, $"Unsupported standardView '{param.StandardView}'");
+                            return ControlFail($"Unsupported standardView '{param.StandardView}'");
                         message = $"Rhino view changed to standard view '{param.StandardView}'.";
                         break;
                     case "namedView":
                         if (!RestoreNamedView(doc, viewport, param.NamedView))
-                            return ControlFail(response, $"Named view '{param.NamedView}' was not found");
+                            return ControlFail($"Named view '{param.NamedView}' was not found");
                         message = $"Rhino named view '{param.NamedView}' restored.";
                         break;
                     case "cplaneView":
                         if (!ApplyCPlaneView(doc, viewport, param.CPlaneName))
-                            return ControlFail(response, string.IsNullOrWhiteSpace(param.CPlaneName)
+                            return ControlFail(string.IsNullOrWhiteSpace(param.CPlaneName)
                                 ? "Could not align view to the active construction plane"
                                 : $"Named construction plane '{param.CPlaneName}' was not found");
                         message = string.IsNullOrWhiteSpace(param.CPlaneName)
@@ -241,37 +149,38 @@ namespace rhino_zmq_poc
                         break;
                     case "camera":
                         if (!ApplyCamera(viewport, param.Camera, out var cameraError))
-                            return ControlFail(response, cameraError);
+                            return ControlFail(cameraError);
                         message = "Rhino camera updated.";
                         break;
                     case "zoom":
                         if (!ApplyZoom(viewport, param.Zoom, out var zoomError))
-                            return ControlFail(response, zoomError);
+                            return ControlFail(zoomError);
                         message = $"Rhino view zoom updated ({param.Zoom?.Mode}).";
                         break;
                     case "saveNamedView":
                         if (string.IsNullOrWhiteSpace(param.NamedView))
-                            return ControlFail(response, "saveNamedView requires namedView");
+                            return ControlFail("saveNamedView requires namedView");
                         var index = doc.NamedViews.Add(param.NamedView.Trim(), viewport.Id);
                         if (index < 0)
-                            return ControlFail(response, $"Could not save named view '{param.NamedView}'");
+                            return ControlFail($"Could not save named view '{param.NamedView}'");
                         message = $"Rhino named view '{param.NamedView}' saved.";
                         break;
                     default:
-                        return ControlFail(response, $"Unsupported action '{param.Action}'");
+                        return ControlFail($"Unsupported action '{param.Action}'");
                 }
 
                 view.Redraw();
                 doc.Views.Redraw();
 
-                response.Ok = true;
-                response.Message = message;
-                response.Metadata = BuildMetadata(viewport, null, null);
-                return response;
+                return new RhinoControlExecution(
+                    true,
+                    message,
+                    null,
+                    BuildMetadata(viewport, null, null));
             }
             catch (Exception ex)
             {
-                return ControlFail(response, $"{ex.GetType().Name}: {ex.Message}");
+                return ControlFail($"{ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -281,21 +190,11 @@ namespace rhino_zmq_poc
             return Math.Min(Math.Max(n, 64), MaxDimension);
         }
 
-        private static CaptureRhinoViewResponse CaptureFail(CaptureRhinoViewResponse response, string error)
-        {
-            response.Ok = false;
-            response.Error = error;
-            response.ImageBase64 = "";
-            return response;
-        }
+        private static RhinoCaptureExecution CaptureFail(string error) =>
+            new(false, "", "image/png", error, null);
 
-        private static ControlRhinoViewResponse ControlFail(ControlRhinoViewResponse response, string error)
-        {
-            response.Ok = false;
-            response.Error = error;
-            response.Message = "";
-            return response;
-        }
+        private static RhinoControlExecution ControlFail(string error) =>
+            new(false, "", error, null);
 
         private static bool IsActiveSelector(string raw)
             => string.IsNullOrWhiteSpace(raw) || raw.Trim().Equals("active", StringComparison.OrdinalIgnoreCase);
@@ -384,7 +283,7 @@ namespace rhino_zmq_poc
             return true;
         }
 
-        private static bool ApplyCamera(RhinoViewport viewport, RhinoCameraControlParams camera, out string error)
+        private static bool ApplyCamera(RhinoViewport viewport, RhinoCameraArguments camera, out string error)
         {
             error = null;
             if (viewport == null)
@@ -429,7 +328,7 @@ namespace rhino_zmq_poc
             return true;
         }
 
-        private static bool ApplyZoom(RhinoViewport viewport, RhinoZoomControlParams zoom, out string error)
+        private static bool ApplyZoom(RhinoViewport viewport, RhinoZoomArguments zoom, out string error)
         {
             error = null;
             if (viewport == null)
@@ -467,22 +366,42 @@ namespace rhino_zmq_poc
 
         private static void SetActiveViewport(RhinoDoc doc, RhinoView view)
         {
-            var sanitized = Utilities.SanitizeMacroArgument(view?.ActiveViewport?.Name);
+            var sanitized = SanitizeMacroArgument(view?.ActiveViewport?.Name);
             if (sanitized == null)
                 return;
             RhinoApp.RunScript(doc.RuntimeSerialNumber, $"_-SetActiveViewport \"{sanitized}\"", "Hopper agent", false);
         }
 
-        private static Point3d ToPoint(RhinoPointInput point)
+        private static string SanitizeMacroArgument(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            var result = new StringBuilder(value.Length);
+            foreach (var character in value.Trim())
+            {
+                if (character < 0x20)
+                    continue;
+                if (character == '\\')
+                    result.Append("\\\\");
+                else if (character == '"')
+                    result.Append("\\\"");
+                else
+                    result.Append(character);
+            }
+            return result.Length == 0 ? null : result.ToString();
+        }
+
+        private static Point3d ToPoint(RhinoPoint3 point)
             => new Point3d(point.X, point.Y, point.Z);
 
-        private static RhinoPointDto ToDto(Point3d point)
-            => new RhinoPointDto { X = point.X, Y = point.Y, Z = point.Z };
+        private static RhinoPoint3 ToDto(Point3d point)
+            => new RhinoPoint3(point.X, point.Y, point.Z);
 
-        private static RhinoPointDto ToDto(Vector3d vector)
-            => new RhinoPointDto { X = vector.X, Y = vector.Y, Z = vector.Z };
+        private static RhinoPoint3 ToDto(Vector3d vector)
+            => new RhinoPoint3(vector.X, vector.Y, vector.Z);
 
-        private static RhinoViewMetadataDto BuildMetadata(RhinoViewport viewport, int? width, int? height)
+        private static RhinoViewMetadata BuildMetadata(RhinoViewport viewport, int? width, int? height)
         {
             var cplane = viewport.GetConstructionPlane();
             var projection = viewport.IsTwoPointPerspectiveProjection
@@ -493,21 +412,19 @@ namespace rhino_zmq_poc
                         ? "parallel"
                         : viewport.ViewportType.ToString();
 
-            return new RhinoViewMetadataDto
-            {
-                ViewName = viewport.Name ?? "",
-                ViewportId = viewport.Id.ToString(),
-                Projection = projection,
-                CameraLocation = ToDto(viewport.CameraLocation),
-                CameraTarget = ToDto(viewport.CameraTarget),
-                CameraDirection = ToDto(viewport.CameraDirection),
-                CameraUp = ToDto(viewport.CameraUp),
-                LensLength = viewport.Camera35mmLensLength,
-                CPlaneName = cplane.Name ?? "",
-                CPlaneOrigin = ToDto(cplane.Plane.Origin),
-                Width = width,
-                Height = height
-            };
+            return new RhinoViewMetadata(
+                viewport.Name ?? "",
+                viewport.Id.ToString(),
+                projection,
+                ToDto(viewport.CameraLocation),
+                ToDto(viewport.CameraTarget),
+                ToDto(viewport.CameraDirection),
+                ToDto(viewport.CameraUp),
+                viewport.Camera35mmLensLength,
+                cplane.Name ?? "",
+                ToDto(cplane.Plane.Origin),
+                width,
+                height);
         }
     }
 }

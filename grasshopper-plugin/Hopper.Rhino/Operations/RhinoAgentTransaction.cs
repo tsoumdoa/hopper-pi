@@ -49,6 +49,8 @@ namespace rhino_zmq_poc
             }
         }
 
+        public static string CommitActive() => Commit(_doc);
+
         public static string Cancel(RhinoDoc doc)
         {
             if (!_active || _doc != doc)
@@ -65,6 +67,8 @@ namespace rhino_zmq_poc
                 Reset();
             }
         }
+
+        public static string CancelActive() => Cancel(_doc);
 
         private static void Reset()
         {

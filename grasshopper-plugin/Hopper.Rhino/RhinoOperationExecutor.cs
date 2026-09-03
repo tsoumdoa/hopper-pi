@@ -50,5 +50,34 @@ namespace rhino_zmq_poc
                 result.Output ?? "",
                 result.Error ?? "");
         }
+
+        public RhinoCaptureExecution CaptureView(RhinoCaptureArguments arguments) =>
+            ViewportOperations.Capture(RhinoDoc.ActiveDoc, arguments);
+
+        public RhinoControlExecution ControlView(RhinoControlArguments arguments) =>
+            ViewportOperations.Control(RhinoDoc.ActiveDoc, arguments);
+
+        public RhinoTransactionExecution BeginTransaction(string name)
+        {
+            var result = RhinoAgentTransaction.Begin(RhinoDoc.ActiveDoc, name);
+            return Transaction(result);
+        }
+
+        public RhinoTransactionExecution CommitTransaction() =>
+            Transaction(RhinoAgentTransaction.CommitActive());
+
+        public RhinoTransactionExecution CancelTransaction() =>
+            Transaction(RhinoAgentTransaction.CancelActive());
+
+        public void CleanupOpenTransactions() => RhinoAgentTransaction.CancelActive();
+
+        private static RhinoTransactionExecution Transaction(string result)
+        {
+            var succeeded = result.IndexOf(" error:", System.StringComparison.OrdinalIgnoreCase) < 0;
+            return new RhinoTransactionExecution(
+                succeeded,
+                result,
+                succeeded ? null : result);
+        }
     }
 }
