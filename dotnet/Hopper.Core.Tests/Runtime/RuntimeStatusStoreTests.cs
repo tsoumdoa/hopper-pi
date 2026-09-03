@@ -204,17 +204,9 @@ public sealed class RuntimeStatusStoreTests
     }
 
     [Fact]
-    public void InitialHostHandshakeRequiresTheLaunchedProcessIdentity()
+    public void InitialHostHandshakeUsesTheManagedHostIdentityWhileLifecycleMirrorLags()
     {
-        var store = CreateStore(out var clock);
-        store.UpdateLifecycle(new LifecycleSnapshot(
-            1,
-            clock.UtcNow,
-            DomainLifecycleState.Starting,
-            LifecycleReasonCode.StartRequested,
-            "Starting.",
-            "life-status-1",
-            0));
+        var store = CreateStore(out _);
         store.UpdateHost(new HostRuntimeStatusUpdate(
             DomainLifecycleState.Starting,
             4242,
@@ -222,6 +214,7 @@ public sealed class RuntimeStatusStoreTests
             "22.22.3",
             HandshakeState.connecting,
             0));
+        Assert.Equal(ProtocolLifecycleState.stopped, store.Read().Lifecycle.State);
 
         var before = store.Read();
         var rejected = store.TryAcceptInitialHostHandshake(9999, "v99.0.0");
@@ -237,6 +230,31 @@ public sealed class RuntimeStatusStoreTests
         Assert.Equal(4242, store.Read().Host.ProcessId);
         Assert.Equal("v22.22.3", store.Read().Host.NodeVersion);
         Assert.Equal(HandshakeState.live, store.Read().Host.Handshake);
+    }
+
+    [Theory]
+    [InlineData(DomainLifecycleState.Stopped)]
+    [InlineData(DomainLifecycleState.Running)]
+    [InlineData(DomainLifecycleState.Stopping)]
+    [InlineData(DomainLifecycleState.Faulted)]
+    public void InitialHostHandshakeRejectsAnyManagedHostStateExceptStarting(
+        DomainLifecycleState hostState)
+    {
+        var store = CreateStore(out _);
+        store.UpdateHost(new HostRuntimeStatusUpdate(
+            hostState,
+            4242,
+            "/opt/homebrew/bin/node",
+            "22.22.3",
+            HandshakeState.connecting,
+            0));
+        var before = store.Read();
+
+        var rejected = store.TryAcceptInitialHostHandshake(4242, "v22.22.3");
+
+        Assert.False(rejected.Accepted);
+        Assert.Equal(before.Revision, rejected.StatusRevision);
+        Assert.Same(before, store.Read());
     }
 
     [Fact]

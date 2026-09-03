@@ -152,8 +152,7 @@ public sealed class RuntimeStatusStore
             if (current.Host.Handshake == HandshakeState.live)
                 return new HostHandshakeAcceptance(true, current.Revision);
 
-            if (current.Lifecycle.State != ProtocolLifecycleState.starting
-                || current.Host.State != ProtocolLifecycleState.starting
+            if (current.Host.State != ProtocolLifecycleState.starting
                 || current.Host.Handshake != HandshakeState.connecting
                 || current.Host.ProcessId != nodeProcessId)
             {
