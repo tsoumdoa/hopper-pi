@@ -134,6 +134,22 @@ describe("Hopper loopback server", () => {
 	});
 
 	it.each([
+		...(["stopped", "faulted"] as const).map((state) => ({
+			name: `lifecycle is ${state}`,
+			status: {
+				...runtimeStatus,
+				lifecycle: { ...runtimeStatus.lifecycle, state },
+			},
+			expectedInstance: "life-server-test",
+		})),
+		...(["starting", "stopping", "faulted"] as const).map((state) => ({
+			name: `host is ${state}`,
+			status: {
+				...runtimeStatus,
+				host: { ...runtimeStatus.host, state },
+			},
+			expectedInstance: "life-server-test",
+		})),
 		{
 			name: "transport is not ready",
 			status: {

@@ -157,7 +157,9 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 			void options.getRuntimeStatus(1_500).then(
 				(status) => {
 					const lifecycleInstanceId = status.transport.lifecycleInstanceId;
-					const protocolHandshakeLive = status.transport.ready
+					const protocolHandshakeLive = status.lifecycle.state === "running"
+						&& status.host.state === "running"
+						&& status.transport.ready
 						&& lifecycleInstanceId === options.protocolHandshake.lifecycleInstanceId
 						&& status.host.handshake === "live";
 					writeJson(response, protocolHandshakeLive ? 200 : 503, {
