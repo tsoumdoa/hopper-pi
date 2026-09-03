@@ -2,20 +2,10 @@
 
 export const ENV = {
 	GH_DEBUG: "GH_DEBUG",
-	GH_ZMQ_PUB: "GH_ZMQ_PUB",
-	GH_ZMQ_PUSH: "GH_ZMQ_PUSH",
-	GH_ZMQ_REQ: "GH_ZMQ_REQ",
-	GH_ZMQ_TOKEN: "GH_ZMQ_TOKEN",
 	HOPPER_CONNECTION_PROFILE: "HOPPER_CONNECTION_PROFILE",
 	HOPPER_MULTIMODAL_FALLBACK: "HOPPER_MULTIMODAL_FALLBACK",
 	/** When enabled (`1`/`true`/`yes`/`on`), start with a small Hopper core and load specialists via hopper_search_tools. Off by default (today's all-tools-active behavior). */
 	HOPPER_PROGRESSIVE_TOOLS: "HOPPER_PROGRESSIVE_TOOLS",
-} as const;
-
-export const DEFAULT_ZMQ_ENDPOINTS = {
-	pub: "tcp://127.0.0.1:5555",
-	push: "tcp://127.0.0.1:5556",
-	req: "tcp://127.0.0.1:5557",
 } as const;
 
 export const PROBE_TIMEOUT_MS = 8_000;

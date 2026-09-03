@@ -7,12 +7,16 @@ import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { LOOPBACK_HOST } from "./config.js";
 import type { HostRuntime } from "./pi-runtime.js";
 import { parseClientMessage, type ClientMessage, type ServerMessage } from "./protocol.js";
+import type { LiveProtocolHandshake } from "../infra/runtime-rpc.js";
+import type { RuntimeStatus } from "../protocol/v2.js";
 
 export type HopperServerOptions = {
 	runtime: HostRuntime;
 	staticDir: string;
 	port?: number;
 	token?: string;
+	protocolHandshake: LiveProtocolHandshake;
+	getRuntimeStatus: (completionTimeoutMs?: number) => Promise<RuntimeStatus>;
 	onShutdownRequest?: () => void;
 };
 
@@ -21,6 +25,8 @@ export type HopperServer = {
 	port: number;
 	token: string;
 	url: string;
+	lifecycleInstanceId: string;
+	protocolHandshakeLive: true;
 	close(): Promise<void>;
 };
 
@@ -146,7 +152,47 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 	const httpServer = createHttpServer((request, response) => {
 		const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
 		if (pathname === "/health") {
-			writeJson(response, 200, { ok: true });
+			// Rhino's health monitor has a two-second HTTP deadline. Leave room for
+			// response serialization after the authenticated status round trip.
+			void options.getRuntimeStatus(1_500).then(
+				(status) => {
+					const lifecycleInstanceId = status.transport.lifecycleInstanceId;
+					const protocolHandshakeLive = status.lifecycle.state === "running"
+						&& status.host.state === "running"
+						&& status.transport.ready
+						&& lifecycleInstanceId === options.protocolHandshake.lifecycleInstanceId
+						&& status.host.handshake === "live";
+					writeJson(response, protocolHandshakeLive ? 200 : 503, {
+						ok: protocolHandshakeLive,
+						lifecycleInstanceId,
+						protocolHandshakeLive,
+					});
+				},
+				() => writeJson(response, 503, {
+					ok: false,
+					lifecycleInstanceId: options.protocolHandshake.lifecycleInstanceId,
+					protocolHandshakeLive: false,
+				}),
+			);
+			return;
+		}
+		if (pathname === "/api/runtime-status") {
+			if (request.method !== "GET") {
+				writeJson(response, 405, { error: "Method not allowed" });
+				return;
+			}
+			const authorization = request.headers.authorization ?? "";
+			const suppliedToken = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+			if (!safeEqual(suppliedToken, token)) {
+				writeJson(response, 403, { error: "Forbidden" });
+				return;
+			}
+			void options.getRuntimeStatus().then(
+				(status) => writeJson(response, 200, status),
+				(error) => writeJson(response, 503, {
+					error: error instanceof Error ? error.message : String(error),
+				}),
+			);
 			return;
 		}
 		if (pathname === "/api/shutdown") {
@@ -249,6 +295,8 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 		port,
 		token,
 		url: `http://${LOOPBACK_HOST}:${port}/#${token}`,
+		lifecycleInstanceId: options.protocolHandshake.lifecycleInstanceId,
+		protocolHandshakeLive: options.protocolHandshake.protocolHandshakeLive,
 		close: async () => {
 			unsubscribe();
 			for (const socket of webSockets.clients) socket.terminate();

@@ -1,5 +1,6 @@
 import { Requester } from "../infra/requester.js";
 import { withRequester } from "../infra/request-helpers.js";
+import { getRuntimeRpc } from "../infra/runtime-rpc.js";
 import type {
 	GetCanvasErrorsResponse,
 	GetCurrentCanvasResponse,
@@ -11,7 +12,10 @@ import type {
 let _components: ListAllComponentsResponse | null = null;
 
 export async function getCachedOrFetchComponents(): Promise<ListAllComponentsResponse> {
-	if (_components) return _components;
+	if (_components) {
+		await getRuntimeRpc().ensureGrasshopperReady();
+		return _components;
+	}
 	const data = await withRequester(fetchAllComponents);
 	_components = data;
 	return data;

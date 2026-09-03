@@ -1,13 +1,12 @@
 import { PROBE_TIMEOUT_MS } from "../config.js";
-import type { AuthErrorResponse, PingResponse } from "../types/messages.js";
-import { clearConnectionCache } from "./connection.js";
 import {
 	BackendOfflineError,
 	type BackendStatus,
 	isBackendKnownOffline,
 	setCachedBackendStatus,
 } from "./backend-status-cache.js";
-import { Requester } from "./requester.js";
+import { getRuntimeRpc } from "./runtime-rpc.js";
+import type { RuntimeStatus } from "../protocol/v2.js";
 
 export type { BackendStatus } from "./backend-status-cache.js";
 export {
@@ -20,46 +19,15 @@ export {
 	setCachedBackendStatus,
 } from "./backend-status-cache.js";
 
-async function probeRequester(
-	requester: import("./requester.js").Requester
-): Promise<void> {
-	const res = await requester.request<
-		PingResponse | AuthErrorResponse | { type?: string }
-	>({
-		type: "ping",
-	});
-	if (res.type === "auth.error") {
-		const error = "error" in res ? res.error : undefined;
-		throw new Error(error || "Invalid connection token");
-	}
-	if (res.type !== "ping.response") {
-		throw new Error(`unexpected response: ${res.type}`);
-	}
+/** Read Rhino's authoritative runtime status through RPC v2. */
+export async function getRuntimeStatus(): Promise<RuntimeStatus> {
+	return getRuntimeRpc().getRuntimeStatus(PROBE_TIMEOUT_MS);
 }
 
-async function withProbeRequester(
-	fn: (requester: Requester) => Promise<void>,
-	options: { refresh?: boolean } = {}
-): Promise<void> {
-	const requester = new Requester();
-	try {
-		await requester.connect(options);
-		await fn(requester);
-	} finally {
-		await requester.close();
-	}
-}
-
-/** Lightweight REQ/REP probe to see if the Rhino ZMQ backend is reachable. */
 export async function probeBackend(): Promise<BackendStatus> {
 	let status: BackendStatus;
 	try {
-		try {
-			await probeOnce();
-		} catch {
-			clearConnectionCache();
-			await probeOnce({ refresh: true });
-		}
+		await probeOnce();
 		status = { online: true };
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
@@ -69,16 +37,8 @@ export async function probeBackend(): Promise<BackendStatus> {
 	return status;
 }
 
-async function probeOnce(options: { refresh?: boolean } = {}): Promise<void> {
-	await Promise.race([
-		withProbeRequester(probeRequester, options),
-		new Promise<never>((_, reject) => {
-			setTimeout(
-				() => reject(new Error(`timeout after ${PROBE_TIMEOUT_MS}ms`)),
-				PROBE_TIMEOUT_MS
-			);
-		}),
-	]);
+async function probeOnce(): Promise<void> {
+	await getRuntimeStatus();
 }
 
 /** Re-probe when cached offline so a transient miss does not block tools. */

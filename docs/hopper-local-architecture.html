@@ -810,7 +810,7 @@
         <div class="sequence" role="group" aria-label="Five step startup sequence">
           <article class="sequence-step">
             <span>01</span>
-            <h3>Run <span class="mono inline-code">_HopperCode</span></h3>
+            <h3>Run <span class="mono inline-code">HopperCode</span></h3>
             <p>The user starts Hopper from Rhino.</p>
           </article>
           <article class="sequence-step">
@@ -821,7 +821,7 @@
           <article class="sequence-step">
             <span>03</span>
             <h3>Launch the host</h3>
-            <p>Rhino invokes the exact bundled Hopper host, never the global Pi command.</p>
+            <p>Rhino resolves a stable Node 22.19.0 or newer installation and launches the packaged Hopper host.</p>
           </article>
           <article class="sequence-step">
             <span>04</span>
@@ -900,9 +900,9 @@
       <ol class="milestones">
         <li class="milestone"><div><strong>Prove the embedded agent</strong><p>Create a local Hopper host that starts a Pi session runtime, loads only the bundled extensions and skills, binds browser-backed extension UI, and reaches the current ZMQ backend.</p></div></li>
         <li class="milestone"><div><strong>Add the browser conversation</strong><p>Serve one chat page with streaming text, visible tool calls, stop, new session, and the existing ask-user interactions.</p></div></li>
-        <li class="milestone"><div><strong>Give Rhino ownership</strong><p>Add the <span class="mono">_HopperCode</span> command, host health checks, browser launch, active-document tracking, and clean shutdown.</p></div></li>
+        <li class="milestone"><div><strong>Give Rhino ownership</strong><p>Add the <span class="mono">HopperCode</span> commands, host health checks, browser launch, active-document tracking, and clean shutdown.</p></div></li>
         <li class="milestone"><div><strong>Remove the canvas dependency</strong><p>Move backend ownership out of the GHZMQ component. Keep that component only if its canvas status output remains useful.</p></div></li>
-        <li class="milestone"><div><strong>Package both platforms</strong><p>Bundle pinned Node 22.22.3 x64 and arm64 runtimes, exact Pi and Hopper versions, and native ZMQ builds in separate Windows and macOS Rhino packages.</p></div></li>
+        <li class="milestone"><div><strong>Package both platforms</strong><p>Build separate macOS arm64 and Windows x64 Yak packages with target-specific native modules. Require an external stable Node 22.19.0 or newer installation.</p></div></li>
       </ol>
     </section>
 
