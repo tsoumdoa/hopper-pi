@@ -68,6 +68,8 @@ describe("host config", () => {
 	it("permits only an explicit loopback Vite development origin", () => {
 		expect(resolveHostConfig(["--ui-dev-origin", "http://localhost:5173"], { env: {} }).uiDevOrigin)
 			.toBe("http://localhost:5173");
+		expect(resolveHostConfig(["--ui-dev-origin", "http://localhost:5173/?ignored=true"], { env: {} }).uiDevOrigin)
+			.toBe("http://localhost:5173");
 		expect(() => resolveHostConfig(["--ui-dev-origin", "https://localhost:5173"], { env: {} }))
 			.toThrow("http localhost origin");
 		expect(() => resolveHostConfig(["--ui-dev-origin", "http://example.com:5173"], { env: {} }))

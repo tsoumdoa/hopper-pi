@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
+import type { ClientMessage } from "../../../src/host/protocol.js";
 import { cn } from "../lib/utils";
 import type { UiRequest } from "../state/hopper-types";
 import { Button } from "./ui/button";
@@ -20,7 +21,7 @@ export function UiRequestDialog({
 }: {
 	request: UiRequest | null;
 	queued: number;
-	send(message: Record<string, unknown>): boolean;
+	send(message: ClientMessage): boolean;
 	onResolved(): void;
 }) {
 	const [value, setValue] = useState("");

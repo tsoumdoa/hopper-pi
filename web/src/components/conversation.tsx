@@ -179,7 +179,9 @@ export function Conversation({
 
 	const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
 		const node = scroller.current;
-		if (node) node.scrollTo({ top: node.scrollHeight, behavior });
+		if (!node) return;
+		const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+		node.scrollTo({ top: node.scrollHeight, behavior: reducedMotion ? "auto" : behavior });
 	};
 
 	const onScroll = () => {

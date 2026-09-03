@@ -291,6 +291,21 @@ describe("Hopper loopback server", () => {
 		expect(status).toBe(403);
 	});
 
+	it("rejects a WebSocket without an origin", async () => {
+		const server = await startHopperServer({
+			runtime: fakeRuntime(),
+			staticDir: await staticDirectory(),
+			protocolHandshake,
+			getRuntimeStatus,
+		});
+		servers.push(server);
+		const status = await new Promise<number>((resolve) => {
+			const socket = new WebSocket(`ws://${server.host}:${server.port}/ws`);
+			socket.once("unexpected-response", (_request, response) => resolve(response.statusCode ?? 0));
+		});
+		expect(status).toBe(403);
+	});
+
 	it("permits only its explicitly configured Vite development origin", async () => {
 		const server = await startHopperServer({
 			runtime: fakeRuntime(),

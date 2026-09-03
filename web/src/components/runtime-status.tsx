@@ -1,24 +1,40 @@
 import { ChevronDown, RefreshCw } from "lucide-react";
 import { useState } from "react";
+import type { RuntimeStatus } from "../../../src/protocol/v2.js";
 import { cn, titleCase } from "../lib/utils";
 import { Button } from "./ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 
-type Record_ = Record<string, unknown> | undefined;
-
-function readRecord(value: unknown): Record_ {
-	return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
-}
-
-function summarize(status: Record<string, unknown> | null, error: string | null) {
+export function summarizeRuntimeStatus(status: RuntimeStatus | null, error: string | null) {
 	if (error) return { tone: "danger" as const, text: "Status unavailable" };
 	if (!status) return { tone: "muted" as const, text: "Waiting for Rhino" };
-	const lifecycle = readRecord(status.lifecycle);
-	const grasshopper = readRecord(status.grasshopper);
-	const lifecycleState = String(lifecycle?.state ?? "unknown");
+	const lifecycleState = status.lifecycle.state;
 	const tone = lifecycleState === "faulted" ? ("danger" as const) : lifecycleState === "running" ? ("ok" as const) : ("warn" as const);
-	const document = readRecord(status.rhino)?.documentName ?? (grasshopper?.documentName as string | undefined);
+	const document = status.rhino.documentName ?? status.grasshopper.documentName;
 	return { tone, text: `${titleCase(lifecycleState)}${document ? ` · ${document}` : ""}` };
+}
+
+export function runtimeStatusRows(status: RuntimeStatus): Array<[string, string]> {
+	const failures = status.host.healthFailureCount;
+	return [
+		["Lifecycle", `${titleCase(status.lifecycle.state)}${status.lifecycle.reason ? ` (${status.lifecycle.reason.code}: ${status.lifecycle.reason.message})` : ""}`],
+		["Transport", status.transport.ready ? "Ready" : "Not ready"],
+		["Instance", status.transport.lifecycleInstanceId ?? "Not assigned"],
+		[
+			"Host",
+			[
+				titleCase(status.host.state),
+				status.host.processId == null ? "PID unavailable" : `PID ${status.host.processId}`,
+				status.host.nodeVersion ? `Node ${status.host.nodeVersion}` : null,
+				`${titleCase(status.host.handshake)} handshake`,
+				`${failures} health failure${failures === 1 ? "" : "s"}`,
+			].filter(Boolean).join(" · "),
+		],
+		["Rhino", status.rhino.activeDocument ? status.rhino.documentName ?? "Active, untitled" : "No active document"],
+		["Grasshopper", titleCase(status.grasshopper.state)],
+		["GH document", status.grasshopper.activeDocument ? status.grasshopper.documentName ?? "Active, untitled" : "No active document"],
+		["Dispatcher", `${status.dispatcher.depth}/${status.dispatcher.capacity} queued · ${status.dispatcher.acceptingExternalWork ? "accepting work" : "not accepting work"}`],
+	];
 }
 
 export function RuntimeStatusPanel({
@@ -28,45 +44,18 @@ export function RuntimeStatusPanel({
 	refreshing,
 	defaultOpen = false,
 }: {
-	status: Record<string, unknown> | null;
+	status: RuntimeStatus | null;
 	error: string | null;
 	onRefresh(): void;
 	refreshing: boolean;
 	defaultOpen?: boolean;
 }) {
 	const [open, setOpen] = useState(defaultOpen);
-	const summary = summarize(status, error);
-	const lifecycle = readRecord(status?.lifecycle);
-	const lifecycleReason = readRecord(lifecycle?.reason);
-	const transport = readRecord(status?.transport);
-	const host = readRecord(status?.host);
-	const rhino = readRecord(status?.rhino);
-	const grasshopper = readRecord(status?.grasshopper);
-	const dispatcher = readRecord(status?.dispatcher);
-	const failures = Number(host?.healthFailureCount ?? 0);
-
-	const rows: Array<[string, string]> = status
-		? [
-			["Lifecycle", `${titleCase(String(lifecycle?.state ?? "unknown"))}${lifecycleReason ? ` (${lifecycleReason.code}: ${lifecycleReason.message})` : ""}`],
-			["Transport", transport?.ready ? "Ready" : "Not ready"],
-			["Instance", String(transport?.lifecycleInstanceId ?? "Not assigned")],
-			[
-				"Host",
-				[
-					titleCase(String(host?.state ?? "unknown")),
-					host?.processId == null ? "PID unavailable" : `PID ${host.processId}`,
-					host?.nodeVersion ? `Node ${host.nodeVersion}` : null,
-					host?.handshake ? `${titleCase(String(host.handshake))} handshake` : null,
-					`${failures} health failure${failures === 1 ? "" : "s"}`,
-				].filter(Boolean).join(" · "),
-			],
-			["Rhino", rhino?.activeDocument ? String(rhino.documentName ?? "Active, untitled") : "No active document"],
-			["Grasshopper", titleCase(String(grasshopper?.state ?? "unknown"))],
-			["GH document", grasshopper?.activeDocument ? String(grasshopper.documentName ?? "Active, untitled") : "No active document"],
-			["Dispatcher", `${dispatcher?.depth ?? "?"}/${dispatcher?.capacity ?? "?"} queued · ${dispatcher?.acceptingExternalWork ? "accepting work" : "not accepting work"}`],
-		]
+	const summary = summarizeRuntimeStatus(status, error);
+	const rows = status ? runtimeStatusRows(status) : [];
+	const errors = status
+		? Object.entries(status.errors).flatMap(([component, value]) => value ? [[component, value] as const] : [])
 		: [];
-	const errors = Object.entries((status?.errors ?? {}) as Record<string, { code?: string; message?: string } | null>).filter(([, value]) => value);
 
 	return (
 		<Collapsible open={open} onOpenChange={setOpen} className="rounded-xl border border-line bg-surface shadow-card">
@@ -116,7 +105,7 @@ export function RuntimeStatusPanel({
 								<p className="mt-1 text-muted">None</p>
 							)}
 						</div>
-						{status.revision !== undefined && <p className="mt-2 text-[11px] text-muted">Snapshot revision {String(status.revision)}</p>}
+						<p className="mt-2 text-[11px] text-muted">Snapshot revision {status.revision}</p>
 					</>
 				) : (
 					!error && <p className="text-muted">Waiting for the first Rhino status snapshot.</p>

@@ -2,13 +2,14 @@ import type {
 	AuthFlow,
 	ConversationMessage,
 	HopperState,
-	ModelSummary,
 	SendMode,
 	ToastLevel,
 	ToastNotice,
 	ToolCall,
 	UiRequest,
 } from "./hopper-types";
+import type { HostSnapshot } from "../../../src/host/protocol.js";
+import type { RuntimeStatus } from "../../../src/protocol/v2.js";
 
 export const DEFAULT_SESSION_NAME = "New Rhino session";
 export const CONNECTED_DETAIL = "Private Hopper host on this computer";
@@ -35,7 +36,7 @@ export const initialHopperState: HopperState = {
 
 export type HopperAction =
 	| { type: "connection"; status: HopperState["connection"]["status"]; detail: string; reconnectAttempt?: number }
-	| { type: "snapshot"; snapshot: Record<string, unknown> }
+	| { type: "snapshot"; snapshot: HostSnapshot }
 	| { type: "agent-event"; event: Record<string, unknown> }
 	| { type: "streaming"; streaming: boolean }
 	| { type: "working-message"; text: string | null }
@@ -43,7 +44,7 @@ export type HopperAction =
 	| { type: "ui-request-resolved" }
 	| { type: "toast"; notice: ToastNotice }
 	| { type: "dismiss-toast"; id: string }
-	| { type: "runtime-status"; status: Record<string, unknown> }
+	| { type: "runtime-status"; status: RuntimeStatus }
 	| { type: "runtime-status-error"; error: string }
 	| { type: "backend-detail"; detail: string }
 	| { type: "session-title"; title: string }
@@ -239,26 +240,26 @@ function reduceAgentEvent(state: HopperState, event: Record<string, unknown>): H
 	}
 	if (type === "message_end") return finishAssistantMessage(state, event);
 	if (type === "message_update") {
-		const update = (event.assistantMessageEvent ?? event.update ?? event.event ?? event) as Record<string, unknown>;
+		const update = event.assistantMessageEvent as Record<string, unknown>;
 		const updateType = String(update.type ?? "");
-		if (["text_delta", "output_text_delta"].includes(updateType)) {
+		if (updateType === "text_delta") {
 			return updateActiveAssistant(state, (message) => ({ ...message, text: message.text + String(update.delta ?? update.text ?? ""), streaming: true }));
 		}
-		if (["thinking_delta", "reasoning_delta"].includes(updateType)) {
+		if (updateType === "thinking_delta") {
 			return updateActiveAssistant(state, (message) => ({ ...message, thinking: message.thinking + String(update.delta ?? update.text ?? ""), streaming: true }));
 		}
-		if (["toolcall_start", "tool_call_start"].includes(updateType)) {
+		if (updateType === "toolcall_start") {
 			return startTool(state, String(update.toolCallId ?? update.id ?? identifier("tool")), String(update.toolName ?? update.name ?? "Tool call"), update.args ?? update.arguments);
 		}
 		return state;
 	}
-	if (["tool_execution_start", "tool_call_start"].includes(type)) {
+	if (type === "tool_execution_start") {
 		return startTool(state, String(event.toolCallId ?? event.id ?? identifier("tool")), String(event.toolName ?? event.name ?? "Tool call"), event.args ?? event.arguments ?? event.input);
 	}
-	if (["tool_execution_update", "tool_call_update"].includes(type)) {
-		return finishTool(state, String(event.toolCallId ?? event.id), event.partialResult ?? event.result ?? event.update, false, true);
+	if (type === "tool_execution_update") {
+		return finishTool(state, String(event.toolCallId), event.partialResult, false, true);
 	}
-	if (["tool_execution_end", "tool_call_end"].includes(type)) {
+	if (type === "tool_execution_end") {
 		return finishTool(state, String(event.toolCallId ?? event.id), event.result, Boolean(event.isError ?? event.error));
 	}
 	return state;
@@ -273,22 +274,21 @@ export function hopperReducer(state: HopperState, action: HopperAction): HopperS
 		}
 		case "snapshot": {
 			const snapshot = action.snapshot;
-			const selected = snapshot.model && typeof snapshot.model === "object" ? (snapshot.model as ModelSummary) : null;
 			return {
 				...state,
 				connection: { status: "connected", detail: CONNECTED_DETAIL, reconnectAttempt: 0 },
 				session: {
-					id: String(snapshot.sessionId ?? "") || null,
-					name: String(snapshot.sessionName ?? "") || DEFAULT_SESSION_NAME,
+					id: snapshot.sessionId || null,
+					name: snapshot.sessionName || DEFAULT_SESSION_NAME,
 					messages: toStoredMessages(snapshot.messages),
 					isStreaming: Boolean(snapshot.isStreaming),
 				},
 				workingMessage: snapshot.isStreaming ? state.workingMessage : null,
-				models: Array.isArray(snapshot.models) ? (snapshot.models as ModelSummary[]) : state.models,
-				providers: Array.isArray(snapshot.providers) ? (snapshot.providers as HopperState["providers"]) : state.providers,
-				selectedModel: selected,
-				thinkingLevel: String(snapshot.thinkingLevel ?? state.thinkingLevel),
-				availableThinkingLevels: Array.isArray(snapshot.availableThinkingLevels) ? (snapshot.availableThinkingLevels as string[]) : state.availableThinkingLevels,
+				models: snapshot.models,
+				providers: snapshot.providers,
+				selectedModel: snapshot.model ?? null,
+				thinkingLevel: snapshot.thinkingLevel,
+				availableThinkingLevels: snapshot.availableThinkingLevels,
 			};
 		}
 		case "agent-event":

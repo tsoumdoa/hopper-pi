@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import type { ClientMessage, ServerMessage } from "../../../src/host/protocol.js";
 import { CONNECTED_DETAIL, createToast, hopperReducer, initialHopperState } from "../state/hopper-reducer";
-import type { SendMode, UiRequest } from "../state/hopper-types";
+import type { SendMode } from "../state/hopper-types";
 import { MockHopperTransport } from "../mocks/hopper-mock";
 import { providerLabel, safeExternalUrl } from "../lib/utils";
 
-type OutboundMessage = Record<string, unknown>;
 export const isMockMode = import.meta.env.MODE === "mock";
 
 const CONNECTED_STATUSES = ["authenticated", "ready", "connected", "idle", "streaming"];
@@ -55,25 +55,27 @@ export function useHopperConnection() {
 		dispatch({ type: "connection", status: "connected", detail: CONNECTED_DETAIL, reconnectAttempt: 0 });
 	}, []);
 
-	const handleServerMessage = useCallback((message: Record<string, unknown>) => {
+	const handleServerMessage = useCallback((message: ServerMessage) => {
 		switch (message.type) {
 			case "snapshot":
 				authenticated.current = true;
 				attempt.current = 0;
-				dispatch({ type: "snapshot", snapshot: (message.snapshot ?? message.data ?? message) as Record<string, unknown> });
+				dispatch({ type: "snapshot", snapshot: message.snapshot });
 				break;
 			case "session_replaced":
 				authenticated.current = true;
-				dispatch({ type: "snapshot", snapshot: (message.session ?? message) as Record<string, unknown> });
+				dispatch({ type: "snapshot", snapshot: message.session });
 				break;
 			case "agent_event":
-				dispatch({ type: "agent-event", event: (message.event ?? message.data ?? message) as Record<string, unknown> });
+				dispatch({ type: "agent-event", event: message.event as Record<string, unknown> });
 				break;
-			case "ui_request":
-				dispatch({ type: "ui-request", request: (message.request ?? message) as UiRequest });
+			case "ui_request": {
+				const { type: _type, ...request } = message;
+				dispatch({ type: "ui-request", request });
 				break;
+			}
 			case "ui_notification":
-				toast(String(message.message ?? message.text ?? "Hopper notification"), (message.level as "info" | "warning" | "error") ?? "info");
+				toast(message.message, message.level);
 				break;
 			case "ui_status": {
 				const text = typeof message.text === "string" ? message.text : "";
@@ -88,7 +90,7 @@ export function useHopperConnection() {
 				break;
 			}
 			case "auth_event": {
-				const auth = (message.event ?? message.data ?? {}) as Record<string, unknown>;
+				const auth = message.event as Record<string, unknown>;
 				let notice: string | undefined;
 				let url: string | undefined;
 				let label = "Open link";
@@ -112,8 +114,8 @@ export function useHopperConnection() {
 				break;
 			}
 			case "status": {
-				const status = String(message.status ?? message.state ?? "");
-				const detail = typeof message.message === "string" ? message.message : undefined;
+				const status = message.status;
+				const detail = message.message;
 				if (CONNECTED_STATUSES.includes(status)) markConnected();
 				if (status === "streaming" || typeof message.streaming === "boolean") {
 					dispatch({ type: "streaming", streaming: status === "streaming" || message.streaming === true });
@@ -134,9 +136,9 @@ export function useHopperConnection() {
 				break;
 			}
 			case "error": {
-				const text = String(message.message ?? message.error ?? "Hopper encountered an error.");
-				const requestType = String(message.requestType ?? "");
-				if (["login", "logout"].includes(requestType) || message.scope === "auth") dispatch({ type: "auth-error", error: text });
+				const text = message.message;
+				const requestType = message.requestType ?? "";
+				if (["login", "logout"].includes(requestType)) dispatch({ type: "auth-error", error: text });
 				// A rejected prompt never produces agent events, so undo the optimistic "working" state.
 				if (requestType === "prompt") dispatch({ type: "streaming", streaming: false });
 				toast(text, "error");
@@ -147,7 +149,7 @@ export function useHopperConnection() {
 		}
 	}, [markConnected, toast]);
 
-	const send = useCallback((message: OutboundMessage, options: { requireAuth?: boolean } = {}) => {
+	const send = useCallback((message: ClientMessage, options: { requireAuth?: boolean } = {}) => {
 		const requireAuth = options.requireAuth ?? true;
 		if (isMockMode && mockTransport.current) {
 			mockTransport.current.send(message);
@@ -205,9 +207,9 @@ export function useHopperConnection() {
 			current.send(JSON.stringify({ type: "authenticate", token }));
 		});
 		current.addEventListener("message", (event) => {
-			let message: Record<string, unknown>;
+			let message: ServerMessage;
 			try {
-				message = JSON.parse(String(event.data)) as Record<string, unknown>;
+				message = JSON.parse(String(event.data)) as ServerMessage;
 			} catch {
 				toast("Hopper sent an unreadable message.", "error");
 				return;

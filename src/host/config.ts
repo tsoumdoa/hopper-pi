@@ -92,6 +92,7 @@ export function resolveHostConfig(
 	const staticDirArg = readOption(args, "--static-dir");
 	const profileArg = readOption(args, "--connection-profile");
 	const uiDevOriginArg = readOption(args, "--ui-dev-origin") ?? env.HOPPER_UI_DEV_ORIGIN;
+	let uiDevOrigin: string | undefined;
 	const instanceId = readOption(args, "--instance-id") ?? "standalone";
 	const port = parseInteger(readOption(args, "--port"), "--port") ?? 0;
 	const parentPid = parseInteger(readOption(args, "--parent-pid"), "--parent-pid");
@@ -111,6 +112,7 @@ export function resolveHostConfig(
 		if (origin.protocol !== "http:" || !["localhost", LOOPBACK_HOST].includes(origin.hostname) || !origin.port || origin.pathname !== "/") {
 			throw new Error("--ui-dev-origin must be an http localhost origin with an explicit port");
 		}
+		uiDevOrigin = origin.origin;
 	}
 
 	const absolute = (path: string) => (isAbsolute(path) ? path : resolve(cwd, path));
@@ -127,7 +129,7 @@ export function resolveHostConfig(
 		instanceId,
 		parentPid,
 		connectionProfile: profileArg ? absolute(profileArg) : undefined,
-		uiDevOrigin: uiDevOriginArg,
+		uiDevOrigin,
 		paths: {
 			dataDir,
 			agentDir: join(dataDir, "agent"),

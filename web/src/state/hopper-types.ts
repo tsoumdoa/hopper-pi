@@ -1,4 +1,7 @@
-export type SendMode = "prompt" | "steer" | "follow_up";
+import type { ClientMessage, HostSnapshot, UiRequestMessage } from "../../../src/host/protocol.js";
+import type { RuntimeStatus } from "../../../src/protocol/v2.js";
+
+export type SendMode = Extract<ClientMessage, { text: string }>["type"];
 
 export type ToolCall = {
 	id: string;
@@ -23,19 +26,9 @@ export type ConversationMessage = {
 	tools: ToolCall[];
 };
 
-export type ModelSummary = { provider: string; id: string; name?: string };
-export type ProviderSummary = { id: string; name: string; authenticated: boolean };
-export type UiOption = { id: string; value: string; label: string; description?: string };
-export type UiRequest = {
-	requestId: string;
-	kind: "select" | "confirm" | "input" | "editor" | "auth";
-	title: string;
-	description?: string;
-	options?: UiOption[];
-	placeholder?: string;
-	prefill?: string;
-	secret?: boolean;
-};
+export type ModelSummary = NonNullable<HostSnapshot["model"]>;
+export type ProviderSummary = HostSnapshot["providers"][number];
+export type UiRequest = Omit<UiRequestMessage, "type">;
 
 export type ToastLevel = "info" | "warning" | "error" | "success";
 export type ToastNotice = {
@@ -74,7 +67,7 @@ export type HopperState = {
 	pendingUiRequests: UiRequest[];
 	activeUiRequest: UiRequest | null;
 	notifications: ToastNotice[];
-	runtimeStatus: Record<string, unknown> | null;
+	runtimeStatus: RuntimeStatus | null;
 	runtimeStatusError: string | null;
 	backendDetail: string;
 	auth: AuthFlow;
