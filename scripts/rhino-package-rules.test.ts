@@ -90,9 +90,12 @@ function pe(cpu: "x86" | "x64" | "arm64", managed = false): Buffer {
 async function minimalStage(target: "mac-arm64" | "win-x64"): Promise<string> {
 	const stage = await temporaryDirectory();
 	await fixtureFile(stage, "manifest.yml", "name: hopper-pi\n");
+	await fixtureFile(stage, "Hopper.Grasshopper.gha", "managed Grasshopper fixture\n");
+	await fixtureFile(stage, "Hopper.Rhino.rhp", "managed Rhino fixture\n");
 	await fixtureFile(stage, "runtime/hopper-runtime.json", "{}\n");
 	await fixtureFile(stage, "runtime/host/package.json", "{\"type\":\"module\"}\n");
 	await fixtureFile(stage, "runtime/host/dist/host/index.js", "export {};\n");
+	await fixtureFile(stage, "runtime/host/node_modules/zeromq/build/manifest.json", "{}\n");
 	const nativePath = target === "mac-arm64"
 		? "runtime/host/node_modules/zeromq/build/darwin/arm64/node/libc-115-Release/addon.node"
 		: "runtime/host/node_modules/zeromq/build/win32/x64/node/msvc-115-Release/addon.node";
@@ -223,6 +226,15 @@ describe("Rhino package verifier", () => {
 		);
 	});
 
+	it("rejects an incomplete runtime even when every present path is allowed", async () => {
+		const stage = await minimalStage("mac-arm64");
+		await rm(join(stage, "runtime", "host", "node_modules", "zeromq", "build", "manifest.json"));
+		await rm(join(stage, "Hopper.Rhino.rhp"));
+		await expect(verifyRhinoPackage({ target: "mac-arm64", stage, quiet: true })).rejects.toThrow(
+			/manifest\.json[\s\S]*Rhino plug-in|Rhino plug-in[\s\S]*manifest\.json/,
+		);
+	});
+
 	it("rejects symbolic links", async () => {
 		const stage = await minimalStage("mac-arm64");
 		await symlink(join(stage, "manifest.yml"), join(stage, "runtime", "host", "dist", "linked.js"));
@@ -241,7 +253,7 @@ describe("Rhino package verifier", () => {
 		const stage = await minimalStage("mac-arm64");
 		const script = join(process.cwd(), "scripts", "verify-rhino-package.mjs");
 		const { stdout } = await execFileAsync(process.execPath, [script, "--target", "mac-arm64", stage]);
-		expect(stdout).toContain("Verified 5 staged files for mac-arm64");
+		expect(stdout).toContain("Verified 8 staged files for mac-arm64");
 		expect(JSON.parse(await readFile(join(stage, "rhino-package-manifest.json"), "utf8")).target)
 			.toBe("mac-arm64");
 	});

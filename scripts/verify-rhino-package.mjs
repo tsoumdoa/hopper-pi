@@ -225,6 +225,32 @@ function formatBytes(bytes) {
 	return `${(bytes / 1024 ** 2).toFixed(1)} MiB`;
 }
 
+function requiredRuntimeErrors(files, target) {
+	const paths = new Set(files.map((file) => file.relativePath));
+	const errors = [];
+	for (const requiredPath of [
+		"manifest.yml",
+		"runtime/hopper-runtime.json",
+		"runtime/host/package.json",
+		"runtime/host/dist/host/index.js",
+		"runtime/host/node_modules/zeromq/build/manifest.json",
+	]) {
+		if (!paths.has(requiredPath)) errors.push(`${requiredPath}: required runtime file is missing`);
+	}
+	if (![...paths].some((path) => !path.includes("/") && path.toLowerCase().endsWith(".rhp"))) {
+		errors.push("*.rhp: a Rhino plug-in is required at the package root");
+	}
+	if (![...paths].some((path) => !path.includes("/") && path.toLowerCase().endsWith(".gha"))) {
+		errors.push("*.gha: a Grasshopper plug-in is required at the package root");
+	}
+	const expected = RHINO_PACKAGE_TARGETS[target];
+	const addonPrefix = `runtime/host/node_modules/zeromq/build/${expected.os}/${expected.cpu}/`;
+	if (![...paths].some((path) => path.startsWith(addonPrefix) && path.endsWith("/addon.node"))) {
+		errors.push(`${addonPrefix}**/addon.node: target-native ZeroMQ addon is missing`);
+	}
+	return errors;
+}
+
 export async function verifyRhinoPackage(options) {
 	const target = options.target;
 	if (!(target in RHINO_PACKAGE_TARGETS)) {
@@ -237,7 +263,7 @@ export async function verifyRhinoPackage(options) {
 	const manifestRelative = relative(stage, manifestPath);
 	const manifestIsInsideStage = manifestRelative !== "" && !manifestRelative.startsWith("..") && !isAbsolute(manifestRelative);
 	const files = await listFiles(stage);
-	const errors = [];
+	const errors = requiredRuntimeErrors(files, target);
 	const manifestFiles = [];
 	const yakFiles = [];
 

@@ -123,15 +123,16 @@ function removeDependencyDevelopmentFiles(directory) {
 function pruneNativeDependencies(nodeModules, targetConfig) {
 	const zeromqBuild = join(nodeModules, "zeromq", "build");
 	if (existsSync(zeromqBuild)) {
-		for (const operatingSystem of readdirSync(zeromqBuild)) {
-			const operatingSystemPath = join(zeromqBuild, operatingSystem);
-			if (operatingSystem !== targetConfig.os) {
+		for (const entry of readdirSync(zeromqBuild, { withFileTypes: true })) {
+			if (!entry.isDirectory()) continue;
+			const operatingSystemPath = join(zeromqBuild, entry.name);
+			if (entry.name !== targetConfig.os) {
 				rmSync(operatingSystemPath, { recursive: true, force: true });
 				continue;
 			}
-			for (const cpu of readdirSync(operatingSystemPath)) {
-				if (cpu !== targetConfig.cpu) {
-					rmSync(join(operatingSystemPath, cpu), { recursive: true, force: true });
+			for (const cpuEntry of readdirSync(operatingSystemPath, { withFileTypes: true })) {
+				if (cpuEntry.isDirectory() && cpuEntry.name !== targetConfig.cpu) {
+					rmSync(join(operatingSystemPath, cpuEntry.name), { recursive: true, force: true });
 				}
 			}
 		}
@@ -139,9 +140,10 @@ function pruneNativeDependencies(nodeModules, targetConfig) {
 
 	const tuiNative = join(nodeModules, "@earendil-works", "pi-tui", "native");
 	if (existsSync(tuiNative)) {
-		for (const operatingSystem of readdirSync(tuiNative)) {
-			const operatingSystemPath = join(tuiNative, operatingSystem);
-			if (operatingSystem !== targetConfig.os) {
+		for (const entry of readdirSync(tuiNative, { withFileTypes: true })) {
+			if (!entry.isDirectory()) continue;
+			const operatingSystemPath = join(tuiNative, entry.name);
+			if (entry.name !== targetConfig.os) {
 				rmSync(operatingSystemPath, { recursive: true, force: true });
 				continue;
 			}

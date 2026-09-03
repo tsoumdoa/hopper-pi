@@ -82,7 +82,7 @@ HOPPER_SKIP_GH_PLUGIN=1 pnpm install --frozen-lockfile
 echo "[hopper-pi] Building a fresh Rhino package at $STAGE_DIR"
 pnpm package:rhino -- --output "$STAGE_DIR" --yak
 
-echo "[hopper-pi] Smoke-testing the packaged host"
+echo "[hopper-pi] Smoke-testing packaged host imports and native ZeroMQ"
 node scripts/smoke-staged-host.mjs "$STAGE_DIR"
 
 INSTALLED_LINE="$("$YAK" list | awk -v name="$PACKAGE_NAME" '$1 == name { print; exit }')"
