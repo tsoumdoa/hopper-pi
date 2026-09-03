@@ -167,6 +167,7 @@ run(process.execPath, [installer, "--force"], {
 	env: {
 		HOPPER_GH_LIBRARIES: output,
 		HOPPER_GH_STRICT: "1",
+		HOPPER_PACKAGE_STAGE: "1",
 	},
 });
 // The installer stamp contains local absolute build paths. It is useful for a
@@ -206,7 +207,7 @@ run(nativeNodeExecutable, ["--version"]);
 run(nativeNodeExecutable, ["--input-type=module", "--eval", "await import('zeromq')"], { cwd: hostDirectory });
 
 writeFileSync(join(runtimeDirectory, "hopper-runtime.json"), JSON.stringify({
-	protocolVersion: 1,
+	protocolVersion: 2,
 	nodeExecutables,
 	hostEntry: "host/dist/host/index.js",
 	nodeVersion: bundledNodeVersion,

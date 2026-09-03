@@ -157,6 +157,42 @@ public class OrderedDispatcherTests
     }
 
     [Fact]
+    public async Task LifecycleControlQueueIsNotCapacityLimited()
+    {
+        var scheduler = new ManualUiCallbackScheduler();
+        var clock = new ManualClock(InitialTime);
+        var dispatcher = new OrderedDispatcher(scheduler, clock);
+
+        var first = dispatcher.SubmitLifecycleControl(() => 1);
+        var cleanup = dispatcher.SubmitLifecycleControl(() => 2);
+
+        Assert.False(first.IsCompleted);
+        Assert.False(cleanup.IsCompleted);
+        Assert.Equal(2, dispatcher.Status.LifecycleDepth);
+        scheduler.RunNext();
+        scheduler.RunNext();
+        Assert.Equal(1, (await first).Value);
+        Assert.Equal(2, (await cleanup).Value);
+    }
+
+    [Fact]
+    public async Task CancellationCompletesLifecycleControlWaitingForUiThread()
+    {
+        var scheduler = new ManualUiCallbackScheduler();
+        var clock = new ManualClock(InitialTime);
+        var dispatcher = new OrderedDispatcher(scheduler, clock);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+
+        var cleanup = dispatcher.SubmitLifecycleControl(
+            () => true,
+            clock.UtcNow.AddMinutes(1),
+            cancellation.Token);
+
+        Assert.Equal(DispatcherResultKind.CancelledBeforeStart, (await cleanup).Kind);
+        Assert.Equal(0, dispatcher.Status.LifecycleDepth);
+    }
+
+    [Fact]
     public async Task BulkCancellationOnlyCancelsQueuedExternalWork()
     {
         var scheduler = new ManualUiCallbackScheduler();
@@ -174,6 +210,46 @@ public class OrderedDispatcherTests
 
         scheduler.RunNext();
         Assert.Equal(3, (await lifecycle).Value);
+    }
+
+    [Fact]
+    public async Task KeyedCancellationRemovesOnlyTheMatchingQueuedOperation()
+    {
+        var scheduler = new ManualUiCallbackScheduler();
+        var clock = new ManualClock(InitialTime);
+        var dispatcher = new OrderedDispatcher(scheduler, clock);
+        var deadline = clock.UtcNow.AddMinutes(1);
+        var first = dispatcher.SubmitExternal(() => 1, deadline, operationId: "op-first");
+        var second = dispatcher.SubmitExternal(() => 2, deadline, operationId: "op-second");
+
+        var cancellation = dispatcher.CancelQueuedExternal("op-second");
+
+        Assert.Equal(DispatcherCancellationState.CancelledBeforeStart, cancellation);
+        Assert.Equal(DispatcherResultKind.CancelledBeforeStart, (await second).Kind);
+        Assert.False(first.IsCompleted);
+        scheduler.RunNext();
+        Assert.Equal(1, (await first).Value);
+    }
+
+    [Fact]
+    public void KeyedCancellationDistinguishesRunningAndMissingOperations()
+    {
+        var scheduler = new ManualUiCallbackScheduler();
+        var clock = new ManualClock(InitialTime);
+        var dispatcher = new OrderedDispatcher(scheduler, clock);
+        var deadline = clock.UtcNow.AddMinutes(1);
+        var observed = DispatcherCancellationState.NotFound;
+        dispatcher.SubmitExternal(
+            () => observed = dispatcher.CancelQueuedExternal("op-running"),
+            deadline,
+            operationId: "op-running");
+
+        scheduler.RunNext();
+
+        Assert.Equal(DispatcherCancellationState.RejectedAlreadyStarted, observed);
+        Assert.Equal(
+            DispatcherCancellationState.NotFound,
+            dispatcher.CancelQueuedExternal("op-missing"));
     }
 
     [Fact]
@@ -253,9 +329,125 @@ public class OrderedDispatcherTests
         Assert.Equal(42, (await next).Value);
     }
 
+    [Fact]
+    public void StatusChangedTracksAdmissionQueueDepthAndExecution()
+    {
+        var scheduler = new ManualUiCallbackScheduler();
+        var clock = new ManualClock(InitialTime);
+        var dispatcher = new OrderedDispatcher(scheduler, clock, capacity: 2);
+        var snapshots = new List<DispatcherStatus>();
+        dispatcher.StatusChanged += snapshots.Add;
+
+        dispatcher.SubmitExternal(() => 1, clock.UtcNow.AddMinutes(1));
+        dispatcher.SubmitExternal(() => 2, clock.UtcNow.AddMinutes(1));
+        dispatcher.CloseExternalAdmission();
+
+        Assert.Equal(2, snapshots[^1].ExternalDepth);
+        Assert.False(snapshots[^1].AcceptingExternalWork);
+
+        scheduler.RunNext();
+
+        Assert.Equal(1, snapshots[^1].ExternalDepth);
+        Assert.False(snapshots[^1].IsRunning);
+
+        dispatcher.CancelQueuedExternal();
+
+        Assert.Equal(0, snapshots[^1].ExternalDepth);
+        Assert.False(snapshots[^1].AcceptingExternalWork);
+    }
+
+    [Fact]
+    public async Task ThrowingStatusObserverCannotStallQueuedWork()
+    {
+        var scheduler = new ManualUiCallbackScheduler();
+        var clock = new ManualClock(InitialTime);
+        var dispatcher = new OrderedDispatcher(scheduler, clock);
+        dispatcher.StatusChanged += _ => throw new InvalidOperationException("observer failed");
+
+        var first = dispatcher.SubmitExternal(() => 1, clock.UtcNow.AddMinutes(1));
+        var second = dispatcher.SubmitExternal(() => 2, clock.UtcNow.AddMinutes(1));
+        scheduler.RunNext();
+        scheduler.RunNext();
+
+        Assert.Equal(1, (await first).Value);
+        Assert.Equal(2, (await second).Value);
+    }
+
+    [Fact]
+    public void ExecutionDurationIsRecordedAndSlowThresholdIsStrict()
+    {
+        var scheduler = new ManualUiCallbackScheduler();
+        var clock = new ManualClock(InitialTime);
+        var durationClock = new ManualDurationClock();
+        var dispatcher = new OrderedDispatcher(
+            scheduler,
+            clock,
+            durationClock: durationClock);
+        var records = new List<DispatcherExecutionRecord>();
+        dispatcher.ExecutionRecorded += records.Add;
+
+        dispatcher.SubmitExternal(() =>
+        {
+            durationClock.Advance(TimeSpan.FromMilliseconds(250));
+            return true;
+        }, clock.UtcNow.AddMinutes(1), operationId: "at-threshold");
+        scheduler.RunNext();
+        dispatcher.SubmitLifecycleControl(() =>
+        {
+            durationClock.Advance(TimeSpan.FromMilliseconds(251));
+            return true;
+        });
+
+        scheduler.RunNext();
+
+        Assert.Equal(2, records.Count);
+        Assert.Equal(TimeSpan.FromMilliseconds(250), records[0].Duration);
+        Assert.False(records[0].IsSlow);
+        Assert.False(records[0].IsLifecycleControl);
+        Assert.Equal("at-threshold", records[0].OperationId);
+        Assert.Equal(TimeSpan.FromMilliseconds(251), records[1].Duration);
+        Assert.True(records[1].IsSlow);
+        Assert.True(records[1].IsLifecycleControl);
+    }
+
+    [Fact]
+    public async Task DiagnosticsFailureDoesNotBlockOperationOrNextCallback()
+    {
+        var scheduler = new ManualUiCallbackScheduler();
+        var clock = new ManualClock(InitialTime);
+        var dispatcher = new OrderedDispatcher(
+            scheduler,
+            clock,
+            durationClock: new ManualDurationClock());
+        var observed = 0;
+        dispatcher.ExecutionRecorded += _ => throw new InvalidOperationException("diagnostics failed");
+        dispatcher.ExecutionRecorded += _ => observed++;
+        var first = dispatcher.SubmitExternal(() => 1, clock.UtcNow.AddMinutes(1));
+        var second = dispatcher.SubmitExternal(() => 2, clock.UtcNow.AddMinutes(1));
+
+        scheduler.RunNext();
+        scheduler.RunNext();
+
+        Assert.Equal(1, (await first).Value);
+        Assert.Equal(2, (await second).Value);
+        Assert.Equal(2, observed);
+    }
+
     private static T Record<T>(ICollection<T> order, T value)
     {
         order.Add(value);
         return value;
+    }
+
+    private sealed class ManualDurationClock : IDispatcherDurationClock
+    {
+        private long _ticks;
+
+        public long GetTimestamp() => _ticks;
+
+        public TimeSpan GetElapsedTime(long startingTimestamp) =>
+            TimeSpan.FromTicks(_ticks - startingTimestamp);
+
+        public void Advance(TimeSpan duration) => _ticks += duration.Ticks;
     }
 }

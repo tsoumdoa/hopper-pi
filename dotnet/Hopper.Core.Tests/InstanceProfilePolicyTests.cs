@@ -306,6 +306,77 @@ public class InstanceProfilePolicyTests
         Assert.Equal(new[] { "/instances/a/logs" }, fixture.FileSystem.DeletedDirectories);
     }
 
+    [Fact]
+    public void DirectoryScannerPreservesActiveMalformedAndUninspectableProfilesAndDeletesDeadProfile()
+    {
+        var fileSystem = new FakeFileSystem();
+        fileSystem.Directories.TryAdd("/profiles", 0);
+        fileSystem.Files["/profiles/active.json"] = InstanceProfileCodec.Serialize(
+            Profile(processId: 1001, instanceId: "active"));
+        fileSystem.Files["/profiles/dead.json"] = InstanceProfileCodec.Serialize(
+            Profile(processId: 1002, instanceId: "dead"));
+        fileSystem.Files["/profiles/malformed.json"] = "not-json";
+        fileSystem.Files["/profiles/uninspectable.json"] = InstanceProfileCodec.Serialize(
+            Profile(processId: 1003, instanceId: "uninspectable"));
+        var processes = new MappedProcessInspector(new Dictionary<int, ProcessIdentityObservation>
+        {
+            [1001] = Running(StartedAt),
+            [1002] = new(ProcessInspectionState.NotRunning),
+            [1003] = new(ProcessInspectionState.Uninspectable),
+        });
+        var scanner = new InstanceProfileDirectoryScanner(
+            fileSystem,
+            processes,
+            new FakeClock { UtcNow = CreatedAt.AddMinutes(1) },
+            new IncrementingTemporaryPaths());
+
+        var report = scanner.Scan("/profiles");
+
+        Assert.Null(report.Error);
+        Assert.Equal(
+            new[]
+            {
+                InstanceProfileOwnershipState.Active,
+                InstanceProfileOwnershipState.VerifiedDead,
+                InstanceProfileOwnershipState.Malformed,
+                InstanceProfileOwnershipState.Uninspectable,
+            },
+            report.Entries.Select(entry => entry.Cleanup.OwnershipState));
+        Assert.True(fileSystem.FileExists("/profiles/active.json"));
+        Assert.False(fileSystem.FileExists("/profiles/dead.json"));
+        Assert.True(fileSystem.FileExists("/profiles/dead.verified-dead.json"));
+        Assert.True(fileSystem.FileExists("/profiles/malformed.json"));
+        Assert.True(fileSystem.FileExists("/profiles/uninspectable.json"));
+    }
+
+    [Fact]
+    public void DirectoryScannerRevisitsMarkerAndDeletesOnlyAgedEphemeralLogs()
+    {
+        var fileSystem = new FakeFileSystem();
+        fileSystem.Directories.TryAdd("/profiles", 0);
+        fileSystem.Directories.TryAdd("/profiles/dead.logs", 0);
+        fileSystem.Files["/profiles/dead.json"] = InstanceProfileCodec.Serialize(
+            Profile(processId: 1002, instanceId: "dead"));
+        var clock = new FakeClock { UtcNow = CreatedAt.AddMinutes(1) };
+        var scanner = new InstanceProfileDirectoryScanner(
+            fileSystem,
+            new MappedProcessInspector(new Dictionary<int, ProcessIdentityObservation>
+            {
+                [1002] = new(ProcessInspectionState.NotRunning),
+            }),
+            clock,
+            new IncrementingTemporaryPaths());
+
+        scanner.Scan("/profiles");
+        clock.UtcNow += InstanceProfileRetentionPolicy.EphemeralLogRetention;
+        var report = scanner.Scan("/profiles");
+
+        Assert.Single(report.Entries);
+        Assert.True(report.Entries[0].Cleanup.LogsDeleted);
+        Assert.False(fileSystem.DirectoryExists("/profiles/dead.logs"));
+        Assert.False(fileSystem.FileExists("/profiles/dead.verified-dead.json"));
+    }
+
     private static InstanceConnectionProfile Profile(
         int processId = 4242,
         string instanceId = "instance-a") =>
@@ -377,6 +448,20 @@ public class InstanceProfilePolicyTests
         }
     }
 
+    private sealed class MappedProcessInspector : IProcessIdentityInspector
+    {
+        private readonly IReadOnlyDictionary<int, ProcessIdentityObservation> _observations;
+
+        public MappedProcessInspector(
+            IReadOnlyDictionary<int, ProcessIdentityObservation> observations)
+        {
+            _observations = observations;
+        }
+
+        public ProcessIdentityObservation Inspect(int processId) =>
+            _observations[processId];
+    }
+
     private sealed class IncrementingTemporaryPaths : IAtomicWritePathProvider
     {
         private int _next;
@@ -398,6 +483,10 @@ public class InstanceProfilePolicyTests
 
         public bool FileExists(string path) => Files.ContainsKey(path);
         public bool DirectoryExists(string path) => Directories.ContainsKey(path);
+        public IEnumerable<string> EnumerateFiles(string path, string searchPattern) =>
+            Files.Keys.Where(candidate =>
+                string.Equals(Path.GetDirectoryName(candidate), path, StringComparison.Ordinal)
+                && Path.GetFileName(candidate).EndsWith(".json", StringComparison.Ordinal));
 
         public string ReadAllText(string path)
         {

@@ -133,6 +133,164 @@ public sealed class RuntimeStatusStoreTests
     }
 
     [Fact]
+    public void LifecycleStateTracksHostAndOnlyProvenExitClearsLiveProcessIdentity()
+    {
+        var store = CreateStore(out var clock);
+        store.UpdateHost(new HostRuntimeStatusUpdate(
+            DomainLifecycleState.Running,
+            4242,
+            "/opt/homebrew/bin/node",
+            "22.19.0",
+            HandshakeState.live,
+            0));
+        clock.Advance(TimeSpan.FromSeconds(1));
+
+        store.UpdateLifecycle(new LifecycleSnapshot(
+            1,
+            clock.UtcNow,
+            DomainLifecycleState.Stopping,
+            LifecycleReasonCode.StopRequested,
+            "Stopping.",
+            "life-status-1",
+            0));
+
+        Assert.Equal(ProtocolLifecycleState.stopping, store.Read().Host.State);
+        Assert.Equal(4242, store.Read().Host.ProcessId);
+        Assert.Equal(HandshakeState.live, store.Read().Host.Handshake);
+
+        store.UpdateHostProcessExited();
+        store.UpdateLifecycle(new LifecycleSnapshot(
+            2,
+            clock.UtcNow,
+            DomainLifecycleState.Faulted,
+            LifecycleReasonCode.UnexpectedChildExit,
+            "Exited.",
+            "life-status-1",
+            0));
+
+        Assert.Equal(ProtocolLifecycleState.faulted, store.Read().Host.State);
+        Assert.Null(store.Read().Host.ProcessId);
+        Assert.Equal(HandshakeState.disconnected, store.Read().Host.Handshake);
+        Assert.Equal("/opt/homebrew/bin/node", store.Read().Host.NodePath);
+        Assert.Equal("22.19.0", store.Read().Host.NodeVersion);
+    }
+
+    [Fact]
+    public void StoppedLifecycleUnconditionallyClearsProcessIdentityButRetainsNodeDiagnostics()
+    {
+        var store = CreateStore(out var clock);
+        store.UpdateHost(new HostRuntimeStatusUpdate(
+            DomainLifecycleState.Running,
+            4242,
+            "/opt/homebrew/bin/node",
+            "22.19.0",
+            HandshakeState.live,
+            0));
+
+        store.UpdateLifecycle(new LifecycleSnapshot(
+            1,
+            clock.UtcNow,
+            DomainLifecycleState.Stopped,
+            LifecycleReasonCode.Stopped,
+            "Stopped.",
+            null,
+            0));
+
+        Assert.Equal(ProtocolLifecycleState.stopped, store.Read().Host.State);
+        Assert.Null(store.Read().Host.ProcessId);
+        Assert.Equal(HandshakeState.disconnected, store.Read().Host.Handshake);
+        Assert.Equal("/opt/homebrew/bin/node", store.Read().Host.NodePath);
+        Assert.Equal("22.19.0", store.Read().Host.NodeVersion);
+    }
+
+    [Fact]
+    public void InitialHostHandshakeRequiresTheLaunchedProcessIdentity()
+    {
+        var store = CreateStore(out var clock);
+        store.UpdateLifecycle(new LifecycleSnapshot(
+            1,
+            clock.UtcNow,
+            DomainLifecycleState.Starting,
+            LifecycleReasonCode.StartRequested,
+            "Starting.",
+            "life-status-1",
+            0));
+        store.UpdateHost(new HostRuntimeStatusUpdate(
+            DomainLifecycleState.Starting,
+            4242,
+            "/opt/homebrew/bin/node",
+            "22.22.3",
+            HandshakeState.connecting,
+            0));
+
+        var before = store.Read();
+        var rejected = store.TryAcceptInitialHostHandshake(9999, "v99.0.0");
+
+        Assert.False(rejected.Accepted);
+        Assert.Equal(before.Revision, rejected.StatusRevision);
+        Assert.Same(before, store.Read());
+
+        var accepted = store.TryAcceptInitialHostHandshake(4242, "v22.22.3");
+
+        Assert.True(accepted.Accepted);
+        Assert.Equal(before.Revision + 1, accepted.StatusRevision);
+        Assert.Equal(4242, store.Read().Host.ProcessId);
+        Assert.Equal("v22.22.3", store.Read().Host.NodeVersion);
+        Assert.Equal(HandshakeState.live, store.Read().Host.Handshake);
+    }
+
+    [Fact]
+    public void LiveHandshakeAllowsStandaloneClientsWithoutOverwritingManagedIdentity()
+    {
+        var store = CreateStore(out _);
+        store.UpdateHost(new HostRuntimeStatusUpdate(
+            DomainLifecycleState.Running,
+            4242,
+            "/opt/homebrew/bin/node",
+            "v22.22.3",
+            HandshakeState.live,
+            0));
+        var before = store.Read();
+
+        var accepted = store.TryAcceptInitialHostHandshake(9999, "v99.0.0");
+
+        Assert.True(accepted.Accepted);
+        Assert.Equal(before.Revision, accepted.StatusRevision);
+        Assert.Same(before, store.Read());
+    }
+
+    [Fact]
+    public void ProcessExitWinsAgainstAStaleInitialHandshake()
+    {
+        var store = CreateStore(out var clock);
+        store.UpdateLifecycle(new LifecycleSnapshot(
+            1,
+            clock.UtcNow,
+            DomainLifecycleState.Starting,
+            LifecycleReasonCode.StartRequested,
+            "Starting.",
+            "life-status-1",
+            0));
+        store.UpdateHost(new HostRuntimeStatusUpdate(
+            DomainLifecycleState.Starting,
+            4242,
+            "/opt/homebrew/bin/node",
+            "22.22.3",
+            HandshakeState.connecting,
+            0));
+        store.UpdateHostProcessExited();
+        var exited = store.Read();
+
+        var rejected = store.TryAcceptInitialHostHandshake(4242, "v22.22.3");
+
+        Assert.False(rejected.Accepted);
+        Assert.Equal(exited.Revision, rejected.StatusRevision);
+        Assert.Same(exited, store.Read());
+        Assert.Null(store.Read().Host.ProcessId);
+        Assert.Equal(HandshakeState.disconnected, store.Read().Host.Handshake);
+    }
+
+    [Fact]
     public void ComponentErrorsAndDocumentsRejectInconsistentInput()
     {
         var store = CreateStore(out _);

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Diagnostics;
 
 namespace Hopper.Core;
 
@@ -448,6 +449,85 @@ public sealed class SystemNodeRuntimeFileSystem : INodeRuntimeFileSystem
 public sealed class SystemNodeRuntimeEnvironment : INodeRuntimeEnvironment
 {
     public string? GetEnvironmentVariable(string name) => Environment.GetEnvironmentVariable(name);
+}
+
+public sealed class SystemNodeRuntimeProcessRunner : INodeRuntimeProcessRunner
+{
+    public async Task<NodeVersionProcessResult> RunAsync(
+        NodeRuntimeProcessRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.Timeout <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(request));
+
+        var startInfo = new ProcessStartInfo(request.ExecutablePath)
+        {
+            UseShellExecute = request.UseShell,
+            RedirectStandardOutput = !request.UseShell,
+            RedirectStandardError = !request.UseShell,
+            CreateNoWindow = true,
+        };
+        foreach (var argument in request.Arguments)
+            startInfo.ArgumentList.Add(argument);
+
+        using var process = new Process { StartInfo = startInfo };
+        try
+        {
+            if (!process.Start())
+                return new NodeVersionProcessResult(null, "", "", FailureMessage: "Process.Start returned false.");
+        }
+        catch (Exception exception)
+        {
+            return new NodeVersionProcessResult(null, "", "", FailureMessage: exception.Message);
+        }
+
+        var standardOutput = startInfo.RedirectStandardOutput
+            ? process.StandardOutput.ReadToEndAsync()
+            : Task.FromResult(string.Empty);
+        var standardError = startInfo.RedirectStandardError
+            ? process.StandardError.ReadToEndAsync()
+            : Task.FromResult(string.Empty);
+        using var timeout = new CancellationTokenSource(request.Timeout);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            timeout.Token);
+        try
+        {
+            await process.WaitForExitAsync(linked.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            TryKill(process);
+            return new NodeVersionProcessResult(
+                null,
+                await standardOutput.ConfigureAwait(false),
+                await standardError.ConfigureAwait(false),
+                TimedOut: true);
+        }
+        catch (OperationCanceledException)
+        {
+            TryKill(process);
+            throw;
+        }
+
+        return new NodeVersionProcessResult(
+            process.ExitCode,
+            await standardOutput.ConfigureAwait(false),
+            await standardError.ConfigureAwait(false));
+    }
+
+    private static void TryKill(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+        }
+        catch
+        {
+        }
+    }
 }
 
 public enum NodeRuntimeOperatingSystem
