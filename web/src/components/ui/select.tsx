@@ -46,10 +46,6 @@ export function SelectLabel({ className, ...props }: ComponentProps<typeof Selec
 	return <SelectPrimitive.Label className={cn("px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-muted", className)} {...props} />;
 }
 
-export function SelectSeparator({ className, ...props }: ComponentProps<typeof SelectPrimitive.Separator>) {
-	return <SelectPrimitive.Separator className={cn("my-1 h-px bg-line", className)} {...props} />;
-}
-
 export function SelectItem({ className, children, ...props }: ComponentProps<typeof SelectPrimitive.Item>) {
 	return (
 		<SelectPrimitive.Item

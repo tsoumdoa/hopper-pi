@@ -199,6 +199,10 @@ pnpm ui:mock
 
 Open http://localhost:5174. This runs the Vite UI against local fixture data, so it never starts Rhino or contacts a provider account. Send a normal prompt to exercise streaming and tool-call rendering. The following prompts open representative interactive and error states: `/mock option`, `/mock confirm`, `/mock editor`, and `/mock failure`.
 
+### Develop the browser UI against Hopper
+
+Run `pnpm host:dev` with the Rhino backend active, then run `pnpm ui:dev` in a second terminal. The host prints a JSON object whose `url` ends with the session token. Open `http://localhost:5173/` with that same fragment, for example `http://localhost:5173/#TOKEN`.
+
 Rebuild or reinstall the plugin manually:
 
 ```bash

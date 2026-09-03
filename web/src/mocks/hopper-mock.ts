@@ -4,8 +4,15 @@ import type { RuntimeStatus } from "../../../src/protocol/v2.js";
 type SnapshotMessage = Extract<ServerMessage, { type: "snapshot" }>;
 
 const MOCK_PROVIDERS = [
-	{ id: "openai", name: "OpenAI" },
-	{ id: "anthropic", name: "Anthropic" },
+	{ id: "openai", name: "OpenAI", authMethods: [{ type: "api_key" as const, label: "OpenAI API key" }] },
+	{
+		id: "anthropic",
+		name: "Anthropic",
+		authMethods: [
+			{ type: "api_key" as const, label: "Anthropic API key" },
+			{ type: "oauth" as const, label: "Sign in with Claude" },
+		],
+	},
 ];
 
 export const mockRuntimeStatus: RuntimeStatus = {
@@ -36,8 +43,8 @@ function snapshot(overrides: Partial<SnapshotMessage["snapshot"]> = {}): Snapsho
 				{ provider: "anthropic", id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
 			],
 			providers: [
-				{ id: "openai", name: "OpenAI", authenticated: true },
-				{ id: "anthropic", name: "Anthropic", authenticated: false },
+				{ ...MOCK_PROVIDERS[0], authenticated: true },
+				{ ...MOCK_PROVIDERS[1], authenticated: false },
 			],
 			messages: [
 				{ id: "mock-user-1", role: "user", content: "Inspect the active Grasshopper canvas and summarize its structure." },

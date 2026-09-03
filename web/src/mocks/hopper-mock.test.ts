@@ -22,7 +22,9 @@ describe("MockHopperTransport", () => {
 
 		expect(messages).toContainEqual({ type: "status", status: "authenticated", scope: "auth", provider: "anthropic" });
 		const snapshot = [...messages].reverse().find((message): message is Extract<ServerMessage, { type: "snapshot" }> => message.type === "snapshot");
-		expect(snapshot?.snapshot.providers).toContainEqual({ id: "anthropic", name: "Anthropic", authenticated: true });
+		expect(snapshot?.snapshot.providers).toContainEqual(expect.objectContaining({ id: "anthropic", name: "Anthropic", authenticated: true }));
+		expect(snapshot?.snapshot.providers.find((provider) => provider.id === "anthropic")?.authMethods.map((method) => method.type))
+			.toEqual(["api_key", "oauth"]);
 	});
 
 	it("cancels pending stream events when a run is aborted", () => {

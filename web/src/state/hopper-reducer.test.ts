@@ -13,7 +13,7 @@ describe("hopperReducer", () => {
 				availableThinkingLevels: ["off", "high"],
 				model: { provider: "openai", id: "gpt-5" },
 				models: [{ provider: "openai", id: "gpt-5" }],
-				providers: [{ id: "openai", name: "OpenAI", authenticated: true }],
+				providers: [{ id: "openai", name: "OpenAI", authenticated: true, authMethods: [{ type: "api_key", label: "OpenAI API key" }] }],
 				messages: [{ id: "user-1", role: "user", content: "Inspect this canvas" }],
 			},
 		});
@@ -105,5 +105,13 @@ describe("hopperReducer", () => {
 		expect(state.pendingUiRequests).toHaveLength(1);
 		state = hopperReducer(state, { type: "ui-request-resolved" });
 		expect(state.activeUiRequest?.requestId).toBe("second");
+	});
+
+	it("ignores a pending UI request replayed after reconnect", () => {
+		const request = { requestId: "pending", kind: "confirm" as const, title: "Continue?" };
+		let state = hopperReducer(initialHopperState, { type: "ui-request", request });
+		state = hopperReducer(state, { type: "ui-request", request });
+		expect(state.activeUiRequest?.requestId).toBe("pending");
+		expect(state.pendingUiRequests).toHaveLength(0);
 	});
 });

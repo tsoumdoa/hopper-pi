@@ -309,10 +309,14 @@ export function hopperReducer(state: HopperState, action: HopperAction): HopperS
 					],
 				},
 			};
-		case "ui-request":
+		case "ui-request": {
+			const alreadyQueued = state.activeUiRequest?.requestId === action.request.requestId
+				|| state.pendingUiRequests.some((request) => request.requestId === action.request.requestId);
+			if (alreadyQueued) return state;
 			return state.activeUiRequest
 				? { ...state, pendingUiRequests: [...state.pendingUiRequests, action.request] }
 				: { ...state, activeUiRequest: action.request };
+		}
 		case "ui-request-resolved":
 			return { ...state, activeUiRequest: state.pendingUiRequests[0] ?? null, pendingUiRequests: state.pendingUiRequests.slice(1) };
 		case "toast":

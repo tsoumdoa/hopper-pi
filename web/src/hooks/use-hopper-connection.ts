@@ -149,8 +149,7 @@ export function useHopperConnection() {
 		}
 	}, [markConnected, toast]);
 
-	const send = useCallback((message: ClientMessage, options: { requireAuth?: boolean } = {}) => {
-		const requireAuth = options.requireAuth ?? true;
+	const send = useCallback((message: ClientMessage) => {
 		if (isMockMode && mockTransport.current) {
 			mockTransport.current.send(message);
 			return true;
@@ -159,7 +158,7 @@ export function useHopperConnection() {
 			toast("Hopper is not connected.", "error");
 			return false;
 		}
-		if (requireAuth && !authenticated.current) {
+		if (!authenticated.current) {
 			toast("Hopper is still authenticating.", "warning");
 			return false;
 		}

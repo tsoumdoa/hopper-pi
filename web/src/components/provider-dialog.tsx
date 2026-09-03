@@ -1,5 +1,5 @@
 import { ExternalLink, KeyRound, Loader2, LogOut } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import type { FormEvent } from "react";
 import { providerLabel } from "../lib/utils";
 import type { AuthFlow, ProviderSummary } from "../state/hopper-types";
@@ -10,15 +10,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
-const FALLBACK_PROVIDERS: ProviderSummary[] = [
-	{ id: "anthropic", name: "Anthropic", authenticated: false },
-	{ id: "openai", name: "OpenAI", authenticated: false },
-	{ id: "openai-codex", name: "OpenAI Codex", authenticated: false },
-	{ id: "google", name: "Google", authenticated: false },
-];
-
 export type ProviderDialogProps = {
-	open: boolean;
 	onOpenChange(open: boolean): void;
 	providers: ProviderSummary[];
 	/** Provider backing the current model, used as the default selection. */
@@ -26,48 +18,48 @@ export type ProviderDialogProps = {
 	auth: AuthFlow;
 	onLogin(provider: string, authType: "api_key" | "oauth", apiKey?: string): boolean;
 	onLogout(provider: string): void;
-	onResetAuth(): void;
 };
 
-export function ProviderDialog({ open, onOpenChange, providers, currentProvider, auth, onLogin, onLogout, onResetAuth }: ProviderDialogProps) {
-	const options = providers.length ? providers : FALLBACK_PROVIDERS;
-	const [provider, setProvider] = useState<string>("");
-	const [authType, setAuthType] = useState<"api_key" | "oauth">("api_key");
+export function ProviderDialog({ onOpenChange, providers, currentProvider, auth, onLogin, onLogout }: ProviderDialogProps) {
+	const initialProvider = providers.find((item) => item.id === auth.provider)
+		?? providers.find((item) => item.id === currentProvider)
+		?? providers.find((item) => item.authenticated)
+		?? providers[0];
+	const [provider, setProvider] = useState(initialProvider?.id ?? "");
+	const [authType, setAuthType] = useState<"api_key" | "oauth">(initialProvider?.authMethods[0]?.type ?? "api_key");
 	const [apiKey, setApiKey] = useState("");
 	const [validation, setValidation] = useState<string | null>(null);
 
-	// Each time the dialog opens, start from the session's provider with a clean form.
-	// Only `open` drives this; the other values are read once at that moment.
-	const latest = useRef({ currentProvider, options, onResetAuth });
-	latest.current = { currentProvider, options, onResetAuth };
-	useEffect(() => {
-		if (!open) return;
-		const { currentProvider: current, options: items, onResetAuth: reset } = latest.current;
-		setProvider(current ?? items.find((item) => item.authenticated)?.id ?? items[0]?.id ?? "");
+	const selectProvider = (id: string) => {
+		setProvider(id);
+		setAuthType(providers.find((item) => item.id === id)?.authMethods[0]?.type ?? "api_key");
 		setApiKey("");
 		setValidation(null);
-		reset();
-	}, [open]);
+	};
 
-	const selected = options.find((item) => item.id === provider) ?? options[0];
+	const selected = providers.find((item) => item.id === provider) ?? providers[0];
 	const selectedId = selected?.id ?? "";
-	const selectedName = providerLabel(selectedId, options);
+	const selectedName = providerLabel(selectedId, providers);
+	const selectedMethod = selected?.authMethods.find((method) => method.type === authType)
+		?? selected?.authMethods[0];
+	const selectedAuthType = selectedMethod?.type;
 
 	const submit = (event: FormEvent) => {
 		event.preventDefault();
-		if (!selectedId) return;
-		if (authType === "api_key" && !apiKey.trim()) {
+		if (!selectedId || !selectedAuthType) return;
+		if (selectedAuthType === "api_key" && !apiKey.trim()) {
 			setValidation("Enter an API key.");
 			return;
 		}
 		setValidation(null);
-		if (onLogin(selectedId, authType, authType === "api_key" ? apiKey.trim() : undefined)) setApiKey("");
+		if (onLogin(selectedId, selectedAuthType, selectedAuthType === "api_key" ? apiKey.trim() : undefined)) setApiKey("");
 	};
 
-	const error = validation ?? auth.error;
+	const currentAuth = auth.provider === selectedId ? auth : null;
+	const error = validation ?? currentAuth?.error;
 
 	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
+		<Dialog open onOpenChange={onOpenChange}>
 			<DialogContent aria-describedby="provider-dialog-description">
 				<DialogHeader>
 					<DialogKicker>Private Hopper settings</DialogKicker>
@@ -86,30 +78,41 @@ export function ProviderDialog({ open, onOpenChange, providers, currentProvider,
 								</Badge>
 							)}
 						</div>
-						<Select value={selectedId} onValueChange={setProvider} disabled={auth.busy}>
+						<Select value={selectedId} onValueChange={selectProvider} disabled={auth.busy}>
 							<SelectTrigger id="provider-select">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								{options.map((item) => (
+								{providers.map((item) => (
 									<SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
 								))}
 							</SelectContent>
 						</Select>
 					</div>
-					<div className="grid gap-1.5">
-						<Label htmlFor="auth-type-select">Sign-in method</Label>
-						<Select value={authType} onValueChange={(value) => setAuthType(value as "api_key" | "oauth")} disabled={auth.busy}>
-							<SelectTrigger id="auth-type-select">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="api_key">API key</SelectItem>
-								<SelectItem value="oauth">Browser sign-in</SelectItem>
-							</SelectContent>
-						</Select>
-					</div>
-					{authType === "api_key" && (
+					{selected?.authMethods.length ? (
+						<div className="grid gap-1.5">
+							<Label htmlFor={selected.authMethods.length > 1 ? "auth-type-select" : undefined}>Sign-in method</Label>
+							{selected.authMethods.length > 1 ? (
+								<Select value={selectedAuthType} onValueChange={(value) => setAuthType(value as "api_key" | "oauth")} disabled={auth.busy}>
+									<SelectTrigger id="auth-type-select">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										{selected.authMethods.map((method) => (
+											<SelectItem key={method.type} value={method.type}>{method.label}</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							) : (
+								<p className="rounded-lg border border-line bg-surface-muted px-3 py-2 text-sm text-ink-soft">{selectedMethod?.label}</p>
+							)}
+						</div>
+					) : (
+						<p className="rounded-lg border border-line bg-surface-muted px-3 py-2.5 text-xs leading-relaxed text-ink-soft">
+							{selected ? `${selected.name} must be configured outside Hopper.` : "No providers are available."}
+						</p>
+					)}
+					{selectedAuthType === "api_key" && (
 						<div className="grid gap-1.5">
 							<Label htmlFor="api-key-input">API key</Label>
 							<Input
@@ -129,14 +132,14 @@ export function ProviderDialog({ open, onOpenChange, providers, currentProvider,
 						</div>
 					)}
 
-					{auth.notice && (
+					{currentAuth?.notice && (
 						<div role="status" className="flex items-start gap-2 rounded-lg border border-accent/20 bg-accent-soft px-3 py-2.5 text-xs text-accent">
-							{auth.busy && !auth.url ? <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin" /> : <KeyRound className="mt-0.5 size-3.5 shrink-0" />}
+							{currentAuth.busy && !currentAuth.url ? <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin" /> : <KeyRound className="mt-0.5 size-3.5 shrink-0" />}
 							<div className="min-w-0 flex-1">
-								<p className="leading-relaxed">{auth.notice}</p>
-								{auth.url && (
-									<a className="mt-1 inline-flex items-center gap-1 font-semibold underline underline-offset-2" href={auth.url} target="_blank" rel="noreferrer noopener">
-										{auth.label ?? "Open link"}
+								<p className="leading-relaxed">{currentAuth.notice}</p>
+								{currentAuth.url && (
+									<a className="mt-1 inline-flex items-center gap-1 font-semibold underline underline-offset-2" href={currentAuth.url} target="_blank" rel="noreferrer noopener">
+										{currentAuth.label ?? "Open link"}
 										<ExternalLink className="size-3" />
 									</a>
 								)}
@@ -154,9 +157,9 @@ export function ProviderDialog({ open, onOpenChange, providers, currentProvider,
 						</Button>
 						<div className="flex gap-2">
 							<Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>Close</Button>
-							<Button type="submit" disabled={auth.busy || !selectedId}>
+							<Button type="submit" disabled={auth.busy || !selectedId || !selectedAuthType}>
 								{auth.busy && <Loader2 className="size-4 animate-spin" />}
-								{authType === "oauth" ? "Sign in" : "Connect"}
+								{selectedAuthType === "oauth" ? "Sign in" : "Connect"}
 							</Button>
 						</div>
 					</DialogFooter>

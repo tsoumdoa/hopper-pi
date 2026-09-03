@@ -164,16 +164,16 @@ export function App() {
 				/>
 			</main>
 
-			<ProviderDialog
-				open={providerOpen}
-				onOpenChange={setProviderOpen}
-				providers={state.providers}
-				currentProvider={state.selectedModel?.provider ?? null}
-				auth={state.auth}
-				onLogin={login}
-				onLogout={requestLogout}
-				onResetAuth={() => dispatch({ type: "auth-reset" })}
-			/>
+			{providerOpen && (
+				<ProviderDialog
+					onOpenChange={setProviderOpen}
+					providers={state.providers}
+					currentProvider={state.selectedModel?.provider ?? null}
+					auth={state.auth}
+					onLogin={login}
+					onLogout={requestLogout}
+				/>
+			)}
 			<UiRequestDialog
 				request={state.activeUiRequest}
 				queued={state.pendingUiRequests.length}

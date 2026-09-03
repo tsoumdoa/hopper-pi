@@ -8,8 +8,6 @@ import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "./ui/select";
 
-const FALLBACK_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
-
 function BrandMark({ className }: { className?: string }) {
 	return (
 		<span aria-hidden="true" className={cn("grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-base font-bold text-white shadow-sm", className)}>
@@ -87,7 +85,6 @@ export function Sidebar({
 		}
 		return [...groups.entries()];
 	}, [state.models]);
-	const thinkingLevels = state.availableThinkingLevels.length ? state.availableThinkingLevels : FALLBACK_THINKING_LEVELS;
 	const authenticatedProviders = state.providers.filter((provider) => provider.authenticated);
 	const selectedProvider = state.selectedModel?.provider ?? authenticatedProviders[0]?.id ?? null;
 	const selectedProviderAuthenticated = state.providers.some((provider) => provider.id === selectedProvider && provider.authenticated);
@@ -141,7 +138,7 @@ export function Sidebar({
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
-							{thinkingLevels.map((level) => (
+							{state.availableThinkingLevels.map((level) => (
 								<SelectItem key={level} value={level}>{thinkingLabel(level)}</SelectItem>
 							))}
 						</SelectContent>
@@ -203,9 +200,18 @@ export function Sidebar({
 				New session
 			</Button>
 
-			<div id="mobile-settings-panel" className={cn("grid gap-4 lg:contents", mobileOpen ? "animate-fade-in" : "max-lg:hidden")}>
+			<div
+				id="mobile-settings-panel"
+				className={cn(
+					"grid gap-4 lg:contents",
+					mobileOpen
+						? "max-lg:absolute max-lg:left-3 max-lg:right-3 max-lg:top-[calc(100%-1px)] max-lg:z-30 max-lg:max-h-[min(70vh,520px)] max-lg:overflow-y-auto max-lg:rounded-xl max-lg:border max-lg:border-line-strong max-lg:bg-canvas max-lg:p-3 max-lg:shadow-pop max-lg:animate-fade-in"
+						: "max-lg:hidden",
+				)}
+			>
 				{settings}
-				<div className="lg:hidden">
+				<div className="grid gap-3 lg:hidden">
+					<RuntimeStatusPanel status={state.runtimeStatus} error={state.runtimeStatusError} onRefresh={onRefreshRuntime} refreshing={runtimeRefreshing} />
 					<ConnectionCard state={state} onReconnect={onReconnect} />
 				</div>
 			</div>
