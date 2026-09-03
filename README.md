@@ -10,9 +10,13 @@ AI inside their real workflow — not locked behind a black-box SaaS.
 
 ## What's new
 
-### Unreleased — Direct viewport capture
+### 0.1.91 — Final Pi extension release
 
-- **No screenshot permission prompt:** `rh_capture_view` can capture the Rhino viewport as soon as a multimodal model requests it. The per-session consent prompt and its environment override have been removed.
+- **Final `hopper-pi` release:** 0.1.91 is the last version released as a Pi extension. The `hopper-pi` package will remain available as the 0.1.x stable line for existing Pi users.
+- **Next release path:** Hoppercode will continue as a native Rhino plugin distributed through Yak, Rhino's official package manager.
+- **`gh_quick_scaffold`:** place a working, visible Grasshopper placeholder graph early, then refine or replace its script and wiring.
+- **`hopper_delegate`:** run parallel tool-less subagents for planning and review. The main agent keeps control of Rhino and Grasshopper changes.
+- **Direct viewport capture:** `rh_capture_view` now captures the Rhino viewport when a multimodal model requests it. The per-session screenshot prompt and its environment override are gone.
 
 ### 0.1.90 — Slim progressive tool catalog
 
