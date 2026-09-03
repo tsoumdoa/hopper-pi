@@ -135,14 +135,14 @@ node scripts/install-grasshopper-plugin.mjs --force
 ## Architecture
 
 ```
-Browser UI  ⇄  private Hopper host + embedded Pi SDK  ⇄  ZMQ  ⇄  Rhino-owned backend
+Browser UI  ⇄  private Hopper host + embedded Pi SDK  ⇄  RPC v2  ⇄  Rhino-owned host
                          ↑                                  ↑
                   exact local package                 active GH document
 ```
 
-- `Hopper.Rhino.rhp` owns `_HopperCode`, the backend, host process, browser launch, health checks, and shutdown.
-- `Hopper.Backend.dll` owns ZMQ, queued UI-thread execution, active-document routing, and Rhino/Grasshopper operations.
-- `rhino-zmq-poc.gha` is a thin compatibility adapter for existing GHZMQ components.
+- `Hopper.Rhino.rhp` owns `_HopperCode`, transport, dispatch, Rhino operations, the host process, health checks, and shutdown.
+- `Hopper.Grasshopper.gha` registers Grasshopper operations lazily and owns active-canvas subscriptions.
+- The legacy GHZMQ component remains a passive compatibility marker for existing definitions; it does not start transport or Node.
 - The host binds only `127.0.0.1`, checks the browser origin, and requires a 256-bit token as the first WebSocket message. The token begins in the URL fragment and is removed from browser history.
 - Provider credentials use the global Pi auth file at `~/.pi/agent/auth.json` by default, including `PI_CODING_AGENT_DIR` overrides. Login, token refresh, and logout in Hopper update that shared file. Model settings remain in Hopper's private user-data directory. Session and workspace state are separated per live Rhino backend instance.
 
@@ -218,8 +218,8 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 | `src/host/` | Embedded Pi runtime, loopback server, protocol, and browser UI |
 | `src/` | Pi extension, ZMQ client, tools, and XML parsing |
 | `grasshopper-plugin/Hopper.Rhino/` | Rhino lifecycle plug-in and `_HopperCode` command |
-| `grasshopper-plugin/Hopper.Backend/` | Shared backend assembly |
-| `grasshopper-plugin/` | Backward-compatible GHZMQ adapter |
+| `dotnet/Hopper.Grasshopper/` | Lazy Grasshopper operation adapter and passive GHZMQ compatibility component |
+| `dotnet/Hopper.Core/` | Rhino/Grasshopper-free protocol, lifecycle, dispatch, and transport policies |
 | `scripts/package-rhino.mjs` | Stage a platform package with official Node and production dependencies |
 | `docs/hopper-local-architecture.html` | Interactive architecture and implementation plan |
 | `mds/` | Skills and progressive reference docs for the agent |

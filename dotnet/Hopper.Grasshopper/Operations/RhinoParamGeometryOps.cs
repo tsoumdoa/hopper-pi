@@ -13,6 +13,21 @@ using Rhino.Geometry;
 
 namespace rhino_zmq_poc
 {
+    internal sealed class QueryRhinoObjectsParams
+    {
+        [JsonPropertyName("selectionOnly")]
+        public bool? SelectionOnly { get; set; }
+
+        [JsonPropertyName("layer")]
+        public string Layer { get; set; }
+
+        [JsonPropertyName("objectIds")]
+        public List<string> ObjectIds { get; set; }
+
+        [JsonPropertyName("objectType")]
+        public string ObjectType { get; set; }
+    }
+
     internal class SetParamRhinoGeometryParams
     {
         [JsonPropertyName("targetId")]
@@ -91,10 +106,10 @@ namespace rhino_zmq_poc
             string queryNote = null;
             if (hasQuery)
             {
-                var matched = RhinoObjectQuery.Query(rhinoDoc, param.RhinoQuery);
+                var matched = QueryRhinoObjects(rhinoDoc, param.RhinoQuery);
                 if (matched.Count == 0)
                     return "setParamRhinoGeometry error: rhinoQuery matched no Rhino objects";
-                objectIds = matched.Select(o => o.ObjectId).ToList();
+                objectIds = matched.Select(o => o.Id.ToString()).ToList();
                 queryNote = FormatRhinoQueryNote(param.RhinoQuery, matched.Count);
             }
             else
@@ -151,6 +166,64 @@ namespace rhino_zmq_poc
                 parts.Add($"type={query.ObjectType}");
             return string.Join(", ", parts);
         }
+
+        private static List<RhinoObject> QueryRhinoObjects(
+            RhinoDoc document,
+            QueryRhinoObjectsParams query)
+        {
+            IEnumerable<RhinoObject> objects = query.SelectionOnly == true
+                ? document.Objects.GetSelectedObjects(false, false) ?? Array.Empty<RhinoObject>()
+                : document.Objects.GetObjectList(ObjectType.AnyObject);
+
+            if (query.ObjectIds != null && query.ObjectIds.Count > 0)
+            {
+                var ids = query.ObjectIds
+                    .Select(value => Guid.TryParse(value, out var id) ? id : Guid.Empty)
+                    .Where(id => id != Guid.Empty)
+                    .ToHashSet();
+                objects = objects.Where(item => ids.Contains(item.Id));
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.Layer))
+            {
+                var layerIndex = document.Layers.FindByFullPath(query.Layer, -1);
+                if (layerIndex < 0)
+                    return new List<RhinoObject>();
+                objects = objects.Where(item => item.Attributes.LayerIndex == layerIndex);
+            }
+
+            var type = NormalizeObjectType(query.ObjectType);
+            if (type != null)
+                objects = objects.Where(item => MatchesObjectType(item, type));
+
+            return objects.OrderBy(item => item.Id).ToList();
+        }
+
+        private static string NormalizeObjectType(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+            return value.Trim().ToLowerInvariant() switch
+            {
+                "any" or "*" => null,
+                "curves" => "curve",
+                "points" => "point",
+                "breps" or "polysurface" or "polysurfaces" => "brep",
+                "surfaces" => "surface",
+                "meshes" => "mesh",
+                var normalized => normalized,
+            };
+        }
+
+        private static bool MatchesObjectType(RhinoObject item, string type) => type switch
+        {
+            "curve" => item.Geometry is Curve,
+            "point" => item.ObjectType == ObjectType.Point,
+            "brep" => item.Geometry is Brep or Extrusion,
+            "surface" => item.Geometry is Surface or BrepFace,
+            "mesh" => item.Geometry is Mesh,
+            _ => item.ObjectType.ToString().Equals(type, StringComparison.OrdinalIgnoreCase),
+        };
 
         public static GetParamRhinoGeometryResult GetParamRhinoGeometry(GH_Document doc, GetParamRhinoGeometryParams param)
         {

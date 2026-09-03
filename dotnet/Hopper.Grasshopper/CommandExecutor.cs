@@ -307,25 +307,6 @@ namespace rhino_zmq_poc
         private string ExecuteCancelAgentTransaction(GH_Document doc, JsonElement _)
             => AgentTransaction.Cancel(doc);
 
-        private string ExecuteBeginRhinoAgentTransaction(JsonElement p)
-        {
-            var param = p.Deserialize<BeginAgentTransactionParams>();
-            var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
-            return RhinoAgentTransaction.Begin(rhinoDoc, param?.Name);
-        }
-
-        private string ExecuteCommitRhinoAgentTransaction()
-        {
-            var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
-            return RhinoAgentTransaction.Commit(rhinoDoc);
-        }
-
-        private string ExecuteCancelRhinoAgentTransaction()
-        {
-            var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
-            return RhinoAgentTransaction.Cancel(rhinoDoc);
-        }
-
         private string ExecuteSetParamRhinoGeometry(GH_Document doc, JsonElement p)
         {
             var param = p.Deserialize<SetParamRhinoGeometryParams>();
@@ -333,9 +314,8 @@ namespace rhino_zmq_poc
                 return "setParamRhinoGeometry error: invalid params";
             if (string.IsNullOrWhiteSpace(param.TargetId))
                 return "setParamRhinoGeometry error: missing targetId";
-            var rhinoDoc = RhinoScriptExecutor.ResolveRhinoDoc();
+            var rhinoDoc = Rhino.RhinoDoc.ActiveDoc;
             return RhinoParamGeometryOps.SetParamRhinoGeometry(doc, rhinoDoc, param);
         }
     }
 }
-

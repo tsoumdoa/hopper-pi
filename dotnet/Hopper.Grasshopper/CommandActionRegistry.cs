@@ -51,9 +51,6 @@ namespace rhino_zmq_poc
             "beginAgentTransaction",
             "commitAgentTransaction",
             "cancelAgentTransaction",
-            "beginRhinoAgentTransaction",
-            "commitRhinoAgentTransaction",
-            "cancelRhinoAgentTransaction",
             "setParamRhinoGeometry",
         };
     }

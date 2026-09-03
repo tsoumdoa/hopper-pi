@@ -10,7 +10,7 @@ using Rhino.Geometry;
 
 namespace rhino_zmq_poc
 {
-    internal class CaptureRhinoViewParams
+    internal sealed class CaptureRhinoViewParams
     {
         [JsonPropertyName("view")]
         public string View { get; set; }

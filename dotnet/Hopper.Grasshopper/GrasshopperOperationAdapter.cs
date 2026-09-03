@@ -13,7 +13,7 @@ namespace rhino_zmq_poc
     /// Adapts the existing Grasshopper operations to the Rhino-owned RPC runtime.
     /// It owns no sockets, child processes, or lifecycle state.
     /// </summary>
-    public sealed class GrasshopperOperationAdapter : IGrasshopperAdapter
+    public sealed class GrasshopperOperationAdapter : IGrasshopperAdapter, IDisposable
     {
         private static readonly HashSet<RpcOperation> QueryOperations = new HashSet<RpcOperation>
         {
@@ -72,6 +72,10 @@ namespace rhino_zmq_poc
 
         private readonly CommandExecutor _commands = new CommandExecutor(_ => { });
         private readonly UiRequestDispatcher _queries = CreateQueryDispatcher();
+        private readonly ActiveGrasshopperDocumentTracker _documents =
+            new ActiveGrasshopperDocumentTracker();
+
+        internal void Start() => _documents.Start();
 
         public OperationDocumentStatus DocumentStatus
         {
@@ -157,7 +161,10 @@ namespace rhino_zmq_poc
                 AgentTransaction.Cancel(document);
         }
 
-        private static GH_Document ActiveDocument => Instances.ActiveCanvas?.Document;
+        private GH_Document ActiveDocument => _documents.ActiveDocument
+            ?? Instances.ActiveCanvas?.Document;
+
+        public void Dispose() => _documents.Dispose();
 
         private static UiRequestDispatcher CreateQueryDispatcher()
         {

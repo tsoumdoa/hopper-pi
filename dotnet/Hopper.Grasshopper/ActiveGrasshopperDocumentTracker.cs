@@ -5,30 +5,27 @@ using Rhino;
 namespace rhino_zmq_poc
 {
     /// <summary>
-    /// Moves solution publication to the document shown by the active canvas.
-    /// Edit routing resolves the active document separately for every operation.
+    /// Tracks the active canvas and owns all document subscriptions for the adapter.
     /// </summary>
     internal sealed class ActiveGrasshopperDocumentTracker : IDisposable
     {
-        private readonly DocumentMonitor _monitor;
-        private GH_Document _lastDocument;
+        private readonly DocumentMonitor _monitor = new DocumentMonitor();
+        private GH_Document _activeDocument;
         private bool _started;
 
-        public ActiveGrasshopperDocumentTracker(DocumentMonitor monitor)
-        {
-            _monitor = monitor ?? throw new ArgumentNullException(nameof(monitor));
-        }
+        public GH_Document ActiveDocument => _activeDocument;
 
         public void Start()
         {
             if (_started)
                 return;
+
             _started = true;
             RhinoApp.Idle += OnIdle;
             Refresh();
         }
 
-        private void OnIdle(object sender, EventArgs e) => Refresh();
+        private void OnIdle(object sender, EventArgs args) => Refresh();
 
         private void Refresh()
         {
@@ -36,10 +33,10 @@ namespace rhino_zmq_poc
                 return;
 
             var current = Grasshopper.Instances.ActiveCanvas?.Document;
-            if (ReferenceEquals(current, _lastDocument))
+            if (ReferenceEquals(current, _activeDocument))
                 return;
 
-            _lastDocument = current;
+            _activeDocument = current;
             _monitor.EnsureSubscription(current);
         }
 
@@ -47,9 +44,11 @@ namespace rhino_zmq_poc
         {
             if (!_started)
                 return;
+
             _started = false;
             RhinoApp.Idle -= OnIdle;
-            _lastDocument = null;
+            _monitor.Dispose();
+            _activeDocument = null;
         }
     }
 }

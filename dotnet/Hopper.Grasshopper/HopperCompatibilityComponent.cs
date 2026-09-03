@@ -13,7 +13,7 @@ namespace rhino_zmq_poc
     {
         public rhino_zmq_pocComponent()
             : base("Hopper Code Backend", "GHZMQ",
-                "CLI-GH Connector: ZMQ pub/sub and command execution",
+                "Passive compatibility marker; HopperCode owns the runtime",
                 "Params", "Util")
         {
         }

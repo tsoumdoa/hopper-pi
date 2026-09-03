@@ -206,7 +206,7 @@ run(nativeNodeExecutable, ["--version"]);
 run(nativeNodeExecutable, ["--input-type=module", "--eval", "await import('zeromq')"], { cwd: hostDirectory });
 
 writeFileSync(join(runtimeDirectory, "hopper-runtime.json"), JSON.stringify({
-	protocolVersion: 1,
+	protocolVersion: 2,
 	nodeExecutables,
 	hostEntry: "host/dist/host/index.js",
 	nodeVersion: bundledNodeVersion,

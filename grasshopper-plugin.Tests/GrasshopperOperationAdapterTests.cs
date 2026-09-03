@@ -5,6 +5,18 @@ namespace rhino_zmq_poc.Tests;
 
 public class GrasshopperOperationAdapterTests
 {
+    [Fact]
+    public void GrasshopperAssemblyDoesNotReferenceLegacyBackendOrTransport()
+    {
+        var references = typeof(GrasshopperOperationAdapter).Assembly
+            .GetReferencedAssemblies()
+            .Select(reference => reference.Name)
+            .ToArray();
+
+        Assert.DoesNotContain("Hopper.Backend", references);
+        Assert.DoesNotContain("NetMQ", references);
+    }
+
     [Theory]
     [InlineData(RpcOperation.listAllComponents)]
     [InlineData(RpcOperation.getCurrentCanvas)]

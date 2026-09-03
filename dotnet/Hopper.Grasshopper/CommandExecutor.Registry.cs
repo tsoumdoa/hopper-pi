@@ -53,9 +53,6 @@ namespace rhino_zmq_poc
                 ["beginAgentTransaction"] = (ex, doc, cmd) => ex.ExecuteBeginAgentTransaction(doc, cmd.Params),
                 ["commitAgentTransaction"] = (ex, doc, cmd) => ex.ExecuteCommitAgentTransaction(doc, cmd.Params),
                 ["cancelAgentTransaction"] = (ex, doc, cmd) => ex.ExecuteCancelAgentTransaction(doc, cmd.Params),
-                ["beginRhinoAgentTransaction"] = (ex, _, cmd) => ex.ExecuteBeginRhinoAgentTransaction(cmd.Params),
-                ["commitRhinoAgentTransaction"] = (ex, _, _) => ex.ExecuteCommitRhinoAgentTransaction(),
-                ["cancelRhinoAgentTransaction"] = (ex, _, _) => ex.ExecuteCancelRhinoAgentTransaction(),
                 ["setParamRhinoGeometry"] = (ex, doc, cmd) => ex.ExecuteSetParamRhinoGeometry(doc, cmd.Params),
             };
     }

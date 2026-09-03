@@ -20,6 +20,8 @@ namespace rhino_zmq_poc
             if (!HostOperationRegistries.Grasshopper.TryRegister(Adapter))
                 return GH_LoadingInstruction.Abort;
 
+            Adapter.Start();
+
             if (!_subscribed)
             {
                 AppDomain.CurrentDomain.DomainUnload += OnDomainUnload;
@@ -32,6 +34,7 @@ namespace rhino_zmq_poc
         private static void OnDomainUnload(object sender, EventArgs args)
         {
             HostOperationRegistries.Grasshopper.TryUnregister(Adapter);
+            Adapter.Dispose();
         }
     }
 }
