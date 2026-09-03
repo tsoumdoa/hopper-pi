@@ -17,7 +17,6 @@
   <ItemGroup>
     <PackageReference Include="RhinoCommon" Version="8.0.23304.9001" ExcludeAssets="runtime" />
     <ProjectReference Include="../../dotnet/Hopper.Core/Hopper.Core.csproj" />
-    <ProjectReference Include="../../dotnet/Hopper.Rhino.Host/Hopper.Rhino.Host.csproj" />
   </ItemGroup>
 
   <ItemGroup>

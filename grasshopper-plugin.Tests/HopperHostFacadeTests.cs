@@ -156,6 +156,11 @@ public sealed class HopperHostFacadeTests
 
         Assert.Equal(GrasshopperCapabilityState.NotInstalled, fixture.Grasshopper.Status.State);
         Assert.Equal(GrasshopperState.not_installed, fixture.Facade.GetStatus().Runtime.Grasshopper.State);
+        var response = fixture.Facade.Execute(Request(RpcOperation.startGrasshopper));
+
+        Assert.Equal(RpcResultClass.capability_unavailable, response.Class);
+        Assert.Equal(RpcReasonCode.GRASSHOPPER_NOT_INSTALLED, response.ReasonCode);
+        Assert.Equal(GrasshopperCapabilityState.NotInstalled, fixture.Grasshopper.Status.State);
         Assert.Equal(0, fixture.GrasshopperStart.CallCount);
     }
 
@@ -176,7 +181,7 @@ public sealed class HopperHostFacadeTests
             response.Data?.Deserialize<CancelOperationDataV2>(RpcV2Contract.JsonOptions)?.State);
     }
 
-    private static RpcRequestV2 Request(RpcOperation operation, object args = null) => new()
+    private static RpcRequestV2 Request(RpcOperation operation, object? args = null) => new()
     {
         Operation = operation,
         Args = JsonSerializer.SerializeToElement(args ?? new { }, RpcV2Contract.JsonOptions),
@@ -259,7 +264,7 @@ public sealed class HopperHostFacadeTests
     private sealed class OperationCancellation : IHopperOperationCancellation
     {
         public CancelOperationState Next { get; set; } = CancelOperationState.not_found;
-        public string LastOperationId { get; private set; }
+        public string? LastOperationId { get; private set; }
 
         public CancelOperationState Cancel(string operationId)
         {

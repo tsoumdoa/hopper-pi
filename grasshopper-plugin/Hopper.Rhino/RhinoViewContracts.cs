@@ -1,3 +1,5 @@
+#nullable enable
+
 namespace Hopper.Rhino.Host;
 
 public sealed record RhinoPoint3(double X, double Y, double Z);

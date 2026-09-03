@@ -43,7 +43,7 @@ test("TS Grasshopper command actions are handled by the Grasshopper executor", (
 
 test("TS Rhino transaction actions are handled by the Rhino adapter", () => {
 	const adapterSource = readFileSync(
-		join(repoRoot, "dotnet/Hopper.Rhino.Host/RhinoOperationAdapter.cs"),
+		join(repoRoot, "grasshopper-plugin/Hopper.Rhino/RhinoOperationAdapter.cs"),
 		"utf8",
 	);
 

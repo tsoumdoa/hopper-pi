@@ -1,3 +1,7 @@
+#nullable enable
+
+using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using Hopper.Core.Operations;
 using Hopper.Core.Lifecycle;

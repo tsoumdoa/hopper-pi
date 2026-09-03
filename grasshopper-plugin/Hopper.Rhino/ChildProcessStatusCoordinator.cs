@@ -1,3 +1,6 @@
+#nullable enable
+
+using System;
 using Hopper.Core.Runtime;
 
 namespace Hopper.Rhino.Host;

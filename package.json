@@ -15,6 +15,8 @@
 		"src",
 		"mds",
 		"grasshopper-plugin",
+		"dotnet/Hopper.Core",
+		"dotnet/Hopper.Grasshopper",
 		"scripts"
 	],
 	"scripts": {

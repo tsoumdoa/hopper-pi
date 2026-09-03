@@ -18,12 +18,8 @@
   <ItemGroup>
     <ProjectReference Include="../dotnet/Hopper.Grasshopper/Hopper.Grasshopper.csproj"
                       AdditionalProperties="TargetExt=.dll" />
-    <ProjectReference Include="../dotnet/Hopper.Rhino.Host/Hopper.Rhino.Host.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Include="../grasshopper-plugin/Hopper.Rhino/HostReadiness.cs" Link="HostReadiness.cs" />
-    <Compile Include="../grasshopper-plugin/Hopper.Rhino/RuntimeManifestPaths.cs" Link="RuntimeManifestPaths.cs" />
+    <ProjectReference Include="../grasshopper-plugin/Hopper.Rhino/Hopper.Rhino.csproj"
+                      AdditionalProperties="TargetExt=.dll" />
   </ItemGroup>
 
 </Project>

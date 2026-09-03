@@ -1,3 +1,7 @@
+#nullable enable
+
+using System;
+using System.Collections.Generic;
 using Hopper.Core.Protocol;
 
 namespace Hopper.Rhino.Host;

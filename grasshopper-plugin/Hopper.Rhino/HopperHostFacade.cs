@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Text.Json;
 using System.Threading;
@@ -221,7 +223,12 @@ namespace Hopper.Rhino.Host
                 return Completed(new StartGrasshopperDataV2 { State = StartGrasshopperState.start_requested });
 
             if (capability.State == GrasshopperCapabilityState.NotInstalled)
-                _grasshopper.SetInstalled(true);
+            {
+                return Failure<StartGrasshopperDataV2>(
+                    RpcResultClass.capability_unavailable,
+                    RpcReasonCode.GRASSHOPPER_NOT_INSTALLED,
+                    "The packaged Hopper.Grasshopper assembly was not found.");
+            }
             if (!_grasshopper.MarkLoading())
                 return Failed(RpcReasonCode.GRASSHOPPER_START_FAILED, "Grasshopper could not enter loading state.");
 

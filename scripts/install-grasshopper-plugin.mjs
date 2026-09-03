@@ -200,7 +200,6 @@ function artifactSources(configuration) {
 		"Hopper.Rhino.deps.json",
 		"Hopper.Rhino.runtimeconfig.json",
 		"Hopper.Core.dll",
-		"Hopper.Rhino.Host.dll",
 		"AsyncIO.dll",
 		"Microsoft.Bcl.AsyncInterfaces.dll",
 		"Microsoft.Extensions.ObjectPool.dll",
@@ -246,6 +245,7 @@ function removePreviousInstallFiles(installDir) {
 		"rhino-zmq-poc.deps.json",
 		"rhino-zmq-poc.runtimeconfig.json",
 		"Hopper.Backend.dll",
+		"Hopper.Rhino.Host.dll",
 	]) {
 		rmSync(join(installDir, staleName), { force: true });
 	}

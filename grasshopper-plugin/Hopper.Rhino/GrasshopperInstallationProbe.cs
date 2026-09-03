@@ -1,3 +1,8 @@
+#nullable enable
+
+using System;
+using System.IO;
+
 namespace Hopper.Rhino.Host;
 
 public static class GrasshopperInstallationProbe
