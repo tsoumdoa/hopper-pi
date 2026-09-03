@@ -14,30 +14,6 @@ using Rhino;
 
 namespace rhino_zmq_poc
 {
-    internal sealed class RhinoOperationAdapter : IRhinoOperationAdapter
-    {
-        public OperationDocumentStatus DocumentStatus
-        {
-            get
-            {
-                var document = RhinoDoc.ActiveDoc;
-                return document == null
-                    ? OperationDocumentStatus.None
-                    : new OperationDocumentStatus(true, document.Name);
-            }
-        }
-
-        public bool CanExecute(RpcOperation operation) => false;
-
-        public OperationResultV2 Execute(RpcRequestV2 request) =>
-            new OperationResultV2
-            {
-                Class = RpcResultClass.capability_unavailable,
-                ReasonCode = RpcReasonCode.CAPABILITY_UNAVAILABLE,
-                Message = "The Rhino operation is not registered in this host build.",
-            };
-    }
-
     internal sealed class BrowserAfterRunningCoordinator : IHopperRunningObserver, IDisposable
     {
         private readonly object _gate = new object();
@@ -207,7 +183,7 @@ namespace rhino_zmq_poc
                 new RhinoCommandCompletionSink());
             deferredOperations.SetTarget(facade);
 
-            var rhinoAdapter = new RhinoOperationAdapter();
+            var rhinoAdapter = new RhinoOperationAdapter(new RhinoOperationExecutor(), clock);
             if (!rhino.TryRegister(rhinoAdapter))
                 throw new InvalidOperationException("A different Rhino operation adapter is already registered.");
 

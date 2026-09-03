@@ -346,13 +346,13 @@ namespace Hopper.Rhino.Host
             RpcReasonCode reason,
             string message,
             T? data = default) => new()
-        {
-            Class = resultClass,
-            ReasonCode = reason,
-            Message = message,
-            Data = data is null
-                ? null
-                : JsonSerializer.SerializeToElement(data, RpcV2Contract.JsonOptions),
-        };
+            {
+                Class = resultClass,
+                ReasonCode = reason,
+                Message = message,
+                Data = data is null
+                    ? null
+                    : JsonSerializer.SerializeToElement(data, RpcV2Contract.JsonOptions),
+            };
     }
 }

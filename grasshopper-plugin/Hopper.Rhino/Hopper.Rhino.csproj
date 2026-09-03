@@ -26,6 +26,11 @@
 
   <ItemGroup>
     <Compile Include="../HostReadiness.cs" Link="HostReadiness.cs" />
+    <Compile Include="../operations/RhinoObjectQuery.cs" Link="Operations/RhinoObjectQuery.cs" />
+    <Compile Include="../RhinoAgentTransaction.cs" Link="Operations/RhinoAgentTransaction.cs" />
+    <Compile Include="../RhinoCodeRunner.cs" Link="Operations/RhinoCodeRunner.cs" />
+    <Compile Include="../RhinoCodeRunner.Reflection.cs" Link="Operations/RhinoCodeRunner.Reflection.cs" />
+    <Compile Include="../RhinoScriptExecutor.cs" Link="Operations/RhinoScriptExecutor.cs" />
     <Compile Include="../RuntimeManifestPaths.cs" Link="RuntimeManifestPaths.cs" />
   </ItemGroup>
 
