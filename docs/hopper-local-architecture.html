@@ -810,7 +810,7 @@
         <div class="sequence" role="group" aria-label="Five step startup sequence">
           <article class="sequence-step">
             <span>01</span>
-            <h3>Run <span class="mono inline-code">_Hopper</span></h3>
+            <h3>Run <span class="mono inline-code">_HopperCode</span></h3>
             <p>The user starts Hopper from Rhino.</p>
           </article>
           <article class="sequence-step">
@@ -900,7 +900,7 @@
       <ol class="milestones">
         <li class="milestone"><div><strong>Prove the embedded agent</strong><p>Create a local Hopper host that starts a Pi session runtime, loads only the bundled extensions and skills, binds browser-backed extension UI, and reaches the current ZMQ backend.</p></div></li>
         <li class="milestone"><div><strong>Add the browser conversation</strong><p>Serve one chat page with streaming text, visible tool calls, stop, new session, and the existing ask-user interactions.</p></div></li>
-        <li class="milestone"><div><strong>Give Rhino ownership</strong><p>Add the <span class="mono">_Hopper</span> command, host health checks, browser launch, active-document tracking, and clean shutdown.</p></div></li>
+        <li class="milestone"><div><strong>Give Rhino ownership</strong><p>Add the <span class="mono">_HopperCode</span> command, host health checks, browser launch, active-document tracking, and clean shutdown.</p></div></li>
         <li class="milestone"><div><strong>Remove the canvas dependency</strong><p>Move backend ownership out of the GHZMQ component. Keep that component only if its canvas status output remains useful.</p></div></li>
         <li class="milestone"><div><strong>Package both platforms</strong><p>Bundle pinned Node 22.22.3 x64 and arm64 runtimes, exact Pi and Hopper versions, and native ZMQ builds in separate Windows and macOS Rhino packages.</p></div></li>
       </ol>

@@ -35,6 +35,7 @@
 
   <ItemGroup>
     <PackageReference Include="Grasshopper" Version="8.0.23304.9001" ExcludeAssets="runtime" />
+    <ProjectReference Include="../dotnet/Hopper.Core/Hopper.Core.csproj" />
     <ProjectReference Include="Hopper.Backend/Hopper.Backend.csproj" />
   </ItemGroup>
 

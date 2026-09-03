@@ -1,14 +1,15 @@
 using System;
 using System.Runtime.InteropServices;
+using Hopper.Core;
 using Rhino;
 using Rhino.Commands;
 
 namespace rhino_zmq_poc
 {
-    [Guid("f4e34020-8f9a-4cc4-98ed-5b3596163859")]
-    public sealed class HopperCommand : Command
+    [Guid(PublicIdentity.HopperCodeCommandId)]
+    public sealed class HopperCodeCommand : Command
     {
-        public override string EnglishName => "Hopper";
+        public override string EnglishName => PublicIdentity.HopperCodeCommandName;
 
         protected override Result RunCommand(RhinoDoc doc, RunMode mode)
         {
@@ -32,10 +33,10 @@ namespace rhino_zmq_poc
         }
     }
 
-    [Guid("db50ad24-52d8-4e58-ae8a-5719994ad577")]
-    public sealed class HopperStatusCommand : Command
+    [Guid(PublicIdentity.HopperCodeStatusCommandId)]
+    public sealed class HopperCodeStatusCommand : Command
     {
-        public override string EnglishName => "HopperStatus";
+        public override string EnglishName => PublicIdentity.HopperCodeStatusCommandName;
 
         protected override Result RunCommand(RhinoDoc doc, RunMode mode)
         {

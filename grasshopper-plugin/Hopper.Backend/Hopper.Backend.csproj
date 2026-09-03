@@ -22,6 +22,7 @@
   <ItemGroup>
     <PackageReference Include="Grasshopper" Version="8.0.23304.9001" ExcludeAssets="runtime" />
     <PackageReference Include="NetMQ" Version="4.0.1.9" />
+    <ProjectReference Include="../../dotnet/Hopper.Core/Hopper.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

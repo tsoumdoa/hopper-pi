@@ -1,12 +1,13 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using Hopper.Core;
 using Rhino;
 using Rhino.PlugIns;
 
 namespace rhino_zmq_poc
 {
-    [Guid("4c3eae5e-7e91-4d5c-9bbf-d95e981c5de9")]
+    [Guid(PublicIdentity.RhinoPluginId)]
     public sealed class HopperRhinoPlugin : PlugIn
     {
         public HopperRhinoPlugin()

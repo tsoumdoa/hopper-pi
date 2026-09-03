@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Linq;
 using Grasshopper.Kernel;
+using Hopper.Core;
 using Rhino;
 
 namespace rhino_zmq_poc
@@ -103,7 +104,7 @@ namespace rhino_zmq_poc
 
         protected override Bitmap Icon => PluginIcon.Bitmap;
 
-        public override Guid ComponentGuid => new Guid("e07753b1-fdec-417a-b57a-83a95204a8dd");
+        public override Guid ComponentGuid => new Guid(PublicIdentity.LegacyGrasshopperComponentId);
 
         public override void RemovedFromDocument(GH_Document doc)
         {
