@@ -191,6 +191,14 @@ pnpm install
 pnpm run dev
 ```
 
+### Test the browser UI without Rhino
+
+```bash
+pnpm ui:mock
+```
+
+Open http://localhost:5174. This runs the Vite UI against local fixture data, so it never starts Rhino or contacts a provider account. Send a normal prompt to exercise streaming and tool-call rendering. The following prompts open representative interactive and error states: `/mock option`, `/mock confirm`, `/mock editor`, and `/mock failure`.
+
 Rebuild or reinstall the plugin manually:
 
 ```bash

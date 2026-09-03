@@ -1,10 +1,15 @@
 import { useEffect } from "react";
 import type { Dispatch } from "react";
 import type { HopperAction } from "../state/hopper-reducer";
+import { mockRuntimeStatus } from "../mocks/hopper-mock";
 
-export function useRuntimeStatus(token: string, connected: boolean, dispatch: Dispatch<HopperAction>) {
+export function useRuntimeStatus(token: string, connected: boolean, dispatch: Dispatch<HopperAction>, mock = false) {
 	useEffect(() => {
 		if (!token || !connected) return;
+		if (mock) {
+			dispatch({ type: "runtime-status", status: mockRuntimeStatus });
+			return;
+		}
 		let cancelled = false;
 		const refresh = async () => {
 			try {
@@ -19,5 +24,5 @@ export function useRuntimeStatus(token: string, connected: boolean, dispatch: Di
 		void refresh();
 		const timer = window.setInterval(() => void refresh(), 3_000);
 		return () => { cancelled = true; window.clearInterval(timer); };
-	}, [connected, dispatch, token]);
+	}, [connected, dispatch, mock, token]);
 }

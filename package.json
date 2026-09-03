@@ -22,6 +22,7 @@
 	"scripts": {
 		"dev": "tsx src/index.ts",
 		"ui:dev": "vite",
+		"ui:mock": "vite --mode mock --port 5174",
 		"ui:build": "tsc -p tsconfig.web.json && vite build",
 		"build": "tsc -p tsconfig.json && pnpm ui:build",
 		"build:release": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.release.json && pnpm ui:build",

@@ -10,6 +10,6 @@ describe("browser runtime status view", () => {
 		expect(hook).toContain('fetch("/api/runtime-status"');
 		expect(hook).toContain("Authorization: `Bearer ${token}`");
 		expect(app).toContain("host?.healthFailureCount");
-		expect(app).toContain("Object.entries((status.errors");
+		expect(app).toMatch(/Object\.entries\(\s*\(status\.errors/);
 	});
 });
