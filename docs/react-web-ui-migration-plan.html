@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Hopper browser UI migration brief for React, Vite, Tailwind CSS, and shadcn/ui.">
+  <title>Hopper web UI migration brief</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #fbfbf9;
+      --ink: #121212;
+      --muted: #70706d;
+      --line: #deded9;
+      --soft: #f1f1ee;
+      --accent: #174f3b;
+      --accent-soft: #e2eee7;
+      --warning: #a6542a;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--ink); background: var(--paper); line-height: 1.55; }
+    a { color: inherit; text-underline-offset: 3px; }
+    code, .eyebrow, .section-id, dt, .tag, .tree { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+
+    .page { width: min(960px, calc(100% - 40px)); margin: 0 auto; padding: 64px 0 96px; }
+    .topline { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; }
+    .dot { width: 5px; height: 5px; background: var(--ink); border-radius: 50%; }
+    .tag { padding: 3px 8px; border: 1px solid var(--line); border-radius: 99px; font-size: 10px; letter-spacing: .04em; }
+    .tag.dark { color: white; border-color: var(--ink); background: var(--ink); }
+
+    header { padding: 24px 0 32px; border-bottom: 1px solid var(--line); }
+    h1 { max-width: 780px; margin: 0 0 12px; font-size: clamp(37px, 6vw, 64px); line-height: .98; letter-spacing: -.055em; }
+    .lede { max-width: 760px; margin: 0; color: #5f5f5c; font-size: clamp(16px, 2vw, 19px); }
+
+    .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; margin: 0; padding: 22px 0; border-bottom: 1px solid var(--line); }
+    .facts div { min-width: 0; }
+    dt { margin-bottom: 5px; color: var(--muted); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+    dd { margin: 0; font-size: 13px; font-weight: 650; }
+
+    nav { display: flex; flex-wrap: wrap; gap: 12px 18px; padding: 20px 0 4px; color: var(--muted); font-size: 12px; }
+    nav a { text-decoration: none; }
+    nav a:hover { color: var(--ink); text-decoration: underline; }
+
+    section { padding: 64px 0 0; }
+    .section-heading { display: grid; grid-template-columns: 145px minmax(0, 1fr); gap: 24px; align-items: baseline; margin-bottom: 22px; }
+    .section-id { color: #888883; font-size: 11px; letter-spacing: .08em; white-space: nowrap; }
+    h2 { margin: 0; font-size: clamp(23px, 3vw, 31px); letter-spacing: -.04em; line-height: 1.1; }
+    h3 { margin: 28px 0 9px; font-size: 16px; letter-spacing: -.02em; }
+    p { max-width: 790px; margin: 0 0 14px; }
+    .body { padding-left: 169px; }
+    .body > :last-child { margin-bottom: 0; }
+
+    .callout { margin: 20px 0; padding: 17px 18px; border-left: 2px solid var(--accent); background: var(--accent-soft); }
+    .callout strong { display: block; margin-bottom: 4px; }
+    .callout p { margin: 0; }
+    .warning { border-left-color: var(--warning); background: #f8eee9; }
+
+    .rows { margin: 16px 0; border-top: 1px solid var(--line); }
+    .row { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 22px; padding: 13px 0; border-bottom: 1px solid var(--line); }
+    .row b { font-size: 13px; }
+    .row span { color: #5f5f5c; font-size: 14px; }
+    .tree { margin: 18px 0; padding: 18px 20px; overflow: auto; color: #292925; background: var(--soft); border: 1px solid var(--line); font-size: 12px; line-height: 1.65; white-space: pre; }
+
+    .steps { display: grid; gap: 0; margin: 18px 0; border-top: 1px solid var(--line); }
+    .step { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 17px; padding: 20px 0; border-bottom: 1px solid var(--line); }
+    .step-number { color: var(--muted); font: 11px "SFMono-Regular", Consolas, monospace; }
+    .step h3 { margin: 0 0 6px; }
+    .step p { margin: 0; color: #565652; }
+    ul { margin: 10px 0 0; padding-left: 18px; }
+    li { margin: 5px 0; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .action { padding: 5px 8px; border: 1px solid var(--line); background: white; border-radius: 4px; font: 11px "SFMono-Regular", Consolas, monospace; }
+    footer { margin-top: 72px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+
+    @media (max-width: 720px) {
+      .page { width: min(100% - 28px, 960px); padding-top: 32px; }
+      .facts { grid-template-columns: 1fr 1fr; gap: 17px; }
+      .section-heading { grid-template-columns: 1fr; gap: 8px; }
+      .body { padding-left: 0; }
+      .row { grid-template-columns: 1fr; gap: 4px; }
+      .step { grid-template-columns: 36px minmax(0, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="topline"><span class="dot"></span><span>implementation brief</span><span class="tag">hoppercode</span><span class="tag">web client</span><span class="tag dark">approved direction</span></div>
+    <header>
+      <h1>Hopper React web UI migration</h1>
+      <p class="lede">Replace the static browser interface with a typed React client built by Vite, styled with Tailwind, and assembled from locally owned shadcn/ui primitives. Keep the private Hopper host and Rhino boundary exactly where they are.</p>
+    </header>
+
+    <dl class="facts">
+      <div><dt>Client</dt><dd>React + TypeScript</dd></div>
+      <div><dt>Build</dt><dd>Vite → dist/host/static</dd></div>
+      <div><dt>Styling</dt><dd>Tailwind + shadcn/ui</dd></div>
+      <div><dt>State</dt><dd>Reducer + hooks, no library first</dd></div>
+    </dl>
+
+    <nav aria-label="Brief sections">
+      <a href="#boundary">Boundary</a><a href="#state">State</a><a href="#structure">Structure</a><a href="#ui">UI system</a><a href="#delivery">Delivery</a><a href="#gates">Exit gates</a>
+    </nav>
+
+    <section id="boundary">
+      <div class="section-heading"><span class="section-id">00 / boundary</span><h2>The client changes. The private system does not.</h2></div>
+      <div class="body">
+        <p>The browser continues to connect only to the local Hopper host over WebSocket and authenticated HTTP. The host remains the single gateway to the embedded Pi runtime, Rhino RPC, and Grasshopper operations.</p>
+        <div class="callout"><strong>Non-negotiable production rule</strong><p>The packaged app binds to loopback, keeps its token authentication and origin checks, and never exposes ZeroMQ or Rhino directly to the browser.</p></div>
+        <div class="rows">
+          <div class="row"><b>Keep</b><span>Token handoff, session snapshots, reconnect behavior, runtime polling, provider flows, and agent-owned dialogs.</span></div>
+          <div class="row"><b>Replace</b><span>The static HTML, direct DOM mutation, hand-written responsive CSS, and one large mutable browser-state object.</span></div>
+          <div class="row"><b>Do not add</b><span>A public API server, browser-to-Rhino path, or a second source of truth for the agent session.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="state">
+      <div class="section-heading"><span class="section-id">01 / state</span><h2>Use a reducer first.</h2></div>
+      <div class="body">
+        <p>Hopper has one controller, one WebSocket event stream, and a server-owned session. React <code>useReducer</code> fits that shape cleanly. It keeps every incoming event as an explicit state transition without introducing an extra client-state framework.</p>
+        <div class="callout"><strong>Decision</strong><p>Use <code>useReducer</code>, context, and two hooks: one for the WebSocket connection and one for authenticated runtime-status polling. Do not add Zustand, Redux, Jotai, or TanStack Query during the migration.</p></div>
+        <div class="rows">
+          <div class="row"><b>Reducer owns</b><span>Connection display state, session snapshot, messages, streaming assistant output, tool calls, pending dialogs, models, providers, notices, and latest runtime status.</span></div>
+          <div class="row"><b>Hooks own</b><span>Socket lifecycle, timers, HTTP fetches, session storage, cleanup, and command functions.</span></div>
+          <div class="row"><b>Components own</b><span>Rendering state and invoking typed commands. They do not interpret raw WebSocket payloads.</span></div>
+        </div>
+        <div class="actions"><span class="action">SNAPSHOT_RECEIVED</span><span class="action">AGENT_TEXT_DELTA</span><span class="action">TOOL_STARTED</span><span class="action">TOOL_FINISHED</span><span class="action">UI_REQUEST_ENQUEUED</span><span class="action">RUNTIME_STATUS_RECEIVED</span></div>
+      </div>
+    </section>
+
+    <section id="structure">
+      <div class="section-heading"><span class="section-id">02 / structure</span><h2>A separate web source tree, a familiar production output.</h2></div>
+      <div class="body">
+        <p>Keep frontend-only tooling out of the Node host TypeScript compilation. Vite emits to the existing static directory expected by Rhino packaging.</p>
+        <pre class="tree">web/
+  index.html
+  src/
+    main.tsx
+    app.tsx
+    components/
+      conversation/
+      provider/
+      runtime/
+      ui/                 # shadcn/ui source owned by Hopper
+    hooks/
+      use-hopper-connection.ts
+      use-runtime-status.ts
+    state/
+      hopper-context.tsx
+      hopper-reducer.ts
+    lib/
+      host-protocol.ts
+      message-normalizers.ts
+    styles/globals.css
+vite.config.ts
+tsconfig.web.json
+components.json
+
+dist/host/static/         # Vite production output, served by Hopper</pre>
+      </div>
+    </section>
+
+    <section id="ui">
+      <div class="section-heading"><span class="section-id">03 / UI system</span><h2>Editorial control room, built from owned primitives.</h2></div>
+      <div class="body">
+        <p>The app keeps Hopper's warm paper, forest green, and orange working states, but gains cleaner type hierarchy, more deliberate spacing, and a clearer distinction between live work and configuration. shadcn/ui supplies accessible base components that remain editable inside the repository.</p>
+        <div class="rows">
+          <div class="row"><b>Conversation</b><span>Streaming response surface, expandable thinking, concise tool cards, and an anchored composer.</span></div>
+          <div class="row"><b>Utility rail</b><span>Session, model, provider, connection, and detailed Rhino runtime state without competing with the conversation.</span></div>
+          <div class="row"><b>Mobile</b><span>Settings move to a Sheet. Conversation and composer stay primary.</span></div>
+        </div>
+        <div class="actions"><span class="action">Button</span><span class="action">Badge</span><span class="action">Dialog</span><span class="action">Select</span><span class="action">Textarea</span><span class="action">Sheet</span><span class="action">ScrollArea</span><span class="action">Collapsible</span></div>
+      </div>
+    </section>
+
+    <section id="delivery">
+      <div class="section-heading"><span class="section-id">04 / delivery</span><h2>Build in layers, validate behavior at each boundary.</h2></div>
+      <div class="body">
+        <div class="steps">
+          <article class="step"><span class="step-number">01</span><div><h3>Protect the existing contract</h3><p>Extract browser-safe protocol types, record representative events as fixtures, and strengthen host authentication tests.</p></div></article>
+          <article class="step"><span class="step-number">02</span><div><h3>Install the client foundation</h3><p>Add React, Vite, Tailwind, shadcn/ui, a web TypeScript configuration, and a production output path of <code>dist/host/static</code>.</p></div></article>
+          <article class="step"><span class="step-number">03</span><div><h3>Implement state and transport</h3><p>Create the reducer, context, normalizers, WebSocket hook, and runtime-status hook before building feature components.</p></div></article>
+          <article class="step"><span class="step-number">04</span><div><h3>Port the product behavior</h3><p>Move sidebar, runtime status, history, streamed messages, tools, composer, provider flow, queued dialogs, and toast handling in that order.</p></div></article>
+          <article class="step"><span class="step-number">05</span><div><h3>Enable safe local development</h3><p>Allow one explicitly configured Vite development origin and proxy its requests. Production remains strict same-origin and loopback-only.</p></div></article>
+          <article class="step"><span class="step-number">06</span><div><h3>Package and retire the old UI</h3><p>Test Vite asset serving and the Rhino package, then delete the legacy static files only after the release build passes.</p></div></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="gates">
+      <div class="section-heading"><span class="section-id">05 / exit gates</span><h2>Completion means a safe packaged client, not a pretty local page.</h2></div>
+      <div class="body">
+        <div class="callout warning"><strong>Release gate</strong><p>A Vite development server is never required for a Rhino-launched session. The final Yak package must contain the built UI assets and retain the host's security controls.</p></div>
+        <ul>
+          <li>Launch from Rhino, authenticate, restore a snapshot, send a prompt, and render streamed tool status.</li>
+          <li>Verify login, logout, model selection, thinking selection, abort, new session, and agent dialogs.</li>
+          <li>Verify mobile keyboard access, focus order, and reduced-motion behavior.</li>
+          <li>Pass Node type checks, frontend type checks, unit tests, browser smoke coverage, release build, and Rhino package verification.</li>
+        </ul>
+      </div>
+    </section>
+
+    <footer>Hopper web UI migration brief. Visual-document direction informed by the supplied Skyline Restaurant &amp; Cocktail Bar brief: restrained typography, thin rules, compact metadata, and sequential technical requirements.</footer>
+  </main>
+</body>
+</html>

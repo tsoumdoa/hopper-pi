@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@theme {
+  --color-canvas: #f4f1e8;
+  --color-paper: #fffdf8;
+  --color-ink: #162019;
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  * { @apply border-stone-200; }
+  html, body, #root { min-height: 100%; }
+  body { @apply bg-canvas text-ink antialiased; }
+  button, input, select, textarea { font: inherit; }
+  ::selection { @apply bg-emerald-900 text-white; }
+}

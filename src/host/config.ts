@@ -18,6 +18,7 @@ export type HostConfig = {
 	instanceId: string;
 	parentPid?: number;
 	connectionProfile?: string;
+	uiDevOrigin?: string;
 	paths: HostPaths;
 };
 
@@ -90,6 +91,7 @@ export function resolveHostConfig(
 	const authPathArg = readOption(args, "--auth-path");
 	const staticDirArg = readOption(args, "--static-dir");
 	const profileArg = readOption(args, "--connection-profile");
+	const uiDevOriginArg = readOption(args, "--ui-dev-origin") ?? env.HOPPER_UI_DEV_ORIGIN;
 	const instanceId = readOption(args, "--instance-id") ?? "standalone";
 	const port = parseInteger(readOption(args, "--port"), "--port") ?? 0;
 	const parentPid = parseInteger(readOption(args, "--parent-pid"), "--parent-pid");
@@ -98,6 +100,17 @@ export function resolveHostConfig(
 	if (parentPid !== undefined && parentPid < 1) throw new Error("--parent-pid must be positive");
 	if (!/^[A-Za-z0-9_-]{1,128}$/.test(instanceId)) {
 		throw new Error("--instance-id must contain only letters, numbers, underscores, or hyphens");
+	}
+	if (uiDevOriginArg) {
+		let origin: URL;
+		try {
+			origin = new URL(uiDevOriginArg);
+		} catch {
+			throw new Error("--ui-dev-origin must be a valid URL");
+		}
+		if (origin.protocol !== "http:" || !["localhost", LOOPBACK_HOST].includes(origin.hostname) || !origin.port || origin.pathname !== "/") {
+			throw new Error("--ui-dev-origin must be an http localhost origin with an explicit port");
+		}
 	}
 
 	const absolute = (path: string) => (isAbsolute(path) ? path : resolve(cwd, path));
@@ -114,6 +127,7 @@ export function resolveHostConfig(
 		instanceId,
 		parentPid,
 		connectionProfile: profileArg ? absolute(profileArg) : undefined,
+		uiDevOrigin: uiDevOriginArg,
 		paths: {
 			dataDir,
 			agentDir: join(dataDir, "agent"),

@@ -81,11 +81,11 @@ async function staticDirectory(): Promise<string> {
 	return directory;
 }
 
-function openSocket(server: HopperServer): Promise<WebSocket> {
+function openSocket(server: HopperServer, origin = `http://${server.host}:${server.port}`): Promise<WebSocket> {
 	return new Promise((resolve, reject) => {
 		const socket = new WebSocket(
 			`ws://${server.host}:${server.port}/ws`,
-			{ headers: { Origin: `http://${server.host}:${server.port}` } },
+			{ headers: { Origin: origin } },
 		);
 		socket.once("open", () => resolve(socket));
 		socket.once("error", reject);
@@ -289,6 +289,23 @@ describe("Hopper loopback server", () => {
 			socket.once("unexpected-response", (_request, response) => resolve(response.statusCode ?? 0));
 		});
 		expect(status).toBe(403);
+	});
+
+	it("permits only its explicitly configured Vite development origin", async () => {
+		const server = await startHopperServer({
+			runtime: fakeRuntime(),
+			staticDir: await staticDirectory(),
+			token: "dev-token",
+			protocolHandshake,
+			getRuntimeStatus,
+			allowedDevOrigin: "http://localhost:5173",
+		});
+		servers.push(server);
+		const socket = await openSocket(server, "http://localhost:5173");
+		const initial = nextMessage(socket);
+		socket.send(JSON.stringify({ type: "authenticate", token: "dev-token" }));
+		await expect(initial).resolves.toEqual({ type: "snapshot", snapshot: snapshot() });
+		socket.close();
 	});
 
 	it("returns Rhino's runtime snapshot unchanged only to an authenticated request", async () => {
