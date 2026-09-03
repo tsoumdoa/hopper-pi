@@ -74,7 +74,10 @@ export class MockHopperTransport {
 			case "set_thinking": this.emit(snapshot({ thinkingLevel: message.level })); break;
 			case "login": this.emit({ type: "auth_event", event: message.authType === "oauth" ? { type: "auth_url", instructions: "Mock OAuth flow. No account will be opened.", url: "https://example.com/mock-auth" } : { type: "info", message: "Mock API key accepted." } }); this.schedule(250, () => this.emit(snapshot())); break;
 			case "logout": this.emit({ type: "status", status: "logged_out", scope: "auth", provider: message.provider }); break;
-			case "ui_response": this.emit({ type: "ui_notification", message: "Mock response recorded.", level: "info" }); break;
+			case "ui_response":
+				this.emit({ type: "ui_notification", message: message.value === null || message.value === false ? "Mock request cancelled." : `Mock response recorded: ${String(message.value).slice(0, 60)}`, level: "info" });
+				this.schedule(200, () => this.emit({ type: "agent_event", event: { type: "agent_end" } }));
+				break;
 			case "mock_scenario": this.runScenario(String(message.scenario)); break;
 		}
 	}
@@ -98,14 +101,18 @@ export class MockHopperTransport {
 	}
 
 	private runScenario(scenario: string) {
-		if (scenario === "pick_option") this.emit({ type: "ui_request", requestId: "mock-choice", kind: "select", title: "Choose a panel strategy", description: "This is a mock agent question.", options: [{ id: "uniform", value: "uniform", label: "Uniform panels", description: "Keep the current rhythm." }, { id: "gradient", value: "gradient", label: "Gradient panels", description: "Increase density near the entry." }] });
-		if (scenario === "confirm") this.emit({ type: "ui_request", requestId: "mock-confirm", kind: "confirm", title: "Apply the mock change?", description: "No Rhino document will change." });
-		if (scenario === "editor") this.emit({ type: "ui_request", requestId: "mock-editor", kind: "editor", title: "Edit a mock script", prefill: "// This is a local mock editor\nreturn panels;" });
+		this.emit({ type: "agent_event", event: { type: "agent_start" } });
+		this.emit({ type: "ui_status", key: "working", text: scenario === "tool_error" ? "Applying graph" : "Waiting for your answer" });
+		if (scenario === "pick_option") this.emit({ type: "ui_request", requestId: `mock-choice-${Date.now()}`, kind: "select", title: "Choose a panel strategy", description: "This is a mock agent question.", options: [{ id: "uniform", value: "uniform", label: "Uniform panels", description: "Keep the current rhythm." }, { id: "gradient", value: "gradient", label: "Gradient panels", description: "Increase density near the entry." }] });
+		if (scenario === "confirm") this.emit({ type: "ui_request", requestId: `mock-confirm-${Date.now()}`, kind: "confirm", title: "Apply the mock change?", description: "No Rhino document will change." });
+		if (scenario === "editor") this.emit({ type: "ui_request", requestId: `mock-editor-${Date.now()}`, kind: "editor", title: "Edit a mock script", prefill: "// This is a local mock editor\nreturn panels;" });
 		if (scenario === "tool_error") {
 			const toolId = `mock-failed-tool-${Date.now()}`;
 			this.emit({ type: "agent_event", event: { type: "message_start", message: { id: `mock-error-${Date.now()}`, role: "assistant" } } });
 			this.emit({ type: "agent_event", event: { type: "tool_execution_start", toolCallId: toolId, toolName: "gh_apply_graph", args: { components: 4 } } });
 			this.schedule(400, () => this.emit({ type: "agent_event", event: { type: "tool_execution_end", toolCallId: toolId, result: "Mock validation error: one input endpoint is missing.", isError: true } }));
+			this.schedule(600, () => this.emit({ type: "agent_event", event: { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "The graph could not be applied because one input endpoint is missing. I can retry after wiring it." } } }));
+			this.schedule(800, () => this.emit({ type: "agent_event", event: { type: "agent_end" } }));
 		}
 	}
 

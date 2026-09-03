@@ -3,13 +3,13 @@ import { describe, expect, it } from "vitest";
 
 describe("browser runtime status view", () => {
 	it("includes the authoritative runtime fields and authenticated snapshot request", async () => {
-		const [app, hook] = await Promise.all([
-			readFile(new URL("../../web/src/app.tsx", import.meta.url), "utf8"),
+		const [statusView, hook] = await Promise.all([
+			readFile(new URL("../../web/src/components/runtime-status.tsx", import.meta.url), "utf8"),
 			readFile(new URL("../../web/src/hooks/use-runtime-status.ts", import.meta.url), "utf8"),
 		]);
 		expect(hook).toContain('fetch("/api/runtime-status"');
 		expect(hook).toContain("Authorization: `Bearer ${token}`");
-		expect(app).toContain("host?.healthFailureCount");
-		expect(app).toMatch(/Object\.entries\(\s*\(status\.errors/);
+		expect(statusView).toContain("host?.healthFailureCount");
+		expect(statusView).toMatch(/Object\.entries\(\s*\(status\?\.errors/);
 	});
 });

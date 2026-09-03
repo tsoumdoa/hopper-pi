@@ -1,6 +1,11 @@
+export type SendMode = "prompt" | "steer" | "follow_up";
+
 export type ToolCall = {
 	id: string;
 	name: string;
+	/** Tool input, when the host reported it. */
+	args?: unknown;
+	/** Latest tool output. Falls back to `args` for display until a result arrives. */
 	detail: unknown;
 	status: "running" | "complete" | "error";
 };
@@ -8,8 +13,12 @@ export type ToolCall = {
 export type ConversationMessage = {
 	id: string;
 	role: "user" | "assistant";
+	/** How a user message was delivered. Only set for locally sent messages. */
+	kind?: SendMode;
 	text: string;
 	thinking: string;
+	/** Provider or agent error reported for this assistant message. */
+	error?: string;
 	streaming: boolean;
 	tools: ToolCall[];
 };
@@ -17,12 +26,46 @@ export type ConversationMessage = {
 export type ModelSummary = { provider: string; id: string; name?: string };
 export type ProviderSummary = { id: string; name: string; authenticated: boolean };
 export type UiOption = { id: string; value: string; label: string; description?: string };
-export type UiRequest = { requestId: string; kind: "select" | "confirm" | "input" | "editor" | "auth"; title: string; description?: string; options?: UiOption[]; placeholder?: string; prefill?: string; secret?: boolean };
-export type ToastNotice = { id: string; message: string; level: "info" | "warning" | "error"; url?: string; label?: string };
+export type UiRequest = {
+	requestId: string;
+	kind: "select" | "confirm" | "input" | "editor" | "auth";
+	title: string;
+	description?: string;
+	options?: UiOption[];
+	placeholder?: string;
+	prefill?: string;
+	secret?: boolean;
+};
+
+export type ToastLevel = "info" | "warning" | "error" | "success";
+export type ToastNotice = {
+	id: string;
+	message: string;
+	level: ToastLevel;
+	url?: string;
+	label?: string;
+	/** Milliseconds before the toast dismisses itself. */
+	timeout: number;
+};
+
+export type ConnectionStatus = "connecting" | "authenticating" | "connected" | "disconnected" | "error";
+
+export type AuthFlow = {
+	/** A login or logout request is in flight. */
+	busy: boolean;
+	provider: string | null;
+	notice: string | null;
+	url?: string;
+	label?: string;
+	error: string | null;
+	/** Increments every time a provider sign-in completes. */
+	completedCount: number;
+};
 
 export type HopperState = {
-	connection: { status: "connecting" | "authenticating" | "connected" | "disconnected" | "error"; detail: string; reconnectAttempt: number };
+	connection: { status: ConnectionStatus; detail: string; reconnectAttempt: number };
 	session: { id: string | null; name: string; messages: ConversationMessage[]; isStreaming: boolean };
+	workingMessage: string | null;
 	models: ModelSummary[];
 	providers: ProviderSummary[];
 	selectedModel: ModelSummary | null;
@@ -34,4 +77,5 @@ export type HopperState = {
 	runtimeStatus: Record<string, unknown> | null;
 	runtimeStatusError: string | null;
 	backendDetail: string;
+	auth: AuthFlow;
 };
