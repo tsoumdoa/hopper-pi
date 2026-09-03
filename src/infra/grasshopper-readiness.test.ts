@@ -108,6 +108,24 @@ describe("GrasshopperReadinessCoordinator", () => {
 		expect(events.subscribeCount).toBe(1);
 	});
 
+	it("publishes the user warning before the single lazy start request", async () => {
+		const order: string[] = [];
+		let reads = 0;
+		const coordinator = createCoordinator({
+			readStatus: async () => reads++ === 0
+				? status("not_loaded", false, 1)
+				: status("ready", true, 2),
+			beforeStartGrasshopper: async (observed) => {
+				order.push(`notice:${observed.revision}`);
+			},
+			startGrasshopper: async () => { order.push("start"); },
+		});
+
+		await Promise.all([coordinator.ensureReady(), coordinator.ensureReady()]);
+
+		expect(order).toEqual(["notice:1", "start"]);
+	});
+
 	it("does not submit when ready Grasshopper has no active document", async () => {
 		const observed = status("ready", false, 9);
 		const coordinator = createCoordinator({ readStatus: async () => observed });
@@ -175,6 +193,7 @@ function createCoordinator(overrides: {
 	clock?: FakeClock;
 	readStatus?: () => Promise<RuntimeStatus>;
 	startGrasshopper?: () => Promise<void>;
+	beforeStartGrasshopper?: (status: RuntimeStatus) => void | Promise<void>;
 }): GrasshopperReadinessCoordinator {
 	return new GrasshopperReadinessCoordinator({
 		lifecycleInstanceId: LIFECYCLE_ID,
@@ -182,6 +201,7 @@ function createCoordinator(overrides: {
 		clock: overrides.clock,
 		readStatus: overrides.readStatus ?? (async () => status("ready", true, 1)),
 		startGrasshopper: overrides.startGrasshopper ?? (async () => { }),
+		beforeStartGrasshopper: overrides.beforeStartGrasshopper,
 	});
 }
 

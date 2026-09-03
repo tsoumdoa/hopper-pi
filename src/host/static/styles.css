@@ -110,6 +110,7 @@ textarea:disabled {
   padding: 24px 20px 20px;
   border-right: 1px solid var(--line);
   background: rgb(250 248 241 / 92%);
+  overflow-y: auto;
 }
 
 .mobile-settings-button {
@@ -283,6 +284,83 @@ input {
 
 .sidebar-spacer {
   flex: 1;
+}
+
+.runtime-status-card {
+  display: grid;
+  gap: 10px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.runtime-status-card .text-button {
+  padding: 2px;
+  color: var(--green);
+  background: transparent;
+  font-size: 11px;
+}
+
+.runtime-status-summary,
+.runtime-errors p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.runtime-status-summary[data-state="failed"] {
+  color: var(--red);
+}
+
+.runtime-status-grid {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.runtime-status-grid > div {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.runtime-status-grid dt {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 720;
+}
+
+.runtime-status-grid dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+}
+
+#runtime-grasshopper[data-state="ready"] {
+  color: var(--green);
+}
+
+#runtime-grasshopper[data-state="failed"],
+#runtime-grasshopper[data-state="not_installed"] {
+  color: var(--red);
+}
+
+.runtime-errors {
+  display: grid;
+  gap: 4px;
+}
+
+.runtime-errors ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 16px;
+  color: var(--red);
+  font-size: 10px;
+}
+
+.runtime-errors li:only-child {
+  color: var(--muted);
 }
 
 .connection-card {

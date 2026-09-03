@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
 	connect: vi.fn(),
+	getRuntimeStatus: vi.fn(),
+	subscribeNotices: vi.fn(),
 	closeRuntimeRpc: vi.fn(async () => { }),
 	createRuntime: vi.fn(),
 	startServer: vi.fn(),
@@ -9,7 +11,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../infra/runtime-rpc.js", () => ({
-	getRuntimeRpc: () => ({ connect: mocks.connect }),
+	getRuntimeRpc: () => ({
+		connect: mocks.connect,
+		getRuntimeStatus: mocks.getRuntimeStatus,
+		subscribeNotices: mocks.subscribeNotices,
+	}),
 	closeRuntimeRpc: mocks.closeRuntimeRpc,
 }));
 
@@ -38,6 +44,7 @@ describe("host protocol startup", () => {
 		originalSigterm = new Set(process.listeners("SIGTERM"));
 		vi.clearAllMocks();
 		mocks.closeRuntimeRpc.mockResolvedValue(undefined);
+		mocks.subscribeNotices.mockReturnValue(() => { });
 		mocks.validateStaticDirectory.mockImplementation((path: string) => path);
 	});
 
@@ -105,7 +112,11 @@ describe("host protocol startup", () => {
 			protocolHandshakeLive: true,
 		} as const;
 		mocks.connect.mockResolvedValue(handshake);
-		mocks.createRuntime.mockResolvedValue({ dispose: vi.fn(async () => { }) });
+		const publish = vi.fn();
+		mocks.createRuntime.mockResolvedValue({
+			dispose: vi.fn(async () => { }),
+			bus: { publish },
+		});
 		mocks.startServer.mockResolvedValue({
 			url: "http://127.0.0.1:4321/#token",
 			lifecycleInstanceId: handshake.lifecycleInstanceId,
@@ -123,6 +134,7 @@ describe("host protocol startup", () => {
 
 		expect(mocks.startServer).toHaveBeenCalledWith(expect.objectContaining({
 			protocolHandshake: handshake,
+			getRuntimeStatus: expect.any(Function),
 		}));
 		expect(mocks.connect.mock.invocationCallOrder[0])
 			.toBeLessThan(mocks.startServer.mock.invocationCallOrder[0]!);
@@ -133,6 +145,18 @@ describe("host protocol startup", () => {
 			pid: process.pid,
 			lifecycleInstanceId: "life-from-profile",
 			protocolHandshakeLive: true,
+		});
+
+		const noticeListener = mocks.subscribeNotices.mock.calls[0]?.[0];
+		noticeListener({
+			type: "grasshopper_starting",
+			level: "warning",
+			message: "Grasshopper may open and create an untitled document.",
+		});
+		expect(publish).toHaveBeenCalledWith({
+			type: "ui_notification",
+			level: "warning",
+			message: "Grasshopper may open and create an untitled document.",
 		});
 	});
 });

@@ -18,6 +18,17 @@ const elements = {
   connectionBanner: document.querySelector("#connection-banner"),
   connectionBannerText: document.querySelector("#connection-banner-text"),
   runtimePill: document.querySelector("#runtime-pill"),
+  runtimeStatusRefresh: document.querySelector("#runtime-status-refresh"),
+  runtimeStatusSummary: document.querySelector("#runtime-status-summary"),
+  runtimeLifecycle: document.querySelector("#runtime-lifecycle"),
+  runtimeTransport: document.querySelector("#runtime-transport"),
+  runtimeInstance: document.querySelector("#runtime-instance"),
+  runtimeHost: document.querySelector("#runtime-host"),
+  runtimeRhinoDocument: document.querySelector("#runtime-rhino-document"),
+  runtimeGrasshopper: document.querySelector("#runtime-grasshopper"),
+  runtimeGrasshopperDocument: document.querySelector("#runtime-grasshopper-document"),
+  runtimeDispatcher: document.querySelector("#runtime-dispatcher"),
+  runtimeErrorList: document.querySelector("#runtime-error-list"),
   sessionTitle: document.querySelector("#session-title"),
   modelSelect: document.querySelector("#model-select"),
   thinkingSelect: document.querySelector("#thinking-select"),
@@ -58,6 +69,8 @@ const state = {
   intentionalClose: false,
   reconnectAttempt: 0,
   reconnectTimer: null,
+  runtimeStatusTimer: null,
+  runtimeStatusInFlight: false,
   streaming: false,
   activeAssistant: null,
   tools: new Map(),
@@ -133,6 +146,7 @@ function connect() {
     if (state.socket !== socket) return;
     state.socket = null;
     state.authenticated = false;
+    stopRuntimeStatusPolling();
     setStreaming(false);
     setConnection("disconnected", "Disconnected", event.reason || "The local host closed the connection");
     showBanner("Connection to the local Hopper host was lost.");
@@ -227,6 +241,80 @@ function markAuthenticated() {
   state.authenticated = true;
   setConnection("connected", "Connected", "Private Hopper host on this computer");
   hideBanner();
+  startRuntimeStatusPolling();
+}
+
+function startRuntimeStatusPolling() {
+  if (state.runtimeStatusTimer) return;
+  void refreshRuntimeStatus();
+  state.runtimeStatusTimer = setInterval(() => void refreshRuntimeStatus(), 3000);
+}
+
+function stopRuntimeStatusPolling() {
+  clearInterval(state.runtimeStatusTimer);
+  state.runtimeStatusTimer = null;
+}
+
+async function refreshRuntimeStatus() {
+  if (!state.authenticated || !state.token || state.runtimeStatusInFlight) return;
+  state.runtimeStatusInFlight = true;
+  elements.runtimeStatusRefresh.disabled = true;
+  try {
+    const response = await fetch("/api/runtime-status", {
+      headers: { Authorization: `Bearer ${state.token}` },
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`status request returned HTTP ${response.status}`);
+    renderRuntimeStatus(await response.json());
+  } catch (error) {
+    elements.runtimeStatusSummary.textContent = `Rhino status unavailable: ${error instanceof Error ? error.message : String(error)}`;
+    elements.runtimeStatusSummary.dataset.state = "failed";
+  } finally {
+    state.runtimeStatusInFlight = false;
+    elements.runtimeStatusRefresh.disabled = false;
+  }
+}
+
+function renderRuntimeStatus(status) {
+  const lifecycleReason = status.lifecycle.reason
+    ? ` (${status.lifecycle.reason.code}: ${status.lifecycle.reason.message})`
+    : "";
+  elements.runtimeLifecycle.textContent = `${titleCase(status.lifecycle.state)}${lifecycleReason}`;
+  elements.runtimeTransport.textContent = status.transport.ready ? "Ready" : "Not ready";
+  elements.runtimeInstance.textContent = status.transport.lifecycleInstanceId || "Not assigned";
+  const hostDetails = [
+    titleCase(status.host.state),
+    status.host.processId === null ? "PID unavailable" : `PID ${status.host.processId}`,
+    status.host.nodeVersion || "Node version unavailable",
+    `${titleCase(status.host.handshake)} handshake`,
+    `${status.host.healthFailureCount} health failure${status.host.healthFailureCount === 1 ? "" : "s"}`,
+  ];
+  elements.runtimeHost.textContent = hostDetails.join(" · ");
+  elements.runtimeRhinoDocument.textContent = status.rhino.activeDocument
+    ? status.rhino.documentName || "Active, untitled"
+    : "No active document";
+  elements.runtimeGrasshopper.textContent = titleCase(status.grasshopper.state);
+  elements.runtimeGrasshopper.dataset.state = status.grasshopper.state;
+  elements.runtimeGrasshopperDocument.textContent = status.grasshopper.activeDocument
+    ? status.grasshopper.documentName || "Active, untitled"
+    : "No active document";
+  elements.runtimeDispatcher.textContent = `${status.dispatcher.depth}/${status.dispatcher.capacity} queued · ${status.dispatcher.acceptingExternalWork ? "accepting work" : "not accepting work"}`;
+  elements.runtimeStatusSummary.textContent = `Rhino snapshot revision ${status.revision}`;
+  elements.runtimeStatusSummary.dataset.state = status.lifecycle.state === "faulted" ? "failed" : "live";
+
+  elements.runtimeErrorList.replaceChildren();
+  const errors = Object.entries(status.errors).filter(([, error]) => error);
+  if (errors.length === 0) {
+    const item = document.createElement("li");
+    item.textContent = "None";
+    elements.runtimeErrorList.append(item);
+  } else {
+    for (const [component, error] of errors) {
+      const item = document.createElement("li");
+      item.textContent = `${titleCase(component)} · ${error.code}: ${error.message}`;
+      elements.runtimeErrorList.append(item);
+    }
+  }
 }
 
 function handleStatus(message) {
@@ -913,6 +1001,7 @@ elements.newSessionButton.addEventListener("click", () => {
 });
 elements.reconnectButton.addEventListener("click", reconnectNow);
 elements.bannerReconnectButton.addEventListener("click", reconnectNow);
+elements.runtimeStatusRefresh.addEventListener("click", () => void refreshRuntimeStatus());
 elements.shutdownButton.addEventListener("click", () => {
   if (!window.confirm("Shut down this local Hopper host? Rhino can start it again with _HopperCode.")) return;
   state.intentionalClose = true;
@@ -1015,6 +1104,7 @@ window.addEventListener("keydown", (event) => {
 });
 window.addEventListener("beforeunload", () => {
   state.intentionalClose = true;
+  stopRuntimeStatusPolling();
   state.socket?.close(1000, "Page closed");
 });
 

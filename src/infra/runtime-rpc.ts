@@ -46,6 +46,13 @@ export type LiveProtocolHandshake = {
 	protocolHandshakeLive: true;
 };
 
+export type RuntimeRpcNotice = {
+	type: "grasshopper_starting";
+	level: "warning";
+	message: string;
+	status: RuntimeStatus;
+};
+
 export class RpcOperationError extends Error {
 	constructor(
 		public readonly operation: OperationName,
@@ -58,7 +65,12 @@ export class RpcOperationError extends Error {
 
 export class RpcOutcomeUnknownError extends Error {
 	constructor(public readonly outcome: NodeLocalOutcomeUnknown) {
-		super(outcome.result.message);
+		super(
+			`Mutation outcome is unknown for ${outcome.operation} ` +
+			`(operation ID ${outcome.operationId}). It may have completed. ` +
+			`Do not retry automatically; inspect Rhino or Grasshopper state first. ` +
+			outcome.result.message,
+		);
 		this.name = "RpcOutcomeUnknownError";
 	}
 }
@@ -72,6 +84,7 @@ export class RuntimeRpc {
 	private readonly nodeVersion: string;
 	private handshake: Promise<void> | null = null;
 	private handshakeComplete = false;
+	private readonly noticeListeners = new Set<(notice: RuntimeRpcNotice) => void>();
 
 	constructor(options: RuntimeRpcOptions) {
 		this.lifecycleInstanceId = options.lifecycleInstanceId;
@@ -85,7 +98,18 @@ export class RuntimeRpc {
 			timeoutMs: options.readinessTimeoutMs,
 			readStatus: (timeoutMs) => this.readRuntimeStatusDirect(timeoutMs),
 			startGrasshopper: (timeoutMs) => this.startGrasshopperDirect(timeoutMs),
+			beforeStartGrasshopper: (status) => this.publishNotice({
+				type: "grasshopper_starting",
+				level: "warning",
+				message: "Grasshopper is opening. Rhino may show the Grasshopper editor and create an untitled document.",
+				status,
+			}),
 		});
+	}
+
+	subscribeNotices(listener: (notice: RuntimeRpcNotice) => void): () => void {
+		this.noticeListeners.add(listener);
+		return () => this.noticeListeners.delete(listener);
 	}
 
 	async connect(): Promise<LiveProtocolHandshake> {
@@ -125,7 +149,12 @@ export class RuntimeRpc {
 	}
 
 	async close(): Promise<void> {
+		this.noticeListeners.clear();
 		await this.transport.close();
+	}
+
+	private publishNotice(notice: RuntimeRpcNotice): void {
+		for (const listener of this.noticeListeners) listener(notice);
 	}
 
 	private async ensureHandshake(completionTimeoutMs?: number): Promise<void> {

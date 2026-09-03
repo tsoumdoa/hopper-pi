@@ -15,6 +15,7 @@ export type GrasshopperReadinessOptions = {
 	events: RuntimeStatusEventSource;
 	readStatus: (timeoutMs: number) => Promise<RuntimeStatus>;
 	startGrasshopper: (timeoutMs: number) => Promise<void>;
+	beforeStartGrasshopper?: (status: RuntimeStatus) => void | Promise<void>;
 	clock?: ReadinessClock;
 	timeoutMs?: number;
 };
@@ -41,6 +42,7 @@ export class GrasshopperReadinessCoordinator {
 	private readonly events: RuntimeStatusEventSource;
 	private readonly readStatus: (timeoutMs: number) => Promise<RuntimeStatus>;
 	private readonly startGrasshopper: (timeoutMs: number) => Promise<void>;
+	private readonly beforeStartGrasshopper?: (status: RuntimeStatus) => void | Promise<void>;
 	private readonly clock: ReadinessClock;
 	private readonly timeoutMs: number;
 	private inFlight: Promise<RuntimeStatus> | null = null;
@@ -50,6 +52,7 @@ export class GrasshopperReadinessCoordinator {
 		this.events = options.events;
 		this.readStatus = options.readStatus;
 		this.startGrasshopper = options.startGrasshopper;
+		this.beforeStartGrasshopper = options.beforeStartGrasshopper;
 		this.clock = options.clock ?? systemClock;
 		this.timeoutMs = options.timeoutMs ?? 60_000;
 	}
@@ -78,6 +81,7 @@ export class GrasshopperReadinessCoordinator {
 			if (status?.grasshopper.state === "not_loaded") {
 				startIssued = true;
 				try {
+					await this.beforeStartGrasshopper?.(status);
 					await this.startGrasshopper(this.remainingCallBudget(deadlineAt));
 				} catch (error) {
 					lastReadError = error;
@@ -107,6 +111,7 @@ export class GrasshopperReadinessCoordinator {
 						// second start request.
 						startIssued = true;
 						try {
+							await this.beforeStartGrasshopper?.(status);
 							await this.startGrasshopper(this.remainingCallBudget(deadlineAt));
 						} catch (error) {
 							lastReadError = error;

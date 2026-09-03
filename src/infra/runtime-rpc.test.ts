@@ -91,7 +91,32 @@ describe("RuntimeRpc", () => {
 			expect(error).toBeInstanceOf(RpcOutcomeUnknownError);
 			expect((error as RpcOutcomeUnknownError).outcome).toBe(unknown);
 			expect((error as RpcOutcomeUnknownError).outcome.source).toBe("node");
+			expect((error as Error).message).toContain("Mutation outcome is unknown");
+			expect((error as Error).message).toContain("It may have completed");
+			expect((error as Error).message).toContain("Do not retry automatically");
 		}
+	});
+
+	it("notifies listeners before explicitly opening Grasshopper", async () => {
+		let reads = 0;
+		const order: string[] = [];
+		const transport = new FakeTransport((operation) => {
+			if (operation === "lifecycleHandshake") return response(operation, { handshake: "live" });
+			if (operation === "getRuntimeStatus") {
+				return response(operation, reads++ === 0 ? status("not_loaded", false, 1) : status("ready", true, 2));
+			}
+			if (operation === "startGrasshopper") order.push("start");
+			return response(operation, {});
+		});
+		const runtime = runtimeWith(transport, new FakeEvents());
+		runtime.subscribeNotices((notice) => {
+			order.push("notice");
+			expect(notice.message).toContain("create an untitled document");
+		});
+
+		await runtime.ensureGrasshopperReady();
+
+		expect(order).toEqual(["notice", "start"]);
 	});
 
 	it("does not submit a Grasshopper operation without an active document", async () => {

@@ -63,6 +63,28 @@
         </section>
       </div>
 
+      <section class="runtime-status-card" aria-labelledby="runtime-status-title">
+        <div class="section-heading">
+          <h2 id="runtime-status-title">Rhino runtime</h2>
+          <button class="text-button" id="runtime-status-refresh" type="button">Refresh</button>
+        </div>
+        <p class="runtime-status-summary" id="runtime-status-summary" aria-live="polite">Waiting for Rhino status</p>
+        <dl class="runtime-status-grid">
+          <div><dt>Lifecycle</dt><dd id="runtime-lifecycle">Unknown</dd></div>
+          <div><dt>Transport</dt><dd id="runtime-transport">Unknown</dd></div>
+          <div><dt>Instance</dt><dd id="runtime-instance">Unknown</dd></div>
+          <div><dt>Host</dt><dd id="runtime-host">Unknown</dd></div>
+          <div><dt>Rhino document</dt><dd id="runtime-rhino-document">Unknown</dd></div>
+          <div><dt>Grasshopper</dt><dd id="runtime-grasshopper">Unknown</dd></div>
+          <div><dt>GH document</dt><dd id="runtime-grasshopper-document">Unknown</dd></div>
+          <div><dt>Dispatcher</dt><dd id="runtime-dispatcher">Unknown</dd></div>
+        </dl>
+        <div class="runtime-errors">
+          <p>Latest component errors</p>
+          <ul id="runtime-error-list"><li>None</li></ul>
+        </div>
+      </section>
+
       <div class="sidebar-spacer"></div>
 
       <div class="connection-card">

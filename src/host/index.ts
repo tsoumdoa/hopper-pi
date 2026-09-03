@@ -16,10 +16,12 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 	let runtime: EmbeddedPiHost | undefined;
 	let server: HopperServer | undefined;
 	let stopParentWatcher = () => {};
+	let unsubscribeRuntimeNotices = () => {};
 	const shutdown = new HostShutdownCoordinator({
 		cleanup: async () => {
 			stopParentWatcher();
 			await server?.close();
+			unsubscribeRuntimeNotices();
 			await runtime?.dispose();
 			await closeRuntimeRpc();
 		},
@@ -37,16 +39,25 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 	});
 
 	try {
-		const protocolHandshake = await getRuntimeRpc().connect();
+		const runtimeRpc = getRuntimeRpc();
+		const protocolHandshake = await runtimeRpc.connect();
 		runtime = await EmbeddedPiHost.create({
 			paths: config.paths,
 			onShutdownRequest: () => { void shutdown.request("normal"); },
+		});
+		unsubscribeRuntimeNotices = runtimeRpc.subscribeNotices((notice) => {
+			runtime?.bus.publish({
+				type: "ui_notification",
+				message: notice.message,
+				level: notice.level,
+			});
 		});
 		server = await startHopperServer({
 			runtime,
 			staticDir: config.paths.staticDir,
 			port: config.port,
 			protocolHandshake,
+			getRuntimeStatus: () => runtimeRpc.getRuntimeStatus(8_000),
 			onShutdownRequest: () => { void shutdown.request("normal"); },
 		});
 	} catch (error) {
