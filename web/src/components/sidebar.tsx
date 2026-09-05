@@ -1,5 +1,8 @@
+import { useShallow } from "zustand/react/shallow";
 import { KeyRound, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Settings2, X } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { useHopperStore } from "../state/hopper-store-context";
+import { useRuntimeStatus } from "../hooks/use-runtime-status";
 import { cn, providerLabel } from "../lib/utils";
 import type { HopperState } from "../state/hopper-types";
 import { RuntimeStatusPanel, summarizeRuntimeStatus } from "./runtime-status";
@@ -25,7 +28,9 @@ function toneClass(tone: Tone) {
 	}[tone];
 }
 
-function connectionSummary(state: HopperState): { tone: Tone; label: string; canRetry: boolean } {
+type SidebarState = Pick<HopperState, "connection" | "backendDetail" | "providers" | "selectedModel" | "runtimeStatus" | "runtimeStatusError">;
+
+function connectionSummary(state: SidebarState): { tone: Tone; label: string; canRetry: boolean } {
 	const status = state.connection.status;
 	const label = { connecting: "Connecting", authenticating: "Authenticating", connected: "Connected", disconnected: "Disconnected", error: "Connection failed" }[status];
 	const canRetry = status === "disconnected" || status === "error";
@@ -33,7 +38,7 @@ function connectionSummary(state: HopperState): { tone: Tone; label: string; can
 	return { tone, label, canRetry };
 }
 
-function ConnectionCard({ state, onReconnect }: { state: HopperState; onReconnect(): void }) {
+function ConnectionCard({ state, onReconnect }: { state: SidebarState; onReconnect(): void }) {
 	const { tone, label, canRetry } = connectionSummary(state);
 	return (
 		<div className="rounded-md border border-line bg-surface p-2.5">
@@ -55,7 +60,7 @@ function ConnectionCard({ state, onReconnect }: { state: HopperState; onReconnec
 	);
 }
 
-function ProviderCard({ state, connected, onManageProvider }: { state: HopperState; connected: boolean; onManageProvider(): void }) {
+function ProviderCard({ state, connected, onManageProvider }: { state: SidebarState; connected: boolean; onManageProvider(): void }) {
 	const authenticated = state.providers.filter((provider) => provider.authenticated);
 	const selected = state.selectedModel?.provider ?? authenticated[0]?.id ?? null;
 	const selectedAuthenticated = state.providers.some((provider) => provider.id === selected && provider.authenticated);
@@ -78,7 +83,7 @@ function ProviderCard({ state, connected, onManageProvider }: { state: HopperSta
 }
 
 export type SidebarProps = {
-	state: HopperState;
+	token: string;
 	connected: boolean;
 	collapsed: boolean;
 	onCollapsedChange(collapsed: boolean): void;
@@ -87,12 +92,10 @@ export type SidebarProps = {
 	onNewSession(): void;
 	onManageProvider(): void;
 	onReconnect(): void;
-	onRefreshRuntime(): void;
-	runtimeRefreshing: boolean;
 };
 
 export function Sidebar({
-	state,
+	token,
 	connected,
 	collapsed,
 	onCollapsedChange,
@@ -101,9 +104,13 @@ export function Sidebar({
 	onNewSession,
 	onManageProvider,
 	onReconnect,
-	onRefreshRuntime,
-	runtimeRefreshing,
 }: SidebarProps) {
+	const state = useHopperStore(useShallow((state) => ({
+		connection: state.connection, backendDetail: state.backendDetail,
+		providers: state.providers, selectedModel: state.selectedModel,
+		runtimeStatus: state.runtimeStatus, runtimeStatusError: state.runtimeStatusError,
+	})));
+	const { refresh: onRefreshRuntime, refreshing: runtimeRefreshing } = useRuntimeStatus(token, connected);
 	const container = useRef<HTMLElement>(null);
 
 	// Mobile settings sheet closes on Escape and on taps outside the sidebar.

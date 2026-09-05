@@ -1,5 +1,6 @@
 import { CircleAlert, CircleCheck, ExternalLink, Info, TriangleAlert, X } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { useHopperStore } from "../state/hopper-store-context";
 import { cn } from "../lib/utils";
 import type { ToastNotice } from "../state/hopper-types";
 
@@ -55,7 +56,9 @@ function Toast({ notice, onDismiss }: { notice: ToastNotice; onDismiss(): void }
 	);
 }
 
-export function ToastRegion({ notices, onDismiss }: { notices: ToastNotice[]; onDismiss(id: string): void }) {
+export function ToastRegion() {
+	const notices = useHopperStore((state) => state.notifications);
+	const onDismiss = useHopperStore((state) => state.actions.dismissToast);
 	return (
 		<div className="pointer-events-none fixed right-4 top-14 z-[60] grid w-[min(360px,calc(100%-2rem))] gap-2" aria-live="polite" aria-atomic="false">
 			{notices.slice(-4).map((notice) => (
