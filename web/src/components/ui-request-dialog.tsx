@@ -31,7 +31,10 @@ export function UiRequestDialog({
 	const kind = resolveKind(request);
 	const finish = (cancelled = false) => {
 		const result = cancelled ? (kind === "confirm" ? false : null) : kind === "confirm" ? true : value;
-		if (send({ type: "ui_response", requestId: request.requestId, value: result })) onResolved();
+		const sent = send({ type: "ui_response", requestId: request.requestId, value: result });
+		// Allow local dismissal while offline so the user can reach Reconnect.
+		// The host replays unanswered requests when this tab connects again.
+		if (sent || cancelled) onResolved();
 	};
 
 	return (
