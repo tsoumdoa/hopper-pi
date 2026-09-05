@@ -1,6 +1,5 @@
 import type {
 	GetCanvasErrorsResponse,
-	GetScriptCodeResponse,
 	GhComponentInfo,
 	ListAllComponentsResponse,
 	ListScriptParamsResponse,
@@ -56,13 +55,6 @@ export function formatScriptParamsResponse(response: ListScriptParamsResponse) {
 	return {
 		content: [{ type: "text" as const, text: lines.join("\n") }],
 		details: response,
-	};
-}
-
-export function formatScriptCodeResponse(response: GetScriptCodeResponse) {
-	return {
-		content: [{ type: "text" as const, text: response.code }],
-		details: { code: response.code },
 	};
 }
 

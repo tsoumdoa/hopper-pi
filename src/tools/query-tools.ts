@@ -11,7 +11,7 @@ import {
 	fetchCanvasErrors,
 	getCachedOrFetchComponents,
 } from "./canvas-fetch.js";
-import { formatCanvasResponse } from "./canvas-formatters.js";
+import { formatCanvasResponse } from "../presenters/canvas-formatter.js";
 import {
 	formatComponentsMultiQuery,
 	formatCanvasErrorsResponse,

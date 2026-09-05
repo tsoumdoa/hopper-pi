@@ -67,11 +67,6 @@ public interface IMutationResultStoreClock
     DateTimeOffset UtcNow { get; }
 }
 
-public sealed class SystemMutationResultStoreClock : IMutationResultStoreClock
-{
-    public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
-}
-
 public sealed record SerializedMutationResult(string Body);
 
 public sealed record OperationResultTooLargeTerminal(string Body);

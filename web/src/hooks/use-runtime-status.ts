@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Dispatch } from "react";
 import type { RuntimeStatus } from "../../../src/protocol/v2.js";
-import type { HopperAction } from "../state/hopper-reducer";
+import { useHopperStore } from "../state/hopper-store-context";
 import { mockRuntimeStatus } from "../mocks/hopper-mock";
 
 const POLL_INTERVAL_MS = 3_000;
@@ -12,28 +11,29 @@ export async function requestRuntimeStatus(token: string, request: typeof fetch 
 	return response.json() as Promise<RuntimeStatus>;
 }
 
-export function useRuntimeStatus(token: string, connected: boolean, dispatch: Dispatch<HopperAction>) {
+export function useRuntimeStatus(token: string, connected: boolean) {
+	const actions = useHopperStore((state) => state.actions);
 	const [refreshing, setRefreshing] = useState(false);
 	const inFlight = useRef(false);
 
 	const refresh = useCallback(async () => {
 		if (!token || !connected) return;
 		if (import.meta.env.MODE === "mock") {
-			dispatch({ type: "runtime-status", status: mockRuntimeStatus });
+			actions.setRuntimeStatus(mockRuntimeStatus);
 			return;
 		}
 		if (inFlight.current) return;
 		inFlight.current = true;
 		setRefreshing(true);
 		try {
-			dispatch({ type: "runtime-status", status: await requestRuntimeStatus(token) });
+			actions.setRuntimeStatus(await requestRuntimeStatus(token));
 		} catch (error) {
-			dispatch({ type: "runtime-status-error", error: error instanceof Error ? error.message : String(error) });
+			actions.setRuntimeStatusError(error instanceof Error ? error.message : String(error));
 		} finally {
 			inFlight.current = false;
 			setRefreshing(false);
 		}
-	}, [connected, dispatch, token]);
+	}, [actions, connected, token]);
 
 	useEffect(() => {
 		if (!token || !connected) return;

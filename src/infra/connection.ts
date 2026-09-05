@@ -24,8 +24,6 @@ type ConnectionProfile = {
 	};
 };
 
-export const DEBUG = process.env[ENV.GH_DEBUG] === "1";
-
 let cachedConnection: ConnectionConfig | null = null;
 
 export function clearConnectionCache(): void {

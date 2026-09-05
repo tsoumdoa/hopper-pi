@@ -1,8 +1,8 @@
 import { ExternalLink, KeyRound, Loader2, LogOut } from "lucide-react";
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { useHopperStore } from "../state/hopper-store-context";
 import { providerLabel } from "../lib/utils";
-import type { AuthFlow, ProviderSummary } from "../state/hopper-types";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -12,15 +12,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 
 export type ProviderDialogProps = {
 	onOpenChange(open: boolean): void;
-	providers: ProviderSummary[];
-	/** Provider backing the current model, used as the default selection. */
-	currentProvider: string | null;
-	auth: AuthFlow;
 	onLogin(provider: string, authType: "api_key" | "oauth", apiKey?: string): boolean;
 	onLogout(provider: string): void;
 };
 
-export function ProviderDialog({ onOpenChange, providers, currentProvider, auth, onLogin, onLogout }: ProviderDialogProps) {
+export function ProviderDialog({ onOpenChange, onLogin, onLogout }: ProviderDialogProps) {
+	const providers = useHopperStore((state) => state.providers);
+	const currentProvider = useHopperStore((state) => state.selectedModel?.provider ?? null);
+	const auth = useHopperStore((state) => state.auth);
 	const initialProvider = providers.find((item) => item.id === auth.provider)
 		?? providers.find((item) => item.id === currentProvider)
 		?? providers.find((item) => item.authenticated)

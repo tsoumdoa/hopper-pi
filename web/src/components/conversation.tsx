@@ -1,5 +1,6 @@
 import { ArrowDown, Brain, ChevronRight, CircleAlert, CircleCheck, Loader2, Wrench } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useHopperStore } from "../state/hopper-store-context";
 import { cn, formatValue, summarizeValue } from "../lib/utils";
 import type { ConversationMessage, ToolCall } from "../state/hopper-types";
 import { Button } from "./ui/button";
@@ -159,14 +160,13 @@ function Welcome({ connected, onSuggestion }: { connected: boolean; onSuggestion
 }
 
 export function Conversation({
-	messages,
 	connected,
 	onSuggestion,
 }: {
-	messages: ConversationMessage[];
 	connected: boolean;
 	onSuggestion(prompt: string): void;
 }) {
+	const messages = useHopperStore((state) => state.session.messages);
 	const scroller = useRef<HTMLDivElement>(null);
 	const stickToBottom = useRef(true);
 	const [showJump, setShowJump] = useState(false);

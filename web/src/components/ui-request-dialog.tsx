@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useHopperStore } from "../state/hopper-store-context";
 import type { ClientMessage } from "../../../src/host/protocol.js";
 import { cn } from "../lib/utils";
 import type { UiRequest } from "../state/hopper-types";
@@ -14,16 +15,13 @@ function resolveKind(request: UiRequest) {
 }
 
 export function UiRequestDialog({
-	request,
-	queued,
 	send,
-	onResolved,
 }: {
-	request: UiRequest | null;
-	queued: number;
 	send(message: ClientMessage): boolean;
-	onResolved(): void;
 }) {
+	const request = useHopperStore((state) => state.activeUiRequest);
+	const queued = useHopperStore((state) => state.pendingUiRequests.length);
+	const onResolved = useHopperStore((state) => state.actions.resolveUiRequest);
 	const [value, setValue] = useState("");
 	useEffect(() => setValue(request?.prefill ?? request?.options?.[0]?.value ?? ""), [request]);
 	if (!request) return null;

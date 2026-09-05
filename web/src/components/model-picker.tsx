@@ -1,5 +1,7 @@
+import { useShallow } from "zustand/react/shallow";
 import { Brain, KeyRound } from "lucide-react";
 import { useMemo } from "react";
+import { useHopperStore } from "../state/hopper-store-context";
 import { providerLabel, thinkingLabel } from "../lib/utils";
 import type { HopperState } from "../state/hopper-types";
 import { Button } from "./ui/button";
@@ -12,14 +14,17 @@ export const toolbarTriggerClass =
 	"h-7 w-auto max-w-[220px] gap-1.5 border-transparent bg-transparent px-2 text-xs font-medium text-ink-soft hover:border-transparent hover:bg-ink/[.06] hover:text-ink data-[placeholder]:text-muted";
 
 export type ModelControlsProps = {
-	state: HopperState;
 	connected: boolean;
 	onSelectModel(value: string): void;
 	onSelectThinking(level: string): void;
 	onManageProvider(): void;
 };
 
-export function ModelControls({ state, connected, onSelectModel, onSelectThinking, onManageProvider }: ModelControlsProps) {
+export function ModelControls({ connected, onSelectModel, onSelectThinking, onManageProvider }: ModelControlsProps) {
+	const state = useHopperStore(useShallow((state) => ({
+		models: state.models, providers: state.providers, selectedModel: state.selectedModel,
+		thinkingLevel: state.thinkingLevel, availableThinkingLevels: state.availableThinkingLevels,
+	})));
 	const groupedModels = useMemo(() => {
 		const groups = new Map<string, HopperState["models"]>();
 		for (const model of state.models) {

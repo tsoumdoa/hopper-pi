@@ -40,42 +40,10 @@ namespace rhino_zmq_poc
             "RhinoCodePlatform.Rhino3D",
         };
 
-        public static bool IsAvailable()
+        private static bool IsAvailable()
         {
             return TryResolveRhinoCodeType("Rhino.Runtime.Code.RhinoCode", out _) &&
                    TryResolveRhinoCodeType("Rhino.Runtime.Code.Execution.RunContext", out _);
-        }
-
-        /// <summary>
-        /// Rhino 8 defers RhinoCode language startup until Script Editor is opened.
-        /// Warm up on the next UI idle so the first rh_run_script does not fail.
-        /// </summary>
-        public static void ScheduleWarmup(params string[] modes)
-        {
-            if (!IsAvailable())
-                return;
-
-            var targets = (modes == null || modes.Length == 0)
-                ? new[] { "python", "csharp" }
-                : modes;
-
-            EventHandler idleHandler = null;
-            idleHandler = (_, __) =>
-            {
-                RhinoApp.Idle -= idleHandler;
-                foreach (var mode in targets)
-                {
-                    try
-                    {
-                        WarmupLanguage(mode);
-                    }
-                    catch
-                    {
-                        // Best-effort; EnsureLanguageReady retries on the next script run.
-                    }
-                }
-            };
-            RhinoApp.Idle += idleHandler;
         }
 
         public static RhinoCodeRunResult Run(RhinoDoc doc, string mode, string source)
@@ -358,44 +326,6 @@ namespace rhino_zmq_poc
                 return "mcneel.ironpython.python2";
 
             return "mcneel.pythonnet.python";
-        }
-
-        private static void WarmupLanguage(string mode)
-        {
-            if (!TryResolveRhinoCodeType("Rhino.Runtime.Code.RhinoCode", out var rhinoCodeType))
-                return;
-            if (!TryResolveRhinoCodeType("Rhino.Runtime.Code.Languages.LanguageSpec", out var languageSpecType))
-                return;
-
-            var languageSpec = ResolveLanguageSpec(languageSpecType, mode, PrepareSource(mode, "pass"));
-            if (languageSpec == null)
-                return;
-
-            var languages = rhinoCodeType
-                .GetProperty("Languages", BindingFlags.Public | BindingFlags.Static)?
-                .GetValue(null);
-            if (languages == null)
-                return;
-
-            var queryLatest = languages.GetType().GetMethod(
-                "QueryLatest",
-                BindingFlags.Public | BindingFlags.Instance,
-                null,
-                new[] { languageSpecType },
-                null);
-            if (queryLatest == null)
-                return;
-
-            if (queryLatest.Invoke(languages, new[] { languageSpec }) != null)
-            {
-                lock (LanguageWarmupLock)
-                {
-                    WarmedModes.Add(mode);
-                }
-                return;
-            }
-
-            EnsureLanguageReady(mode, languages, languageSpecType, languageSpec, queryLatest);
         }
 
         private static bool EnsureLanguageReady(

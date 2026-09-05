@@ -6,10 +6,6 @@ export async function withRequester<T>(
 ): Promise<T> {
 	await ensureBackendReachable();
 	const requester = new Requester();
-	try {
-		await requester.connect();
-		return await fn(requester);
-	} finally {
-		await requester.close();
-	}
+	await requester.connect();
+	return fn(requester);
 }

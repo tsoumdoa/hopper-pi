@@ -109,15 +109,6 @@ namespace rhino_zmq_poc
         public List<ScriptIOParam> Outputs { get; set; }
     }
 
-    internal class ApplyGraphEndpoint
-    {
-        [JsonPropertyName("ref")]
-        public string Ref { get; set; }
-
-        [JsonPropertyName("port")]
-        public JsonElement Port { get; set; }
-    }
-
     internal class ApplyGraphWireSpec
     {
         [JsonPropertyName("from")]

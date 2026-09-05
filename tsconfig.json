@@ -6,6 +6,8 @@
     "rootDir": "src",
     "outDir": "dist",
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noImplicitAny": false,
     "skipLibCheck": true,
     "sourceMap": true

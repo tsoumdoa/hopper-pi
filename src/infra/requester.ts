@@ -23,10 +23,6 @@ export class Requester {
 		const { type: _type, ...args } = data;
 		return this.runtime.request<T>(operation as OperationName, args as JsonObject);
 	}
-
-	async close(): Promise<void> {
-		// The DEALER is intentionally process-scoped. Per-tool callers do not own it.
-	}
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

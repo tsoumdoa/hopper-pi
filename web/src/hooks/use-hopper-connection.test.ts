@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import { createHopperStore } from "../state/hopper-store";
+import type { HopperStore } from "../state/hopper-types";
+import { HopperStoreProvider } from "../state/hopper-store-context";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,6 +31,7 @@ class TestSocket extends EventTarget {
 	}
 }
 
+let store: HopperStore;
 let root: Root;
 let container: HTMLDivElement;
 let connection: ReturnType<typeof useHopperConnection>;
@@ -36,10 +40,7 @@ function Harness() {
 	return createElement(Fragment, null,
 		createElement("button", { id: "reconnect", onClick: connection.reconnect }, "Reconnect"),
 		createElement(UiRequestDialog, {
-			request: connection.state.activeUiRequest,
-			queued: connection.state.pendingUiRequests.length,
 			send: connection.send,
-			onResolved: () => connection.dispatch({ type: "ui-request-resolved" }),
 		}),
 	);
 }
@@ -53,7 +54,8 @@ beforeEach(async () => {
 	container = document.createElement("div");
 	document.body.append(container);
 	root = createRoot(container);
-	await act(async () => root.render(createElement(Harness)));
+	store = createHopperStore();
+	await act(async () => root.render(createElement(HopperStoreProvider, { store, children: createElement(Harness) })));
 });
 
 afterEach(async () => {
@@ -81,12 +83,12 @@ describe("Hopper connection recovery", () => {
 		await act(async () => socket.close(code));
 		// Failed submission must keep the draft visible; only explicit dismissal closes it.
 		await act(async () => { document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
-		expect(connection.state.activeUiRequest?.requestId).toBe(request.requestId);
+		expect(store.getState().activeUiRequest?.requestId).toBe(request.requestId);
 		await act(async () => {
 			if (dismiss === "Escape") document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 			else [...document.querySelectorAll("button")].find((button) => button.textContent === "Cancel")!.click();
 		});
-		expect(connection.state.activeUiRequest).toBeNull();
+		expect(store.getState().activeUiRequest).toBeNull();
 		expect(document.querySelector('[role="dialog"]')).toBeNull();
 		expect(document.body.style.pointerEvents).not.toBe("none");
 		expect(container.getAttribute("aria-hidden")).not.toBe("true");
@@ -99,11 +101,11 @@ describe("Hopper connection recovery", () => {
 			replacement.message({ type: "snapshot", snapshot: { sessionId: "session-1", messages: [], isStreaming: false, thinkingLevel: "off", availableThinkingLevels: [], models: [], providers: [] } });
 			replacement.message(request);
 		});
-		expect(connection.state.activeUiRequest?.requestId).toBe(request.requestId);
+		expect(store.getState().activeUiRequest?.requestId).toBe(request.requestId);
 		expect(document.querySelector('[role="dialog"]')).not.toBeNull();
 		await act(async () => [...document.querySelectorAll("button")].find((button) => button.textContent === "Cancel")!.click());
 		expect(replacement.send).toHaveBeenLastCalledWith(JSON.stringify({ type: "ui_response", requestId: request.requestId, value: null }));
-		expect(connection.state.activeUiRequest).toBeNull();
+		expect(store.getState().activeUiRequest).toBeNull();
 	});
 
 	it.each([4001, 4003])("waits for an explicit reconnect after close code %s", async (code) => {
@@ -113,8 +115,8 @@ describe("Hopper connection recovery", () => {
 			await vi.advanceTimersByTimeAsync(30_000);
 		});
 		expect(TestSocket.instances).toHaveLength(1);
-		expect(connection.state.connection.status).toBe("disconnected");
-		expect(connection.state.connection.detail).not.toContain("Retrying");
+		expect(store.getState().connection.status).toBe("disconnected");
+		expect(store.getState().connection.detail).not.toContain("Retrying");
 		await act(async () => connection.reconnect());
 		expect(TestSocket.instances).toHaveLength(2);
 		await act(async () => TestSocket.instances[1].open());
@@ -135,8 +137,8 @@ describe("Hopper connection recovery", () => {
 			old.message({ type: "status", status: "streaming" });
 		});
 		expect(old.send).not.toHaveBeenCalled();
-		expect(connection.state.connection.status).toBe("connecting");
-		expect(connection.state.session.isStreaming).toBe(false);
+		expect(store.getState().connection.status).toBe("connecting");
+		expect(store.getState().session.isStreaming).toBe(false);
 	});
 
 	it("keeps the running response active when another prompt is rejected", async () => {
@@ -146,7 +148,7 @@ describe("Hopper connection recovery", () => {
 			socket.message({ type: "status", status: "streaming" });
 			socket.message({ type: "error", requestType: "prompt", message: "Already streaming" });
 		});
-		expect(connection.state.session.isStreaming).toBe(true);
-		expect(connection.state.notifications.at(-1)?.message).toBe("Already streaming");
+		expect(store.getState().session.isStreaming).toBe(true);
+		expect(store.getState().notifications.at(-1)?.message).toBe("Already streaming");
 	});
 });
