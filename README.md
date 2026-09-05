@@ -116,6 +116,8 @@ HopperCode
 
 Rhino starts one private loopback host, completes an authenticated handshake for that Rhino instance, and opens its tokenized localhost URL. Provider login, model choice, conversations, extension dialogs, and tool progress stay in that browser tab.
 
+If you close the browser tab, run `HopperCode` again in the same Rhino instance to reopen it with the current conversation. Closing the tab leaves the host and any active response running. The reopened UI restores the conversation and current progress. If another Hopper tab is still open, the new tab takes over the connection.
+
 Open **Skills & Markdown** in the sidebar to inspect the bundled skills, preview their Markdown and reference files, or turn individual skills off. Enabled skills appear in the agent's skill catalog; the agent can load relevant files with a restricted `read` tool. This tool only reads enabled Markdown in this library. Pi's general shell, edit, and write tools remain disabled.
 
 To add your own instructions:
@@ -158,7 +160,7 @@ The Rhino commands are:
 
 | Command | Behavior |
 | ------- | -------- |
-| `HopperCode` | Start Hopper from `stopped` or `faulted`. In other states, print the current state without launching another host. |
+| `HopperCode` | Start Hopper from `stopped` or `faulted`. When `running`, reopen the browser with the current conversation. In other states, print the current state. |
 | `HopperCodeStatus` | Print lifecycle, Node, transport, document, Grasshopper, dispatcher, and recent error details without starting Hopper. |
 | `HopperCodeStop` | Stop the current host and transport in the background. |
 | `HopperCodeRestart` | Finish stopping the current instance, then start one replacement. Repeated restart requests are coalesced. |
@@ -353,6 +355,7 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 
 - **Inspect tool schemas:** Run `/hopper-schemas` to browse the JSON schemas exposed to the agent for every registered tool (or `/hopper-schemas rh_run_script` / `/hopper-schemas all`). Dump them with `/hopper-schemas dump` (writes `tool-schemas.json` in the cwd). `/hopper-schemas sizes` reports catalog counts and compact schema bytes by group/tool.
 - **`HopperCode` is unknown:** Install the generated `.yak`, rather than copying only the `.gha` to Grasshopper Libraries, then restart Rhino. A Rhino `.rhp` must be loaded for the command to exist.
+- **Browser tab closed:** Run `HopperCode` again in the same Rhino instance to reopen the current conversation.
 - **Browser host does not open:** Run `HopperCodeStatus`. It reports lifecycle state, child PID, Node resolution, handshake health, and startup errors without printing the secret URL.
 - **Node is missing or unsupported:** Run `node --version` in a terminal. If Rhino cannot see the same installation, add its absolute path to Hopper's `config.json` as shown in [Choosing Node](#choosing-node), then run `HopperCodeRestart`.
 - **Grasshopper did not open:** `HopperCode` intentionally leaves Grasshopper unloaded. Submit a `gh_*` request in the browser. Hopper warns before opening Grasshopper and waits for its active definition. Run `HopperCodeStatus` for a typed startup or document error.

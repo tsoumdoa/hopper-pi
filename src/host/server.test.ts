@@ -102,6 +102,36 @@ function nextMessage(socket: WebSocket): Promise<ServerMessage> {
 }
 
 describe("Hopper loopback server", () => {
+	it("restores the active thread and progress after closing and reopening the browser", async () => {
+		const runtime = fakeRuntime();
+		let current: HostSnapshot = {
+			...snapshot(),
+			messages: [{ role: "user", content: "Build a sphere", timestamp: 1 }],
+			isStreaming: true,
+		};
+		runtime.snapshot = () => current;
+		const server = await startHopperServer({ runtime, staticDir: await staticDirectory(), protocolHandshake, getRuntimeStatus });
+		servers.push(server);
+		const first = await openSocket(server);
+		const initial = nextMessage(first);
+		first.send(JSON.stringify({ type: "authenticate", token: server.token }));
+		await initial;
+		const closed = new Promise<void>((resolve) => first.once("close", () => resolve()));
+		first.close();
+		await closed;
+
+		current = { ...current, streamingMessage: { role: "assistant", content: [{ type: "text", text: "Creating the sphere" }] } };
+		const reopened = await openSocket(server);
+		const restored = nextMessage(reopened);
+		reopened.send(JSON.stringify({ type: "authenticate", token: server.token }));
+		await expect(restored).resolves.toEqual({ type: "snapshot", snapshot: current });
+		expect(runtime.abort).not.toHaveBeenCalled();
+		expect(runtime.newSession).not.toHaveBeenCalled();
+		expect(runtime.dispose).not.toHaveBeenCalled();
+		expect(runtime.ui.replayPending).toHaveBeenCalledTimes(2);
+		reopened.close();
+	});
+
 	it("authenticates skill listing, previews and settings, and validates mutations", async () => {
 		const runtime = fakeRuntime();
 		const server = await startHopperServer({ runtime, staticDir: await staticDirectory(), token: "skills-token", protocolHandshake, getRuntimeStatus });

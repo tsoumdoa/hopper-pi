@@ -71,6 +71,7 @@ namespace Hopper.Rhino.Host
         private readonly RuntimeStatusStore _status;
         private readonly IHopperRunningObserver? _runningObserver;
         private readonly IHopperCommandCompletionSink? _completionSink;
+        private readonly Action? _reopenBrowser;
         private readonly IGrasshopperStartController _grasshopperStart;
         private readonly IHopperOperationCancellation _operationCancellation;
         private CancellationTokenSource? _pendingStart;
@@ -84,7 +85,8 @@ namespace Hopper.Rhino.Host
             IGrasshopperStartController grasshopperStart,
             IHopperOperationCancellation operationCancellation,
             IHopperRunningObserver? runningObserver = null,
-            IHopperCommandCompletionSink? completionSink = null)
+            IHopperCommandCompletionSink? completionSink = null,
+            Action? reopenBrowser = null)
         {
             _lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
             _background = background ?? throw new ArgumentNullException(nameof(background));
@@ -95,6 +97,7 @@ namespace Hopper.Rhino.Host
             _operationCancellation = operationCancellation ?? throw new ArgumentNullException(nameof(operationCancellation));
             _runningObserver = runningObserver;
             _completionSink = completionSink;
+            _reopenBrowser = reopenBrowser;
             _operations = new HostOperationRouter(rhino, grasshopper);
         }
 
@@ -103,6 +106,27 @@ namespace Hopper.Rhino.Host
             lock (_startGate)
             {
                 var snapshot = _lifecycle.Snapshot;
+                if (snapshot.State == Hopper.Core.Lifecycle.LifecycleState.Running
+                    && _reopenBrowser != null)
+                {
+                    try
+                    {
+                        _ = _background.Schedule(() =>
+                        {
+                            if (IsCurrentRunningInstance(snapshot))
+                            {
+                                SyncStatus();
+                                _reopenBrowser();
+                            }
+                            return Task.CompletedTask;
+                        });
+                    }
+                    catch (Exception exception)
+                    {
+                        return Rejected($"Could not reopen Hopper browser: {exception.Message}");
+                    }
+                    return new HopperCommandReceipt(true, "HopperCode browser reopen requested.", snapshot);
+                }
                 if (_pendingStart != null
                     || snapshot.State is not (Hopper.Core.Lifecycle.LifecycleState.Stopped
                         or Hopper.Core.Lifecycle.LifecycleState.Faulted))

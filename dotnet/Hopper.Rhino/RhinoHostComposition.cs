@@ -208,7 +208,8 @@ namespace rhino_zmq_poc
                 new RhinoGrasshopperStartController(),
                 transport,
                 runningObservers,
-                new RhinoCommandCompletionSink(dispatcher));
+                new RhinoCommandCompletionSink(dispatcher),
+                reopenBrowser: browser.OnRunning);
             deferredOperations.SetTarget(facade);
 
             HostDocumentStatusCoordinator documentStatus = null;

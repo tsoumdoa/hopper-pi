@@ -15,6 +15,54 @@ namespace rhino_zmq_poc.Tests;
 public sealed class HopperHostFacadeTests
 {
     [Fact]
+    public async Task StartWhileRunningReopensBrowserWithoutRestartingHost()
+    {
+        var fixture = new FacadeFixture();
+        fixture.Facade.RequestStart();
+        await fixture.FacadeScheduler.RunNext();
+        var instanceId = fixture.Controller.Snapshot.LifecycleInstanceId;
+
+        var receipt = fixture.Facade.RequestStart();
+
+        Assert.True(receipt.Accepted);
+        Assert.Equal("HopperCode browser reopen requested.", receipt.Message);
+        Assert.Equal(0, fixture.BrowserOpenCount);
+        await fixture.FacadeScheduler.RunNext();
+        Assert.Equal(1, fixture.BrowserOpenCount);
+        Assert.Equal(instanceId, fixture.Controller.Snapshot.LifecycleInstanceId);
+        Assert.Equal(1, fixture.Transport.StartCount);
+        Assert.Equal(1, fixture.RunningObserver.RunningCount);
+        Assert.Equal(0, fixture.RunningObserver.ResetCount);
+    }
+
+    [Fact]
+    public async Task QueuedBrowserReopenIsIgnoredAfterStop()
+    {
+        var fixture = new FacadeFixture();
+        fixture.Facade.RequestStart();
+        await fixture.FacadeScheduler.RunNext();
+        fixture.Facade.RequestStart();
+
+        fixture.Facade.RequestStop();
+        await fixture.FacadeScheduler.RunNext();
+
+        Assert.Equal(0, fixture.BrowserOpenCount);
+        await fixture.LifecycleScheduler.RunAll();
+        await fixture.FacadeScheduler.RunAll();
+    }
+
+    [Fact]
+    public void RepeatedStartWhileQueuedDoesNotOpenBrowserOrQueueAnotherStart()
+    {
+        var fixture = new FacadeFixture();
+        fixture.Facade.RequestStart();
+
+        Assert.False(fixture.Facade.RequestStart().Accepted);
+        Assert.Single(fixture.FacadeScheduler.Pending);
+        Assert.Equal(0, fixture.BrowserOpenCount);
+    }
+
+    [Fact]
     public async Task StartIsAcceptedWithoutRunningWorkOnCommandThread()
     {
         var fixture = new FacadeFixture();
@@ -230,7 +278,8 @@ public sealed class HopperHostFacadeTests
                 Status,
                 GrasshopperStart,
                 Cancellation,
-                RunningObserver);
+                RunningObserver,
+                reopenBrowser: () => BrowserOpenCount++);
         }
 
         public QueuedScheduler FacadeScheduler { get; } = new();
@@ -244,6 +293,7 @@ public sealed class HopperHostFacadeTests
         public RunningObserver RunningObserver { get; } = new();
         public LifecycleController Controller { get; }
         public HopperHostFacade Facade { get; }
+        public int BrowserOpenCount { get; private set; }
     }
 
     private sealed class Wakeups : IRuntimeStatusWakeupPublisher
@@ -256,11 +306,13 @@ public sealed class HopperHostFacadeTests
     private sealed class RunningObserver : IHopperRunningObserver
     {
         public int ResetCount { get; private set; }
+        public int RunningCount { get; private set; }
 
         public void Reset() => ResetCount++;
 
         public void OnRunning()
         {
+            RunningCount++;
         }
     }
 
