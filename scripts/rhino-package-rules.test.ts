@@ -112,6 +112,15 @@ describe("Rhino package path rules", () => {
 		expect(evaluatePackagePath("runtimes/win-x64/native/helper.dll", "win-x64").allowed).toBe(true);
 	});
 
+	it("keeps Pi's esbuild runtime but rejects the duplicate CLI and dependency tests", () => {
+		expect(evaluatePackagePath("runtime/host/node_modules/esbuild/lib/main.js", "mac-arm64").allowed).toBe(true);
+		expect(evaluatePackagePath("runtime/host/node_modules/@esbuild/darwin-arm64/bin/esbuild", "mac-arm64").allowed).toBe(true);
+		expect(evaluatePackagePath("runtime/host/node_modules/@esbuild/win32-x64/esbuild.exe", "win-x64").allowed).toBe(true);
+		expect(evaluatePackagePath("runtime/host/node_modules/esbuild/bin/esbuild", "mac-arm64").allowed).toBe(false);
+		expect(evaluatePackagePath("runtime/host/node_modules/@stablelib/base64/base64.test.ts", "mac-arm64").allowed).toBe(false);
+		expect(evaluatePackagePath("runtime/host/node_modules/@stablelib/base64/lib/base64.test.js", "mac-arm64").allowed).toBe(false);
+	});
+
 	it("rejects installer inputs and first-party development files", () => {
 		const paths = [
 			"runtime/host/pnpm-lock.yaml",
@@ -192,10 +201,10 @@ describe("native binary classification", () => {
 
 describe("Rhino package verifier", () => {
 	it("enforces the documented per-target size ceilings", () => {
-		expect(validateStagedSize("mac-arm64", 83 * 1024 * 1024)).toBeNull();
-		expect(validateStagedSize("mac-arm64", 83 * 1024 * 1024 + 1)).toContain("above");
-		expect(validateStagedSize("win-x64", 82 * 1024 * 1024)).toBeNull();
-		expect(validateStagedSize("win-x64", 82 * 1024 * 1024 + 1)).toContain("above");
+		expect(validateStagedSize("mac-arm64", 93 * 1024 * 1024)).toBeNull();
+		expect(validateStagedSize("mac-arm64", 93 * 1024 * 1024 + 1)).toContain("above");
+		expect(validateStagedSize("win-x64", 92 * 1024 * 1024)).toBeNull();
+		expect(validateStagedSize("win-x64", 92 * 1024 * 1024 + 1)).toContain("above");
 	});
 
 	it("writes a stable sorted manifest with sizes and SHA-256 hashes", async () => {

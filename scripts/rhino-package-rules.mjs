@@ -1,8 +1,9 @@
 import { extname } from "node:path";
 
 export const RHINO_PACKAGE_TARGETS = Object.freeze({
-	"mac-arm64": Object.freeze({ os: "darwin", cpu: "arm64", maxStagedBytes: 83 * 1024 * 1024 }),
-	"win-x64": Object.freeze({ os: "win32", cpu: "x64", maxStagedBytes: 82 * 1024 * 1024 }),
+	// Pi 0.85 adds esbuild as a runtime dependency, including one native binary.
+	"mac-arm64": Object.freeze({ os: "darwin", cpu: "arm64", maxStagedBytes: 93 * 1024 * 1024 }),
+	"win-x64": Object.freeze({ os: "win32", cpu: "x64", maxStagedBytes: 92 * 1024 * 1024 }),
 });
 
 export const PACKAGE_MANIFEST_NAME = "rhino-package-manifest.json";
@@ -94,7 +95,12 @@ export const PACKAGE_DENY_RULES = Object.freeze([
 	{
 		id: "known-development-module",
 		description: "known development-only modules are not shipped",
-		test: (path) => /^runtime\/host\/node_modules\/(?:@types|@esbuild|typescript|tsx|vitest|vite|esbuild)(\/|$)/.test(path),
+		test: (path) => /^runtime\/host\/node_modules\/(?:@types|typescript|tsx|vitest|vite)(\/|$)/.test(path),
+	},
+	{
+		id: "duplicate-esbuild-cli",
+		description: "esbuild's JS API uses the native binary in @esbuild; its CLI copy is not shipped",
+		test: (path) => /^runtime\/host\/node_modules\/esbuild\/bin(\/|$)/.test(path),
 	},
 ]);
 

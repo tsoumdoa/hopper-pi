@@ -116,6 +116,7 @@ function removeDependencyDevelopmentFiles(directory) {
 		} else if (/^(?:pnpm-lock\.yaml|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock)$/i.test(entry.name)
 			|| entry.name === ".modules.yaml"
 			|| entry.name === ".pnpm-workspace-state-v1.json"
+			|| /\.(test|spec)\.[cm]?[jt]sx?$/i.test(entry.name)
 			|| entry.name.endsWith(".map")) {
 			rmSync(path, { force: true });
 		}
@@ -123,6 +124,9 @@ function removeDependencyDevelopmentFiles(directory) {
 }
 
 function pruneNativeDependencies(nodeModules, targetConfig) {
+	// Pi's Chord runtime uses esbuild's JS API, which resolves the @esbuild binary.
+	// Its install script also copies that binary into bin/ for CLI use.
+	rmSync(join(nodeModules, "esbuild", "bin"), { recursive: true, force: true });
 	const zeromqBuild = join(nodeModules, "zeromq", "build");
 	if (existsSync(zeromqBuild)) {
 		for (const entry of readdirSync(zeromqBuild, { withFileTypes: true })) {
