@@ -6,7 +6,7 @@ import { URL } from "node:url";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { LOOPBACK_HOST } from "./config.js";
 import type { HostRuntime } from "./pi-runtime.js";
-import { parseClientMessage, parseSkillLibraryUpdate, type ClientMessage, type ServerMessage } from "./protocol.js";
+import { MAX_IMAGES, MAX_IMAGE_BASE64, parseClientMessage, parseSkillLibraryUpdate, type ClientMessage, type ServerMessage } from "./protocol.js";
 import type { LiveProtocolHandshake } from "../infra/runtime-rpc.js";
 import type { RuntimeStatus } from "../protocol/v2.js";
 
@@ -50,6 +50,7 @@ const MIME_TYPES: Record<string, string> = {
 	".js": "text/javascript; charset=utf-8",
 	".json": "application/json; charset=utf-8",
 	".png": "image/png",
+	".woff2": "font/woff2",
 	".svg": "image/svg+xml",
 };
 
@@ -73,9 +74,10 @@ function setPageHeaders(response: ServerResponse, contentType: string): void {
 	response.setHeader("X-Content-Type-Options", "nosniff");
 	response.setHeader("Referrer-Policy", "no-referrer");
 	response.setHeader("Cache-Control", "no-store");
+	// Excalidraw declares CDN font fallbacks alongside locally hosted fonts.
 	response.setHeader(
 		"Content-Security-Policy",
-		"default-src 'self'; connect-src 'self' ws:; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+		"default-src 'self'; connect-src 'self' ws:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data: https://esm.sh; script-src 'self'; base-uri 'none'; frame-ancestors 'none'",
 	);
 }
 
@@ -129,9 +131,9 @@ async function dispatch(
 ): Promise<void> {
 	switch (message.type) {
 		case "authenticate": throw new Error("Socket is already authenticated");
-		case "prompt": return runtime.prompt(message.text);
-		case "steer": return runtime.steer(message.text);
-		case "follow_up": return runtime.followUp(message.text);
+		case "prompt": return runtime.prompt(message.text, message.images);
+		case "steer": return runtime.steer(message.text, message.images);
+		case "follow_up": return runtime.followUp(message.text, message.images);
 		case "abort": return runtime.abort();
 		case "new_session": return runtime.newSession();
 		case "set_model": return runtime.setModel(message.provider, message.id);
@@ -247,7 +249,7 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 		}
 		serveStatic(staticDir, request, response);
 	});
-	const webSockets = new WebSocketServer({ noServer: true, maxPayload: 1_048_576 });
+	const webSockets = new WebSocketServer({ noServer: true, maxPayload: MAX_IMAGES * MAX_IMAGE_BASE64 + 1_048_576 });
 	let controller: WebSocket | undefined;
 	let unsubscribe = () => {};
 

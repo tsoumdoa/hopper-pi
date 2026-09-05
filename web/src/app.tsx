@@ -15,6 +15,7 @@ import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { useHopperConnection } from "./hooks/use-hopper-connection";
 import { providerLabel } from "./lib/utils";
+import type { DraftImage } from "./lib/image-attachments";
 import type { SendMode } from "./state/hopper-types";
 
 const SIDEBAR_KEY = "hopper.sidebar.collapsed";
@@ -48,6 +49,9 @@ export function App() {
 	const connected = connection.status === "connected";
 
 	const [draft, setDraft] = useState("");
+	const [images, setImages] = useState<DraftImage[]>([]);
+	const selectedModel = useHopperStore((state) => state.selectedModel);
+	const imagesSupported = selectedModel?.input?.includes("image") !== false;
 	// Explicit delivery choice made while a turn runs; null means the default for the current state.
 	const [modeOverride, setModeOverride] = useState<SendMode | null>(null);
 	const [providerOpen, setProviderOpen] = useState(false);
@@ -89,9 +93,12 @@ export function App() {
 
 	const submit = () => {
 		const text = draft.trim();
-		if (!text) return;
-		if (prompt(text, mode)) setDraft("");
+		if (!text && !images.length) return;
+		if (images.length && !imagesSupported) return;
+		if (prompt(text, mode, images.map((attachment) => attachment.image))) { setDraft(""); setImages([]); }
 	};
+
+	useEffect(() => { setImages([]); }, [sessionId]);
 
 	const newSession = () => {
 		const start = () => send({ type: "new_session" });
@@ -173,9 +180,13 @@ export function App() {
 				<ConnectionBanner connection={connection} onReconnect={reconnect} />
 				<Conversation connected={connected} onSuggestion={useSuggestion} />
 				<Composer
+					key={sessionId}
 					ref={composer}
 					draft={draft}
 					onDraftChange={setDraft}
+					images={images}
+					onImagesChange={setImages}
+					imagesSupported={imagesSupported}
 					mode={mode}
 					onModeChange={setModeOverride}
 					disabled={!connected}

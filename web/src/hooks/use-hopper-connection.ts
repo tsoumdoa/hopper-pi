@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ClientMessage, ServerMessage } from "../../../src/host/protocol.js";
+import type { ImageAttachment, ClientMessage, ServerMessage } from "../../../src/host/protocol.js";
 import { useHopperStoreApi } from "../state/hopper-store-context";
 import { handleServerMessage, CONNECTED_STATUSES } from "../state/server-messages";
 import type { SendMode } from "../state/hopper-types";
@@ -160,9 +160,9 @@ export function useHopperConnection() {
 		return () => window.removeEventListener("online", onOnline);
 	}, [reconnect]);
 
-	const prompt = useCallback((text: string, type: SendMode) => {
-		if (!send({ type, text })) return false;
-		actions.addUserMessage(text, type);
+	const prompt = useCallback((text: string, type: SendMode, images?: ImageAttachment[]) => {
+		if (!send({ type, text, ...(images?.length ? { images } : {}) })) return false;
+		actions.addUserMessage(text, type, images);
 		return true;
 	}, [actions, send]);
 
