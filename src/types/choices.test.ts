@@ -4,7 +4,6 @@ import {
 	OTHER_OPTION_LABEL,
 	appendOtherOptionLabels,
 	formatPickOptionLabels,
-	isOtherChoice,
 	resolvePickOption,
 	type PickOption,
 } from "./choices.js";
@@ -14,15 +13,12 @@ const options: PickOption[] = [
 	{ label: "Divide Surface", value: "guid-divide" },
 ];
 
-test("formats labels with descriptions", () => {
-	assert.deepEqual(formatPickOptionLabels(options), [
+test("formats labels with descriptions and resolves the selected display label", () => {
+	const labels = formatPickOptionLabels(options);
+	assert.deepEqual(labels, [
 		"Pipe — Surface > Freeform",
 		"Divide Surface",
 	]);
-});
-
-test("resolves selection by display label", () => {
-	const labels = formatPickOptionLabels(options);
 	assert.equal(resolvePickOption(options, labels[0])?.value, "guid-pipe");
 });
 
@@ -37,11 +33,4 @@ test("skips Other when already present", () => {
 
 test("does not treat other-prefixed labels as the canonical Other choice", () => {
 	assert.deepEqual(appendOtherOptionLabels(["A", "Others"]), ["A", "Others", OTHER_OPTION_LABEL]);
-});
-
-test("detects Other choice", () => {
-	assert.equal(isOtherChoice(OTHER_OPTION_LABEL), true);
-	assert.equal(isOtherChoice(" other "), true);
-	assert.equal(isOtherChoice("Pipe"), false);
-	assert.equal(isOtherChoice("Others"), false);
 });

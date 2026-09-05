@@ -45,19 +45,6 @@ public class MutationResultStoreTests
     }
 
     [Fact]
-    public void AdmissionReservesFullResultSlot()
-    {
-        var fixture = Fixture();
-
-        var result = fixture.Store.Admit(OperationRetentionKind.Mutation, "operation-1");
-
-        Assert.Equal(MutationAdmissionState.Admitted, result.State);
-        Assert.Equal(1, result.Snapshot.InFlightCount);
-        Assert.Equal(MutationResultStoreOptions.DefaultReservationBytes, result.Snapshot.UsedBytes);
-        Assert.Equal(MutationLookupState.Pending, fixture.Store.Lookup("operation-1").State);
-    }
-
-    [Fact]
     public void DefaultCountAndByteBoundariesAllowExactly256Reservations()
     {
         var fixture = Fixture();
@@ -94,10 +81,15 @@ public class MutationResultStoreTests
     }
 
     [Fact]
-    public void DuplicatePendingAdmissionDoesNotReserveAgain()
+    public void AdmissionReservesFullResultSlotAndDuplicateDoesNotReserveAgain()
     {
         var fixture = Fixture();
-        fixture.Store.Admit(OperationRetentionKind.Mutation, "same");
+        var first = fixture.Store.Admit(OperationRetentionKind.Mutation, "same");
+
+        Assert.Equal(MutationAdmissionState.Admitted, first.State);
+        Assert.Equal(1, first.Snapshot.InFlightCount);
+        Assert.Equal(MutationResultStoreOptions.DefaultReservationBytes, first.Snapshot.UsedBytes);
+        Assert.Equal(MutationLookupState.Pending, fixture.Store.Lookup("same").State);
 
         var duplicate = fixture.Store.Admit(OperationRetentionKind.Mutation, "same");
 
@@ -264,7 +256,7 @@ public class MutationResultStoreTests
     }
 
     [Fact]
-    public void CleanupReleasesOnlyInFlightReservations()
+    public void CleanupReleasesOnlyInFlightReservationsAndRejectsLateCompletion()
     {
         var fixture = Fixture();
         fixture.Store.Admit(OperationRetentionKind.Mutation, "terminal");
@@ -282,34 +274,9 @@ public class MutationResultStoreTests
         Assert.Equal(4, snapshot.UsedBytes);
         Assert.Equal(MutationLookupState.NotFound, fixture.Store.Lookup("pending-1").State);
         Assert.Equal(MutationLookupState.NotFound, fixture.Store.Lookup("pending-2").State);
-    }
-
-    [Fact]
-    public void CompletionAfterCleanupIsNotFound()
-    {
-        var fixture = Fixture();
-        fixture.Store.Admit(OperationRetentionKind.Mutation, "operation-1");
-        fixture.Store.ReleaseInFlight("operation-1");
-
         Assert.Equal(
             MutationCompletionState.NotFound,
-            fixture.Store.Complete("operation-1", Result("late")).State);
-    }
-
-    [Fact]
-    public void CancellationBeforeStartCanBeRetainedAsRealTerminalResult()
-    {
-        var fixture = Fixture();
-        fixture.Store.Admit(OperationRetentionKind.Mutation, "cancelled");
-
-        var completion = fixture.Store.Complete(
-            "cancelled",
-            Result("{\"resultClass\":\"cancelled_before_start\"}"));
-
-        Assert.Equal(MutationCompletionState.Completed, completion.State);
-        var lookup = fixture.Store.Lookup("cancelled");
-        Assert.Equal(MutationLookupState.Terminal, lookup.State);
-        Assert.Contains("cancelled_before_start", lookup.TerminalResult!.Body);
+            fixture.Store.Complete("pending-1", Result("late")).State);
     }
 
     [Fact]

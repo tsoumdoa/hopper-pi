@@ -26,10 +26,12 @@ const REGISTRY = [
 ];
 
 test("resolves exact names and plugin-qualified names case-insensitively", () => {
-	assert.deepEqual(resolveGraphComponentType(REGISTRY, "addition", "type"), {
-		ok: true,
-		typeGuid: ADD_GUID,
-	});
+	for (const name of ["addition", "ADDITION", "GRASSHOPPER/ADDITION"]) {
+		assert.deepEqual(resolveGraphComponentType(REGISTRY, name, "type"), {
+			ok: true,
+			typeGuid: ADD_GUID,
+		});
+	}
 	assert.deepEqual(resolveGraphComponentType(REGISTRY, "ACME/merge", "type"), {
 		ok: true,
 		typeGuid: PLUGIN_MERGE_GUID,
@@ -60,15 +62,4 @@ test("returns candidates for ambiguous exact names and rejects fuzzy names", () 
 	const missing = resolveGraphComponentType(REGISTRY, "Add", "components[0].type");
 	assert.equal(missing.ok, false);
 	if (!missing.ok) assert.equal(missing.error.code, "TYPE_NOT_FOUND");
-});
-
-test("resolves uppercase ASCII names via locale-independent matching", () => {
-	assert.deepEqual(resolveGraphComponentType(REGISTRY, "ADDITION", "type"), {
-		ok: true,
-		typeGuid: ADD_GUID,
-	});
-	assert.deepEqual(resolveGraphComponentType(REGISTRY, "GRASSHOPPER/ADDITION", "type"), {
-		ok: true,
-		typeGuid: ADD_GUID,
-	});
 });
