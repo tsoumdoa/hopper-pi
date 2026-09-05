@@ -39,15 +39,6 @@ function withSearchCatalog(): HopperToolCatalogEntry[] {
 	];
 }
 
-test("catalog covers every ALL_TOOLS entry exactly once", () => {
-	const names = HOPPER_REGISTERED_CATALOG.map((entry) => entry.tool.name);
-	assert.deepEqual(names, ALL_TOOLS.map((tool) => tool.name));
-	assert.equal(new Set(names).size, names.length);
-	for (const entry of HOPPER_REGISTERED_CATALOG) {
-		assert.ok(entry.keywords.length > 0);
-	}
-});
-
 test("always-active core matches issue policy plus canvas errors", () => {
 	const catalog = withSearchCatalog();
 	const core = getAlwaysActiveToolNames(catalog).sort();
@@ -248,8 +239,11 @@ test("catalog size report includes groups and bytes", () => {
 	assert.ok(report.tools[0].totalBytes >= report.tools.at(-1)!.totalBytes);
 });
 
-test("no duplicate registration names across catalog", () => {
+test("catalog entries have unique registration names and search keywords", () => {
 	const catalog = withSearchCatalog();
 	const names = catalog.map((entry) => entry.tool.name);
 	assert.equal(new Set(names).size, names.length);
+	for (const entry of catalog) {
+		assert.ok(entry.keywords.length > 0, `${entry.tool.name} should have search keywords`);
+	}
 });

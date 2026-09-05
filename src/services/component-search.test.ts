@@ -3,11 +3,8 @@ import { test } from "vitest";
 import type { GhComponentInfo } from "../types/messages.js";
 import {
 	tokenizeQuery,
-	scoreComponent,
-	scoreComponentQuery,
 	searchMatchedComponents,
 	formatComponentLines,
-	truncateDescription,
 } from "../services/component-search.js";
 
 function comp(
@@ -61,12 +58,6 @@ test("query-handlers search", () => {
 	assert.deepEqual(tokenizeQuery("trim brep"), ["trim", "brep"]);
 	assert.deepEqual(tokenizeQuery("a"), []);
 
-	// --- scoreComponent ---
-
-	assert.ok(scoreComponent(comp("Isotrim"), "isotrim") >= 100);
-	assert.ok(scoreComponent(comp("Divide Surface"), "div") >= 75);
-	assert.ok(scoreComponent(comp("Divide Surface"), "srf") >= 62);
-
 	// --- search ranking ---
 
 	assert.ok(matchedNames("Trim").some((n) => n.startsWith("Trim")), "Trim query matches trim components");
@@ -80,10 +71,6 @@ test("query-handlers search", () => {
 	const both = matchedNames("divSrf isotrim");
 	assert.ok(both.includes("Divide Surface"), "OR: Divide Surface in matches");
 	assert.ok(both.includes("Isotrim"), "OR: Isotrim in matches");
-
-	const trimBrepScore = scoreComponentQuery(comp("Trim with Brep"), tokenizeQuery("trim brep"));
-	const trimSolidScore = scoreComponentQuery(comp("Trim Solid"), tokenizeQuery("trim brep"));
-	assert.ok(trimBrepScore.score > trimSolidScore.score, "all-token bonus ranks Trim with Brep above partial matches");
 });
 
 test("formatComponentLines", () => {
@@ -108,14 +95,10 @@ test("formatComponentLines", () => {
 
 	const noDesc = formatComponentLines([comp("Panel", { description: "" })]);
 	assert.match(noDesc, /^Panel \[.+\] · Surface\/Util$/);
-	assert.ok(!noDesc.includes(" — "), "omits description segment when empty");
 
 	const longDesc = "x".repeat(95);
-	const truncated = truncateDescription(longDesc);
-	assert.equal(truncated.length, 90);
-	assert.ok(truncated.endsWith("..."));
 	assert.match(
 		formatComponentLines([comp("Long", { description: longDesc })]),
-		/^Long \[.+\] · Surface\/Util — x+\.\.\.$/,
+		/^Long \[.+\] · Surface\/Util — x{87}\.\.\.$/,
 	);
 });

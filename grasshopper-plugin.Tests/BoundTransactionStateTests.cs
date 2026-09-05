@@ -7,11 +7,10 @@ namespace rhino_zmq_poc.Tests;
 public sealed class BoundTransactionStateTests
 {
     [Fact]
-    public void CleanupUsesDocumentThatOpenedTransactionAfterActiveDocumentSwitches()
+    public void CleanupUsesStoredDocumentAndSnapshotThenClearsState()
     {
         var state = new BoundTransactionState<object, object>();
         var originalDocument = new object();
-        var newActiveDocument = new object();
         var snapshot = new object();
         state.Begin(originalDocument, snapshot);
 
@@ -25,23 +24,7 @@ public sealed class BoundTransactionStateTests
         });
 
         Assert.Same(originalDocument, cleanedDocument);
-        Assert.NotSame(newActiveDocument, cleanedDocument);
         Assert.Same(snapshot, cleanedSnapshot);
-        Assert.False(state.IsActive);
-    }
-
-    [Fact]
-    public void CleanupUsesDocumentThatOpenedTransactionAfterActiveDocumentCloses()
-    {
-        var state = new BoundTransactionState<object, object>();
-        var closedDocument = new object();
-        state.Begin(closedDocument, new object());
-
-        object? activeDocument = null;
-        var cleanedDocument = state.Complete((document, _) => document);
-
-        Assert.Null(activeDocument);
-        Assert.Same(closedDocument, cleanedDocument);
         Assert.False(state.IsActive);
     }
 

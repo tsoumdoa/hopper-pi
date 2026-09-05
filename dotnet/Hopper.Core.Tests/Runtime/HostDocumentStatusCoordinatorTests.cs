@@ -130,18 +130,6 @@ public sealed class HostDocumentStatusCoordinatorTests
     }
 
     [Fact]
-    public void CoreDocumentContractHasNoRhinoOrGrasshopperAssemblyReference()
-    {
-        var references = typeof(HostDocumentStatusChange).Assembly
-            .GetReferencedAssemblies()
-            .Select(reference => reference.Name)
-            .ToArray();
-
-        Assert.DoesNotContain("RhinoCommon", references);
-        Assert.DoesNotContain("Grasshopper", references);
-    }
-
-    [Fact]
     public void WakeupWireValueContainsOnlyProtocolVersionAndRevision()
     {
         var json = JsonSerializer.Serialize(

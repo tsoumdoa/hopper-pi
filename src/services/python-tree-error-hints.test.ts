@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
-	formatPythonTreeConversionHint,
 	hasGooConversionError,
 	isGooConversionError,
 } from "./python-tree-error-hints.js";
@@ -39,6 +38,7 @@ test("formatCanvasErrorsResponse appends treehelpers hint on Goo conversion erro
 	assert.match(text, /Python tree\/list hint/);
 	assert.match(text, /list_to_tree/);
 	assert.match(text, /tree_to_list/);
+	assert.match(text, /python-boilerplate\.md/);
 });
 
 test("formatCanvasErrorsResponse omits hint when no Goo conversion errors", () => {
@@ -58,10 +58,6 @@ test("formatCanvasErrorsResponse omits hint when no Goo conversion errors", () =
 
 	const text = response.content[0].text;
 	assert.doesNotMatch(text, /Python tree\/list hint/);
-});
-
-test("formatPythonTreeConversionHint mentions boilerplate doc", () => {
-	assert.match(formatPythonTreeConversionHint(), /python-boilerplate\.md/);
 });
 
 test("hasGooConversionError is false for empty errors", () => {

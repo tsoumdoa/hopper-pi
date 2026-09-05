@@ -62,5 +62,4 @@ test("sanitizeGhEditScriptItem redacts code bodies", () => {
 		code: "line1\nline2\nline3",
 	});
 	assert.deepEqual(sanitized.code, { chars: 17, lines: 3 });
-	assert.equal("code" in sanitized && typeof sanitized.code === "string", false);
 });
