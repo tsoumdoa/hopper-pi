@@ -8,6 +8,36 @@ const emptySnapshot: HostSnapshot = {
 };
 
 describe("hopperReducer", () => {
+	it("continues a partial reply restored during reconnect or a settings refresh", () => {
+		let state = hopperReducer(initialHopperState, { type: "snapshot", snapshot: {
+			...emptySnapshot, isStreaming: true,
+			messages: [{ role: "user", content: "Check the canvas" }],
+			streamingMessage: { role: "assistant", content: [
+				{ type: "text", text: "Checking " },
+				{ type: "thinking", thinking: "Inspect the document" },
+				{ type: "toolCall", id: "tool-1", name: "gh_list_components", arguments: {} },
+			] },
+		} });
+		expect(state.session.messages[1]).toMatchObject({ text: "Checking ", thinking: "Inspect the document", streaming: true });
+		state = hopperReducer(state, { type: "agent-event", event: { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "the canvas." } } });
+		state = hopperReducer(state, { type: "agent-event", event: { type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "Checking the canvas." }] } } });
+		state = hopperReducer(state, { type: "agent-event", event: { type: "tool_execution_start", toolCallId: "tool-1", toolName: "gh_list_components", args: {} } });
+		state = hopperReducer(state, { type: "agent-event", event: { type: "tool_execution_end", toolCallId: "tool-1", result: "Found 12" } });
+		expect(state.session.messages).toHaveLength(2);
+		expect(state.session.messages[1]).toMatchObject({ text: "Checking the canvas.", streaming: false, tools: [{ id: "tool-1", status: "complete", detail: "Found 12" }] });
+	});
+
+	it("reuses calls restored just before tool execution begins", () => {
+		let state = hopperReducer(initialHopperState, { type: "snapshot", snapshot: {
+			...emptySnapshot, isStreaming: true,
+			messages: [{ role: "assistant", content: [{ type: "toolCall", id: "tool-1", name: "gh_list_components", arguments: {} }] }],
+		} });
+		expect(state.session.messages[0]?.tools[0]?.status).toBe("running");
+		state = hopperReducer(state, { type: "agent-event", event: { type: "tool_execution_start", toolCallId: "tool-1", toolName: "gh_list_components", args: {} } });
+		expect(state.session.messages).toHaveLength(1);
+		expect(state.session.messages[0]?.tools).toHaveLength(1);
+	});
+
 	it.each(["follow_up", "steer"] as const)("keeps the active reply and tool results when a %s arrives mid-turn", (kind) => {
 		let state = hopperReducer(initialHopperState, { type: "agent-event", event: { type: "message_start", message: { id: "assistant-1", role: "assistant" } } });
 		const event = (event: Record<string, unknown>) => { state = hopperReducer(state, { type: "agent-event", event }); };

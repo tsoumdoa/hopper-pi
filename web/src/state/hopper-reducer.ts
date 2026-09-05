@@ -111,7 +111,7 @@ function thinkingFromContent(content: Record<string, unknown>[]) {
 		.join("\n");
 }
 
-function toStoredMessages(messages: unknown): ConversationMessage[] {
+function toStoredMessages(messages: unknown, isStreaming = false): ConversationMessage[] {
 	if (!Array.isArray(messages)) return [];
 	const toolResults = new Map<string, { content: unknown; isError: boolean }>();
 	for (const message of messages) {
@@ -139,7 +139,7 @@ function toStoredMessages(messages: unknown): ConversationMessage[] {
 					name: String(part.name ?? part.toolName ?? "Tool call"),
 					args,
 					detail: result?.content ?? args,
-					status: result?.isError ? "error" : "complete",
+					status: result?.isError ? "error" : !result && isStreaming ? "running" : "complete",
 				};
 			});
 		return [{
@@ -167,6 +167,9 @@ function updateActiveAssistant(state: HopperState, update: (message: Conversatio
 }
 
 function startTool(state: HopperState, id: string, name: string, args: unknown) {
+	// A snapshot can contain the call before its execution-start event arrives.
+	const owner = state.session.messages.find((message) => message.tools.some((tool) => tool.id === id));
+	if (owner) state = { ...state, session: { ...state.session, activeAssistantId: owner.id } };
 	return updateActiveAssistant(state, (message) => {
 		const existing = message.tools.find((tool) => tool.id === id);
 		if (existing) {
@@ -285,15 +288,20 @@ export function hopperReducer(state: HopperState, action: HopperAction): HopperS
 		}
 		case "snapshot": {
 			const snapshot = action.snapshot;
+			const messages = toStoredMessages(snapshot.messages, snapshot.isStreaming);
+			const partial = snapshot.isStreaming
+				? toStoredMessages([snapshot.streamingMessage], true).find((message) => message.role === "assistant")
+				: undefined;
+			if (partial) messages.push({ ...partial, streaming: true });
 			return {
 				...state,
 				connection: { status: "connected", detail: CONNECTED_DETAIL, reconnectAttempt: 0 },
 				session: {
 					id: snapshot.sessionId || null,
 					name: snapshot.sessionName || DEFAULT_SESSION_NAME,
-					messages: toStoredMessages(snapshot.messages),
+					messages,
 					isStreaming: Boolean(snapshot.isStreaming),
-					activeAssistantId: null,
+					activeAssistantId: partial?.id ?? null,
 				},
 				workingMessage: snapshot.isStreaming ? state.workingMessage : null,
 				models: snapshot.models,

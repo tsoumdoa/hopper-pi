@@ -271,6 +271,9 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 					requestType: parsed.type,
 					message: error instanceof Error ? error.message : String(error),
 				});
+				if (["prompt", "steer", "follow_up"].includes(parsed.type)) {
+					send(socket, { type: "snapshot", snapshot: options.runtime.snapshot() });
+				}
 			});
 		});
 		socket.on("close", () => {

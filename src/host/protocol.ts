@@ -28,6 +28,8 @@ export type ProviderSummary = {
 };
 
 export type HostSnapshot = {
+	/** Partial response, which Pi has not yet added to messages. */
+	streamingMessage?: JsonValue;
 	sessionId: string;
 	sessionFile?: string;
 	sessionName?: string;

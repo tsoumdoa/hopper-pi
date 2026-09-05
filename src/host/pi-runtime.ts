@@ -211,6 +211,8 @@ export class EmbeddedPiHost {
 			sessionFile: session.sessionFile,
 			sessionName: session.sessionName,
 			messages: Array.isArray(messages) ? messages : [],
+			streamingMessage: session.agent.state.streamingMessage
+				? toWireValue(session.agent.state.streamingMessage) : undefined,
 			isStreaming: session.isStreaming,
 			model: session.model ? modelSummary(session.model) : undefined,
 			thinkingLevel: session.thinkingLevel,

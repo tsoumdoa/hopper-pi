@@ -99,6 +99,26 @@ function nextMessage(socket: WebSocket): Promise<ServerMessage> {
 }
 
 describe("Hopper loopback server", () => {
+	it.each([false, true])("restores actual streaming state after a rejected prompt, streaming=%s", async (isStreaming) => {
+		const runtime = fakeRuntime();
+		runtime.snapshot = () => ({ ...snapshot(), isStreaming });
+		runtime.prompt = vi.fn(async () => { throw new Error("Prompt rejected"); });
+		const server = await startHopperServer({ runtime, staticDir: await staticDirectory(), protocolHandshake, getRuntimeStatus });
+		servers.push(server);
+		const socket = await openSocket(server);
+		const initial = nextMessage(socket);
+		socket.send(JSON.stringify({ type: "authenticate", token: server.token }));
+		await initial;
+		const received: ServerMessage[] = [];
+		socket.on("message", (data) => received.push(JSON.parse(data.toString())));
+		socket.send(JSON.stringify({ type: "prompt", text: "Another prompt" }));
+		await vi.waitFor(() => expect(received).toEqual([
+			{ type: "error", requestType: "prompt", message: "Prompt rejected" },
+			{ type: "snapshot", snapshot: runtime.snapshot() },
+		]));
+		socket.close();
+	});
+
 	it("fails before listening when the web UI is missing", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "hopper-host-missing-ui-"));
 		tempDirs.push(directory);

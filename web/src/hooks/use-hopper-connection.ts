@@ -40,6 +40,7 @@ export function useHopperConnection() {
 	const reconnectTimer = useRef<number | null>(null);
 	const attempt = useRef(0);
 	const authenticated = useRef(false);
+	const reconnectBlocked = useRef(false);
 	// Mirrors state.providers so message handlers can label providers without re-subscribing.
 	const providersRef = useRef(state.providers);
 	providersRef.current = state.providers;
@@ -138,8 +139,7 @@ export function useHopperConnection() {
 				const text = message.message;
 				const requestType = message.requestType ?? "";
 				if (["login", "logout"].includes(requestType)) dispatch({ type: "auth-error", error: text });
-				// A rejected prompt never produces agent events, so undo the optimistic "working" state.
-				if (requestType === "prompt") dispatch({ type: "streaming", streaming: false });
+				// The host follows rejected messages with its authoritative session snapshot.
 				toast(text, "error");
 				break;
 			}
@@ -166,6 +166,7 @@ export function useHopperConnection() {
 	}, [toast]);
 
 	const reconnect = useCallback(() => {
+		reconnectBlocked.current = false;
 		if (reconnectTimer.current) window.clearTimeout(reconnectTimer.current);
 		reconnectTimer.current = null;
 		attempt.current = 0;
@@ -199,10 +200,12 @@ export function useHopperConnection() {
 		const current = new WebSocket(socketUrl());
 		socket.current = current;
 		current.addEventListener("open", () => {
+			if (socket.current !== current) return;
 			dispatch({ type: "connection", status: "authenticating", detail: "Confirming the Rhino session" });
 			current.send(JSON.stringify({ type: "authenticate", token }));
 		});
 		current.addEventListener("message", (event) => {
+			if (socket.current !== current) return;
 			let message: ServerMessage;
 			try {
 				message = JSON.parse(String(event.data)) as ServerMessage;
@@ -217,6 +220,14 @@ export function useHopperConnection() {
 			socket.current = null;
 			authenticated.current = false;
 			const reason = event.reason || "The local host closed the connection";
+			// A replaced tab must yield control until the user explicitly reconnects.
+			if (event.code === 4001 || event.code === 4003) {
+				reconnectBlocked.current = true;
+				dispatch({ type: "connection", status: "disconnected", detail: event.code === 4001
+					? `${reason}. Click Reconnect to use this tab.`
+					: `${reason}. Run _HopperCode in Rhino to open a fresh link.` });
+				return;
+			}
 			const delay = Math.min(1_000 * 2 ** attempt.current, 10_000);
 			attempt.current += 1;
 			dispatch({ type: "connection", status: "disconnected", detail: `${reason}. Retrying in ${Math.ceil(delay / 1000)}s…`, reconnectAttempt: attempt.current });
@@ -238,6 +249,7 @@ export function useHopperConnection() {
 
 	useEffect(() => {
 		const onOnline = () => {
+			if (reconnectBlocked.current) return;
 			if (!socket.current || socket.current.readyState !== WebSocket.OPEN) reconnect();
 		};
 		window.addEventListener("online", onOnline);
