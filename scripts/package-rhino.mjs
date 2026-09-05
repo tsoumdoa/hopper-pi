@@ -116,6 +116,7 @@ function removeDependencyDevelopmentFiles(directory) {
 		} else if (/^(?:pnpm-lock\.yaml|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock)$/i.test(entry.name)
 			|| entry.name === ".modules.yaml"
 			|| entry.name === ".pnpm-workspace-state-v1.json"
+			|| /\.(test|spec)\.[cm]?[jt]sx?$/i.test(entry.name)
 			|| entry.name.endsWith(".map")) {
 			rmSync(path, { force: true });
 		}
@@ -123,6 +124,17 @@ function removeDependencyDevelopmentFiles(directory) {
 }
 
 function pruneNativeDependencies(nodeModules, targetConfig) {
+	// Pi's Chord runtime uses esbuild's JS API, which resolves the @esbuild binary.
+	// Its install script also copies that binary into bin/ for CLI use.
+	rmSync(join(nodeModules, "esbuild", "bin"), { recursive: true, force: true });
+	const esbuildScope = join(nodeModules, "@esbuild");
+	if (existsSync(esbuildScope)) {
+		for (const packageName of readdirSync(esbuildScope)) {
+			if (packageName !== `${targetConfig.os}-${targetConfig.cpu}`) {
+				rmSync(join(esbuildScope, packageName), { recursive: true, force: true });
+			}
+		}
+	}
 	const zeromqBuild = join(nodeModules, "zeromq", "build");
 	if (existsSync(zeromqBuild)) {
 		for (const entry of readdirSync(zeromqBuild, { withFileTypes: true })) {
@@ -200,10 +212,20 @@ cpSync(join(packageRoot, "mds"), join(hostDirectory, "mds"), { recursive: true }
 for (const name of ["pnpm-lock.yaml", "pnpm-workspace.yaml", "LICENSE"]) {
 	cpSync(join(packageRoot, name), join(hostDirectory, name));
 }
+// Install the target's optional binaries as well as those needed by build-host
+// install scripts. Pruning below removes the build-host binaries from the payload.
+const stagedWorkspace = join(hostDirectory, "pnpm-workspace.yaml");
+writeFileSync(stagedWorkspace, readFileSync(stagedWorkspace, "utf8") + [
+	"\nsupportedArchitectures:",
+	`  os: [current, ${targetConfig.os}]`,
+	`  cpu: [current, ${targetConfig.cpu}]`,
+	"",
+].join("\n"));
 writeFileSync(join(hostDirectory, "package.json"), JSON.stringify({
 	name: packageJson.name,
 	version: packageJson.version,
 	private: true,
+	packageManager: packageJson.packageManager,
 	type: packageJson.type,
 	engines: { node: ">=22.19.0" },
 	dependencies: packageJson.dependencies,

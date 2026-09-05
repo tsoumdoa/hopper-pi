@@ -81,11 +81,11 @@ async function staticDirectory(): Promise<string> {
 	return directory;
 }
 
-function openSocket(server: HopperServer): Promise<WebSocket> {
+function openSocket(server: HopperServer, origin = `http://${server.host}:${server.port}`): Promise<WebSocket> {
 	return new Promise((resolve, reject) => {
 		const socket = new WebSocket(
 			`ws://${server.host}:${server.port}/ws`,
-			{ headers: { Origin: `http://${server.host}:${server.port}` } },
+			{ headers: { Origin: origin } },
 		);
 		socket.once("open", () => resolve(socket));
 		socket.once("error", reject);
@@ -99,6 +99,26 @@ function nextMessage(socket: WebSocket): Promise<ServerMessage> {
 }
 
 describe("Hopper loopback server", () => {
+	it.each([false, true])("restores actual streaming state after a rejected prompt, streaming=%s", async (isStreaming) => {
+		const runtime = fakeRuntime();
+		runtime.snapshot = () => ({ ...snapshot(), isStreaming });
+		runtime.prompt = vi.fn(async () => { throw new Error("Prompt rejected"); });
+		const server = await startHopperServer({ runtime, staticDir: await staticDirectory(), protocolHandshake, getRuntimeStatus });
+		servers.push(server);
+		const socket = await openSocket(server);
+		const initial = nextMessage(socket);
+		socket.send(JSON.stringify({ type: "authenticate", token: server.token }));
+		await initial;
+		const received: ServerMessage[] = [];
+		socket.on("message", (data) => received.push(JSON.parse(data.toString())));
+		socket.send(JSON.stringify({ type: "prompt", text: "Another prompt" }));
+		await vi.waitFor(() => expect(received).toEqual([
+			{ type: "error", requestType: "prompt", message: "Prompt rejected" },
+			{ type: "snapshot", snapshot: runtime.snapshot() },
+		]));
+		socket.close();
+	});
+
 	it("fails before listening when the web UI is missing", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "hopper-host-missing-ui-"));
 		tempDirs.push(directory);
@@ -289,6 +309,38 @@ describe("Hopper loopback server", () => {
 			socket.once("unexpected-response", (_request, response) => resolve(response.statusCode ?? 0));
 		});
 		expect(status).toBe(403);
+	});
+
+	it("rejects a WebSocket without an origin", async () => {
+		const server = await startHopperServer({
+			runtime: fakeRuntime(),
+			staticDir: await staticDirectory(),
+			protocolHandshake,
+			getRuntimeStatus,
+		});
+		servers.push(server);
+		const status = await new Promise<number>((resolve) => {
+			const socket = new WebSocket(`ws://${server.host}:${server.port}/ws`);
+			socket.once("unexpected-response", (_request, response) => resolve(response.statusCode ?? 0));
+		});
+		expect(status).toBe(403);
+	});
+
+	it("permits only its explicitly configured Vite development origin", async () => {
+		const server = await startHopperServer({
+			runtime: fakeRuntime(),
+			staticDir: await staticDirectory(),
+			token: "dev-token",
+			protocolHandshake,
+			getRuntimeStatus,
+			allowedDevOrigin: "http://localhost:5173",
+		});
+		servers.push(server);
+		const socket = await openSocket(server, "http://localhost:5173");
+		const initial = nextMessage(socket);
+		socket.send(JSON.stringify({ type: "authenticate", token: "dev-token" }));
+		await expect(initial).resolves.toEqual({ type: "snapshot", snapshot: snapshot() });
+		socket.close();
 	});
 
 	it("returns Rhino's runtime snapshot unchanged only to an authenticated request", async () => {

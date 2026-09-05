@@ -15,7 +15,21 @@ export type UiRequestMessage = {
 	secret?: boolean;
 };
 
+export type ProviderAuthMethod = {
+	type: "api_key" | "oauth";
+	label: string;
+};
+
+export type ProviderSummary = {
+	id: string;
+	name: string;
+	authenticated: boolean;
+	authMethods: ProviderAuthMethod[];
+};
+
 export type HostSnapshot = {
+	/** Partial response, which Pi has not yet added to messages. */
+	streamingMessage?: JsonValue;
 	sessionId: string;
 	sessionFile?: string;
 	sessionName?: string;
@@ -25,7 +39,7 @@ export type HostSnapshot = {
 	thinkingLevel: string;
 	availableThinkingLevels: string[];
 	models: Array<{ provider: string; id: string; name?: string }>;
-	providers: Array<{ id: string; name: string; authenticated: boolean }>;
+	providers: ProviderSummary[];
 };
 
 export type ServerMessage =

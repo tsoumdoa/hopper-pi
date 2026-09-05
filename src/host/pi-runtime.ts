@@ -18,7 +18,7 @@ import hopperChoicesExtension from "../extensions/choices/index.js";
 import { serializeAgentEvent, toWireValue } from "./event-serializer.js";
 import { HostMessageBus } from "./message-bus.js";
 import type { HostPaths } from "./config.js";
-import type { HostSnapshot, JsonValue } from "./protocol.js";
+import type { HostSnapshot } from "./protocol.js";
 import { BrowserUiContext } from "./web-ui-context.js";
 
 export type EmbeddedPiHostOptions = {
@@ -34,6 +34,16 @@ function defaultProjectRoot(): string {
 
 function modelSummary(model: { provider: string; id: string; name?: string }) {
 	return { provider: model.provider, id: model.id, name: model.name };
+}
+
+export function providerAuthMethods(auth: {
+	apiKey?: { name: string; login?: unknown };
+	oauth?: { name: string; loginLabel?: string };
+}): HostSnapshot["providers"][number]["authMethods"] {
+	return [
+		...(auth.apiKey?.login ? [{ type: "api_key" as const, label: auth.apiKey.name }] : []),
+		...(auth.oauth ? [{ type: "oauth" as const, label: auth.oauth.loginLabel ?? auth.oauth.name }] : []),
+	];
 }
 
 export function isolatedResourceLoaderOptions(
@@ -201,6 +211,8 @@ export class EmbeddedPiHost {
 			sessionFile: session.sessionFile,
 			sessionName: session.sessionName,
 			messages: Array.isArray(messages) ? messages : [],
+			streamingMessage: session.agent.state.streamingMessage
+				? toWireValue(session.agent.state.streamingMessage) : undefined,
 			isStreaming: session.isStreaming,
 			model: session.model ? modelSummary(session.model) : undefined,
 			thinkingLevel: session.thinkingLevel,
@@ -210,6 +222,7 @@ export class EmbeddedPiHost {
 				id: provider.id,
 				name: provider.name,
 				authenticated: this.runtime.services.modelRuntime.hasConfiguredAuth(provider.id),
+				authMethods: providerAuthMethods(provider.auth),
 			})),
 		};
 	}

@@ -61,6 +61,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 			staticDir: config.paths.staticDir,
 			port: config.port,
 			protocolHandshake,
+			allowedDevOrigin: config.uiDevOrigin,
 			getRuntimeStatus: (completionTimeoutMs = 8_000) => runtimeRpc.getRuntimeStatus(completionTimeoutMs),
 			onShutdownRequest: () => { void shutdown.request("normal"); },
 		});

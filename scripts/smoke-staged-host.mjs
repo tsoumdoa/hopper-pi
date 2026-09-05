@@ -23,6 +23,8 @@ const nodeExecutable = process.env.HOPPER_NODE_EXECUTABLE || process.execPath;
 const smokeSource = [
 	`await import(${JSON.stringify(pathToFileURL(hostEntry).href)});`,
 	`await import("zeromq");`,
+	`const esbuild = await import("esbuild");`,
+	`await esbuild.transform("const value: number = 1", { loader: "ts" });`,
 	`process.stdout.write(process.version);`,
 ].join("\n");
 const child = spawn(nodeExecutable, ["--input-type=module", "--eval", smokeSource], {
@@ -65,4 +67,4 @@ if (!version || version[0] < 22 || (version[0] === 22 && version[1] < 19)) {
 // Starting the HTTP host without Rhino would fabricate lifecycle health. The
 // cross-language RPC smoke covers the authenticated handshake; native release
 // verification starts this staged host through HopperCode inside Rhino.
-console.log(`[hopper-pi] Staged host modules and native ZeroMQ loaded with external Node ${nodeVersion}`);
+console.log(`[hopper-pi] Staged host modules, native ZeroMQ, and esbuild loaded with external Node ${nodeVersion}`);

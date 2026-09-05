@@ -16,6 +16,7 @@ export type HopperServerOptions = {
 	port?: number;
 	token?: string;
 	protocolHandshake: LiveProtocolHandshake;
+	allowedDevOrigin?: string;
 	getRuntimeStatus: (completionTimeoutMs?: number) => Promise<RuntimeStatus>;
 	onShutdownRequest?: () => void;
 };
@@ -221,7 +222,10 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 		const port = typeof address === "object" && address ? address.port : undefined;
 		const expectedOrigin = port ? `http://${LOOPBACK_HOST}:${port}` : "";
 		const url = new URL(request.url ?? "/", expectedOrigin || "http://localhost");
-		if (url.pathname !== "/ws" || request.headers.origin !== expectedOrigin) {
+		const suppliedOrigin = request.headers.origin;
+		const allowedOrigin = suppliedOrigin === expectedOrigin
+			|| (options.allowedDevOrigin !== undefined && suppliedOrigin === options.allowedDevOrigin);
+		if (url.pathname !== "/ws" || !allowedOrigin) {
 			socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
 			socket.destroy();
 			return;
@@ -267,6 +271,9 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 					requestType: parsed.type,
 					message: error instanceof Error ? error.message : String(error),
 				});
+				if (["prompt", "steer", "follow_up"].includes(parsed.type)) {
+					send(socket, { type: "snapshot", snapshot: options.runtime.snapshot() });
+				}
 			});
 		});
 		socket.on("close", () => {
