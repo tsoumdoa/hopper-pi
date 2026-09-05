@@ -12,13 +12,13 @@ export async function requestRuntimeStatus(token: string, request: typeof fetch 
 	return response.json() as Promise<RuntimeStatus>;
 }
 
-export function useRuntimeStatus(token: string, connected: boolean, dispatch: Dispatch<HopperAction>, mock = false) {
+export function useRuntimeStatus(token: string, connected: boolean, dispatch: Dispatch<HopperAction>) {
 	const [refreshing, setRefreshing] = useState(false);
 	const inFlight = useRef(false);
 
 	const refresh = useCallback(async () => {
 		if (!token || !connected) return;
-		if (mock) {
+		if (import.meta.env.MODE === "mock") {
 			dispatch({ type: "runtime-status", status: mockRuntimeStatus });
 			return;
 		}
@@ -33,7 +33,7 @@ export function useRuntimeStatus(token: string, connected: boolean, dispatch: Di
 			inFlight.current = false;
 			setRefreshing(false);
 		}
-	}, [connected, dispatch, mock, token]);
+	}, [connected, dispatch, token]);
 
 	useEffect(() => {
 		if (!token || !connected) return;

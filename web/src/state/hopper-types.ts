@@ -57,7 +57,7 @@ export type AuthFlow = {
 
 export type HopperState = {
 	connection: { status: ConnectionStatus; detail: string; reconnectAttempt: number };
-	session: { id: string | null; name: string; messages: ConversationMessage[]; isStreaming: boolean };
+	session: { id: string | null; name: string; messages: ConversationMessage[]; isStreaming: boolean; activeAssistantId: string | null };
 	workingMessage: string | null;
 	models: ModelSummary[];
 	providers: ProviderSummary[];

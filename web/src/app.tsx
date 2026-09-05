@@ -38,7 +38,7 @@ function StatusPill({ connectionStatus, streaming, workingMessage }: { connectio
 export function App() {
 	const { state, dispatch, token, send, prompt, login, logout, reconnect, isMockMode } = useHopperConnection();
 	const connected = state.connection.status === "connected";
-	const { refresh: refreshRuntime, refreshing } = useRuntimeStatus(token, connected, dispatch, isMockMode);
+	const { refresh: refreshRuntime, refreshing } = useRuntimeStatus(token, connected, dispatch);
 
 	const [draft, setDraft] = useState("");
 	// Explicit delivery choice made while a turn runs; null means the default for the current state.

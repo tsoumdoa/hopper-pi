@@ -38,7 +38,6 @@ export function useHopperConnection() {
 	const socket = useRef<WebSocket | null>(null);
 	const mockTransport = useRef<MockHopperTransport | null>(null);
 	const reconnectTimer = useRef<number | null>(null);
-	const intentionalClose = useRef(false);
 	const attempt = useRef(0);
 	const authenticated = useRef(false);
 	// Mirrors state.providers so message handlers can label providers without re-subscribing.
@@ -173,7 +172,6 @@ export function useHopperConnection() {
 		if (isMockMode) {
 			mockTransport.current?.close();
 		} else {
-			intentionalClose.current = true;
 			socket.current?.close(1000, "Reconnect requested");
 			socket.current = null;
 		}
@@ -196,7 +194,6 @@ export function useHopperConnection() {
 			dispatch({ type: "connection", status: "error", detail: "This page has no Hopper session token. Run _HopperCode in Rhino to open a fresh link." });
 			return;
 		}
-		intentionalClose.current = false;
 		authenticated.current = false;
 		dispatch({ type: "connection", status: "connecting", detail: "Opening the local Hopper host", reconnectAttempt: attempt.current });
 		const current = new WebSocket(socketUrl());
@@ -220,10 +217,6 @@ export function useHopperConnection() {
 			socket.current = null;
 			authenticated.current = false;
 			const reason = event.reason || "The local host closed the connection";
-			if (intentionalClose.current) {
-				dispatch({ type: "connection", status: "disconnected", detail: reason, reconnectAttempt: attempt.current });
-				return;
-			}
 			const delay = Math.min(1_000 * 2 ** attempt.current, 10_000);
 			attempt.current += 1;
 			dispatch({ type: "connection", status: "disconnected", detail: `${reason}. Retrying in ${Math.ceil(delay / 1000)}s…`, reconnectAttempt: attempt.current });
@@ -238,7 +231,6 @@ export function useHopperConnection() {
 		return () => {
 			if (reconnectTimer.current) window.clearTimeout(reconnectTimer.current);
 			reconnectTimer.current = null;
-			intentionalClose.current = true;
 			if (socket.current === current) socket.current = null;
 			current.close(1000, "Page updated");
 		};

@@ -1,7 +1,64 @@
 import { describe, expect, it } from "vitest";
 import { hopperReducer, initialHopperState } from "./hopper-reducer";
+import type { HostSnapshot } from "../../../src/host/protocol.js";
+
+const emptySnapshot: HostSnapshot = {
+	sessionId: "session-1", messages: [], isStreaming: false, thinkingLevel: "off",
+	availableThinkingLevels: ["off"], models: [], providers: [],
+};
 
 describe("hopperReducer", () => {
+	it.each(["follow_up", "steer"] as const)("keeps the active reply and tool results when a %s arrives mid-turn", (kind) => {
+		let state = hopperReducer(initialHopperState, { type: "agent-event", event: { type: "message_start", message: { id: "assistant-1", role: "assistant" } } });
+		const event = (event: Record<string, unknown>) => { state = hopperReducer(state, { type: "agent-event", event }); };
+		event({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "Checking " } });
+		event({ type: "message_update", assistantMessageEvent: { type: "toolcall_start", id: "tool-1", toolName: "gh_list_components" } });
+		state = hopperReducer(state, { type: "user-message", text: "Then check the sliders", kind });
+		event({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "the canvas." } });
+		event({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "Checking the canvas." }] } });
+		event({ type: "tool_execution_start", toolCallId: "tool-1", toolName: "gh_list_components", args: { search: "panel" } });
+		event({ type: "tool_execution_update", toolCallId: "tool-1", partialResult: "Found 1" });
+		expect(state.session.messages[0]?.tools[0]).toMatchObject({ status: "running", detail: "Found 1" });
+		event({ type: "tool_execution_end", toolCallId: "tool-1", result: "Found 12", isError: false });
+		expect(state.session.messages).toMatchObject([
+			{ id: "assistant-1", text: "Checking the canvas.", tools: [{ id: "tool-1", status: "complete", detail: "Found 12", args: { search: "panel" } }] },
+			{ role: "user", text: "Then check the sliders", kind },
+		]);
+		event({ type: "message_start", message: { id: "assistant-2", role: "assistant" } });
+		event({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "Checking the sliders." } });
+		event({ type: "agent_end" });
+		expect(state.session.messages.map(({ text }) => text)).toEqual(["Checking the canvas.", "Then check the sliders", "Checking the sliders."]);
+		expect(state.session.isStreaming).toBe(false);
+	});
+
+	it("matches tool results restored from a reconnect snapshot", () => {
+		let state = hopperReducer(initialHopperState, { type: "snapshot", snapshot: {
+			...emptySnapshot, isStreaming: true,
+			messages: [{ role: "assistant", content: [{ type: "toolCall", id: "tool-1", name: "gh_list_components", arguments: {} }] }],
+		} });
+		state = hopperReducer(state, { type: "agent-event", event: { type: "tool_execution_end", toolCallId: "tool-1", result: "Tool failed", isError: true } });
+		expect(state.session.messages).toMatchObject([{ tools: [{ id: "tool-1", status: "error", detail: "Tool failed" }] }]);
+	});
+
+	it.each([true, false])("unlocks provider controls after a missed auth result and reconnect, authenticated=%s", (authenticated) => {
+		let state = hopperReducer(initialHopperState, { type: "auth-complete" });
+		state = hopperReducer(state, { type: "auth-start", provider: "openai", notice: "Signing in…" });
+		state = hopperReducer(state, { type: "auth-notice", notice: "Open sign-in", url: "https://example.com/login", label: "Sign in" });
+		state = hopperReducer(state, { type: "connection", status: "disconnected", detail: "Closed" });
+		state = hopperReducer(state, { type: "snapshot", snapshot: {
+			...emptySnapshot,
+			providers: [{ id: "openai", name: "OpenAI", authenticated, authMethods: [{ type: "api_key", label: "API key" }] }],
+		} });
+		expect(state.auth).toEqual({ busy: false, provider: null, notice: null, error: null, completedCount: 1 });
+		expect(state.providers[0]?.authenticated).toBe(authenticated);
+	});
+
+	it("keeps an ongoing auth flow when an unrelated snapshot arrives on the same connection", () => {
+		let state = hopperReducer(initialHopperState, { type: "auth-start", provider: "openai", notice: "Signing in…" });
+		state = hopperReducer(state, { type: "snapshot", snapshot: emptySnapshot });
+		expect(state.auth).toMatchObject({ busy: true, provider: "openai", notice: "Signing in…" });
+	});
+
 	it("hydrates a session snapshot without inventing a browser-side session", () => {
 		const state = hopperReducer(initialHopperState, {
 			type: "snapshot",

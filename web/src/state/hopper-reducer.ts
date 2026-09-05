@@ -18,7 +18,7 @@ const initialAuth: AuthFlow = { busy: false, provider: null, notice: null, error
 
 export const initialHopperState: HopperState = {
 	connection: { status: "connecting", detail: "Opening the local Hopper host", reconnectAttempt: 0 },
-	session: { id: null, name: DEFAULT_SESSION_NAME, messages: [], isStreaming: false },
+	session: { id: null, name: DEFAULT_SESSION_NAME, messages: [], isStreaming: false, activeAssistantId: null },
 	workingMessage: null,
 	models: [],
 	providers: [],
@@ -154,20 +154,16 @@ function toStoredMessages(messages: unknown): ConversationMessage[] {
 	});
 }
 
-/**
- * Applies `update` to the assistant message currently receiving events. That is the
- * last message when it is an assistant message; otherwise a fresh assistant message is
- * started so events never land on a previous turn's reply.
- */
+// Follow-ups can appear after the assistant that is still receiving events.
 function updateActiveAssistant(state: HopperState, update: (message: ConversationMessage) => ConversationMessage): HopperState {
 	const messages = [...state.session.messages];
-	const last = messages.at(-1);
-	if (!last || last.role !== "assistant") {
+	let index = messages.findIndex((message) => message.id === state.session.activeAssistantId);
+	if (index === -1) {
+		index = messages.length;
 		messages.push({ id: identifier("assistant"), role: "assistant", text: "", thinking: "", streaming: true, tools: [] });
 	}
-	const index = messages.length - 1;
 	messages[index] = update(messages[index]);
-	return { ...state, session: { ...state.session, messages } };
+	return { ...state, session: { ...state.session, messages, activeAssistantId: messages[index].id } };
 }
 
 function startTool(state: HopperState, id: string, name: string, args: unknown) {
@@ -182,21 +178,31 @@ function startTool(state: HopperState, id: string, name: string, args: unknown) 
 }
 
 function finishTool(state: HopperState, id: string, detail: unknown, isError: boolean, running = false) {
-	return updateActiveAssistant(state, (message) => ({
-		...message,
-		tools: message.tools.map((tool) =>
-			tool.id === id
-				? { ...tool, detail: detail ?? tool.detail, status: running ? "running" : isError ? "error" : "complete" }
-				: tool,
-		),
-	}));
+	const status: ToolCall["status"] = running ? "running" : isError ? "error" : "complete";
+	return {
+		...state,
+		session: {
+			...state.session,
+			messages: state.session.messages.map((message) => message.tools.some((tool) => tool.id === id) ? {
+				...message,
+				tools: message.tools.map((tool) => tool.id === id
+					? { ...tool, detail: detail ?? tool.detail, status }
+					: tool),
+			} : message),
+		},
+	};
 }
 
 function settleMessages(state: HopperState, isStreaming: boolean): HopperState {
 	return {
 		...state,
 		workingMessage: isStreaming ? state.workingMessage : null,
-		session: { ...state.session, isStreaming, messages: state.session.messages.map((message) => message.streaming ? { ...message, streaming: false } : message) },
+		session: {
+			...state.session,
+			isStreaming,
+			activeAssistantId: isStreaming ? state.session.activeAssistantId : null,
+			messages: state.session.messages.map((message) => message.streaming ? { ...message, streaming: false } : message),
+		},
 	};
 }
 
@@ -226,14 +232,16 @@ function reduceAgentEvent(state: HopperState, event: Record<string, unknown>): H
 	if (type === "message_start") {
 		const message = (event.message ?? event) as Record<string, unknown>;
 		if (message.role !== "assistant") return state;
+		const id = String(message.id ?? identifier("assistant"));
 		return {
 			...state,
 			session: {
 				...state.session,
 				isStreaming: true,
+				activeAssistantId: id,
 				messages: [
 					...state.session.messages,
-					{ id: String(message.id ?? identifier("assistant")), role: "assistant", text: "", thinking: "", streaming: true, tools: [] },
+					{ id, role: "assistant", text: "", thinking: "", streaming: true, tools: [] },
 				],
 			},
 		};
@@ -269,8 +277,11 @@ export function hopperReducer(state: HopperState, action: HopperAction): HopperS
 	switch (action.type) {
 		case "connection": {
 			const connection = { status: action.status, detail: action.detail, reconnectAttempt: action.reconnectAttempt ?? state.connection.reconnectAttempt };
+			const auth = action.status === "disconnected" || action.status === "error"
+				? { ...initialAuth, completedCount: state.auth.completedCount }
+				: state.auth;
 			// A dropped socket cannot keep streaming; settle any in-flight message.
-			return action.status === "connected" ? { ...state, connection } : settleMessages({ ...state, connection }, false);
+			return action.status === "connected" ? { ...state, connection } : settleMessages({ ...state, connection, auth }, false);
 		}
 		case "snapshot": {
 			const snapshot = action.snapshot;
@@ -282,6 +293,7 @@ export function hopperReducer(state: HopperState, action: HopperAction): HopperS
 					name: snapshot.sessionName || DEFAULT_SESSION_NAME,
 					messages: toStoredMessages(snapshot.messages),
 					isStreaming: Boolean(snapshot.isStreaming),
+					activeAssistantId: null,
 				},
 				workingMessage: snapshot.isStreaming ? state.workingMessage : null,
 				models: snapshot.models,
