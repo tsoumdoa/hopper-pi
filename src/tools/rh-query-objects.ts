@@ -3,7 +3,6 @@ import { defineTool } from "@earendil-works/pi-coding-agent";
 import { withRequester } from "../infra/request-helpers.js";
 import {
 	resolveRhinoGuid,
-	resolveRhinoGuids,
 	toShortRhinoGuid,
 } from "../services/guid-shortener.js";
 import type { QueryRhinoObjectsResponse } from "../types/messages.js";

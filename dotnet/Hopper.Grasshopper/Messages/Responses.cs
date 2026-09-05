@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
@@ -41,21 +40,6 @@ namespace rhino_zmq_poc
         public long Timestamp { get; set; }
         [JsonPropertyName("code")]
         public string Code { get; set; }
-    }
-
-    internal class CommandResult
-    {
-        [JsonPropertyName("executed")]
-        public bool Executed { get; set; }
-
-        [JsonPropertyName("action")]
-        public string Action { get; set; }
-
-        [JsonPropertyName("output")]
-        public string Output { get; set; }
-
-        [JsonPropertyName("timestamp")]
-        public long Timestamp { get; set; }
     }
 
     internal class GhComponentInfo
@@ -127,27 +111,6 @@ namespace rhino_zmq_poc
         public string Text { get; set; }
     }
 
-    internal class PingResponse
-    {
-        [JsonPropertyName("type")]
-        public string Type { get; set; } = "ping.response";
-
-        [JsonPropertyName("timestamp")]
-        public long Timestamp { get; set; }
-    }
-
-    internal class AuthErrorResponse
-    {
-        [JsonPropertyName("type")]
-        public string Type { get; set; } = "auth.error";
-
-        [JsonPropertyName("timestamp")]
-        public long Timestamp { get; set; }
-
-        [JsonPropertyName("error")]
-        public string Error { get; set; }
-    }
-
     internal class GetCanvasErrorsResponse
     {
         [JsonPropertyName("type")]
@@ -161,146 +124,5 @@ namespace rhino_zmq_poc
 
         [JsonPropertyName("errors")]
         public List<CanvasError> Errors { get; set; }
-    }
-
-    internal class RunRhinoScriptResponse
-    {
-        [JsonPropertyName("type")]
-        public string Type { get; set; } = "runRhinoScript.response";
-
-        [JsonPropertyName("timestamp")]
-        public long Timestamp { get; set; }
-
-        [JsonPropertyName("ok")]
-        public bool Ok { get; set; }
-
-        [JsonPropertyName("output")]
-        public string Output { get; set; }
-
-        [JsonPropertyName("error")]
-        public string Error { get; set; }
-    }
-
-    internal class RhinoObjectInfoDto
-    {
-        [JsonPropertyName("objectId")]
-        public string ObjectId { get; set; }
-
-        [JsonPropertyName("name")]
-        public string Name { get; set; }
-
-        [JsonPropertyName("layer")]
-        public string Layer { get; set; }
-
-        [JsonPropertyName("objectType")]
-        public string ObjectType { get; set; }
-    }
-
-    internal class QueryRhinoObjectsResponse
-    {
-        [JsonPropertyName("type")]
-        public string Type { get; set; } = "queryRhinoObjects.response";
-
-        [JsonPropertyName("timestamp")]
-        public long Timestamp { get; set; }
-
-        [JsonPropertyName("objects")]
-        public List<RhinoObjectInfoDto> Objects { get; set; }
-    }
-
-    internal class RhinoPointDto
-    {
-        [JsonPropertyName("x")]
-        public double X { get; set; }
-
-        [JsonPropertyName("y")]
-        public double Y { get; set; }
-
-        [JsonPropertyName("z")]
-        public double Z { get; set; }
-    }
-
-    internal class RhinoViewMetadataDto
-    {
-        [JsonPropertyName("viewName")]
-        public string ViewName { get; set; }
-
-        [JsonPropertyName("viewportId")]
-        public string ViewportId { get; set; }
-
-        [JsonPropertyName("projection")]
-        public string Projection { get; set; }
-
-        [JsonPropertyName("cameraLocation")]
-        public RhinoPointDto CameraLocation { get; set; }
-
-        [JsonPropertyName("cameraTarget")]
-        public RhinoPointDto CameraTarget { get; set; }
-
-        [JsonPropertyName("cameraDirection")]
-        public RhinoPointDto CameraDirection { get; set; }
-
-        [JsonPropertyName("cameraUp")]
-        public RhinoPointDto CameraUp { get; set; }
-
-        [JsonPropertyName("lensLength")]
-        public double LensLength { get; set; }
-
-        [JsonPropertyName("cplaneName")]
-        public string CPlaneName { get; set; }
-
-        [JsonPropertyName("cplaneOrigin")]
-        public RhinoPointDto CPlaneOrigin { get; set; }
-
-        [JsonPropertyName("width")]
-        public int? Width { get; set; }
-
-        [JsonPropertyName("height")]
-        public int? Height { get; set; }
-    }
-
-    internal class CaptureRhinoViewResponse
-    {
-        [JsonPropertyName("type")]
-        public string Type { get; set; } = "captureRhinoView.response";
-
-        [JsonPropertyName("timestamp")]
-        public long Timestamp { get; set; }
-
-        [JsonPropertyName("ok")]
-        public bool Ok { get; set; }
-
-        [JsonPropertyName("imageBase64")]
-        public string ImageBase64 { get; set; }
-
-        [JsonPropertyName("mediaType")]
-        public string MediaType { get; set; } = "image/png";
-
-        [JsonPropertyName("error")]
-        public string Error { get; set; }
-
-        [JsonPropertyName("metadata")]
-        public RhinoViewMetadataDto Metadata { get; set; }
-    }
-
-    internal class ControlRhinoViewResponse
-    {
-        [JsonPropertyName("type")]
-        public string Type { get; set; } = "controlRhinoView.response";
-
-        [JsonPropertyName("timestamp")]
-        public long Timestamp { get; set; }
-
-        [JsonPropertyName("ok")]
-        public bool Ok { get; set; }
-
-        [JsonPropertyName("error")]
-        public string Error { get; set; }
-
-        [JsonPropertyName("message")]
-        public string Message { get; set; }
-
-        [JsonPropertyName("metadata")]
-        public RhinoViewMetadataDto Metadata { get; set; }
     }
 }

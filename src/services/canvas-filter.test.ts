@@ -1,20 +1,44 @@
-import assert from "node:assert/strict";
-import { test } from "vitest";
-import type { Component } from "../types/gh.js";
-import { expandExcludedIds } from "./canvas-filter.js";
+import { expect, it } from "vitest";
+import type { Component, Wire } from "../types/gh.js";
+import { expandExcludedIds, filterCanvasBySelection } from "./canvas-filter.js";
 
-test("expandExcludedIds cascades exclusion to nodes only connected to excluded nodes", () => {
-	const components: Record<string, Component> = {
-		a: { id: "a", type: "A", typeGuid: "g1", instanceGuid: "i1", nickName: "a", inputs: {}, outputs: {} },
-		b: { id: "b", type: "B", typeGuid: "g2", instanceGuid: "i2", nickName: "b", inputs: {}, outputs: {} },
-		c: { id: "c", type: "C", typeGuid: "g3", instanceGuid: "i3", nickName: "c", inputs: {}, outputs: {} },
+function wire(from: string, to: string): Wire {
+	return { from: `${from}.out`, to: `${to}.in`, sourceComponentGuid: from, targetPortGuid: to };
+}
+
+it.each([
+	{ name: "excludes a node connected only to excluded nodes", edges: [["a", "b"]], expected: ["a", "b"] },
+	{ name: "preserves nodes with a nonexcluded neighbor", edges: [["a", "b"], ["c", "a"]], expected: ["b"] },
+	{ name: "preserves self-connected nodes", edges: [["a", "b"], ["a", "a"]], expected: ["b"] },
+	{ name: "preserves disconnected nodes", edges: [["c", "d"]], expected: ["b"] },
+])("$name", ({ edges, expected }) => {
+	const initial = new Set(["b"]);
+	const wires = edges.map(([from, to]) => wire(from, to));
+	expect([...expandExcludedIds(wires, initial)].sort()).toEqual(expected);
+	expect([...expandExcludedIds([...wires].reverse(), initial)].sort()).toEqual(expected);
+	expect([...initial]).toEqual(["b"]);
+});
+
+it("selects nested group members, tolerates cycles, and removes external wires", () => {
+	function component(id: string, members?: string[]): Component {
+		return {
+			id, type: members ? "Group" : "Component", typeGuid: "type", instanceGuid: id.toUpperCase(),
+			nickName: id, inputs: {}, outputs: {}, members,
+		};
+	}
+	const components = {
+		outer: component("outer", ["inner", "a", "missing"]),
+		inner: component("inner", ["outer", "b"]),
+		a: component("a"),
+		b: component("b"),
+		c: component("c"),
 	};
-	const wires = [
-		{ from: "a.out", to: "b.in", sourceComponentGuid: "s1", targetPortGuid: "t1" },
-		{ from: "c.out", to: "a.in", sourceComponentGuid: "s2", targetPortGuid: "t2" },
-	];
-	const excluded = expandExcludedIds(components, wires, new Set(["b"]));
-	assert.ok(excluded.has("b"));
-	assert.ok(!excluded.has("c"));
-	assert.ok(!excluded.has("a"));
+	const internal = wire("a", "b");
+	const result = filterCanvasBySelection(
+		{ components, wires: [internal, wire("b", "c")] },
+		new Set(["outer"]),
+	);
+	expect(Object.keys(result.components).sort()).toEqual(["a", "b", "inner", "outer"]);
+	expect(result.wires).toEqual([internal]);
+	expect(Object.keys(components)).toHaveLength(5);
 });

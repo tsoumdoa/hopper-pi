@@ -1,6 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { createHybridExecute, formatDefaultResult } from "../edit-handlers.js";
+import { createHybridExecute } from "../execute-factory.js";
+import { formatDefaultResult } from "../result-formatters.js";
 import { withRequester } from "../../infra/request-helpers.js";
 import { fetchScriptParams } from "../canvas-fetch.js";
 import { formatScriptParamsResponse } from "../query-handlers.js";

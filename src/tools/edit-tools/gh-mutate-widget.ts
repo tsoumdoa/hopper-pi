@@ -1,6 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { createExecute, formatDefaultResult } from "../edit-handlers.js";
+import { createExecute } from "../execute-factory.js";
+import { formatDefaultResult } from "../result-formatters.js";
 import { resolveInstanceGuid } from "../../services/guid-shortener.js";
 import {
 	SliderSetFields,

@@ -8,7 +8,6 @@ export type CanvasFilters = {
 };
 
 export function expandExcludedIds(
-	components: Record<string, Component>,
 	wires: Wire[],
 	initialExcluded: Set<string>,
 ): Set<string> {
@@ -23,16 +22,11 @@ export function expandExcludedIds(
 	}
 
 	const excluded = new Set(initialExcluded);
-	let changed = true;
-	while (changed) {
-		changed = false;
-		for (const [id, neighbors] of adjacency) {
-			if (excluded.has(id)) continue;
-			const hasNonExcludedNeighbor = [...neighbors].some((n) => !excluded.has(n));
-			if (!hasNonExcludedNeighbor) {
-				excluded.add(id);
-				changed = true;
-			}
+	// A newly excluded node has no remaining neighbors, so it cannot cause
+	// another exclusion. One pass over this undirected graph is sufficient.
+	for (const [id, neighbors] of adjacency) {
+		if ([...neighbors].every((neighbor) => initialExcluded.has(neighbor))) {
+			excluded.add(id);
 		}
 	}
 	return excluded;
@@ -49,19 +43,11 @@ function expandSelectedIdsForGroups(
 	selectedIds: Set<string>,
 ): Set<string> {
 	const expanded = new Set(selectedIds);
-	let changed = true;
-	while (changed) {
-		changed = false;
-		for (const id of [...expanded]) {
-			const component = components[id];
-			if (component?.type !== "Group" || !component.members) continue;
-			for (const memberId of component.members) {
-				if (!expanded.has(memberId)) {
-					expanded.add(memberId);
-					changed = true;
-				}
-			}
-		}
+	// Set iteration also visits added members, including nested groups.
+	for (const id of expanded) {
+		const component = components[id];
+		if (component?.type !== "Group") continue;
+		for (const memberId of component.members ?? []) expanded.add(memberId);
 	}
 	return expanded;
 }
@@ -114,7 +100,7 @@ export function applyCanvasExclusions(parsed: ParsedGrasshopper): {
 			.filter(([, c]) => EXCLUDED_TYPE_GUIDS.includes(c.typeGuid))
 			.map(([id]) => id),
 	);
-	const excludedIds = expandExcludedIds(parsed.components, parsed.wires, initiallyExcluded);
+	const excludedIds = expandExcludedIds(parsed.wires, initiallyExcluded);
 	const components = Object.fromEntries(
 		Object.entries(parsed.components).filter(([id]) => !excludedIds.has(id)),
 	);

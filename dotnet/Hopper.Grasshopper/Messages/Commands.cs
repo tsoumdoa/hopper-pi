@@ -539,21 +539,6 @@ namespace rhino_zmq_poc
         public JsonElement Params { get; set; }
     }
 
-    internal class SubmitJobRequest
-    {
-        [JsonPropertyName("type")]
-        public string Type { get; set; }
-
-        [JsonPropertyName("token")]
-        public string Token { get; set; }
-
-        [JsonPropertyName("jobId")]
-        public string JobId { get; set; }
-
-        [JsonPropertyName("command")]
-        public GhCommand Command { get; set; }
-    }
-
     internal class BeginAgentTransactionParams
     {
         [JsonPropertyName("name")]

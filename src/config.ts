@@ -1,7 +1,6 @@
 /** Central configuration for the Pi extension. */
 
 export const ENV = {
-	GH_DEBUG: "GH_DEBUG",
 	HOPPER_CONNECTION_PROFILE: "HOPPER_CONNECTION_PROFILE",
 	HOPPER_MULTIMODAL_FALLBACK: "HOPPER_MULTIMODAL_FALLBACK",
 	/** When enabled (`1`/`true`/`yes`/`on`), start with a small Hopper core and load specialists via hopper_search_tools. Off by default (today's all-tools-active behavior). */
@@ -15,7 +14,6 @@ export const MAX_RHINO_OBJECT_IDS = 30;
 const ENV_FLAG_ON = new Set(["1", "true", "yes", "y", "on"]);
 const ENV_FLAG_OFF = new Set(["0", "false", "no", "n", "off"]);
 
-export const DEBUG = process.env[ENV.GH_DEBUG] === "1";
 export const MULTIMODAL_FALLBACK_MODEL = process.env[ENV.HOPPER_MULTIMODAL_FALLBACK]?.trim() || "";
 
 /** Parse a boolean-ish env flag; returns undefined when unset/unrecognized. */

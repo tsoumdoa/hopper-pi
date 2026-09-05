@@ -3,7 +3,6 @@ import type { TextContent } from "@earendil-works/pi-ai";
 import type { CommandAction } from "../types/commands.js";
 import { submitCommand, type SubmitResult } from "../infra/command-dispatch.js";
 import { formatDefaultResult, formatToolError } from "./result-formatters.js";
-import { RpcOutcomeUnknownError } from "../infra/runtime-rpc.js";
 
 type ProgressFn = (msg: { content: TextContent[]; details: unknown }) => void;
 
@@ -34,10 +33,6 @@ export function createExecute<P>(
 		for (const p of params.items) {
 			const actions = normalizeMapped(mapParams(p));
 
-			if (actions.length === 0) {
-				continue;
-			}
-
 			for (const mapped of actions) {
 				const summary = progressMsg?.(p) ?? `Executing ${mapped.action}...`;
 
@@ -52,12 +47,7 @@ export function createExecute<P>(
 					const job = await submitCommand(mapped.action, mapped.params);
 					results.push(formatMessage(p, job));
 				} catch (err) {
-					if (err instanceof RpcOutcomeUnknownError) {
-						results.push(formatToolError(mapped.action, err));
-						continue;
-					}
-					results.push(`${summary} → ERROR: ${err instanceof Error ? err.message : String(err)}`);
-					results.push(formatMessage(p, { jobId: `failed: ${err instanceof Error ? err.message : String(err)}` }));
+					results.push(formatToolError(mapped.action, err));
 				}
 			}
 		}

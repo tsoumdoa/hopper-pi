@@ -27,7 +27,7 @@ export async function getRuntimeStatus(): Promise<RuntimeStatus> {
 export async function probeBackend(): Promise<BackendStatus> {
 	let status: BackendStatus;
 	try {
-		await probeOnce();
+		await getRuntimeStatus();
 		status = { online: true };
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
@@ -35,10 +35,6 @@ export async function probeBackend(): Promise<BackendStatus> {
 	}
 	setCachedBackendStatus(status);
 	return status;
-}
-
-async function probeOnce(): Promise<void> {
-	await getRuntimeStatus();
 }
 
 /** Re-probe when cached offline so a transient miss does not block tools. */
