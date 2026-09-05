@@ -1,5 +1,5 @@
 import { useShallow } from "zustand/react/shallow";
-import { KeyRound, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Settings2, X } from "lucide-react";
+import { BookOpen, KeyRound, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Settings2, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useHopperStore } from "../state/hopper-store-context";
 import { useRuntimeStatus } from "../hooks/use-runtime-status";
@@ -89,6 +89,7 @@ export type SidebarProps = {
 	onMobileOpenChange(open: boolean): void;
 	onNewSession(): void;
 	onManageProvider(): void;
+	onManageSkills(): void;
 	onReconnect(): void;
 };
 
@@ -101,6 +102,7 @@ export function Sidebar({
 	onMobileOpenChange,
 	onNewSession,
 	onManageProvider,
+	onManageSkills,
 	onReconnect,
 }: SidebarProps) {
 	const state = useHopperStore(useShallow((state) => ({
@@ -134,6 +136,9 @@ export function Sidebar({
 	const panels = (
 		<>
 			<ProviderCard state={state} connected={connected} onManageProvider={onManageProvider} />
+			<Button variant="secondary" size="sm" className="justify-start" disabled={!connected} onClick={onManageSkills}>
+				<BookOpen className="size-3.5" />Skills & Markdown
+			</Button>
 			<RuntimeStatusPanel status={state.runtimeStatus} error={state.runtimeStatusError} onRefresh={onRefreshRuntime} refreshing={runtimeRefreshing} />
 			<ConnectionCard state={state} onReconnect={onReconnect} />
 		</>
@@ -190,6 +195,9 @@ export function Sidebar({
 					</Button>
 					<Button size="icon-sm" variant="ghost" disabled={!connected} onClick={onManageProvider} aria-label="Manage provider" title="Manage provider">
 						<KeyRound className="size-4" />
+					</Button>
+					<Button size="icon-sm" variant="ghost" disabled={!connected} onClick={onManageSkills} aria-label="Skills & Markdown" title="Skills & Markdown">
+						<BookOpen className="size-4" />
 					</Button>
 					<div className="mt-auto grid gap-2.5 pb-2" aria-label="Status">
 						<span title={`Rhino runtime · ${runtime.text}`} aria-label={`Rhino runtime: ${runtime.text}`} role="img" className={cn("size-1.5 rounded-full", toneClass(runtime.tone))} />

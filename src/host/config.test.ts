@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { join } from "node:path";
 import { defaultDataDirectory, defaultGlobalPiAuthPath, resolveHostConfig } from "./config.js";
 
 describe("host config", () => {
+	it("keeps Windows preferences under roaming AppData, with a home-directory fallback", () => {
+		expect(defaultDataDirectory({ platform: "win32", homeDir: "/users/test", env: { APPDATA: "/roaming" } }))
+			.toBe(join("/roaming", "hopper-pi", "host"));
+		expect(defaultDataDirectory({ platform: "win32", homeDir: "/users/test", env: {} }))
+			.toBe(join("/users/test", "AppData", "Roaming", "hopper-pi", "host"));
+	});
+
 	it("uses a private platform application directory", () => {
 		expect(defaultDataDirectory({ platform: "darwin", homeDir: "/Users/test" }))
 			.toBe("/Users/test/Library/Application Support/hopper-pi/host");

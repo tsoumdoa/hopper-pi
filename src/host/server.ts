@@ -6,7 +6,7 @@ import { URL } from "node:url";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { LOOPBACK_HOST } from "./config.js";
 import type { HostRuntime } from "./pi-runtime.js";
-import { parseClientMessage, type ClientMessage, type ServerMessage } from "./protocol.js";
+import { parseClientMessage, parseSkillLibraryUpdate, type ClientMessage, type ServerMessage } from "./protocol.js";
 import type { LiveProtocolHandshake } from "../infra/runtime-rpc.js";
 import type { RuntimeStatus } from "../protocol/v2.js";
 
@@ -152,6 +152,40 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 	const token = options.token ?? randomBytes(32).toString("base64url");
 	const httpServer = createHttpServer((request, response) => {
 		const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+		if (pathname === "/api/skills") {
+			const authorization = request.headers.authorization ?? "";
+			if (!safeEqual(authorization.startsWith("Bearer ") ? authorization.slice(7) : "", token)) {
+				writeJson(response, 403, { error: "Forbidden" });
+				return;
+			}
+			if (request.method !== "GET" && request.method !== "POST") {
+				writeJson(response, 405, { error: "Method not allowed" });
+				return;
+			}
+			void (async () => {
+				if (request.method === "POST") {
+					const chunks: Buffer[] = [];
+					let bytes = 0;
+					for await (const chunk of request) {
+						bytes += chunk.length;
+						if (bytes > 16_384) throw new Error("Skill setting is too large");
+						chunks.push(chunk);
+					}
+					const updated = await options.runtime.updateSkills(parseSkillLibraryUpdate(JSON.parse(Buffer.concat(chunks).toString("utf8"))));
+					writeJson(response, 200, updated);
+					return;
+				}
+				const file = new URL(request.url ?? "/", "http://localhost").searchParams.get("file");
+				if (request.method === "GET" && file) {
+					writeJson(response, 200, { content: options.runtime.readSkill(file) });
+				} else {
+					writeJson(response, 200, await options.runtime.listSkills());
+				}
+			})().catch((error) => writeJson(response, 400, {
+				error: error instanceof Error ? error.message : String(error),
+			}));
+			return;
+		}
 		if (pathname === "/health") {
 			// Rhino's health monitor has a two-second HTTP deadline. Leave room for
 			// response serialization after the authenticated status round trip.

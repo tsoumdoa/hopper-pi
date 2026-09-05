@@ -8,6 +8,7 @@ import { Conversation } from "./components/conversation";
 import { ModelControls } from "./components/model-picker";
 import { ProviderDialog } from "./components/provider-dialog";
 import { Sidebar } from "./components/sidebar";
+import { SkillsDialog } from "./components/skills-dialog";
 import { ToastRegion } from "./components/toasts";
 import { UiRequestDialog } from "./components/ui-request-dialog";
 import { Badge } from "./components/ui/badge";
@@ -50,6 +51,7 @@ export function App() {
 	// Explicit delivery choice made while a turn runs; null means the default for the current state.
 	const [modeOverride, setModeOverride] = useState<SendMode | null>(null);
 	const [providerOpen, setProviderOpen] = useState(false);
+	const [skillsOpen, setSkillsOpen] = useState(false);
 	const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(readCollapsed);
 	const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
@@ -151,6 +153,7 @@ export function App() {
 				onMobileOpenChange={setMobileSettingsOpen}
 				onNewSession={newSession}
 				onManageProvider={openProvider}
+				onManageSkills={() => { setMobileSettingsOpen(false); setSkillsOpen(true); }}
 				onReconnect={reconnect}
 			/>
 			<main className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -197,6 +200,7 @@ export function App() {
 					onLogout={requestLogout}
 				/>
 			)}
+			{skillsOpen && <SkillsDialog token={token} connected={connected} streaming={streaming} onOpenChange={setSkillsOpen} />}
 			<UiRequestDialog send={send} />
 			<ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
 			<ToastRegion />

@@ -1,6 +1,36 @@
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
+export type SkillSummary = {
+	id: string;
+	name: string;
+	description: string;
+	path: string;
+	source: "bundled" | "user";
+	enabled: boolean;
+	manualOnly: boolean;
+	files: string[];
+};
+
+export type SkillLibrarySnapshot = {
+	folder: string;
+	skills: SkillSummary[];
+	diagnostics: string[];
+};
+
+export type SkillLibraryUpdate =
+	| { type: "toggle"; id: string; enabled: boolean }
+	| { type: "folder"; folder: string };
+
+export function parseSkillLibraryUpdate(value: unknown): SkillLibraryUpdate {
+	if (!isRecord(value)) throw new Error("Expected a skill setting");
+	if (value.type === "folder") return { type: "folder", folder: stringField(value, "folder") };
+	if (value.type === "toggle" && typeof value.enabled === "boolean") {
+		return { type: "toggle", id: stringField(value, "id"), enabled: value.enabled };
+	}
+	throw new Error("Expected a folder or skill enable setting");
+}
+
 export type UiRequestKind = "select" | "confirm" | "input" | "editor" | "auth";
 
 export type UiRequestMessage = {

@@ -70,6 +70,9 @@ function fakeRuntime(): HostRuntime {
 		setThinkingLevel: vi.fn(),
 		login: vi.fn(async () => {}),
 		logout: vi.fn(async () => {}),
+		listSkills: vi.fn(async () => ({ folder: "/skills", skills: [], diagnostics: [] })),
+		readSkill: vi.fn(() => "# Test skill"),
+		updateSkills: vi.fn(async () => ({ folder: "/skills", skills: [], diagnostics: [] })),
 		dispose: vi.fn(async () => {}),
 	};
 }
@@ -99,6 +102,25 @@ function nextMessage(socket: WebSocket): Promise<ServerMessage> {
 }
 
 describe("Hopper loopback server", () => {
+	it("authenticates skill listing, previews and settings, and validates mutations", async () => {
+		const runtime = fakeRuntime();
+		const server = await startHopperServer({ runtime, staticDir: await staticDirectory(), token: "skills-token", protocolHandshake, getRuntimeStatus });
+		servers.push(server);
+		const endpoint = `http://${server.host}:${server.port}/api/skills`;
+		const headers = { Authorization: "Bearer skills-token", "Content-Type": "application/json" };
+		await expect(fetch(endpoint)).resolves.toMatchObject({ status: 403 });
+		await expect(fetch(endpoint, { method: "POST", body: JSON.stringify({ type: "folder", folder: "/private" }) })).resolves.toMatchObject({ status: 403 });
+		expect(runtime.listSkills).not.toHaveBeenCalled();
+		expect(runtime.updateSkills).not.toHaveBeenCalled();
+		await expect(fetch(endpoint, { headers }).then((response) => response.json())).resolves.toEqual({ folder: "/skills", skills: [], diagnostics: [] });
+		await expect(fetch(`${endpoint}?file=${encodeURIComponent("/skills/rules.md")}`, { headers }).then((response) => response.json())).resolves.toEqual({ content: "# Test skill" });
+		expect(runtime.readSkill).toHaveBeenCalledWith("/skills/rules.md");
+		await expect(fetch(endpoint, { method: "POST", headers, body: JSON.stringify({ type: "toggle", id: "rhino", enabled: false }) })).resolves.toMatchObject({ status: 200 });
+		expect(runtime.updateSkills).toHaveBeenCalledWith({ type: "toggle", id: "rhino", enabled: false });
+		await expect(fetch(endpoint, { method: "POST", headers, body: JSON.stringify({ type: "toggle", id: "rhino", enabled: "false" }) })).resolves.toMatchObject({ status: 400 });
+		await expect(fetch(endpoint, { method: "DELETE", headers })).resolves.toMatchObject({ status: 405 });
+	});
+
 	it.each([false, true])("restores actual streaming state after a rejected prompt, streaming=%s", async (isStreaming) => {
 		const runtime = fakeRuntime();
 		runtime.snapshot = () => ({ ...snapshot(), isStreaming });

@@ -18,7 +18,8 @@ import hopperChoicesExtension from "../extensions/choices/index.js";
 import { serializeAgentEvent, toWireValue } from "./event-serializer.js";
 import { HostMessageBus } from "./message-bus.js";
 import type { HostPaths } from "./config.js";
-import type { HostSnapshot } from "./protocol.js";
+import type { HostSnapshot, SkillLibrarySnapshot, SkillLibraryUpdate } from "./protocol.js";
+import { HostSkillLibrary } from "./skills.js";
 import { BrowserUiContext } from "./web-ui-context.js";
 
 export type EmbeddedPiHostOptions = {
@@ -46,9 +47,7 @@ export function providerAuthMethods(auth: {
 	];
 }
 
-export function isolatedResourceLoaderOptions(
-	projectRoot: string,
-): NonNullable<CreateAgentSessionServicesOptions["resourceLoaderOptions"]> {
+export function isolatedResourceLoaderOptions(): NonNullable<CreateAgentSessionServicesOptions["resourceLoaderOptions"]> {
 	return {
 		noExtensions: true,
 		noSkills: true,
@@ -59,10 +58,6 @@ export function isolatedResourceLoaderOptions(
 			{ name: "hopper", factory: hopperPiExtension },
 			{ name: "hopper-choices", factory: hopperChoicesExtension },
 		],
-		additionalSkillPaths: [
-			join(projectRoot, "mds", "skills"),
-			join(projectRoot, "mds", "reference"),
-		],
 	};
 }
 
@@ -71,11 +66,15 @@ export class EmbeddedPiHost {
 	readonly ui: BrowserUiContext;
 	private unsubscribe?: () => void;
 	private disposed = false;
+	private skillUpdate?: Promise<void>;
+	private promptPending = false;
+	private promptGeneration = 0;
 
 	private constructor(
 		private readonly runtime: AgentSessionRuntime,
 		bus: HostMessageBus,
 		ui: BrowserUiContext,
+		private readonly skills: HostSkillLibrary,
 		private readonly onShutdownRequest?: () => void,
 	) {
 		this.bus = bus;
@@ -93,6 +92,10 @@ export class EmbeddedPiHost {
 
 		const bus = options.bus ?? new HostMessageBus();
 		const ui = new BrowserUiContext(bus);
+		const skills = new HostSkillLibrary(
+			projectRoot, join(paths.dataDir, "skills-settings.json"), join(paths.dataDir, "skills"),
+		);
+		await skills.initialize();
 		const modelRuntime = await ModelRuntime.create({
 			authPath: paths.authPath,
 			modelsPath: join(paths.agentDir, "models.json"),
@@ -108,14 +111,17 @@ export class EmbeddedPiHost {
 				cwd,
 				agentDir: paths.agentDir,
 				modelRuntime,
-				resourceLoaderOptions: isolatedResourceLoaderOptions(projectRoot),
+				resourceLoaderOptions: isolatedResourceLoaderOptions(),
 			});
+			// Keep skill discovery live without reloading extensions or changing active tools.
+			services.resourceLoader.getSkills = () => skills.getSkills();
 			return {
 				...(await createAgentSessionFromServices({
 					services,
 					sessionManager,
 					sessionStartEvent,
 					noTools: "builtin",
+					customTools: [skills.createReadTool(cwd)],
 				})),
 				services,
 				diagnostics: services.diagnostics,
@@ -127,7 +133,7 @@ export class EmbeddedPiHost {
 			agentDir: paths.agentDir,
 			sessionManager: SessionManager.continueRecent(paths.workspaceDir, paths.sessionsDir),
 		});
-		const host = new EmbeddedPiHost(runtime, bus, ui, options.onShutdownRequest);
+		const host = new EmbeddedPiHost(runtime, bus, ui, skills, options.onShutdownRequest);
 		runtime.setRebindSession(async (session) => host.bindSession(session, true));
 		await host.bindSession(runtime.session, false);
 		return host;
@@ -136,26 +142,78 @@ export class EmbeddedPiHost {
 	async prompt(text: string): Promise<void> {
 		this.assertUsable();
 		if (!this.runtime.session.model) throw new Error("No authenticated model is selected");
-		await this.runtime.session.prompt(text, { source: "rpc" });
+		if (this.promptPending) throw new Error("Hopper is already processing a prompt");
+		this.promptPending = true;
+		const generation = this.promptGeneration;
+		try {
+			await this.refreshSkills(true);
+			this.assertUsable();
+			if (generation !== this.promptGeneration) throw new Error("Prompt cancelled before it started");
+			await this.runtime.session.prompt(this.skills.expandCommand(text), { source: "rpc" });
+		} finally { this.promptPending = false; }
+	}
+
+	async listSkills() {
+		this.assertUsable();
+		await this.refreshSkills();
+		return this.skills.snapshot();
+	}
+
+	readSkill(path: string): string {
+		this.assertUsable();
+		return this.skills.read(path, false);
+	}
+
+	async updateSkills(update: SkillLibraryUpdate): Promise<SkillLibrarySnapshot> {
+		this.assertUsable();
+		while (this.skillUpdate) await this.skillUpdate;
+		if (this.promptPending || this.runtime.session.isStreaming || this.runtime.session.isCompacting) {
+			throw new Error("Wait until Hopper finishes before changing skills.");
+		}
+		this.skillUpdate = this.skills.update(update);
+		try {
+			await this.skillUpdate;
+			this.rebuildSkillPrompt();
+			return this.skills.snapshot();
+		} finally { this.skillUpdate = undefined; }
+	}
+
+	private async refreshSkills(forPrompt = false): Promise<void> {
+		while (this.skillUpdate) await this.skillUpdate;
+		if ((!forPrompt && this.promptPending) || this.runtime.session.isStreaming || this.runtime.session.isCompacting) return;
+		this.skillUpdate = this.skills.refresh();
+		try {
+			await this.skillUpdate;
+			this.rebuildSkillPrompt();
+		} finally { this.skillUpdate = undefined; }
+	}
+
+	private rebuildSkillPrompt(): void {
+		this.runtime.session.setActiveToolsByName(this.runtime.session.getActiveToolNames());
 	}
 
 	async steer(text: string): Promise<void> {
 		this.assertUsable();
-		await this.runtime.session.steer(text);
+		while (this.skillUpdate) await this.skillUpdate;
+		await this.runtime.session.steer(this.skills.expandCommand(text));
 	}
 
 	async followUp(text: string): Promise<void> {
 		this.assertUsable();
-		await this.runtime.session.followUp(text);
+		while (this.skillUpdate) await this.skillUpdate;
+		await this.runtime.session.followUp(this.skills.expandCommand(text));
 	}
 
 	async abort(): Promise<void> {
 		this.assertUsable();
+		this.promptGeneration++;
 		await this.runtime.session.abort();
 	}
 
 	async newSession(): Promise<void> {
 		this.assertUsable();
+		this.promptGeneration++;
+		while (this.skillUpdate) await this.skillUpdate;
 		await this.runtime.newSession();
 	}
 
@@ -167,7 +225,13 @@ export class EmbeddedPiHost {
 			throw new Error(`Provider is not authenticated: ${provider}`);
 		}
 		await this.runtime.session.setModel(model, { persist: true });
+		const settings = this.runtime.services.settingsManager;
+		await settings.flush();
+		const errors = settings.drainErrors();
 		this.publishSnapshot();
+		if (errors.length) {
+			throw new Error(`Model selected, but settings could not be saved: ${errors.map(({ error }) => error.message).join("; ")}`);
+		}
 	}
 
 	setThinkingLevel(level: string): void {
@@ -234,6 +298,7 @@ export class EmbeddedPiHost {
 	async dispose(): Promise<void> {
 		if (this.disposed) return;
 		this.disposed = true;
+		if (this.skillUpdate) await this.skillUpdate.catch(() => {});
 		this.unsubscribe?.();
 		this.unsubscribe = undefined;
 		this.ui.cancelAll("Hopper host stopped");
@@ -287,6 +352,9 @@ export type HostRuntime = Pick<
 	| "setThinkingLevel"
 	| "snapshot"
 	| "steer"
+	| "listSkills"
+	| "readSkill"
+	| "updateSkills"
 > & {
 	bus: HostMessageBus;
 	ui: Pick<BrowserUiContext, "replayPending" | "respond">;
