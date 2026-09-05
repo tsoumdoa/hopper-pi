@@ -47,14 +47,14 @@ function toStoredMessages(messages: unknown, isStreaming = false): ConversationM
 	});
 }
 
-export function applySnapshot(state: HopperState, snapshot: HostSnapshot): Partial<HopperState> {
+export function applySnapshot(state: HopperState, snapshot: HostSnapshot) {
 	const messages = toStoredMessages(snapshot.messages, snapshot.isStreaming);
 	const partial = snapshot.isStreaming
 		? toStoredMessages([snapshot.streamingMessage], true).find((message) => message.role === "assistant")
 		: undefined;
 	if (partial) messages.push({ ...partial, streaming: true });
 	return {
-		connection: { status: "connected", detail: CONNECTED_DETAIL, reconnectAttempt: 0 },
+		connection: { status: "connected" as const, detail: CONNECTED_DETAIL, reconnectAttempt: 0 },
 		session: {
 			id: snapshot.sessionId || null,
 			name: snapshot.sessionName || DEFAULT_SESSION_NAME,

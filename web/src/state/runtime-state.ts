@@ -1,5 +1,5 @@
 import type { RuntimeStatus } from "../../../src/protocol/v2.js";
-import type { SetHopperState } from "./hopper-store";
+import type { SetHopperState } from "./hopper-types";
 
 export function createRuntimeActions(set: SetHopperState) {
 	return {

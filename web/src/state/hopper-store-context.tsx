@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useStore } from "zustand";
-import { createHopperStore, type HopperStore, type HopperStoreState } from "./hopper-store";
+import { createHopperStore } from "./hopper-store";
+import type { HopperStore, HopperStoreState } from "./hopper-types";
 
 const HopperStoreContext = createContext<HopperStore | null>(null);
 
@@ -15,6 +16,6 @@ export function useHopperStoreApi() {
 	return store;
 }
 
-export function useHopperStore<T>(selector: (state: HopperStoreState) => T): T {
+export function useHopperStore<T>(selector: (state: HopperStoreState) => T) {
 	return useStore(useHopperStoreApi(), selector);
 }

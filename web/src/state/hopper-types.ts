@@ -1,3 +1,5 @@
+import type { StoreApi, ExtractState } from "zustand/vanilla";
+import type { createHopperStore } from "./hopper-store";
 import type { ClientMessage, HostSnapshot, UiRequestMessage } from "../../../src/host/protocol.js";
 import type { RuntimeStatus } from "../../../src/protocol/v2.js";
 
@@ -72,3 +74,10 @@ export type HopperState = {
 	backendDetail: string;
 	auth: AuthFlow;
 };
+
+export type ConversationState = Pick<HopperState, "session" | "workingMessage">;
+export type SidebarState = Pick<HopperState, "connection" | "backendDetail" | "providers" | "selectedModel" | "runtimeStatus" | "runtimeStatusError">;
+
+export type SetHopperState = StoreApi<HopperState>["setState"];
+export type HopperStore = ReturnType<typeof createHopperStore>;
+export type HopperStoreState = ExtractState<HopperStore>;

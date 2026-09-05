@@ -1,4 +1,4 @@
-import type { SetHopperState } from "./hopper-store";
+import type { SetHopperState } from "./hopper-types";
 import { initialAuth } from "./initial-state";
 
 export function createAuthActions(set: SetHopperState) {

@@ -1,5 +1,5 @@
 import type { ServerMessage } from "../../../src/host/protocol.js";
-import type { HopperStore } from "./hopper-store";
+import type { HopperStore } from "./hopper-types";
 import { CONNECTED_DETAIL } from "./initial-state";
 import { providerLabel, safeExternalUrl } from "../lib/utils";
 

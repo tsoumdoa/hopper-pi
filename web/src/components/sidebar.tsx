@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { useHopperStore } from "../state/hopper-store-context";
 import { useRuntimeStatus } from "../hooks/use-runtime-status";
 import { cn, providerLabel } from "../lib/utils";
-import type { HopperState } from "../state/hopper-types";
+import type { SidebarState } from "../state/hopper-types";
 import { RuntimeStatusPanel, summarizeRuntimeStatus } from "./runtime-status";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -28,9 +28,7 @@ function toneClass(tone: Tone) {
 	}[tone];
 }
 
-type SidebarState = Pick<HopperState, "connection" | "backendDetail" | "providers" | "selectedModel" | "runtimeStatus" | "runtimeStatusError">;
-
-function connectionSummary(state: SidebarState): { tone: Tone; label: string; canRetry: boolean } {
+function connectionSummary(state: SidebarState) {
 	const status = state.connection.status;
 	const label = { connecting: "Connecting", authenticating: "Authenticating", connected: "Connected", disconnected: "Disconnected", error: "Connection failed" }[status];
 	const canRetry = status === "disconnected" || status === "error";

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { createHopperStore, type HopperStore } from "../state/hopper-store";
+import { createHopperStore } from "../state/hopper-store";
+import type { HopperStore } from "../state/hopper-types";
 import { HopperStoreProvider } from "../state/hopper-store-context";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";

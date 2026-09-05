@@ -1,10 +1,9 @@
-import type { ToastLevel, ToastNotice, UiRequest } from "./hopper-types";
-import type { SetHopperState } from "./hopper-store";
+import type { ToastLevel, UiRequest, SetHopperState } from "./hopper-types";
 import { identifier } from "./identifiers";
 
 const TOAST_TIMEOUTS: Record<ToastLevel, number> = { info: 6_500, success: 6_500, warning: 8_000, error: 10_000 };
 
-export function createToast(message: string, level: ToastLevel = "info", extra: { url?: string; label?: string } = {}): ToastNotice {
+export function createToast(message: string, level: ToastLevel = "info", extra: { url?: string; label?: string } = {}) {
 	return {
 		id: identifier("toast"),
 		message,

@@ -1,7 +1,5 @@
-import type { ConversationMessage, HopperState, ToolCall } from "./hopper-types";
+import type { ConversationMessage, ConversationState, ToolCall } from "./hopper-types";
 import { identifier } from "./identifiers";
-
-export type ConversationState = Pick<HopperState, "session" | "workingMessage">;
 
 export function textFromContent(content: unknown) {
 	if (typeof content === "string") return content;
@@ -13,7 +11,7 @@ export function textFromContent(content: unknown) {
 		.join("");
 }
 
-export function messageError(message: Record<string, unknown>): string | undefined {
+export function messageError(message: Record<string, unknown>) {
 	let summary: string | undefined;
 	if (typeof message.errorMessage === "string" && message.errorMessage.trim()) summary = message.errorMessage;
 	if (!summary && typeof message.error === "string" && message.error.trim()) summary = message.error;
@@ -43,7 +41,7 @@ export function thinkingFromContent(content: Record<string, unknown>[]) {
 }
 
 // Follow-ups can appear after the assistant that is still receiving events.
-function updateActiveAssistant(state: ConversationState, update: (message: ConversationMessage) => ConversationMessage): ConversationState {
+function updateActiveAssistant(state: ConversationState, update: (message: ConversationMessage) => ConversationMessage) {
 	const messages = [...state.session.messages];
 	let index = messages.findIndex((message) => message.id === state.session.activeAssistantId);
 	if (index === -1) {
@@ -89,7 +87,7 @@ function finishTool(state: ConversationState, id: string, detail: unknown, isErr
 	};
 }
 
-export function settleMessages(state: ConversationState, isStreaming: boolean): ConversationState {
+export function settleMessages(state: ConversationState, isStreaming: boolean) {
 	return {
 		...state,
 		workingMessage: isStreaming ? state.workingMessage : null,
@@ -102,7 +100,7 @@ export function settleMessages(state: ConversationState, isStreaming: boolean): 
 	};
 }
 
-function finishAssistantMessage(state: ConversationState, event: Record<string, unknown>): ConversationState {
+function finishAssistantMessage(state: ConversationState, event: Record<string, unknown>) {
 	const payload = (event.message ?? event) as Record<string, unknown>;
 	if (payload.role !== "assistant") return settleMessages(state, state.session.isStreaming);
 	const content = Array.isArray(payload.content)
@@ -121,7 +119,7 @@ function finishAssistantMessage(state: ConversationState, event: Record<string, 
 	return settleMessages(updated, updated.session.isStreaming);
 }
 
-export function reduceAgentEvent(state: ConversationState, event: Record<string, unknown>): ConversationState {
+export function reduceAgentEvent(state: ConversationState, event: Record<string, unknown>) {
 	const type = String(event.type ?? "");
 	if (["agent_start", "turn_start"].includes(type)) return { ...state, session: { ...state.session, isStreaming: true } };
 	if (["agent_end", "agent_settled"].includes(type)) return settleMessages(state, false);
@@ -137,7 +135,7 @@ export function reduceAgentEvent(state: ConversationState, event: Record<string,
 				activeAssistantId: id,
 				messages: [
 					...state.session.messages,
-					{ id, role: "assistant", text: "", thinking: "", streaming: true, tools: [] },
+					{ id, role: "assistant" as const, text: "", thinking: "", streaming: true, tools: [] },
 				],
 			},
 		};
