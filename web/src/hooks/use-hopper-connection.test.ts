@@ -152,3 +152,24 @@ describe("Hopper connection recovery", () => {
 		expect(store.getState().notifications.at(-1)?.message).toBe("Already streaming");
 	});
 });
+
+
+it.each(["prompt", "steer", "follow_up"] as const)("sends and displays images for %s", async (type) => {
+	const socket = TestSocket.instances[0];
+	const images = [{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }] as const;
+	await act(async () => {
+		socket.open(); socket.message({ type: "status", status: "authenticated" });
+		expect(connection.prompt("", type, [...images])).toBe(true);
+	});
+	expect(JSON.parse(socket.send.mock.calls.at(-1)![0])).toEqual({ type, text: "", images });
+	expect(store.getState().session.messages.at(-1)).toMatchObject({ text: "", images, kind: type });
+});
+
+it("retains image messages when restoring a host snapshot", async () => {
+	const images = [{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }] as const;
+	await act(async () => store.getState().actions.applySnapshot({
+		sessionId: "restored", messages: [{ role: "user", content: [...images] }], isStreaming: false,
+		thinkingLevel: "off", availableThinkingLevels: [], models: [], providers: [],
+	}));
+	expect(store.getState().session.messages[0]).toMatchObject({ text: "", images });
+});

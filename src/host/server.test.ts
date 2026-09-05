@@ -298,11 +298,25 @@ describe("Hopper loopback server", () => {
 		socket.send(JSON.stringify({ type: "authenticate", token: server.token }));
 		await expect(initial).resolves.toEqual({ type: "snapshot", snapshot: snapshot() });
 		socket.send(JSON.stringify({ type: "prompt", text: "make a loft" }));
-		await vi.waitFor(() => expect(runtime.prompt).toHaveBeenCalledWith("make a loft"));
+		await vi.waitFor(() => expect(runtime.prompt).toHaveBeenCalledWith("make a loft", undefined));
 
 		const event = nextMessage(socket);
 		runtime.bus.publish({ type: "ui_notification", message: "online", level: "info" });
 		await expect(event).resolves.toEqual({ type: "ui_notification", message: "online", level: "info" });
+		socket.close();
+	});
+
+	it.each(["prompt", "steer", "follow_up"] as const)("delivers image-only %s messages larger than the old socket limit", async (type) => {
+		const runtime = fakeRuntime();
+		const server = await startHopperServer({ runtime, staticDir: await staticDirectory(), token: "image-test", protocolHandshake, getRuntimeStatus });
+		servers.push(server);
+		const socket = await openSocket(server);
+		const initial = nextMessage(socket);
+		socket.send(JSON.stringify({ type: "authenticate", token: server.token }));
+		await initial;
+		const images = [{ type: "image", mimeType: "image/png", data: Buffer.alloc(1024 * 1024).toString("base64") }];
+		socket.send(JSON.stringify({ type, text: "", images }));
+		await vi.waitFor(() => expect(runtime[type === "follow_up" ? "followUp" : type]).toHaveBeenCalledWith("", images));
 		socket.close();
 	});
 
