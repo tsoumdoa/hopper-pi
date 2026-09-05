@@ -101,6 +101,9 @@ async function minimalStage(target: "mac-arm64" | "win-x64"): Promise<string> {
 		? "runtime/host/node_modules/zeromq/build/darwin/arm64/node/libc-115-Release/addon.node"
 		: "runtime/host/node_modules/zeromq/build/win32/x64/node/msvc-115-Release/addon.node";
 	await fixtureFile(stage, nativePath, target === "mac-arm64" ? macho("arm64") : pe("x64"));
+	await fixtureFile(stage, target === "mac-arm64"
+		? "runtime/host/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+		: "runtime/host/node_modules/@esbuild/win32-x64/esbuild.exe", target === "mac-arm64" ? macho("arm64") : pe("x64"));
 	return stage;
 }
 
@@ -200,6 +203,18 @@ describe("native binary classification", () => {
 });
 
 describe("Rhino package verifier", () => {
+	it.each(["mac-arm64", "win-x64"] as const)("requires the target esbuild executable for %s", async (target) => {
+		const stage = await minimalStage(target);
+		await rm(join(stage, "runtime/host/node_modules/@esbuild"), { recursive: true });
+		await expect(verifyRhinoPackage({ target, stage, quiet: true })).rejects.toThrow("target-native esbuild executable is missing");
+	});
+
+	it("rejects a build-host esbuild binary left in a Windows package", async () => {
+		const stage = await minimalStage("win-x64");
+		await fixtureFile(stage, "runtime/host/node_modules/@esbuild/darwin-arm64/bin/esbuild", macho("arm64"));
+		await expect(verifyRhinoPackage({ target: "win-x64", stage, quiet: true })).rejects.toThrow("mach-o targets darwin, expected win32");
+	});
+
 	it("enforces the documented per-target size ceilings", () => {
 		expect(validateStagedSize("mac-arm64", 93 * 1024 * 1024)).toBeNull();
 		expect(validateStagedSize("mac-arm64", 93 * 1024 * 1024 + 1)).toContain("above");
@@ -292,7 +307,7 @@ describe("Rhino package verifier", () => {
 		const stage = await minimalStage("mac-arm64");
 		const script = join(process.cwd(), "scripts", "verify-rhino-package.mjs");
 		const { stdout } = await execFileAsync(process.execPath, [script, "--target", "mac-arm64", stage]);
-		expect(stdout).toContain("Verified 9 staged files for mac-arm64");
+		expect(stdout).toContain("Verified 10 staged files for mac-arm64");
 		expect(JSON.parse(await readFile(join(stage, "rhino-package-manifest.json"), "utf8")).target)
 			.toBe("mac-arm64");
 	});

@@ -166,15 +166,20 @@ function updateActiveAssistant(state: HopperState, update: (message: Conversatio
 	return { ...state, session: { ...state.session, messages, activeAssistantId: messages[index].id } };
 }
 
-function startTool(state: HopperState, id: string, name: string, args: unknown) {
+function startTool(state: HopperState, id: string, name: string, args: unknown, executing = false) {
 	// A snapshot can contain the call before its execution-start event arrives.
 	const owner = state.session.messages.find((message) => message.tools.some((tool) => tool.id === id));
 	if (owner) state = { ...state, session: { ...state.session, activeAssistantId: owner.id } };
 	return updateActiveAssistant(state, (message) => {
 		const existing = message.tools.find((tool) => tool.id === id);
 		if (existing) {
-			if (args === undefined || existing.args !== undefined) return message;
-			return { ...message, tools: message.tools.map((tool) => tool.id === id ? { ...tool, args, detail: tool.detail ?? args } : tool) };
+			if (args === undefined || (!executing && existing.args !== undefined)) return message;
+			return { ...message, tools: message.tools.map((tool) => tool.id === id ? {
+				...tool,
+				args,
+				// Snapshot arguments may be incomplete. Keep any actual output already received.
+				detail: tool.detail === tool.args || tool.detail === undefined ? args : tool.detail,
+			} : tool) };
 		}
 		return { ...message, tools: [...message.tools, { id, name, args, detail: args, status: "running" }] };
 	});
@@ -265,7 +270,7 @@ function reduceAgentEvent(state: HopperState, event: Record<string, unknown>): H
 		return state;
 	}
 	if (type === "tool_execution_start") {
-		return startTool(state, String(event.toolCallId ?? event.id ?? identifier("tool")), String(event.toolName ?? event.name ?? "Tool call"), event.args ?? event.arguments ?? event.input);
+		return startTool(state, String(event.toolCallId ?? event.id ?? identifier("tool")), String(event.toolName ?? event.name ?? "Tool call"), event.args ?? event.arguments ?? event.input, true);
 	}
 	if (type === "tool_execution_update") {
 		return finishTool(state, String(event.toolCallId), event.partialResult, false, true);

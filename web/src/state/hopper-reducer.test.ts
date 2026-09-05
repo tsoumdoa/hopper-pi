@@ -8,6 +8,22 @@ const emptySnapshot: HostSnapshot = {
 };
 
 describe("hopperReducer", () => {
+	it.each([false, true])("replaces partial snapshot arguments with execution input, with existing output=%s", (hasOutput) => {
+		let state = hopperReducer(initialHopperState, { type: "snapshot", snapshot: {
+			...emptySnapshot, isStreaming: true,
+			streamingMessage: { role: "assistant", content: [{ type: "toolCall", id: "tool-1", name: "gh_apply_graph", arguments: {} }] },
+		} });
+		const args = { operations: [{ type: "create", name: "Panel" }] };
+		const event = (event: Record<string, unknown>) => { state = hopperReducer(state, { type: "agent-event", event }); };
+		event({ type: "message_update", assistantMessageEvent: { type: "toolcall_end", toolCall: { id: "tool-1", name: "gh_apply_graph", arguments: args } } });
+		if (hasOutput) event({ type: "tool_execution_update", toolCallId: "tool-1", partialResult: "Creating panel" });
+		event({ type: "tool_execution_start", toolCallId: "tool-1", toolName: "gh_apply_graph", args });
+		expect(state.session.messages[0]?.tools[0]).toMatchObject({ args, detail: hasOutput ? "Creating panel" : args });
+		event({ type: "tool_execution_end", toolCallId: "tool-1", result: "Created panel" });
+		expect(state.session.messages).toHaveLength(1);
+		expect(state.session.messages[0]?.tools).toEqual([{ id: "tool-1", name: "gh_apply_graph", args, detail: "Created panel", status: "complete" }]);
+	});
+
 	it("continues a partial reply restored during reconnect or a settings refresh", () => {
 		let state = hopperReducer(initialHopperState, { type: "snapshot", snapshot: {
 			...emptySnapshot, isStreaming: true,

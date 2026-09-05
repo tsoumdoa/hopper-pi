@@ -242,6 +242,8 @@ function requiredRuntimeErrors(files, target) {
 	}
 	const expected = RHINO_PACKAGE_TARGETS[target];
 	const addonPrefix = `runtime/host/node_modules/zeromq/build/${expected.os}/${expected.cpu}/`;
+	const esbuildPath = `runtime/host/node_modules/@esbuild/${expected.os}-${expected.cpu}/${expected.os === "win32" ? "esbuild.exe" : "bin/esbuild"}`;
+	if (!paths.has(esbuildPath)) errors.push(`${esbuildPath}: target-native esbuild executable is missing`);
 	if (![...paths].some((path) => path.startsWith(addonPrefix) && path.endsWith("/addon.node"))) {
 		errors.push(`${addonPrefix}**/addon.node: target-native ZeroMQ addon is missing`);
 	}
