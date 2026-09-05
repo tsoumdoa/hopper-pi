@@ -1,5 +1,6 @@
 import { resolveInstanceGuid } from "../services/guid-shortener.js";
 import type { SubmitResult } from "../infra/command-dispatch.js";
+import { RpcOutcomeUnknownError } from "../infra/runtime-rpc.js";
 
 export function formatDefaultResult<T extends { targetId?: string; action: string }>(
 	item: T,
@@ -16,11 +17,17 @@ export function defaultProgressMsg<T extends { targetId?: string; action: string
 }
 
 export function formatToolError(action: string, err: unknown): string {
+	if (err instanceof RpcOutcomeUnknownError) {
+		return `${action} outcome UNKNOWN: ${err.message}`;
+	}
 	const message = err instanceof Error ? err.message : String(err);
 	return `${action} error: ${message}`;
 }
 
 export function formatToolFailed(err: unknown): string {
+	if (err instanceof RpcOutcomeUnknownError) {
+		return `OUTCOME UNKNOWN: ${err.message}`;
+	}
 	const message = err instanceof Error ? err.message : String(err);
 	return `FAILED: ${message}`;
 }

@@ -1,27 +1,21 @@
-import { nanoid } from "nanoid";
 import { ensureBackendReachable } from "./backend-status.js";
-import { getPublisher } from "./publisher.js";
-import type { CommandAction, SubmitJobRequest } from "../types/commands.js";
-
-export function buildJobRequest(action: CommandAction, params: unknown): SubmitJobRequest {
-	const jobId = `job-${nanoid(8)}`;
-	return {
-		type: "submitJob",
-		jobId,
-		command: { action, params: params as SubmitJobRequest["command"]["params"] },
-	};
-}
+import type { CommandAction } from "../types/commands.js";
+import { classifyOperation, type JsonObject } from "../protocol/v2.js";
+import { getRuntimeRpc } from "./runtime-rpc.js";
 
 export async function submitCommand(
 	action: CommandAction,
 	params: unknown,
 ): Promise<{ jobId: string }> {
+	if (classifyOperation(action) !== "mutation") {
+		throw new Error(`Command dispatch requires a mutation operation: ${action}`);
+	}
 	await ensureBackendReachable();
-	const request = buildJobRequest(action, params);
-	const publisher = getPublisher();
-	await publisher.connect();
-	await publisher.publishCommand(request);
-	return { jobId: request.jobId };
+	const response = await getRuntimeRpc().invoke(
+		action,
+		params as JsonObject,
+	);
+	return { jobId: response.operationId! };
 }
 
 export type SubmitResult = { jobId: string };

@@ -1,0 +1,927 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Critical review of the self-host-pi-rhino pull request: package contents, process lifecycle, thread model, Grasshopper readiness, queueing, and code structure.">
+  <title>Review: self-hosted Hopper for Rhino</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #37352f;
+      --muted: #787774;
+      --faint: #9b9a97;
+      --line: #e9e9e7;
+      --wash: #f7f7f5;
+      --wash-2: #f1f1ef;
+
+      --red: #d44c47;
+      --red-bg: #fbe4e4;
+      --orange: #d9730d;
+      --orange-bg: #faebdd;
+      --green: #448361;
+      --green-bg: #edf3ec;
+      --blue: #337ea9;
+      --blue-bg: #e7f3f8;
+      --purple: #9065b0;
+      --purple-bg: #f6f3f9;
+      --code-red: #eb5757;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #fff;
+      font: 16px/1.65 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    ::selection { background: rgba(35, 131, 226, 0.18); }
+
+    a { color: inherit; text-decoration: underline; text-decoration-color: rgba(55, 53, 47, 0.25); text-underline-offset: 3px; }
+    a:hover { text-decoration-color: var(--ink); }
+
+    code {
+      font-family: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 0.86em;
+      padding: 0.15em 0.35em;
+      border-radius: 3px;
+      background: rgba(135, 131, 120, 0.15);
+      color: var(--code-red);
+    }
+
+    .page {
+      width: min(860px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 104px 0 128px;
+    }
+
+    /* ---------- typography ---------- */
+
+    h1, h2, h3, p { margin-top: 0; }
+
+    h1 {
+      margin-bottom: 24px;
+      font-size: clamp(40px, 6vw, 58px);
+      line-height: 1.06;
+      letter-spacing: -0.028em;
+      font-weight: 700;
+    }
+
+    h2 {
+      margin-bottom: 14px;
+      font-size: clamp(26px, 3.4vw, 33px);
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      font-weight: 700;
+    }
+
+    h3 {
+      margin-bottom: 8px;
+      font-size: 17px;
+      line-height: 1.35;
+      font-weight: 600;
+    }
+
+    .group-title { margin: 44px 0 16px; }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: var(--red);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    /* ---------- header ---------- */
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 88px;
+      color: var(--faint);
+      font-size: 13px;
+    }
+
+    .brand { color: var(--ink); font-weight: 600; }
+
+    .lede { max-width: 700px; margin-bottom: 32px; color: var(--muted); font-size: 19px; line-height: 1.6; }
+
+    /* ---------- verdict + callouts ---------- */
+
+    .verdict, .callout {
+      padding: 18px 20px;
+      border-radius: 6px;
+      background: var(--wash);
+      font-size: 15px;
+    }
+
+    .verdict { background: var(--red-bg); }
+    .verdict p { margin: 0; }
+    .verdict strong { color: var(--red); font-weight: 600; }
+    .verdict strong::after { content: " — "; font-weight: 400; }
+
+    .callout { margin: 24px 0; max-width: 760px; }
+    .callout p:last-child { margin-bottom: 0; }
+    .callout.red { background: var(--red-bg); }
+    .callout.red strong { color: var(--red); }
+    .callout.green { background: var(--green-bg); }
+    .callout.green strong { color: var(--green); }
+    .callout:not(.red):not(.green) strong { color: var(--orange); }
+    .callout strong { font-weight: 600; }
+
+    /* ---------- toc ---------- */
+
+    .toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 20px;
+      margin: 56px 0 104px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .toc a { color: var(--muted); text-decoration: none; font-size: 14px; }
+    .toc a:hover { color: var(--ink); }
+
+    /* ---------- sections ---------- */
+
+    section { margin: 0 0 112px; scroll-margin-top: 24px; }
+    .section-copy { max-width: 700px; color: var(--muted); font-size: 16.5px; margin-bottom: 32px; }
+
+    section > p, section > ul, section > ol { max-width: 760px; }
+
+    /* ---------- grids + cards ---------- */
+
+    .grid { display: grid; gap: 12px; }
+    .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+    .card {
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+    }
+
+    .card p:last-child, .card ul:last-child, .card ol:last-child { margin-bottom: 0; }
+
+    .metric { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+    .metric-label { margin-top: 8px; color: var(--muted); font-size: 13px; }
+
+    .good h3 { color: var(--green); }
+    .warn h3 { color: var(--orange); }
+    .bad h3 { color: var(--red); }
+
+    /* ---------- bars ---------- */
+
+    .bars { display: grid; gap: 12px; margin: 32px 0 8px; max-width: 640px; }
+    .bar-row { display: grid; grid-template-columns: 110px 1fr 64px; gap: 14px; align-items: center; font-size: 14px; }
+    .track { height: 8px; overflow: hidden; border-radius: 4px; background: var(--wash-2); }
+    .fill { height: 100%; min-width: 3px; border-radius: inherit; background: var(--blue); }
+    .fill.amber { background: var(--orange); }
+    .fill.gray { background: var(--faint); }
+    .bar-row strong { text-align: right; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+    /* ---------- tables ---------- */
+
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; margin: 28px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 11px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: 13px; font-weight: 600; }
+    tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: var(--wash); }
+
+    /* ---------- pills ---------- */
+
+    .pill {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .pill.high { color: var(--red); background: var(--red-bg); }
+    .pill.medium { color: var(--orange); background: var(--orange-bg); }
+    .pill.good { color: var(--green); background: var(--green-bg); }
+
+    .code-ref { white-space: nowrap; font-size: 13px; }
+
+    /* ---------- flow diagrams ---------- */
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 20px;
+      align-items: stretch;
+      margin: 32px 0;
+    }
+
+    .node {
+      position: relative;
+      display: grid;
+      align-content: center;
+      min-height: 88px;
+      padding: 12px;
+      border-radius: 6px;
+      background: var(--wash);
+      text-align: center;
+      font-size: 13.5px;
+    }
+
+    .node:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      top: 50%;
+      right: -16px;
+      transform: translateY(-54%);
+      color: var(--faint);
+      font-size: 13px;
+    }
+
+    .node small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+    .node.rhino { background: var(--green-bg); }
+    .node.worker { background: var(--purple-bg); }
+    .node.nodejs { background: var(--blue-bg); }
+    .node.risk { background: var(--red-bg); }
+
+    /* ---------- states ---------- */
+
+    .state-line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 28px 0; }
+    .state { padding: 4px 9px; border-radius: 3px; background: var(--wash-2); font: 500 13px/1.4 "SFMono-Regular", Menlo, Consolas, monospace; }
+    .arrow { color: var(--faint); }
+    .state.ready { color: var(--green); background: var(--green-bg); }
+    .state.wait { color: var(--orange); background: var(--orange-bg); }
+
+    /* ---------- lists ---------- */
+
+    ul, ol { padding-left: 24px; }
+    li + li { margin-top: 8px; }
+    li::marker { color: var(--faint); }
+
+    /* ---------- code / tree blocks ---------- */
+
+    .tree {
+      padding: 18px 20px;
+      overflow-x: auto;
+      border-radius: 6px;
+      background: var(--wash);
+      font: 12.5px/1.75 "SFMono-Regular", Menlo, Consolas, monospace;
+      white-space: pre;
+    }
+
+    /* ---------- toggles ---------- */
+
+    details { border-top: 1px solid var(--line); }
+    details:last-child { border-bottom: 1px solid var(--line); }
+    summary { padding: 13px 2px; cursor: pointer; font-weight: 500; font-size: 15px; list-style: none; }
+    summary::before { content: "▸"; display: inline-block; margin-right: 8px; color: var(--faint); font-size: 12px; transition: transform 0.12s ease; }
+    details[open] summary::before { transform: rotate(90deg); }
+    details > div { padding: 0 2px 18px; color: var(--muted); font-size: 15px; }
+
+    .footnote { margin-top: 32px; color: var(--faint); font-size: 13px; }
+    .footnote a { text-decoration: none; }
+    .footnote a:hover { text-decoration: underline; }
+
+    footer { padding-top: 24px; border-top: 1px solid var(--line); color: var(--faint); font-size: 13px; }
+
+    @media (max-width: 820px) {
+      .page { width: min(100% - 40px, 860px); padding-top: 64px; }
+      .topbar { margin-bottom: 56px; }
+      section { margin-bottom: 80px; }
+      .toc { margin-bottom: 72px; }
+      .grid.two, .grid.three, .grid.four { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr; gap: 8px; }
+      .node { min-height: 0; text-align: left; }
+      .node:not(:last-child)::after { content: "↓"; top: auto; right: 14px; bottom: -1px; transform: none; }
+    }
+
+    @media print {
+      body { background: white; }
+      .page { width: 100%; padding: 0; }
+      .toc { display: none; }
+      section { break-inside: avoid; margin-bottom: 48px; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="topbar">
+      <div class="brand">Hopper engineering review</div>
+      <div class="commit"><code>origin/main…1aea278</code> · reviewed 2026-09-02</div>
+    </div>
+
+    <header>
+      <p class="eyebrow">Pull request review</p>
+      <h1>Good boundary. Weak readiness and ordering.</h1>
+      <p class="lede">The PR makes Rhino own a private Node host and removes the need for a Grasshopper component. That is a sensible direction. It is not yet a dependable runtime: &quot;host ready&quot; does not mean Grasshopper is ready, mutation completion is not observed, and the two paths into Rhino's main thread are not ordered together.</p>
+      <aside class="verdict">
+        <p><strong>Recommendation</strong> Do not merge as production-ready. Merge behind an experimental flag, or fix readiness, completion semantics, and main-thread scheduling first.</p>
+      </aside>
+    </header>
+
+    <nav class="toc" aria-label="Report sections">
+      <a href="#summary">Summary</a>
+      <a href="#bundle">Bundle</a>
+      <a href="#lifecycle">Lifecycle</a>
+      <a href="#threads">Threads</a>
+      <a href="#grasshopper">Grasshopper readiness</a>
+      <a href="#queue">Queue design</a>
+      <a href="#structure">Code structure</a>
+      <a href="#findings">Findings</a>
+      <a href="#plan">Proposed plan</a>
+      <a href="#verification">Verification</a>
+    </nav>
+
+    <section id="summary">
+      <p class="eyebrow">Short answer</p>
+      <h2>What the PR actually does</h2>
+      <div class="grid four">
+        <article class="card good">
+          <h3>Rhino owns the session</h3>
+          <p><code>Hopper.Rhino.rhp</code> starts the ZMQ bridge, launches one child Node process, opens the browser, and stops both when Rhino closes.</p>
+        </article>
+        <article class="card warn">
+          <h3>Node is private, but large</h3>
+          <p>The Yak carries an embedded Pi runtime, provider SDKs, web UI, native ZeroMQ modules, and two full Node executables.</p>
+        </article>
+        <article class="card bad">
+          <h3>Ready means too little</h3>
+          <p>The ready line proves only that the Node HTTP server started. It says nothing about Grasshopper, an active GH document, or ZMQ command capability.</p>
+        </article>
+        <article class="card bad">
+          <h3>Async transport, incomplete protocol</h3>
+          <p>Mutations are queued, but the caller receives success after send, not after execution. Queries can overtake queued changes.</p>
+        </article>
+      </div>
+
+      <div class="callout green">
+        <p><strong>What is solid.</strong> Loopback binding, per-launch browser tokens, origin checks, PID validation, instance-specific connection profiles, pinned Pi versions, checked Node downloads, and parent-process monitoring are all good decisions. The process boundary also protects Rhino from most Node and model-runtime work.</p>
+      </div>
+    </section>
+
+    <section id="bundle">
+      <p class="eyebrow">Question 1</p>
+      <h2>What ships as the Rhino plug-in?</h2>
+      <p class="section-copy">This is not just an <code>.rhp</code>. The staged macOS package measured 393 MB unpacked and the generated Yak measured 113 MB. These numbers come from the branch's existing <code>artifacts/hopper-pi-0.1.90-mac</code> output on an arm64 Mac.</p>
+
+      <div class="grid four">
+        <article class="card"><div class="metric">393 MB</div><div class="metric-label">staged package, unpacked</div></article>
+        <article class="card"><div class="metric">113 MB</div><div class="metric-label">compressed Yak archive</div></article>
+        <article class="card"><div class="metric">218 MB</div><div class="metric-label">two Node executables</div></article>
+        <article class="card"><div class="metric">171 MB</div><div class="metric-label">host plus production dependencies</div></article>
+      </div>
+
+      <div class="bars" aria-label="Package size breakdown">
+        <div class="bar-row"><span>Node x64</span><div class="track"><div class="fill" style="width:28%"></div></div><strong>110 MB</strong></div>
+        <div class="bar-row"><span>Node arm64</span><div class="track"><div class="fill" style="width:27.5%"></div></div><strong>108 MB</strong></div>
+        <div class="bar-row"><span>Node host</span><div class="track"><div class="fill amber" style="width:43.5%"></div></div><strong>171 MB</strong></div>
+        <div class="bar-row"><span>.NET payload</span><div class="track"><div class="fill gray" style="width:1%"></div></div><strong>~4 MB</strong></div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Payload</th><th>What is inside</th><th>Assessment</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Rhino shell</td>
+              <td><code>Hopper.Rhino.rhp</code>, command classes, process manager, browser launcher</td>
+              <td>Small and appropriate.</td>
+            </tr>
+            <tr>
+              <td>Shared .NET backend</td>
+              <td><code>Hopper.Backend.dll</code>, NetMQ, Rhino and GH operations, ZMQ service, job queue</td>
+              <td>Reasonable in size. Ownership and folder layout need work.</td>
+            </tr>
+            <tr>
+              <td>Compatibility GHA</td>
+              <td><code>rhino-zmq-poc.gha</code>, a thin legacy component that references the shared backend</td>
+              <td>Keep only if old GH definitions must continue to load.</td>
+            </tr>
+            <tr>
+              <td>Node runtimes</td>
+              <td>Node 22.22.3 for both x64 and arm64 in each platform package</td>
+              <td>Intentional compatibility, but the largest avoidable cost on any one machine.</td>
+            </tr>
+            <tr>
+              <td>Embedded host</td>
+              <td>Compiled Hopper extension, Pi runtime, provider SDKs, browser server, WebSocket server, web assets, skills and references</td>
+              <td>Core product payload. It needs a release-specific build rather than a copied development tree.</td>
+            </tr>
+            <tr>
+              <td>Production dependencies</td>
+              <td>Full hoisted <code>node_modules</code>, including Pi packages and every bundled ZeroMQ native target</td>
+              <td>The biggest cleanup opportunity after splitting architectures.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="group-title">Confirmed bloat</h3>
+      <ul>
+        <li><strong>Two Node binaries per package.</strong> Only one runs after installation. Publishing architecture-specific artifacts would save about 108 to 110 MB unpacked.</li>
+        <li><strong>All ZeroMQ native builds.</strong> The macOS package contains Linux, Windows, x64, arm64, and ia32 add-ons. The <code>zeromq</code> package is about 20 MB; roughly 15 MB is for non-macOS targets.</li>
+        <li><strong>Development output in the runtime.</strong> The build copies all of <code>dist</code>. It contains 146 source maps and 52 compiled test files or test maps. It also retains <code>dist/services/rhino-visual-consent.js</code> even though the source file no longer exists, because the build never cleans <code>dist</code>.</li>
+        <li><strong>Unreachable application modules.</strong> A conservative import walk found 38 compiled JavaScript files not reachable from <code>dist/host/index.js</code>. Static web assets are included in that number and are valid, but tests, the dump script, stale output, and the unused subscriber are not.</li>
+        <li><strong>Runtime-irrelevant files.</strong> The staged host includes the pnpm lockfile, workspace file, and the Grasshopper installer script. <code>package.json</code> is useful for ESM and dependency resolution; the others are not needed to run.</li>
+        <li><strong>Unused direct dependency.</strong> Hopper imports no <code>chalk</code> source directly. Removing it as a direct dependency will not remove the package because Pi also depends on it, but the manifest should still tell the truth.</li>
+      </ul>
+
+      <div class="callout">
+        <p><strong>Suggested package target.</strong> First split packages by OS and CPU, clean <code>dist</code>, exclude tests and maps, and prune native add-ons to the target. Those changes are low risk. Bundling or trimming the Pi dependency tree comes later because dynamic imports and native modules make aggressive tree-shaking easy to get wrong.</p>
+      </div>
+
+      <p class="footnote">Packaging references: <a class="code-ref" href="../scripts/package-rhino.mjs"><code>scripts/package-rhino.mjs:165–213</code></a>, <a class="code-ref" href="../tsconfig.json"><code>tsconfig.json</code></a>, <a class="code-ref" href="../package.json"><code>package.json</code></a>.</p>
+    </section>
+
+    <section id="lifecycle">
+      <p class="eyebrow">Question 2</p>
+      <h2>Who owns each server?</h2>
+      <p class="section-copy">There are two servers and one client host. The names make this harder to see than it should be.</p>
+
+      <div class="flow" aria-label="Current startup flow">
+        <div class="node rhino"><strong><code>_Hopper</code></strong><small>Rhino command on UI thread</small></div>
+        <div class="node rhino"><strong>ZMQ bridge</strong><small>starts inside Rhino</small></div>
+        <div class="node worker"><strong>Worker loops</strong><small>PULL, REP, jobs</small></div>
+        <div class="node nodejs"><strong>Node child</strong><small>embedded Pi runtime</small></div>
+        <div class="node nodejs"><strong>HTTP + WS</strong><small>loopback, random port</small></div>
+        <div class="node nodejs"><strong>Ready line</strong><small>stdout URL + PID</small></div>
+        <div class="node"><strong>Browser</strong><small>single controller tab</small></div>
+      </div>
+
+      <div class="grid three">
+        <article class="card">
+          <h3>Node process lifecycle</h3>
+          <p><code>HopperHostManager</code> starts one child for each backend instance. It waits up to 60 seconds for a validated JSON ready line, probes <code>/health</code> every 5 seconds, and opens the browser.</p>
+        </article>
+        <article class="card">
+          <h3>Node-side servers</h3>
+          <p>One Node process owns the HTTP static server and WebSocket server. It accepts one authenticated controller tab. A new tab replaces the old one.</p>
+        </article>
+        <article class="card">
+          <h3>ZMQ server lifecycle</h3>
+          <p><code>HopperBackendRuntime.Shared</code> owns PUB, PULL, and REP sockets inside Rhino. The new RHP and the legacy GHA share this singleton.</p>
+        </article>
+      </div>
+
+      <h3 class="group-title">Startup</h3>
+      <ol>
+        <li><code>_Hopper</code> calls <code>StartBackend()</code> synchronously on Rhino's UI thread.</li>
+        <li>The backend binds ZMQ endpoints, writes an instance profile, starts three worker tasks, subscribes to Rhino closing, and begins tracking the active GH document.</li>
+        <li>The RHP launches the bundled Node executable with the exact connection-profile path and Rhino PID.</li>
+        <li>Node creates the Pi session, starts HTTP and WebSocket servers, then prints a tokenized URL to stdout.</li>
+        <li>A .NET process-output callback validates the PID and URL, starts health polling, and opens the browser.</li>
+      </ol>
+
+      <h3 class="group-title">Shutdown</h3>
+      <ol>
+        <li>Rhino's closing event disposes the host manager, then stops the backend. The backend also has its own closing subscription, so stopping is idempotent but duplicated.</li>
+        <li>The host manager performs a synchronous authenticated HTTP shutdown call, waits up to 6 seconds, kills the process tree if needed, then waits again.</li>
+        <li>Node first closes browser connections and the HTTP server, then disposes the Pi runtime. A 5-second force-exit timer is the last guard.</li>
+        <li>The Node child also polls its parent PID every 2 seconds, so it shuts itself down if Rhino vanishes without a clean closing event.</li>
+      </ol>
+
+      <div class="callout red">
+        <p><strong>Main-thread shutdown can stall Rhino.</strong> <code>HopperRhinoPlugin.OnRhinoClosing</code> runs in Rhino, while <code>HopperHostManager.Dispose()</code> performs synchronous HTTP and process waits. ZMQ and job disposal then use more synchronous waits. The configured bounds can add up to roughly 16 seconds in the worst path. Closing should signal cancellation immediately and move waits off the UI thread, with a short final kill fallback.</p>
+      </div>
+
+      <div class="callout">
+        <p><strong>No automatic recovery.</strong> A failed health check only sets <code>Healthy = false</code>. It does not change the host state, restart the child, or use retry backoff. An unexpected process exit requires the user to run <code>_Hopper</code> again.</p>
+      </div>
+
+      <div class="callout">
+        <p><strong>Persistent state has no retention policy.</strong> The runtime keys session and workspace folders by Rhino PID plus a fresh backend GUID. This isolates concurrent Rhino processes, but a Rhino restart does not continue the prior session and old instance folders remain on disk. Crashes can also leave instance connection profiles behind. Add an explicit continuity policy and clean stale instance data by age and verified-dead PID.</p>
+      </div>
+
+      <p class="footnote">Lifecycle references: <a class="code-ref" href="../grasshopper-plugin/Hopper.Rhino/HopperHostManager.cs"><code>HopperHostManager.cs:75–304, 462–518</code></a>, <a class="code-ref" href="../src/host/index.ts"><code>src/host/index.ts:15–57</code></a>, <a class="code-ref" href="../src/host/lifecycle.ts"><code>src/host/lifecycle.ts:15–29</code></a>.</p>
+    </section>
+
+    <section id="threads">
+      <p class="eyebrow">Thread model</p>
+      <h2>No, it does not all run on main</h2>
+      <p class="section-copy">The process and thread split is mostly appropriate. Rhino and Grasshopper object access must stay on Rhino's main thread. Networking, model calls, browser traffic, health checks, and waiting should not.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Execution context</th><th>Current work</th><th>Assessment</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Rhino UI thread</td>
+              <td><code>_Hopper</code>, backend startup, initial socket creation and bind, all Rhino/GH operations, canvas serialization, some shutdown waits</td>
+              <td>Object operations belong here. Network construction, long batches, and process waits do not.</td>
+            </tr>
+            <tr>
+              <td>.NET worker task 1</td>
+              <td>PULL command receive loop and PUB queue draining</td>
+              <td>Correct idea. Socket ownership should be explicit and single-threaded.</td>
+            </tr>
+            <tr>
+              <td>.NET worker task 2</td>
+              <td>REP synchronous request loop</td>
+              <td>Correct idea, but it independently posts work to main, so it races the job path.</td>
+            </tr>
+            <tr>
+              <td>.NET worker task 3</td>
+              <td>Waits for jobs, drains the entire queue, posts one batch to the UI thread, then blocks for completion</td>
+              <td>The worker may block. The unbounded single UI batch is the problem.</td>
+            </tr>
+            <tr>
+              <td>.NET thread pool callbacks</td>
+              <td>Process stdout/stderr/exit, readiness timeout, health timer and HTTP continuation</td>
+              <td>Fine. State locking is present.</td>
+            </tr>
+            <tr>
+              <td>Node process event loop</td>
+              <td>HTTP, WebSocket dispatch, Pi session coordination, async ZMQ clients</td>
+              <td>Separate from Rhino and non-blocking for normal I/O. CPU-heavy JavaScript would still block this event loop.</td>
+            </tr>
+            <tr>
+              <td>Browser process</td>
+              <td>UI rendering and user input</td>
+              <td>Fully isolated from Rhino.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout red">
+        <p><strong>NetMQ thread ownership is risky.</strong> The sockets are constructed and bound on the Rhino UI thread, used by worker tasks, and disposed again from the shutdown thread while receive loops may still be active. NetMQ sockets should have one owner thread. A <code>NetMQPoller</code> plus <code>NetMQQueue</code>, or a dedicated transport thread that creates, binds, polls, and disposes every socket, would remove this ambiguity.</p>
+      </div>
+
+      <p class="footnote">Thread references: <a class="code-ref" href="../grasshopper-plugin/services/ZMqService.cs"><code>ZMqService.cs:84–159, 205–311, 400–491</code></a>, <a class="code-ref" href="../grasshopper-plugin/JobQueue.cs"><code>JobQueue.cs:58–151</code></a>, <a class="code-ref" href="../grasshopper-plugin/Utilities.cs"><code>Utilities.cs:111–182</code></a>.</p>
+    </section>
+
+    <section id="grasshopper">
+      <p class="eyebrow">Question 3</p>
+      <h2>Grasshopper is not guaranteed to be running</h2>
+      <p class="section-copy">The concern is correct. <code>_Hopper</code> starts the bridge and Node host without loading Grasshopper or waiting for a canvas document. A backend ping succeeds because ping never touches the GH document. The browser can therefore show &quot;Ready&quot; while every <code>gh_*</code> tool is about to fail.</p>
+
+      <div class="grid two">
+        <article class="card bad">
+          <h3>Current meaning of ready</h3>
+          <ul>
+            <li>Node created a Pi session.</li>
+            <li>HTTP and WebSocket servers bound a loopback port.</li>
+            <li>The stdout ready message had the expected PID and a valid tokenized URL.</li>
+          </ul>
+          <p>It does not prove ZMQ health, Grasshopper load state, an active canvas, or an active document.</p>
+        </article>
+        <article class="card good">
+          <h3>What ready should mean</h3>
+          <ul>
+            <li>Rhino bridge accepts authenticated requests.</li>
+            <li>Grasshopper's plug-in and component server are loaded.</li>
+            <li>An active GH document exists for GH-scoped work.</li>
+            <li>The dispatcher can accept a bounded work item.</li>
+          </ul>
+          <p>Rhino-only tools may become ready earlier. Report capabilities separately.</p>
+        </article>
+      </div>
+
+      <div class="state-line" aria-label="Proposed readiness states">
+        <span class="state">host_starting</span><span class="arrow">→</span>
+        <span class="state">bridge_ready</span><span class="arrow">→</span>
+        <span class="state wait">grasshopper_loading</span><span class="arrow">→</span>
+        <span class="state wait">awaiting_document</span><span class="arrow">→</span>
+        <span class="state ready">gh_ready</span>
+      </div>
+
+      <h3 class="group-title">Better startup contract</h3>
+      <ol>
+        <li>Run <code>_Hopper</code> on Rhino's command thread as today.</li>
+        <li>On that thread, ask Rhino to load the Grasshopper plug-in through its plug-in API or the supported Grasshopper command. Do this once. Do not poll blindly from Node.</li>
+        <li>Have the bridge expose a typed <code>getRuntimeStatus</code> request with separate fields for Rhino, ZMQ, Grasshopper, active document, queue depth, and shutting down state.</li>
+        <li>If Grasshopper is loaded but has no document, keep the host alive and mark only GH tools unavailable. Ask the user to open or create a document. Do not silently create one unless that product behavior is explicit.</li>
+        <li>Signal readiness changes from GH document or canvas lifecycle events. Use a slow idle fallback only where Rhino/Grasshopper offers no reliable event.</li>
+        <li>Disable or guard <code>gh_*</code> tools until <code>gh_ready</code>. Keep <code>rh_*</code> tools available when the Rhino document is valid.</li>
+      </ol>
+
+      <div class="callout">
+        <p><strong>Do not make startup wait forever for a document.</strong> Loading Grasshopper is a startup responsibility. Choosing or creating a GH document is user state. Model those as separate conditions, show them in the browser, and let queued GH work expire with a clear <code>NO_ACTIVE_GRASSHOPPER_DOCUMENT</code> result.</p>
+      </div>
+
+      <p class="footnote">Readiness references: <a class="code-ref" href="../grasshopper-plugin/Hopper.Rhino/HopperCommands.cs"><code>HopperCommands.cs:13–33</code></a>, <a class="code-ref" href="../grasshopper-plugin/RhinoZmqPlugin.cs"><code>RhinoZmqPlugin.cs:123–165, 223–251</code></a>, <a class="code-ref" href="../grasshopper-plugin/ActiveGrasshopperDocumentTracker.cs"><code>ActiveGrasshopperDocumentTracker.cs:23–45</code></a>.</p>
+    </section>
+
+    <section id="queue">
+      <p class="eyebrow">Execution design</p>
+      <h2>There is a queue, but it is not the queue you need</h2>
+      <p class="section-copy">The current <code>JobQueue</code> does marshal mutations to Rhino's main thread. That answers only thread affinity. It does not provide completion, ordering across request types, backpressure, or safe timeout behavior.</p>
+
+      <div class="flow" aria-label="Current mutation and query paths">
+        <div class="node nodejs"><strong>Agent tool</strong><small>Node process</small></div>
+        <div class="node worker"><strong>PUSH mutation</strong><small>returns after send</small></div>
+        <div class="node worker"><strong>JobQueue</strong><small>unbounded batch</small></div>
+        <div class="node rhino"><strong>Main thread</strong><small>executes later</small></div>
+        <div class="node risk"><strong>REP query</strong><small>separate path may overtake</small></div>
+        <div class="node risk"><strong>Stale result</strong><small>mutation may not be visible</small></div>
+        <div class="node risk"><strong>No completion</strong><small>subscriber is unused</small></div>
+      </div>
+
+      <h3 class="group-title">Concrete failure mode</h3>
+      <ol>
+        <li>The agent sends <code>gh_edit_components</code>.</li>
+        <li><code>submitCommand()</code> resolves after ZeroMQ accepts the message. It returns a job ID to the agent.</li>
+        <li>The agent immediately calls <code>getCurrentCanvas</code> over the independent REP socket.</li>
+        <li>The REP worker may reach the UI thread before the queued mutation batch.</li>
+        <li>The agent sees the old canvas and may duplicate or contradict its own edit.</li>
+      </ol>
+
+      <p>The code already contains a <code>Subscriber</code> and job-status types, but nothing imports the subscriber. The bridge publishes queued, running, completed, and failed events that the embedded host never consumes.</p>
+
+      <h3 class="group-title">Recommended queue model</h3>
+      <div class="flow" aria-label="Proposed unified dispatcher">
+        <div class="node nodejs"><strong>Async request</strong><small>ID + capability + deadline</small></div>
+        <div class="node worker"><strong>Transport owner</strong><small>validates and admits</small></div>
+        <div class="node worker"><strong>Bounded channel</strong><small>one ordered stream</small></div>
+        <div class="node rhino"><strong>UI pump</strong><small>one item or time budget</small></div>
+        <div class="node rhino"><strong>Execute</strong><small>Rhino/GH only here</small></div>
+        <div class="node worker"><strong>Complete TCS</strong><small>result or explicit unknown</small></div>
+        <div class="node nodejs"><strong>Awaited result</strong><small>agent continues in order</small></div>
+      </div>
+
+      <ul>
+        <li><strong>One ordered dispatcher.</strong> Send mutations and document-sensitive queries through the same main-thread work queue. Health pings and static status reads can bypass it.</li>
+        <li><strong>Bound the queue.</strong> Reject excess work with <code>BUSY</code> and include queue depth. An unbounded agent-driven queue is a memory and responsiveness risk.</li>
+        <li><strong>Dispatch in small units.</strong> Execute one item per UI callback, or stop after a short time budget and repost. Never drain an arbitrary batch in one UI turn.</li>
+        <li><strong>Await real completion.</strong> The Node caller should resolve when the main-thread item completes, not when PUSH sends. A correlation ID plus a completion response is enough.</li>
+        <li><strong>Define cancellation states.</strong> A cancelled item that has not started must never run later. Once execution begins, return <code>OUTCOME_UNKNOWN</code> on timeout unless the operation proves rollback.</li>
+        <li><strong>Gate by capability.</strong> Rhino-only work needs a Rhino document. GH work also needs Grasshopper and an active GH document. A waiting item gets a deadline, not infinite patience.</li>
+      </ul>
+
+      <div class="callout green">
+        <p><strong>The desired model is achievable.</strong> Node and ZMQ remain asynchronous and off the UI thread. Each request awaits a task or promise without blocking those event loops. Only the small delegate that touches Rhino or Grasshopper runs on main.</p>
+      </div>
+
+      <p class="footnote">Queue references: <a class="code-ref" href="../src/infra/command-dispatch.ts"><code>command-dispatch.ts:15–25</code></a>, <a class="code-ref" href="../src/infra/subscriber.ts"><code>subscriber.ts</code></a>, <a class="code-ref" href="../grasshopper-plugin/JobQueue.cs"><code>JobQueue.cs:46–151</code></a>, <a class="code-ref" href="../grasshopper-plugin/services/ZMqService.cs"><code>ZMqService.cs:234–378</code></a>.</p>
+    </section>
+
+    <section id="structure">
+      <p class="eyebrow">Question 4</p>
+      <h2>The codebase is in a transitional shape</h2>
+      <p class="section-copy">The new responsibilities are real, but the folders still describe the old proof of concept. The result works against maintenance: a project inside <code>Hopper.Backend/</code> compiles parent-folder globs, the namespace is still <code>rhino_zmq_poc</code>, and host code is mixed into the old extension source tree.</p>
+
+      <div class="grid two">
+        <div>
+          <h3>Current shape</h3>
+          <div class="tree">src/
+├── host/                 Node host + browser UI
+├── infra/                ZMQ client
+├── tools/                Pi tool definitions
+├── services/             extension domain logic
+├── types/                mixed wire/domain types
+└── ui/                   terminal-oriented extension UI
+
+grasshopper-plugin/
+├── Hopper.Backend/       csproj compiles ../*.cs and sibling trees
+├── Hopper.Rhino/         RHP and process owner
+├── operations/           shared Rhino/GH operations
+├── services/             ZMQ service
+└── *.cs                  backend + legacy GHA mixed together</div>
+        </div>
+        <div>
+          <h3>Recommended shape</h3>
+          <div class="tree">src/
+├── host/                 process, HTTP/WS, Pi session
+├── extension/
+│   ├── transport/        ZMQ clients
+│   ├── tools/            Pi tools
+│   ├── services/         tool behavior
+│   └── ui/               host-neutral adapters
+├── protocol/             versioned wire contract
+└── web/                  static browser app
+
+dotnet/
+├── Hopper.Backend/       owns all shared source
+├── Hopper.Rhino/         RHP lifecycle shell
+├── Hopper.Grasshopper/   optional compatibility GHA
+└── Hopper.Tests/</div>
+        </div>
+      </div>
+
+      <h3 class="group-title">Dead or suspect code</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Item</th><th>Evidence</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>src/infra/subscriber.ts</code></td>
+              <td>No production source imports <code>Subscriber</code> or <code>getSubscriber</code>.</td>
+              <td>Use it to await job completion, or delete it and the unused event types.</td>
+            </tr>
+            <tr>
+              <td><code>dist/services/rhino-visual-consent.*</code></td>
+              <td>Compiled output exists; source does not. <code>tsc</code> does not clean <code>dist</code>.</td>
+              <td>Clean the output directory before every build and stage from a fresh directory.</td>
+            </tr>
+            <tr>
+              <td>Compiled tests and maps</td>
+              <td><code>tsconfig.json</code> includes all of <code>src</code>, including 26 test files. The packager copies all <code>dist</code>.</td>
+              <td>Add a release tsconfig or explicit staging allowlist. Keep tests out of the runtime.</td>
+            </tr>
+            <tr>
+              <td><code>chalk</code> direct dependency</td>
+              <td>No Hopper source imports it.</td>
+              <td>Remove the direct entry. It may remain transitively through Pi.</td>
+            </tr>
+            <tr>
+              <td>Legacy GHZMQ component</td>
+              <td>The RHP no longer needs it; it exists only for old saved definitions.</td>
+              <td>Keep with a named deprecation window, or move it to a separate compatibility package.</td>
+            </tr>
+            <tr>
+              <td>POC names</td>
+              <td><code>rhino-zmq-poc</code>, <code>rhino_zmq_poc</code>, and &quot;GHZMQ&quot; remain the assembly, namespace, class, and user-facing identities.</td>
+              <td>Rename new assemblies now. Preserve the old component GUID and type shim only where file compatibility requires it.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout red">
+        <p><strong>There is no basis to claim &quot;no dead code.&quot;</strong> This review found one unused production module and one stale compiled module without running a full language-aware reachability tool. Treat that as a lower bound.</p>
+      </div>
+    </section>
+
+    <section id="findings">
+      <p class="eyebrow">Review register</p>
+      <h2>Findings ordered by impact</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Severity</th><th>Finding</th><th>Why it matters</th><th>Required change</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="pill high">High</span></td>
+              <td>Host readiness ignores Grasshopper and the active document.</td>
+              <td>The browser reports ready while GH tools predictably fail.</td>
+              <td>Add capability-aware status and load Grasshopper during <code>_Hopper</code>.</td>
+            </tr>
+            <tr>
+              <td><span class="pill high">High</span></td>
+              <td>Mutation calls resolve after send, not execution.</td>
+              <td>Queries can overtake edits; failures arrive after the agent has moved on.</td>
+              <td>Await correlated completion through a unified dispatcher.</td>
+            </tr>
+            <tr>
+              <td><span class="pill high">High</span></td>
+              <td>Unbounded batches execute in one Rhino UI callback.</td>
+              <td>A burst of jobs can freeze Rhino for the entire batch.</td>
+              <td>Bound the queue and execute one item or one time slice per callback.</td>
+            </tr>
+            <tr>
+              <td><span class="pill high">High</span></td>
+              <td>NetMQ sockets cross thread boundaries.</td>
+              <td>Construction, use, and disposal do not have a single owner, which raises race and shutdown risk.</td>
+              <td>Create and dispose sockets on one dedicated transport thread or poller.</td>
+            </tr>
+            <tr>
+              <td><span class="pill high">High</span></td>
+              <td>Shutdown performs bounded synchronous waits from Rhino closing.</td>
+              <td>Rhino can appear hung for several seconds during exit.</td>
+              <td>Signal first, await off-main, then apply a short process-tree kill fallback.</td>
+            </tr>
+            <tr>
+              <td><span class="pill medium">Medium</span></td>
+              <td>Node health failures do not change state or recover.</td>
+              <td>Status may remain &quot;ready&quot; with <code>Healthy = false</code>; the user must restart manually.</td>
+              <td>Add explicit degraded/exited states and bounded restart policy.</td>
+            </tr>
+            <tr>
+              <td><span class="pill medium">Medium</span></td>
+              <td>The release package copies a development installation.</td>
+              <td>It ships both CPU runtimes, all native targets, tests, maps, stale output, and non-runtime files.</td>
+              <td>Build a clean, target-specific release payload and enforce a size budget.</td>
+            </tr>
+            <tr>
+              <td><span class="pill medium">Medium</span></td>
+              <td>Tests do not cover the critical Rhino lifecycle.</td>
+              <td>The new host-manager tests validate parsing and paths, not process start, health transition, restart, UI-thread dispatch, or GH readiness.</td>
+              <td>Add component tests with fakes and at least one Rhino integration smoke test.</td>
+            </tr>
+            <tr>
+              <td><span class="pill medium">Medium</span></td>
+              <td>The .NET test suite is not hermetic.</td>
+              <td>On this machine, 21 tests passed and 2 failed because the Grasshopper runtime assembly was unavailable.</td>
+              <td>Separate pure unit tests from Rhino/GH integration tests and document the integration runner.</td>
+            </tr>
+            <tr>
+              <td><span class="pill medium">Medium</span></td>
+              <td>The advertised macOS build compiles with Windows-only API warnings.</td>
+              <td><code>Image.Save</code>, <code>ImageFormat.Png</code>, and <code>Font</code> calls may fail on the platform this PR packages.</td>
+              <td>Exercise capture and graph creation in a real macOS Rhino test, then replace or isolate unsupported drawing APIs.</td>
+            </tr>
+            <tr>
+              <td><span class="pill medium">Medium</span></td>
+              <td>Per-instance state has no retention or continuity policy.</td>
+              <td>Each backend restart creates new session and workspace paths; stale instance folders and crash profiles can accumulate.</td>
+              <td>Choose whether sessions survive Rhino restarts and clean data for verified-dead instances.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="plan">
+      <p class="eyebrow">Recommended changes</p>
+      <h2>A practical order of work</h2>
+
+      <div class="grid three">
+        <article class="card bad">
+          <h3>1. Fix before calling it ready</h3>
+          <ol>
+            <li>Add runtime capability status.</li>
+            <li>Load Grasshopper from <code>_Hopper</code>.</li>
+            <li>Unify main-thread dispatch.</li>
+            <li>Await mutation completion.</li>
+            <li>Move shutdown waits off main.</li>
+          </ol>
+        </article>
+        <article class="card warn">
+          <h3>2. Fix before distributing</h3>
+          <ol>
+            <li>Clean and allowlist release output.</li>
+            <li>Split CPU packages.</li>
+            <li>Prune native ZeroMQ targets.</li>
+            <li>Add a Yak size regression check.</li>
+            <li>Smoke-test both CPU artifacts in CI.</li>
+          </ol>
+        </article>
+        <article class="card good">
+          <h3>3. Pay down structure</h3>
+          <ol>
+            <li>Move shared C# sources under their project.</li>
+            <li>Separate host, extension, protocol, and web code.</li>
+            <li>Remove dead modules and stale names.</li>
+            <li>Generate or contract-test both sides of the wire protocol.</li>
+          </ol>
+        </article>
+      </div>
+
+      <h3 class="group-title">Acceptance criteria</h3>
+      <details open>
+        <summary>Readiness</summary>
+        <div><code>_Hopper</code> either loads Grasshopper or reports a typed failure. The browser distinguishes Rhino ready, bridge ready, GH loaded, and active document. GH tools cannot run before their capability is ready.</div>
+      </details>
+      <details>
+        <summary>Ordering and completion</summary>
+        <div>A mutation followed by a query always returns a query result that includes the mutation. The mutation promise resolves only after execution. Queue-full, cancelled-before-start, timed-out-while-running, and rollback results are distinct.</div>
+      </details>
+      <details>
+        <summary>Responsiveness</summary>
+        <div>Networking and waiting never block Rhino's UI thread. A queue burst cannot run as one unbounded UI batch. Closing Rhino does not wait on synchronous HTTP or multi-second task joins.</div>
+      </details>
+      <details>
+        <summary>Lifecycle</summary>
+        <div>Unexpected Node exit transitions status and can restart with a bounded backoff. Rhino exit kills the process tree if graceful shutdown misses its deadline. Starting <code>_Hopper</code> twice remains idempotent.</div>
+      </details>
+      <details>
+        <summary>Packaging</summary>
+        <div>The release staging directory starts empty. It contains no test files, source maps, stale compiled modules, lockfile, workspace file, installer script, wrong-OS native add-ons, or wrong-CPU Node binary. CI enforces the allowlist and size budget.</div>
+      </details>
+    </section>
+
+    <section id="verification">
+      <p class="eyebrow">Evidence and limits</p>
+      <h2>What I checked</h2>
+      <div class="grid two">
+        <article class="card">
+          <h3>Completed</h3>
+          <ul>
+            <li>Reviewed <code>origin/main…HEAD</code>, 51 changed files, about 6,900 added lines.</li>
+            <li>Traced RHP, shared backend, GHA, Node host, browser server, ZMQ paths, and packaging scripts.</li>
+            <li>Measured the existing staged package and Yak.</li>
+            <li>Built TypeScript successfully.</li>
+            <li>Ran 97 TypeScript tests in 26 files; all passed.</li>
+            <li>Ran the .NET suite; 21 passed and 2 failed because the Grasshopper assembly was unavailable to the test process.</li>
+            <li>Recorded macOS analyzer warnings for Windows-only drawing APIs in viewport capture and graph-object creation.</li>
+            <li>Checked the compiled host import graph and direct dependency usage.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Not proven by this review</h3>
+          <ul>
+            <li>Behavior inside a live Rhino 8 plus Grasshopper session.</li>
+            <li>Rhino.Inside.Revit focus and message-pump behavior.</li>
+            <li>Windows packaging and shutdown behavior.</li>
+            <li>Exact package size after each proposed pruning step.</li>
+            <li>Complete dead-code absence. The simple reachability check found definite issues but is not a compiler-level whole-program analysis.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <footer>
+      <p>This report reviews commit <code>1aea278</code> on branch <code>t3code/self-host-pi-rhino</code>. It is a static and artifact-based review, not a live Rhino integration certification.</p>
+    </footer>
+  </main>
+</body>
+</html>

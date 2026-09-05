@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
- * Build rhino-zmq-poc and install into Grasshopper Libraries/hopper-pi/
+ * Build Hopper's Grasshopper and Rhino plug-ins, then install them
+ * into Grasshopper Libraries/hopper-pi/. A small runtime manifest points the
+ * Rhino plug-in at this package's compiled, dependency-local host.
  *
  * Env:
  *   HOPPER_SKIP_GH_PLUGIN=1  — skip entirely (dev / git clone)
@@ -18,6 +20,7 @@ import {
 	readFileSync,
 	rmSync,
 	statSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { homedir, platform } from "node:os";
@@ -26,12 +29,20 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "..");
-const PLUGIN_PROJECT_DIR = join(PACKAGE_ROOT, "grasshopper-plugin");
-const PROJECT_FILE = join(PLUGIN_PROJECT_DIR, "rhino-zmq-poc.csproj");
+const GHA_PROJECT_DIR = join(PACKAGE_ROOT, "dotnet", "Hopper.Grasshopper");
+const GHA_PROJECT_FILE = join(GHA_PROJECT_DIR, "Hopper.Grasshopper.csproj");
+const RHP_PROJECT_DIR = join(PACKAGE_ROOT, "dotnet", "Hopper.Rhino");
+const RHP_PROJECT_FILE = join(RHP_PROJECT_DIR, "Hopper.Rhino.csproj");
+const HOST_ENTRY = join(PACKAGE_ROOT, "dist", "host", "index.js");
+const RUNTIME_MANIFEST = "hopper-runtime.json";
 
-const args = new Set(process.argv.slice(2));
+const rawArgs = process.argv.slice(2);
+const args = new Set(rawArgs);
 const buildOnly = args.has("--build-only");
 const force = args.has("--force");
+const targetIndex = rawArgs.indexOf("--target");
+const packageTarget = targetIndex === -1 ? null : rawArgs[targetIndex + 1];
+if (targetIndex !== -1 && !packageTarget) fail("--target requires mac-arm64 or win-x64");
 
 function log(...parts) {
 	console.log("[hopper-pi]", ...parts);
@@ -56,12 +67,24 @@ function hasDotnet() {
 }
 
 function targetFramework() {
+	if (packageTarget === "mac-arm64") return "net7.0";
+	if (packageTarget === "win-x64") return "net7.0-windows";
+	if (packageTarget) fail("--target requires mac-arm64 or win-x64");
 	return platform() === "win32" ? "net7.0-windows" : "net7.0";
 }
 
-function buildOutputDir(configuration = "Release") {
+function ghaOutputDir(configuration = "Release") {
 	return join(
-		PLUGIN_PROJECT_DIR,
+		GHA_PROJECT_DIR,
+		"bin",
+		configuration,
+		targetFramework()
+	);
+}
+
+function rhpOutputDir(configuration = "Release") {
+	return join(
+		RHP_PROJECT_DIR,
 		"bin",
 		configuration,
 		targetFramework()
@@ -144,54 +167,133 @@ function readPackageVersion() {
 	}
 }
 
-function listArtifacts(outputDir) {
-	if (!existsSync(outputDir)) return { gha: [], dll: [] };
+function listArtifacts(outputDir, extensions) {
+	if (!existsSync(outputDir)) return [];
 	const entries = readdirSync(outputDir, { withFileTypes: true });
-	const gha = [];
-	const dll = [];
-	for (const e of entries) {
-		if (!e.isFile()) continue;
-		if (e.name.endsWith(".gha")) gha.push(e.name);
-		if (e.name.endsWith(".dll")) dll.push(e.name);
-	}
-	return { gha, dll };
+	return entries
+		.filter((entry) => entry.isFile() && extensions.some((extension) => entry.name.endsWith(extension)))
+		.map((entry) => entry.name)
+		.sort();
 }
 
 function dotnetBuild(configuration) {
-	log(`Building ${PROJECT_FILE} (${configuration})…`);
-	const r = spawnSync(
-		"dotnet",
-		["build", PROJECT_FILE, "-c", configuration, "--no-restore"],
-		{ cwd: PLUGIN_PROJECT_DIR, encoding: "utf8", stdio: "inherit" }
-	);
-	if (r.status !== 0) {
-		const r2 = spawnSync(
+	for (const projectFile of [GHA_PROJECT_FILE, RHP_PROJECT_FILE]) {
+		log(`Building ${projectFile} (${configuration}, ${targetFramework()})…`);
+		const buildArgs = ["build", projectFile, "-c", configuration, "-f", targetFramework()];
+		const first = spawnSync(
 			"dotnet",
-			["build", PROJECT_FILE, "-c", configuration],
-			{ cwd: PLUGIN_PROJECT_DIR, encoding: "utf8", stdio: "inherit" }
+			[...buildArgs, "--no-restore"],
+			{ cwd: PACKAGE_ROOT, encoding: "utf8", stdio: "inherit" }
 		);
-		if (r2.status !== 0) fail("dotnet build failed");
+		if (first.status === 0) continue;
+		const restored = spawnSync(
+			"dotnet",
+			buildArgs,
+			{ cwd: PACKAGE_ROOT, encoding: "utf8", stdio: "inherit" }
+		);
+		if (restored.status !== 0) fail(`dotnet build failed: ${projectFile}`);
 	}
 }
 
-function copyArtifacts(outputDir, installDir) {
-	const { gha, dll } = listArtifacts(outputDir);
-	if (gha.length === 0) {
-		fail(`No .gha found in ${outputDir}`);
+function artifactSources(configuration) {
+	const ghaDir = ghaOutputDir(configuration);
+	const rhpDir = rhpOutputDir(configuration);
+	const pluginExtensions = [".dll", ".gha", ".rhp", ".deps.json", ".runtimeconfig.json"];
+	const approvedArtifacts = new Set([
+		"Hopper.Grasshopper.gha",
+		"Hopper.Grasshopper.deps.json",
+		"Hopper.Grasshopper.runtimeconfig.json",
+		"Hopper.Rhino.rhp",
+		"Hopper.Rhino.deps.json",
+		"Hopper.Rhino.runtimeconfig.json",
+		"Hopper.Core.dll",
+		"AsyncIO.dll",
+		"Microsoft.Bcl.AsyncInterfaces.dll",
+		"Microsoft.Extensions.ObjectPool.dll",
+		"Microsoft.Win32.SystemEvents.dll",
+		"NaCl.dll",
+		"NetMQ.dll",
+		"System.Drawing.Common.dll",
+		"System.Private.ServiceModel.dll",
+		"System.Security.Cryptography.Pkcs.dll",
+		"System.Security.Cryptography.Xml.dll",
+		"System.Security.Permissions.dll",
+		"System.ServiceModel.Primitives.dll",
+		"System.ServiceModel.dll",
+		"System.Windows.Extensions.dll",
+	]);
+	const sources = new Map();
+	for (const outputDir of [ghaDir, rhpDir]) {
+		for (const name of listArtifacts(outputDir, pluginExtensions)) {
+			if (!approvedArtifacts.has(name)) continue;
+			const existing = sources.get(name);
+			if (!existing || name.endsWith(".rhp")) sources.set(name, join(outputDir, name));
+		}
 	}
+	return { ghaDir, rhpDir, sources };
+}
+
+function removePreviousInstallFiles(installDir) {
+	const stampPath = join(installDir, ".hopper-install.json");
+	if (existsSync(stampPath)) {
+		try {
+			const stamp = JSON.parse(readFileSync(stampPath, "utf8"));
+			for (const name of stamp.files ?? []) {
+				if (typeof name !== "string" || name.includes("..")) continue;
+				rmSync(join(installDir, name), { recursive: true, force: true });
+			}
+		} catch {
+			warn("Could not read the previous install stamp; existing Hopper files will be overwritten.");
+		}
+	}
+
+	for (const staleName of [
+		"rhino-zmq-poc.gha",
+		"rhino-zmq-poc.deps.json",
+		"rhino-zmq-poc.runtimeconfig.json",
+		"Hopper.Backend.dll",
+		"Hopper.Rhino.Host.dll",
+	]) {
+		rmSync(join(installDir, staleName), { force: true });
+	}
+}
+
+function writeRuntimeManifest(installDir) {
+	if (!existsSync(HOST_ENTRY)) {
+		warn("Compiled browser host is missing. Run `pnpm build`, then reinstall the plug-in.");
+		return null;
+	}
+	const runtimeDir = join(installDir, "runtime");
+	rmSync(runtimeDir, { recursive: true, force: true });
+	mkdirSync(runtimeDir, { recursive: true });
+	const linkedHost = join(runtimeDir, "host");
+	symlinkSync(PACKAGE_ROOT, linkedHost, platform() === "win32" ? "junction" : "dir");
+	const manifestPath = join(runtimeDir, RUNTIME_MANIFEST);
+	writeFileSync(manifestPath, JSON.stringify({
+		protocolVersion: 2,
+		minimumNodeVersion: "22.19.0",
+		hostEntry: "host/dist/host/index.js",
+	}, null, 2) + "\n");
+	return [join("runtime", "host"), join("runtime", RUNTIME_MANIFEST)];
+}
+
+function copyArtifacts(configuration, installDir) {
+	const { ghaDir, rhpDir, sources } = artifactSources(configuration);
+	if (![...sources.keys()].some((name) => name.endsWith(".gha"))) fail(`No .gha found in ${ghaDir}`);
+	if (![...sources.keys()].some((name) => name.endsWith(".rhp"))) fail(`No .rhp found in ${rhpDir}`);
 
 	mkdirSync(installDir, { recursive: true });
-
-	for (const name of readdirSync(installDir)) {
-		if (name === ".hopper-install.json") continue;
-		rmSync(join(installDir, name), { recursive: true, force: true });
-	}
+	removePreviousInstallFiles(installDir);
 
 	const copied = [];
-	for (const name of [...gha, ...dll]) {
-		copyFileSync(join(outputDir, name), join(installDir, name));
+	for (const [name, source] of sources) {
+		copyFileSync(source, join(installDir, name));
 		copied.push(name);
 	}
+	const runtimeFiles = process.env.HOPPER_PACKAGE_STAGE === "1"
+		? []
+		: writeRuntimeManifest(installDir) ?? [];
+	copied.push(...runtimeFiles);
 
 	writeFileSync(
 		join(installDir, ".hopper-install.json"),
@@ -201,7 +303,7 @@ function copyArtifacts(outputDir, installDir) {
 				builtAt: new Date().toISOString(),
 				configuration: "Release",
 				targetFramework: targetFramework(),
-				outputDir,
+				outputDirs: [ghaDir, rhpDir],
 				installDir,
 				files: copied.sort(),
 			},
@@ -210,7 +312,7 @@ function copyArtifacts(outputDir, installDir) {
 		)
 	);
 
-	return { gha, dll, copied };
+	return { copied };
 }
 
 function shouldSkipBuild(installDir, version) {
@@ -231,8 +333,8 @@ function main() {
 		return;
 	}
 
-	if (!existsSync(PROJECT_FILE)) {
-		fail(`Grasshopper plugin project not found: ${PROJECT_FILE}`);
+	if (!existsSync(GHA_PROJECT_FILE) || !existsSync(RHP_PROJECT_FILE)) {
+		fail("Hopper GHA or RHP project file was not found");
 	}
 
 	if (!hasDotnet()) {
@@ -243,7 +345,6 @@ function main() {
 	}
 
 	const configuration = "Release";
-	const outputDir = buildOutputDir(configuration);
 	const version = readPackageVersion();
 	const installDir = buildOnly ? null : resolveInstallDir();
 
@@ -259,24 +360,20 @@ function main() {
 		log(`Skipping build (already installed v${version}, use --force to rebuild)`);
 	}
 
-	const { gha, dll } = listArtifacts(outputDir);
-	if (gha.length === 0) {
-		fail(`Build produced no .gha in ${outputDir}`);
-	}
+	const artifacts = artifactSources(configuration);
+	const names = [...artifacts.sources.keys()];
+	if (!names.some((name) => name.endsWith(".gha")) || !names.some((name) => name.endsWith(".rhp")))
+		fail("Build did not produce both Hopper's .gha and .rhp artifacts");
 
 	if (buildOnly) {
-		log(`Build OK: ${outputDir} (${gha.length} gha, ${dll.length} dll)`);
+		log(`Build OK: ${names.filter((name) => name.endsWith(".gha")).length} gha, ${names.filter((name) => name.endsWith(".rhp")).length} rhp, ${names.filter((name) => name.endsWith(".dll")).length} dll`);
 		return;
 	}
 
 	try {
-		const { copied } = copyArtifacts(outputDir, installDir);
-		log(
-			`Installed Grasshopper plugin to ${installDir} (${copied.length} files: ${gha.length} .gha, ${dll.length} .dll)`
-		);
-		log(
-			"Restart Rhino/Grasshopper, then place the GH ZMQ Plugin component on the canvas."
-		);
+		const { copied } = copyArtifacts(configuration, installDir);
+		log(`Installed Hopper to ${installDir} (${copied.length} managed files)`);
+		log("Install the generated Yak package, restart Rhino, then run HopperCode. GHZMQ is compatibility-only.");
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		fail(`Failed to copy plugin: ${msg}`);

@@ -1,0 +1,633 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hoppercode.dev/protocol/v2/hopper-rpc.schema.json",
+  "title": "Hopper RPC protocol v2",
+  "description": "Wire envelopes shared by the Rhino ROUTER and Node DEALER. Operation argument payloads remain extensible except for lifecycle and recovery operations.",
+  "oneOf": [
+    { "$ref": "#/$defs/request" },
+    { "$ref": "#/$defs/response" },
+    { "$ref": "#/$defs/protocolErrorResponse" }
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{32,128}$"
+    },
+    "unixMilliseconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "queryOperation": {
+      "enum": [
+        "getRuntimeStatus",
+        "getOperationResult",
+        "listAllComponents",
+        "getCurrentCanvas",
+        "getCanvasErrors",
+        "listScriptParams",
+        "getScriptCode",
+        "queryRhinoObjects",
+        "captureRhinoView",
+        "getParamRhinoGeometry"
+      ]
+    },
+    "controlOperation": {
+      "enum": [
+        "lifecycleHandshake",
+        "startGrasshopper",
+        "cancelOperation"
+      ]
+    },
+    "mutationOperation": {
+      "enum": [
+        "applyGraph",
+        "runRhinoScript",
+        "controlRhinoView",
+        "addComponent",
+        "deleteComponent",
+        "connectWire",
+        "disconnectWire",
+        "moveComponent",
+        "renameComponent",
+        "setComponentLocked",
+        "setComponentHidden",
+        "addGroup",
+        "removeFromGroup",
+        "deleteGroup",
+        "changeGroupColor",
+        "renameGroup",
+        "changeGroupStyle",
+        "createSlider",
+        "editSliderRange",
+        "setSliderValue",
+        "createPanel",
+        "setPanelParams",
+        "setPanelText",
+        "createToggle",
+        "setToggleValue",
+        "createSwatch",
+        "setSwatchColor",
+        "createScribble",
+        "setScribbleText",
+        "createValueList",
+        "setValueListSelected",
+        "createScriptNode",
+        "setScriptCode",
+        "syncScriptParams",
+        "addScriptInput",
+        "removeScriptInput",
+        "addScriptOutput",
+        "removeScriptOutput",
+        "editParamProps",
+        "beginAgentTransaction",
+        "commitAgentTransaction",
+        "cancelAgentTransaction",
+        "beginRhinoAgentTransaction",
+        "commitRhinoAgentTransaction",
+        "cancelRhinoAgentTransaction",
+        "setParamRhinoGeometry"
+      ]
+    },
+    "operation": {
+      "oneOf": [
+        { "$ref": "#/$defs/queryOperation" },
+        { "$ref": "#/$defs/controlOperation" },
+        { "$ref": "#/$defs/mutationOperation" }
+      ]
+    },
+    "domainArgs": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "emptyArgs": {
+      "type": "object",
+      "maxProperties": 0
+    },
+    "recoveryArgs": {
+      "type": "object",
+      "properties": {
+        "operationId": { "$ref": "#/$defs/identifier" }
+      },
+      "required": ["operationId"],
+      "additionalProperties": false
+    },
+    "lifecycleHandshakeArgs": {
+      "type": "object",
+      "properties": {
+        "nodeProcessId": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "nodeVersion": { "type": "string", "pattern": "^v?[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "clientIdentity": { "$ref": "#/$defs/identifier" }
+      },
+      "required": ["nodeProcessId", "nodeVersion", "clientIdentity"],
+      "additionalProperties": false
+    },
+    "requestBase": {
+      "type": "object",
+      "properties": {
+        "protocolVersion": { "const": 2 },
+        "lifecycleInstanceId": { "$ref": "#/$defs/identifier" },
+        "requestId": { "$ref": "#/$defs/identifier" },
+        "token": { "$ref": "#/$defs/token" },
+        "operation": { "$ref": "#/$defs/operation" },
+        "startDeadlineAt": { "$ref": "#/$defs/unixMilliseconds" },
+        "args": { "$ref": "#/$defs/domainArgs" },
+        "operationId": { "$ref": "#/$defs/identifier" }
+      },
+      "required": [
+        "protocolVersion",
+        "lifecycleInstanceId",
+        "requestId",
+        "token",
+        "operation",
+        "startDeadlineAt",
+        "args"
+      ]
+    },
+    "request": {
+      "unevaluatedProperties": false,
+      "allOf": [
+        { "$ref": "#/$defs/requestBase" },
+        {
+          "oneOf": [
+            {
+              "properties": { "operation": { "$ref": "#/$defs/mutationOperation" } },
+              "required": ["operationId"]
+            },
+            {
+              "properties": {
+                "operation": {
+                  "oneOf": [
+                    { "$ref": "#/$defs/queryOperation" },
+                    { "$ref": "#/$defs/controlOperation" }
+                  ]
+                }
+              },
+              "not": { "required": ["operationId"] }
+            }
+          ]
+        },
+        {
+          "if": { "properties": { "operation": { "const": "lifecycleHandshake" } }, "required": ["operation"] },
+          "then": { "properties": { "args": { "$ref": "#/$defs/lifecycleHandshakeArgs" } } }
+        },
+        {
+          "if": {
+            "properties": { "operation": { "enum": ["getRuntimeStatus", "startGrasshopper"] } },
+            "required": ["operation"]
+          },
+          "then": { "properties": { "args": { "$ref": "#/$defs/emptyArgs" } } }
+        },
+        {
+          "if": {
+            "properties": { "operation": { "enum": ["getOperationResult", "cancelOperation"] } },
+            "required": ["operation"]
+          },
+          "then": { "properties": { "args": { "$ref": "#/$defs/recoveryArgs" } } }
+        }
+      ]
+    },
+    "reasonCode": {
+      "enum": [
+        "OK",
+        "AUTH_INVALID",
+        "PROTOCOL_VERSION_UNSUPPORTED",
+        "LIFECYCLE_INSTANCE_STALE",
+        "MALFORMED_REQUEST",
+        "UNKNOWN_OPERATION",
+        "OPERATION_ID_REQUIRED",
+        "OPERATION_ID_FORBIDDEN",
+        "START_DEADLINE_EXCEEDED",
+        "DISPATCHER_BUSY",
+        "RESULT_STORE_FULL",
+        "CANCELLED_BEFORE_START",
+        "CAPABILITY_UNAVAILABLE",
+        "GRASSHOPPER_NOT_INSTALLED",
+        "GRASSHOPPER_START_FAILED",
+        "NO_ACTIVE_GRASSHOPPER_DOCUMENT",
+        "SHUTTING_DOWN",
+        "OPERATION_FAILED",
+        "OPERATION_RESULT_TOO_LARGE",
+        "CANCELLATION_REJECTED_ALREADY_STARTED",
+        "HANDSHAKE_REJECTED",
+        "INTERNAL_ERROR"
+      ]
+    },
+    "runtimeError": {
+      "type": "object",
+      "properties": {
+        "code": { "$ref": "#/$defs/reasonCode" },
+        "message": { "type": "string", "minLength": 1 }
+      },
+      "required": ["code", "message"],
+      "additionalProperties": false
+    },
+    "operationResult": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "enum": [
+            "completed",
+            "failed",
+            "busy",
+            "deadline_exceeded_before_start",
+            "cancelled_before_start",
+            "capability_unavailable",
+            "no_active_grasshopper_document",
+            "shutting_down"
+          ]
+        },
+        "reasonCode": { "$ref": "#/$defs/reasonCode" },
+        "message": { "type": "string" },
+        "data": true
+      },
+      "required": ["class", "reasonCode"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "class": { "const": "completed" } }, "required": ["class"] },
+          "then": { "properties": { "reasonCode": { "const": "OK" } } }
+        },
+        {
+          "if": { "properties": { "class": { "const": "busy" } }, "required": ["class"] },
+          "then": { "properties": { "reasonCode": { "enum": ["DISPATCHER_BUSY", "RESULT_STORE_FULL"] } } }
+        },
+        {
+          "if": { "properties": { "class": { "const": "deadline_exceeded_before_start" } }, "required": ["class"] },
+          "then": { "properties": { "reasonCode": { "const": "START_DEADLINE_EXCEEDED" } } }
+        },
+        {
+          "if": { "properties": { "class": { "const": "cancelled_before_start" } }, "required": ["class"] },
+          "then": { "properties": { "reasonCode": { "const": "CANCELLED_BEFORE_START" } } }
+        },
+        {
+          "if": { "properties": { "class": { "const": "capability_unavailable" } }, "required": ["class"] },
+          "then": { "properties": { "reasonCode": { "enum": ["CAPABILITY_UNAVAILABLE", "GRASSHOPPER_NOT_INSTALLED"] } } }
+        },
+        {
+          "if": { "properties": { "class": { "const": "no_active_grasshopper_document" } }, "required": ["class"] },
+          "then": { "properties": { "reasonCode": { "const": "NO_ACTIVE_GRASSHOPPER_DOCUMENT" } } }
+        },
+        {
+          "if": { "properties": { "class": { "const": "shutting_down" } }, "required": ["class"] },
+          "then": { "properties": { "reasonCode": { "const": "SHUTTING_DOWN" } } }
+        },
+        {
+          "if": { "properties": { "class": { "const": "failed" } }, "required": ["class"] },
+          "then": {
+            "properties": {
+              "reasonCode": {
+                "enum": [
+                  "AUTH_INVALID",
+                  "PROTOCOL_VERSION_UNSUPPORTED",
+                  "LIFECYCLE_INSTANCE_STALE",
+                  "MALFORMED_REQUEST",
+                  "UNKNOWN_OPERATION",
+                  "OPERATION_ID_REQUIRED",
+                  "OPERATION_ID_FORBIDDEN",
+                  "GRASSHOPPER_START_FAILED",
+                  "OPERATION_FAILED",
+                  "OPERATION_RESULT_TOO_LARGE",
+                  "CANCELLATION_REJECTED_ALREADY_STARTED",
+                  "HANDSHAKE_REJECTED",
+                  "INTERNAL_ERROR"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "lifecycleState": {
+      "enum": ["stopped", "starting", "running", "stopping", "faulted"]
+    },
+    "runtimeStatus": {
+      "type": "object",
+      "properties": {
+        "protocolVersion": { "const": 2 },
+        "revision": { "type": "integer", "minimum": 0 },
+        "observedAt": { "$ref": "#/$defs/unixMilliseconds" },
+        "lifecycle": {
+          "type": "object",
+          "properties": {
+            "state": { "$ref": "#/$defs/lifecycleState" },
+            "changedAt": { "$ref": "#/$defs/unixMilliseconds" },
+            "reason": {
+              "oneOf": [
+                { "$ref": "#/$defs/runtimeError" },
+                { "type": "null" }
+              ]
+            }
+          },
+          "required": ["state", "changedAt", "reason"],
+          "additionalProperties": false
+        },
+        "transport": {
+          "type": "object",
+          "properties": {
+            "ready": { "type": "boolean" },
+            "lifecycleInstanceId": {
+              "oneOf": [
+                { "$ref": "#/$defs/identifier" },
+                { "type": "null" }
+              ]
+            }
+          },
+          "required": ["ready", "lifecycleInstanceId"],
+          "additionalProperties": false
+        },
+        "host": {
+          "type": "object",
+          "properties": {
+            "state": { "$ref": "#/$defs/lifecycleState" },
+            "processId": { "type": ["integer", "null"], "minimum": 1 },
+            "nodePath": { "type": ["string", "null"] },
+            "nodeVersion": { "type": ["string", "null"] },
+            "handshake": { "enum": ["disconnected", "connecting", "live", "failed"] },
+            "healthFailureCount": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["state", "processId", "nodePath", "nodeVersion", "handshake", "healthFailureCount"],
+          "additionalProperties": false
+        },
+        "rhino": {
+          "type": "object",
+          "properties": {
+            "activeDocument": { "type": "boolean" },
+            "documentName": { "type": ["string", "null"] }
+          },
+          "required": ["activeDocument", "documentName"],
+          "additionalProperties": false
+        },
+        "grasshopper": {
+          "type": "object",
+          "properties": {
+            "state": { "enum": ["not_installed", "not_loaded", "loading", "ready", "failed"] },
+            "activeDocument": { "type": "boolean" },
+            "documentName": { "type": ["string", "null"] }
+          },
+          "required": ["state", "activeDocument", "documentName"],
+          "additionalProperties": false
+        },
+        "dispatcher": {
+          "type": "object",
+          "properties": {
+            "acceptingExternalWork": { "type": "boolean" },
+            "depth": { "type": "integer", "minimum": 0 },
+            "capacity": { "type": "integer", "minimum": 1 }
+          },
+          "required": ["acceptingExternalWork", "depth", "capacity"],
+          "additionalProperties": false
+        },
+        "errors": {
+          "type": "object",
+          "properties": {
+            "transport": { "oneOf": [{ "$ref": "#/$defs/runtimeError" }, { "type": "null" }] },
+            "host": { "oneOf": [{ "$ref": "#/$defs/runtimeError" }, { "type": "null" }] },
+            "rhino": { "oneOf": [{ "$ref": "#/$defs/runtimeError" }, { "type": "null" }] },
+            "grasshopper": { "oneOf": [{ "$ref": "#/$defs/runtimeError" }, { "type": "null" }] },
+            "dispatcher": { "oneOf": [{ "$ref": "#/$defs/runtimeError" }, { "type": "null" }] }
+          },
+          "required": ["transport", "host", "rhino", "grasshopper", "dispatcher"],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "revision",
+        "observedAt",
+        "lifecycle",
+        "transport",
+        "host",
+        "rhino",
+        "grasshopper",
+        "dispatcher",
+        "errors"
+      ],
+      "additionalProperties": false
+    },
+    "handshakeData": {
+      "type": "object",
+      "properties": {
+        "handshake": { "const": "live" },
+        "statusRevision": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["handshake", "statusRevision"],
+      "additionalProperties": false
+    },
+    "startGrasshopperData": {
+      "type": "object",
+      "properties": {
+        "state": { "enum": ["start_requested", "already_ready"] }
+      },
+      "required": ["state"],
+      "additionalProperties": false
+    },
+    "operationLookupData": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "state": { "const": "pending" },
+            "phase": { "enum": ["queued", "running"] }
+          },
+          "required": ["state", "phase"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "state": { "const": "not_found" } },
+          "required": ["state"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "state": { "const": "terminal" },
+            "result": { "$ref": "#/$defs/operationResult" }
+          },
+          "required": ["state", "result"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "cancelOperationData": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "enum": ["cancelled_before_start", "already_cancelled", "rejected_already_started", "not_found"]
+        }
+      },
+      "required": ["state"],
+      "additionalProperties": false
+    },
+    "responseBase": {
+      "type": "object",
+      "properties": {
+        "protocolVersion": { "const": 2 },
+        "lifecycleInstanceId": { "$ref": "#/$defs/identifier" },
+        "requestId": { "$ref": "#/$defs/identifier" },
+        "operation": { "$ref": "#/$defs/operation" },
+        "operationId": { "$ref": "#/$defs/identifier" },
+        "result": { "$ref": "#/$defs/operationResult" }
+      },
+      "required": ["protocolVersion", "lifecycleInstanceId", "requestId", "operation", "result"]
+    },
+    "response": {
+      "unevaluatedProperties": false,
+      "allOf": [
+        { "$ref": "#/$defs/responseBase" },
+        {
+          "oneOf": [
+            {
+              "properties": { "operation": { "$ref": "#/$defs/mutationOperation" } },
+              "required": ["operationId"]
+            },
+            {
+              "properties": {
+                "operation": {
+                  "oneOf": [
+                    { "$ref": "#/$defs/queryOperation" },
+                    { "$ref": "#/$defs/controlOperation" }
+                  ]
+                }
+              },
+              "not": { "required": ["operationId"] }
+            }
+          ]
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": { "const": "lifecycleHandshake" },
+              "result": { "properties": { "class": { "const": "completed" } }, "required": ["class"] }
+            },
+            "required": ["operation", "result"]
+          },
+          "then": { "properties": { "result": { "properties": { "data": { "$ref": "#/$defs/handshakeData" } }, "required": ["data"] } } }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": { "const": "getRuntimeStatus" },
+              "result": { "properties": { "class": { "const": "completed" } }, "required": ["class"] }
+            },
+            "required": ["operation", "result"]
+          },
+          "then": { "properties": { "result": { "properties": { "data": { "$ref": "#/$defs/runtimeStatus" } }, "required": ["data"] } } }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": { "const": "startGrasshopper" },
+              "result": { "properties": { "class": { "const": "completed" } }, "required": ["class"] }
+            },
+            "required": ["operation", "result"]
+          },
+          "then": { "properties": { "result": { "properties": { "data": { "$ref": "#/$defs/startGrasshopperData" } }, "required": ["data"] } } }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": { "const": "getOperationResult" },
+              "result": { "properties": { "class": { "const": "completed" } }, "required": ["class"] }
+            },
+            "required": ["operation", "result"]
+          },
+          "then": { "properties": { "result": { "properties": { "data": { "$ref": "#/$defs/operationLookupData" } }, "required": ["data"] } } }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": { "const": "cancelOperation" },
+              "result": { "properties": { "class": { "const": "completed" } }, "required": ["class"] }
+            },
+            "required": ["operation", "result"]
+          },
+          "then": { "properties": { "result": { "properties": { "data": { "$ref": "#/$defs/cancelOperationData" } }, "required": ["data"] } } }
+        }
+      ]
+    },
+    "protocolErrorResponse": {
+      "type": "object",
+      "properties": {
+        "protocolVersion": { "const": 2 },
+        "requestId": { "$ref": "#/$defs/identifier" },
+        "errorType": { "const": "protocol_error" },
+        "lifecycleInstanceId": {
+          "oneOf": [
+            { "$ref": "#/$defs/identifier" },
+            { "type": "null" }
+          ]
+        },
+        "operation": {
+          "oneOf": [
+            { "type": "string", "minLength": 1, "maxLength": 128 },
+            { "type": "null" }
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "class": { "const": "failed" },
+            "reasonCode": {
+              "enum": [
+                "AUTH_INVALID",
+                "PROTOCOL_VERSION_UNSUPPORTED",
+                "LIFECYCLE_INSTANCE_STALE",
+                "MALFORMED_REQUEST",
+                "UNKNOWN_OPERATION",
+                "OPERATION_ID_REQUIRED",
+                "OPERATION_ID_FORBIDDEN"
+              ]
+            },
+            "message": { "type": "string", "minLength": 1 }
+          },
+          "required": ["class", "reasonCode", "message"],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "requestId",
+        "errorType",
+        "lifecycleInstanceId",
+        "operation",
+        "result"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "x-hopper-router-dealer-framing": {
+    "transport": "zeromq-router-dealer",
+    "payloadEncoding": "utf-8-json",
+    "delimiterFrame": false,
+    "dealerToRouter": {
+      "dealerSends": ["payload"],
+      "routerReceives": ["routingIdentity", "payload"]
+    },
+    "routerToDealer": {
+      "routerSends": ["routingIdentity", "payload"],
+      "dealerReceives": ["payload"]
+    },
+    "routingIdentity": {
+      "encoding": "opaque-bytes",
+      "lifetime": "stable-for-node-process",
+      "includedInJson": false
+    }
+  },
+  "x-hopper-operation-classification": {
+    "query": { "$ref": "#/$defs/queryOperation" },
+    "control": { "$ref": "#/$defs/controlOperation" },
+    "mutation": { "$ref": "#/$defs/mutationOperation" }
+  },
+  "x-hopper-node-local-result-classes": ["outcome_unknown"],
+  "x-hopper-uncorrelated-request-policy": {
+    "action": "drop",
+    "condition": "No valid requestId can be recovered from the payload",
+    "sideEffect": "Record a transport error without sending a ROUTER reply"
+  }
+}

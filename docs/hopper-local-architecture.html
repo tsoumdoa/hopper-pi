@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Architecture and implementation plan for a private Hopper agent with a localhost web UI, embedded Pi runtime, and Rhino connection.">
+  <title>Hopper local agent architecture</title>
+  <style>
+    :root {
+      --ink: #17211c;
+      --muted: #647169;
+      --paper: #f5f3eb;
+      --panel: rgba(255, 255, 255, 0.74);
+      --line: #c7cec8;
+      --green: #185c45;
+      --green-soft: #dcebe2;
+      --orange: #d8672d;
+      --orange-soft: #f6dfd2;
+      --blue: #315b78;
+      --blue-soft: #dce8ef;
+      --red: #a54134;
+      --red-soft: #f3ded9;
+      --shadow: 0 18px 60px rgba(32, 48, 39, 0.09);
+      --radius: 22px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(rgba(24, 92, 69, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(24, 92, 69, 0.035) 1px, transparent 1px),
+        var(--paper);
+      background-size: 32px 32px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+
+    button,
+    a {
+      font: inherit;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 48px 0 80px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 64px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 750;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 36px;
+      height: 36px;
+      place-items: center;
+      border-radius: 11px;
+      color: white;
+      background: var(--green);
+      box-shadow: 0 8px 22px rgba(24, 92, 69, 0.22);
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.55);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--orange);
+      box-shadow: 0 0 0 4px var(--orange-soft);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(270px, 0.55fr);
+      gap: 48px;
+      align-items: end;
+      margin-bottom: 40px;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: var(--orange);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      max-width: 850px;
+      margin-bottom: 20px;
+      font-size: clamp(42px, 7vw, 78px);
+      font-weight: 790;
+      letter-spacing: -0.065em;
+      line-height: 0.98;
+    }
+
+    .hero-copy {
+      max-width: 730px;
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: clamp(17px, 2vw, 21px);
+    }
+
+    .hero-note {
+      padding: 22px;
+      border-left: 3px solid var(--orange);
+      border-radius: 0 16px 16px 0;
+      background: rgba(255, 255, 255, 0.5);
+    }
+
+    .hero-note strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 15px;
+    }
+
+    .hero-note p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .surface {
+      border: 1px solid rgba(103, 117, 108, 0.24);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .architecture {
+      padding: 26px;
+      overflow: hidden;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    .section-head h2 {
+      margin-bottom: 4px;
+      font-size: 24px;
+      letter-spacing: -0.035em;
+    }
+
+    .section-head p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .view-switcher {
+      display: inline-flex;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #ecece5;
+    }
+
+    .view-button {
+      padding: 8px 12px;
+      border: 0;
+      border-radius: 8px;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .view-button[aria-selected="true"] {
+      color: var(--ink);
+      background: white;
+      box-shadow: 0 3px 12px rgba(24, 40, 31, 0.08);
+    }
+
+    .diagram {
+      display: grid;
+      grid-template-columns: minmax(180px, 0.8fr) 92px minmax(300px, 1.45fr) 92px minmax(220px, 1fr);
+      align-items: stretch;
+      min-height: 330px;
+    }
+
+    .node {
+      position: relative;
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.8);
+      transition: opacity 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+    }
+
+    .node.active {
+      transform: translateY(-3px);
+      box-shadow: 0 16px 32px rgba(24, 56, 40, 0.12);
+    }
+
+    .node-number {
+      display: grid;
+      width: 28px;
+      height: 28px;
+      margin-bottom: 34px;
+      place-items: center;
+      border-radius: 9px;
+      color: white;
+      background: var(--ink);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .node h3 {
+      margin-bottom: 8px;
+      font-size: 22px;
+      letter-spacing: -0.035em;
+    }
+
+    .node > p {
+      margin-bottom: 24px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .node-tag {
+      width: fit-content;
+      margin-top: auto;
+      padding: 6px 9px;
+      border-radius: 8px;
+      color: var(--blue);
+      background: var(--blue-soft);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .host-node {
+      border-color: rgba(24, 92, 69, 0.38);
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.88), rgba(220, 235, 226, 0.72));
+    }
+
+    .host-node .node-number {
+      background: var(--green);
+    }
+
+    .host-modules,
+    .rhino-modules {
+      display: grid;
+      gap: 9px;
+      margin-top: auto;
+    }
+
+    .module {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 11px 12px;
+      border: 1px solid rgba(24, 92, 69, 0.18);
+      border-radius: 11px;
+      background: rgba(255, 255, 255, 0.7);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .module small {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .rhino-node .node-number {
+      background: var(--orange);
+    }
+
+    .rhino-node .module {
+      border-color: rgba(216, 103, 45, 0.18);
+    }
+
+    .connector {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+    }
+
+    .connector-inner {
+      width: 100%;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .connector-label {
+      display: inline-block;
+      margin-bottom: 12px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #eaebe5;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .connector-line {
+      position: relative;
+      height: 2px;
+      background: var(--line);
+      transition: background 180ms ease;
+    }
+
+    .connector-line::after {
+      position: absolute;
+      top: 50%;
+      right: -1px;
+      width: 8px;
+      height: 8px;
+      content: "";
+      border-top: 2px solid var(--line);
+      border-right: 2px solid var(--line);
+      transform: translateY(-50%) rotate(45deg);
+      transition: border-color 180ms ease;
+    }
+
+    .connector.active .connector-line {
+      background: var(--orange);
+    }
+
+    .connector.active .connector-line::after {
+      border-color: var(--orange);
+    }
+
+    .connector.active .connector-label {
+      color: #8d3d19;
+      background: var(--orange-soft);
+    }
+
+    .panel[hidden] {
+      display: none;
+    }
+
+    .sequence {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      min-height: 330px;
+      align-items: stretch;
+    }
+
+    .sequence-step {
+      position: relative;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.78);
+    }
+
+    .sequence-step:not(:last-child)::after {
+      position: absolute;
+      top: 34px;
+      right: -9px;
+      z-index: 2;
+      width: 16px;
+      height: 2px;
+      content: "";
+      background: var(--orange);
+    }
+
+    .sequence-step span {
+      display: block;
+      margin-bottom: 36px;
+      color: var(--orange);
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: 0.08em;
+    }
+
+    .sequence-step h3 {
+      margin-bottom: 8px;
+      font-size: 17px;
+      letter-spacing: -0.025em;
+    }
+
+    .sequence-step p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .grid-two {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .decision-card,
+    .plan-card {
+      padding: 26px;
+    }
+
+    .decision-card h2,
+    .plan-card h2 {
+      margin-bottom: 18px;
+      font-size: 22px;
+      letter-spacing: -0.035em;
+    }
+
+    .decision-list {
+      display: grid;
+      gap: 11px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .decision {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 12px;
+      align-items: start;
+      padding: 13px;
+      border-radius: 13px;
+      background: rgba(255, 255, 255, 0.66);
+    }
+
+    .decision-icon {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border-radius: 9px;
+      color: var(--green);
+      background: var(--green-soft);
+      font-size: 15px;
+      font-weight: 900;
+    }
+
+    .removed .decision-icon {
+      color: var(--red);
+      background: var(--red-soft);
+    }
+
+    .decision strong {
+      display: block;
+      margin-bottom: 2px;
+      font-size: 14px;
+    }
+
+    .decision p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .milestones {
+      display: grid;
+      gap: 0;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      counter-reset: milestone;
+    }
+
+    .milestone {
+      position: relative;
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 12px;
+      min-height: 78px;
+      counter-increment: milestone;
+    }
+
+    .milestone::before {
+      z-index: 1;
+      display: grid;
+      width: 32px;
+      height: 32px;
+      place-items: center;
+      border-radius: 10px;
+      color: white;
+      background: var(--ink);
+      content: counter(milestone);
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .milestone:not(:last-child)::after {
+      position: absolute;
+      top: 32px;
+      bottom: 0;
+      left: 15px;
+      width: 2px;
+      content: "";
+      background: var(--line);
+    }
+
+    .milestone strong {
+      display: block;
+      margin-top: 4px;
+      margin-bottom: 3px;
+      font-size: 14px;
+    }
+
+    .milestone p {
+      margin-bottom: 18px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .boundary {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 20px;
+      align-items: center;
+      margin-top: 20px;
+      padding: 24px 26px;
+    }
+
+    .boundary-block span {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .boundary-block strong {
+      font-size: 16px;
+    }
+
+    .boundary-rule {
+      width: 1px;
+      height: 48px;
+      background: var(--line);
+    }
+
+    footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding-top: 34px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .inline-code {
+      display: inline;
+      margin: 0;
+      color: inherit;
+      letter-spacing: 0;
+    }
+
+    .plan-card-spaced {
+      margin-top: 20px;
+    }
+
+    @media (max-width: 920px) {
+      .hero,
+      .grid-two {
+        grid-template-columns: 1fr;
+      }
+
+      .diagram {
+        grid-template-columns: 1fr;
+        gap: 0;
+      }
+
+      .connector {
+        min-height: 72px;
+      }
+
+      .connector-inner {
+        display: grid;
+        justify-items: center;
+      }
+
+      .connector-label {
+        margin-bottom: 6px;
+      }
+
+      .connector-line {
+        width: 2px;
+        height: 42px;
+      }
+
+      .connector-line::after {
+        top: auto;
+        right: auto;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%) rotate(135deg);
+      }
+
+      .sequence {
+        grid-template-columns: 1fr;
+        min-height: 0;
+      }
+
+      .sequence-step:not(:last-child)::after {
+        top: auto;
+        right: auto;
+        bottom: -7px;
+        left: 34px;
+        width: 2px;
+        height: 14px;
+      }
+
+      .sequence-step span {
+        margin-bottom: 18px;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .page {
+        width: min(100% - 24px, 1180px);
+        padding-top: 24px;
+      }
+
+      .topbar,
+      .section-head,
+      footer {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .topbar {
+        margin-bottom: 42px;
+      }
+
+      .hero {
+        gap: 28px;
+      }
+
+      .architecture,
+      .decision-card,
+      .plan-card {
+        padding: 18px;
+      }
+
+      .view-switcher {
+        width: 100%;
+      }
+
+      .view-button {
+        flex: 1;
+      }
+
+      .boundary {
+        grid-template-columns: 1fr;
+      }
+
+      .boundary-rule {
+        width: 100%;
+        height: 1px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">H</span>
+        <span>Hopper local agent</span>
+      </div>
+      <div class="status"><span class="status-dot" aria-hidden="true"></span> Architecture plan, revision 1</div>
+    </header>
+
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">Trimmed architecture</p>
+        <h1 id="page-title">Pi inside Hopper, without putting Pi inside Rhino.</h1>
+        <p class="hero-copy">Rhino launches one private Hopper host. That host serves the browser UI, embeds Pi through its SDK, and uses the existing ZMQ bridge to edit Rhino and Grasshopper.</p>
+      </div>
+      <aside class="hero-note">
+        <strong>The main decision</strong>
+        <p>No Pi CLI child process and no Pi RPC adapter. The web server and Pi runtime share one Node process.</p>
+      </aside>
+    </section>
+
+    <section class="surface architecture" aria-labelledby="architecture-title">
+      <div class="section-head">
+        <div>
+          <h2 id="architecture-title">System map</h2>
+          <p>Switch views to inspect the runtime path or Rhino startup.</p>
+        </div>
+        <div class="view-switcher" role="tablist" aria-label="Diagram view">
+          <button class="view-button" type="button" role="tab" aria-selected="true" aria-controls="runtime-panel" id="runtime-tab" data-panel="runtime-panel">Prompt flow</button>
+          <button class="view-button" type="button" role="tab" aria-selected="false" aria-controls="startup-panel" id="startup-tab" data-panel="startup-panel">Startup</button>
+        </div>
+      </div>
+
+      <div class="panel" id="runtime-panel" role="tabpanel" aria-labelledby="runtime-tab">
+        <div class="diagram" role="group" aria-label="Browser connects to Hopper host, which connects to Rhino through ZMQ">
+          <article class="node" data-flow-step="1">
+            <span class="node-number">01</span>
+            <h3>Browser</h3>
+            <p>Chat, streamed responses, session controls, model choice, and agent questions.</p>
+            <span class="node-tag">Presentation only</span>
+          </article>
+
+          <div class="connector" role="img" data-flow-step="2" aria-label="HTTP and WebSocket connection">
+            <div class="connector-inner">
+              <span class="connector-label">HTTP + WS</span>
+              <div class="connector-line"></div>
+            </div>
+          </div>
+
+          <article class="node host-node" data-flow-step="3">
+            <span class="node-number">02</span>
+            <h3>Hopper host</h3>
+            <p>One private Node process launched from Rhino. It owns the agent and the localhost UI.</p>
+            <div class="host-modules">
+              <div class="module"><span>Local web server</span><small>127.0.0.1</small></div>
+              <div class="module"><span>Pi SDK runtime</span><small>pinned</small></div>
+              <div class="module"><span>Hopper extension</span><small>gh_* and rh_*</small></div>
+              <div class="module"><span>Browser UI adapter</span><small>ctx.ui</small></div>
+            </div>
+          </article>
+
+          <div class="connector" role="img" data-flow-step="4" aria-label="Authenticated ZMQ connection">
+            <div class="connector-inner">
+              <span class="connector-label">ZMQ</span>
+              <div class="connector-line"></div>
+            </div>
+          </div>
+
+          <article class="node rhino-node" data-flow-step="5">
+            <span class="node-number">03</span>
+            <h3>Rhino plug-in</h3>
+            <p>Runs document operations on Rhino's UI thread and reports tool results.</p>
+            <div class="rhino-modules">
+              <div class="module"><span>Rhino document</span><small>rh_*</small></div>
+              <div class="module"><span>Grasshopper document</span><small>gh_*</small></div>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div class="panel" id="startup-panel" role="tabpanel" aria-labelledby="startup-tab" hidden>
+        <div class="sequence" role="group" aria-label="Five step startup sequence">
+          <article class="sequence-step">
+            <span>01</span>
+            <h3>Run <span class="mono inline-code">HopperCode</span></h3>
+            <p>The user starts Hopper from Rhino.</p>
+          </article>
+          <article class="sequence-step">
+            <span>02</span>
+            <h3>Start the bridge</h3>
+            <p>The Rhino plug-in starts its authenticated ZMQ service.</p>
+          </article>
+          <article class="sequence-step">
+            <span>03</span>
+            <h3>Launch the host</h3>
+            <p>Rhino resolves a stable Node 22.19.0 or newer installation and launches the packaged Hopper host.</p>
+          </article>
+          <article class="sequence-step">
+            <span>04</span>
+            <h3>Create Pi session</h3>
+            <p>The host loads the pinned Pi SDK, Hopper tools, skills, settings, and session.</p>
+          </article>
+          <article class="sequence-step">
+            <span>05</span>
+            <h3>Open localhost</h3>
+            <p>The host chooses a free port and Rhino opens the tokenized browser URL.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid-two">
+      <section class="surface decision-card" aria-labelledby="keep-title">
+        <h2 id="keep-title">Keep</h2>
+        <ul class="decision-list">
+          <li class="decision">
+            <span class="decision-icon" aria-hidden="true">✓</span>
+            <div><strong>Local web UI</strong><p>The browser remains separate from Rhino and can reconnect after a refresh.</p></div>
+          </li>
+          <li class="decision">
+            <span class="decision-icon" aria-hidden="true">✓</span>
+            <div><strong>Private Pi runtime</strong><p>Hopper pins its SDK and keeps settings, skills, and sessions private. Provider credentials use the global Pi auth file by default.</p></div>
+          </li>
+          <li class="decision">
+            <span class="decision-icon" aria-hidden="true">✓</span>
+            <div><strong>Existing ZMQ bridge</strong><p>The current Rhino and Grasshopper command path stays in place.</p></div>
+          </li>
+          <li class="decision">
+            <span class="decision-icon" aria-hidden="true">✓</span>
+            <div><strong>One host per Rhino instance</strong><p>No routing layer or instance picker is needed.</p></div>
+          </li>
+        </ul>
+      </section>
+
+      <section class="surface decision-card" aria-labelledby="remove-title">
+        <h2 id="remove-title">Remove or defer</h2>
+        <ul class="decision-list">
+          <li class="decision removed">
+            <span class="decision-icon" aria-hidden="true">×</span>
+            <div><strong>Pi CLI subprocess</strong><p>The Hopper host creates the Pi session in its own process through the SDK.</p></div>
+          </li>
+          <li class="decision removed">
+            <span class="decision-icon" aria-hidden="true">×</span>
+            <div><strong>Pi JSONL RPC</strong><p>There is no second process that needs an RPC translator or health monitor.</p></div>
+          </li>
+          <li class="decision removed">
+            <span class="decision-icon" aria-hidden="true">×</span>
+            <div><strong>Required GHZMQ component</strong><p>The plug-in owns the backend. The component can remain as an optional status view.</p></div>
+          </li>
+          <li class="decision removed">
+            <span class="decision-icon" aria-hidden="true">→</span>
+            <div><strong>Replacing ZMQ</strong><p>Deferred. A new transport would add work without helping the first release.</p></div>
+          </li>
+        </ul>
+      </section>
+    </div>
+
+    <section class="surface boundary" aria-label="Process isolation boundary">
+      <div class="boundary-block">
+        <span>Rhino process</span>
+        <strong>Rhino plug-in, documents, and UI-thread work</strong>
+      </div>
+      <div class="boundary-rule" aria-hidden="true"></div>
+      <div class="boundary-block">
+        <span>Hopper process</span>
+        <strong>Web server, Pi SDK, extensions, and agent sessions</strong>
+      </div>
+    </section>
+
+    <section class="surface plan-card plan-card-spaced" aria-labelledby="plan-title">
+      <h2 id="plan-title">Implementation plan</h2>
+      <ol class="milestones">
+        <li class="milestone"><div><strong>Prove the embedded agent</strong><p>Create a local Hopper host that starts a Pi session runtime, loads only the bundled extensions and skills, binds browser-backed extension UI, and reaches the current ZMQ backend.</p></div></li>
+        <li class="milestone"><div><strong>Add the browser conversation</strong><p>Serve one chat page with streaming text, visible tool calls, stop, new session, and the existing ask-user interactions.</p></div></li>
+        <li class="milestone"><div><strong>Give Rhino ownership</strong><p>Add the <span class="mono">HopperCode</span> commands, host health checks, browser launch, active-document tracking, and clean shutdown.</p></div></li>
+        <li class="milestone"><div><strong>Remove the canvas dependency</strong><p>Move backend ownership out of the GHZMQ component. Keep that component only if its canvas status output remains useful.</p></div></li>
+        <li class="milestone"><div><strong>Package both platforms</strong><p>Build separate macOS arm64 and Windows x64 Yak packages with target-specific native modules. Require an external stable Node 22.19.0 or newer installation.</p></div></li>
+      </ol>
+    </section>
+
+    <footer>
+      <span>Decision summary: browser UI stays, Pi RPC goes.</span>
+      <span class="mono">Browser → Hopper host → ZMQ → Rhino/GH</span>
+    </footer>
+  </main>
+
+  <script>
+    const buttons = Array.from(document.querySelectorAll('[role="tab"]'));
+    const panels = Array.from(document.querySelectorAll('[role="tabpanel"]'));
+
+    function selectPanel(button) {
+      buttons.forEach((candidate) => {
+        candidate.setAttribute('aria-selected', String(candidate === button));
+      });
+      panels.forEach((panel) => {
+        panel.hidden = panel.id !== button.dataset.panel;
+      });
+    }
+
+    buttons.forEach((button, index) => {
+      button.addEventListener('click', () => selectPanel(button));
+      button.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        const offset = event.key === 'ArrowRight' ? 1 : -1;
+        const next = buttons[(index + offset + buttons.length) % buttons.length];
+        next.focus();
+        selectPanel(next);
+      });
+    });
+
+    const flowSteps = Array.from(document.querySelectorAll('[data-flow-step]'));
+    let currentStep = 0;
+
+    function animateFlow() {
+      flowSteps.forEach((step, index) => step.classList.toggle('active', index === currentStep));
+      currentStep = (currentStep + 1) % flowSteps.length;
+    }
+
+    animateFlow();
+    const flowTimer = window.setInterval(animateFlow, 1100);
+
+    window.addEventListener('pagehide', () => window.clearInterval(flowTimer));
+  </script>
+</body>
+</html>

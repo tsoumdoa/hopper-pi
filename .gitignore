@@ -67,6 +67,7 @@ venv/
 # Build / dist outputs (adjust to your project)
 # ------------------------------------------------------------
 dist/
+artifacts/
 build/
 out/
 target/

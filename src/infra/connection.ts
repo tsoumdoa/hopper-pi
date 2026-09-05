@@ -1,31 +1,30 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { ENV } from "../config.js";
 
 export type ConnectionConfig = {
+	rpcEndpoint: string;
 	pubEndpoint: string;
-	pushEndpoint: string;
-	reqEndpoint: string;
-	token?: string;
-	source: "env" | "profile" | "defaults";
+	token: string;
+	lifecycleInstanceId: string;
 	profilePath: string;
-	instanceId?: string;
-	startedAt?: number;
+	source: "profile";
 };
 
 type ConnectionProfile = {
 	protocolVersion?: number;
-	instanceId?: string;
-	pubEndpoint?: string;
-	pushEndpoint?: string;
-	reqEndpoint?: string;
-	token?: string;
-	startedAt?: number;
+	lifecycleInstanceId?: string;
+	endpoints?: {
+		rpcEndpoint?: string;
+		pubEndpoint?: string;
+	};
+	authentication?: {
+		token?: string;
+	};
 };
 
-import { DEBUG, DEFAULT_ZMQ_ENDPOINTS, ENV } from "../config.js";
-
-export { DEBUG };
+export const DEBUG = process.env[ENV.GH_DEBUG] === "1";
 
 let cachedConnection: ConnectionConfig | null = null;
 
@@ -51,50 +50,27 @@ export function connectionProfileDirectory(): string {
 }
 
 export function connectionProfilePath(): string {
-	if (process.env[ENV.HOPPER_CONNECTION_PROFILE]) {
-		return process.env[ENV.HOPPER_CONNECTION_PROFILE]!;
-	}
-
-	return join(connectionProfileDirectory(), "connection.json");
+	return process.env[ENV.HOPPER_CONNECTION_PROFILE]
+		?? join(connectionProfileDirectory(), "connection.json");
 }
 
 export function resolveConnection(options: { refresh?: boolean } = {}): ConnectionConfig {
-	if (!options.refresh && cachedConnection) {
-		return cachedConnection;
-	}
+	if (!options.refresh && cachedConnection) return cachedConnection;
 
 	const profilePath = connectionProfilePath();
-	const profileDir = connectionProfileDirectory();
 	const profile = readProfile(profilePath);
-	const hasEndpointEnv =
-		Boolean(process.env[ENV.GH_ZMQ_PUB]) ||
-		Boolean(process.env[ENV.GH_ZMQ_PUSH]) ||
-		Boolean(process.env[ENV.GH_ZMQ_REQ]);
-	const hasTokenEnv = Boolean(process.env[ENV.GH_ZMQ_TOKEN]);
+	if (!profile) {
+		throw new Error(`RPC v2 connection profile is missing or invalid: ${profilePath}`);
+	}
 
 	const connection: ConnectionConfig = {
-		pubEndpoint:
-			process.env[ENV.GH_ZMQ_PUB] ||
-			profile?.pubEndpoint ||
-			DEFAULT_ZMQ_ENDPOINTS.pub,
-		pushEndpoint:
-			process.env[ENV.GH_ZMQ_PUSH] ||
-			profile?.pushEndpoint ||
-			DEFAULT_ZMQ_ENDPOINTS.push,
-		reqEndpoint:
-			process.env[ENV.GH_ZMQ_REQ] ||
-			profile?.reqEndpoint ||
-			DEFAULT_ZMQ_ENDPOINTS.req,
-		token:
-			process.env[ENV.GH_ZMQ_TOKEN] ||
-			profile?.token ||
-			readTokenFile(profileDir),
-		source: hasEndpointEnv || hasTokenEnv ? "env" : profile ? "profile" : "defaults",
+		rpcEndpoint: profile.endpoints!.rpcEndpoint!,
+		pubEndpoint: profile.endpoints!.pubEndpoint!,
+		token: profile.authentication!.token!,
+		lifecycleInstanceId: profile.lifecycleInstanceId!,
 		profilePath,
-		instanceId: profile?.instanceId,
-		startedAt: profile?.startedAt,
+		source: "profile",
 	};
-
 	cachedConnection = connection;
 	return connection;
 }
@@ -103,47 +79,20 @@ export function formatEndpoint(endpoint: string): string {
 	return endpoint.replace(/^tcp:\/\//, "");
 }
 
-export function withConnectionToken<T>(data: T, connection: ConnectionConfig): T {
-	if (
-		!connection.token ||
-		data === null ||
-		typeof data !== "object" ||
-		Array.isArray(data)
-	) {
-		return data;
-	}
-
-	return {
-		...data,
-		token: connection.token,
-	};
-}
-
-function readTokenFile(profileDir: string): string | undefined {
-	const tokenPath = join(profileDir, "connection-token");
-	if (!existsSync(tokenPath)) {
-		return undefined;
-	}
-
-	try {
-		const token = readFileSync(tokenPath, "utf8").trim();
-		return token || undefined;
-	} catch {
-		return undefined;
-	}
-}
-
 function readProfile(profilePath: string): ConnectionProfile | null {
-	if (!existsSync(profilePath)) {
-		return null;
-	}
+	if (!existsSync(profilePath)) return null;
 
 	try {
 		const parsed = JSON.parse(readFileSync(profilePath, "utf8")) as ConnectionProfile;
 		if (
-			typeof parsed.pubEndpoint !== "string" ||
-			typeof parsed.pushEndpoint !== "string" ||
-			typeof parsed.reqEndpoint !== "string"
+			parsed.protocolVersion !== 2
+			|| !isIdentifier(parsed.lifecycleInstanceId)
+			|| typeof parsed.endpoints?.rpcEndpoint !== "string"
+			|| parsed.endpoints.rpcEndpoint.length === 0
+			|| typeof parsed.endpoints.pubEndpoint !== "string"
+			|| parsed.endpoints.pubEndpoint.length === 0
+			|| typeof parsed.authentication?.token !== "string"
+			|| !/^[A-Za-z0-9_-]{32,128}$/.test(parsed.authentication.token)
 		) {
 			return null;
 		}
@@ -151,4 +100,8 @@ function readProfile(profilePath: string): ConnectionProfile | null {
 	} catch {
 		return null;
 	}
+}
+
+function isIdentifier(value: unknown): value is string {
+	return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
 }

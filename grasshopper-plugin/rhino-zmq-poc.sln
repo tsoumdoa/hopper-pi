@@ -1,8 +1,16 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "rhino-zmq-poc", "rhino-zmq-poc.csproj", "{07A0FD40-6E1C-169D-A33C-BD8292BE7337}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hopper.Rhino", "..\dotnet\Hopper.Rhino\Hopper.Rhino.csproj", "{9B3C31F7-221B-48E3-8CD0-F2386D851DA0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hopper.Core", "..\dotnet\Hopper.Core\Hopper.Core.csproj", "{377C0649-04FA-415C-95BD-40D40BBFEAD6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hopper.Core.Tests", "..\dotnet\Hopper.Core.Tests\Hopper.Core.Tests.csproj", "{87BBB4F7-18B2-4553-86E2-FA330BAA95F6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hopper.Grasshopper", "..\dotnet\Hopper.Grasshopper\Hopper.Grasshopper.csproj", "{6E1D2BC4-B65A-4F48-BBDB-1C1E29DC87F9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "grasshopper-plugin.Tests", "..\grasshopper-plugin.Tests\grasshopper-plugin.Tests.csproj", "{E854430F-E2C4-4E5E-8825-237299BFC365}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -10,10 +18,26 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{07A0FD40-6E1C-169D-A33C-BD8292BE7337}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{07A0FD40-6E1C-169D-A33C-BD8292BE7337}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{07A0FD40-6E1C-169D-A33C-BD8292BE7337}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{07A0FD40-6E1C-169D-A33C-BD8292BE7337}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9B3C31F7-221B-48E3-8CD0-F2386D851DA0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9B3C31F7-221B-48E3-8CD0-F2386D851DA0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9B3C31F7-221B-48E3-8CD0-F2386D851DA0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9B3C31F7-221B-48E3-8CD0-F2386D851DA0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{377C0649-04FA-415C-95BD-40D40BBFEAD6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{377C0649-04FA-415C-95BD-40D40BBFEAD6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{377C0649-04FA-415C-95BD-40D40BBFEAD6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{377C0649-04FA-415C-95BD-40D40BBFEAD6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{87BBB4F7-18B2-4553-86E2-FA330BAA95F6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{87BBB4F7-18B2-4553-86E2-FA330BAA95F6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{87BBB4F7-18B2-4553-86E2-FA330BAA95F6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{87BBB4F7-18B2-4553-86E2-FA330BAA95F6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6E1D2BC4-B65A-4F48-BBDB-1C1E29DC87F9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6E1D2BC4-B65A-4F48-BBDB-1C1E29DC87F9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6E1D2BC4-B65A-4F48-BBDB-1C1E29DC87F9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6E1D2BC4-B65A-4F48-BBDB-1C1E29DC87F9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E854430F-E2C4-4E5E-8825-237299BFC365}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E854430F-E2C4-4E5E-8825-237299BFC365}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E854430F-E2C4-4E5E-8825-237299BFC365}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E854430F-E2C4-4E5E-8825-237299BFC365}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

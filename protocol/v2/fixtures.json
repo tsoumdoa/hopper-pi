@@ -1,0 +1,500 @@
+{
+  "validRequests": [
+    {
+      "name": "authenticated lifecycle handshake",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-01J7YQ5C5RP8D2VJ9F0A6M3N4B",
+        "requestId": "req-handshake-1",
+        "token": "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+        "operation": "lifecycleHandshake",
+        "startDeadlineAt": 1730000030000,
+        "args": {
+          "nodeProcessId": 4242,
+          "nodeVersion": "v22.19.0",
+          "clientIdentity": "hopper-node-4242"
+        }
+      }
+    },
+    {
+      "name": "runtime status query",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-01J7YQ5C5RP8D2VJ9F0A6M3N4B",
+        "requestId": "req-status-1",
+        "token": "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+        "operation": "getRuntimeStatus",
+        "startDeadlineAt": 1730000030000,
+        "args": {}
+      }
+    },
+    {
+      "name": "lazy Grasshopper start",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-01J7YQ5C5RP8D2VJ9F0A6M3N4B",
+        "requestId": "req-gh-start-1",
+        "token": "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+        "operation": "startGrasshopper",
+        "startDeadlineAt": 1730000030000,
+        "args": {}
+      }
+    },
+    {
+      "name": "mutation result lookup",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-01J7YQ5C5RP8D2VJ9F0A6M3N4B",
+        "requestId": "req-lookup-1",
+        "token": "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+        "operation": "getOperationResult",
+        "startDeadlineAt": 1730000030000,
+        "args": { "operationId": "op-set-slider-1" }
+      }
+    },
+    {
+      "name": "queued mutation cancellation",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-01J7YQ5C5RP8D2VJ9F0A6M3N4B",
+        "requestId": "req-cancel-1",
+        "token": "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+        "operation": "cancelOperation",
+        "startDeadlineAt": 1730000030000,
+        "args": { "operationId": "op-set-slider-1" }
+      }
+    },
+    {
+      "name": "extensible query arguments",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-01J7YQ5C5RP8D2VJ9F0A6M3N4B",
+        "requestId": "req-query-1",
+        "token": "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+        "operation": "queryRhinoObjects",
+        "startDeadlineAt": 1730000030000,
+        "args": {
+          "selectionOnly": false,
+          "filters": { "layers": ["Structure", "Glass"] }
+        }
+      }
+    },
+    {
+      "name": "mutation carries operation id",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-01J7YQ5C5RP8D2VJ9F0A6M3N4B",
+        "requestId": "req-mutation-1",
+        "token": "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+        "operation": "setSliderValue",
+        "operationId": "op-set-slider-1",
+        "startDeadlineAt": 1730000030000,
+        "args": { "targetId": "component-1", "value": 12.5 }
+      }
+    }
+  ],
+  "invalidRequests": [
+    {
+      "name": "protocol v1 is rejected",
+      "value": {
+        "protocolVersion": 1,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-1",
+        "token": "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+        "operation": "getRuntimeStatus",
+        "startDeadlineAt": 1730000030000,
+        "args": {}
+      }
+    },
+    {
+      "name": "authentication token is required",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-1",
+        "operation": "getRuntimeStatus",
+        "startDeadlineAt": 1730000030000,
+        "args": {}
+      }
+    },
+    {
+      "name": "unknown envelope field is rejected",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-1",
+        "token": "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+        "operation": "getRuntimeStatus",
+        "startDeadlineAt": 1730000030000,
+        "args": {},
+        "classification": "query"
+      }
+    },
+    {
+      "name": "mutation requires operation id",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-1",
+        "token": "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+        "operation": "setSliderValue",
+        "startDeadlineAt": 1730000030000,
+        "args": { "targetId": "component-1", "value": 12.5 }
+      }
+    },
+    {
+      "name": "query forbids operation id",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-1",
+        "token": "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+        "operation": "getCurrentCanvas",
+        "operationId": "op-1",
+        "startDeadlineAt": 1730000030000,
+        "args": {}
+      }
+    },
+    {
+      "name": "deadline must be Unix milliseconds",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-1",
+        "token": "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+        "operation": "getCurrentCanvas",
+        "startDeadlineAt": "tomorrow",
+        "args": {}
+      }
+    },
+    {
+      "name": "handshake arguments are exact",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-1",
+        "token": "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+        "operation": "lifecycleHandshake",
+        "startDeadlineAt": 1730000030000,
+        "args": { "nodeProcessId": 4242, "nodeVersion": "22", "clientIdentity": "node-1" }
+      }
+    },
+    {
+      "name": "request id is required for correlation",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "token": "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+        "operation": "getRuntimeStatus",
+        "startDeadlineAt": 1730000030000,
+        "args": {}
+      }
+    },
+    {
+      "name": "unknown operation is rejected",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-1",
+        "token": "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+        "operation": "deleteEverything",
+        "startDeadlineAt": 1730000030000,
+        "args": {}
+      }
+    }
+  ],
+  "validResponses": [
+    {
+      "name": "handshake becomes live",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-01J7YQ5C5RP8D2VJ9F0A6M3N4B",
+        "requestId": "req-handshake-1",
+        "operation": "lifecycleHandshake",
+        "result": {
+          "class": "completed",
+          "reasonCode": "OK",
+          "data": { "handshake": "live", "statusRevision": 4 }
+        }
+      }
+    },
+    {
+      "name": "full runtime status",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-01J7YQ5C5RP8D2VJ9F0A6M3N4B",
+        "requestId": "req-status-1",
+        "operation": "getRuntimeStatus",
+        "result": {
+          "class": "completed",
+          "reasonCode": "OK",
+          "data": {
+            "protocolVersion": 2,
+            "revision": 4,
+            "observedAt": 1730000000000,
+            "lifecycle": { "state": "running", "changedAt": 1730000000000, "reason": null },
+            "transport": {
+              "ready": true,
+              "lifecycleInstanceId": "life-01J7YQ5C5RP8D2VJ9F0A6M3N4B"
+            },
+            "host": {
+              "state": "running",
+              "processId": 4242,
+              "nodePath": "/opt/homebrew/bin/node",
+              "nodeVersion": "22.19.0",
+              "handshake": "live",
+              "healthFailureCount": 0
+            },
+            "rhino": { "activeDocument": true, "documentName": "tower.3dm" },
+            "grasshopper": { "state": "not_loaded", "activeDocument": false, "documentName": null },
+            "dispatcher": { "acceptingExternalWork": true, "depth": 0, "capacity": 64 },
+            "errors": {
+              "transport": null,
+              "host": null,
+              "rhino": null,
+              "grasshopper": null,
+              "dispatcher": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Grasshopper start accepted",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-gh-start-1",
+        "operation": "startGrasshopper",
+        "result": {
+          "class": "completed",
+          "reasonCode": "OK",
+          "data": { "state": "start_requested" }
+        }
+      }
+    },
+    {
+      "name": "operation remains queued",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-lookup-1",
+        "operation": "getOperationResult",
+        "result": {
+          "class": "completed",
+          "reasonCode": "OK",
+          "data": { "state": "pending", "phase": "queued" }
+        }
+      }
+    },
+    {
+      "name": "operation lookup returns retained terminal result",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-lookup-2",
+        "operation": "getOperationResult",
+        "result": {
+          "class": "completed",
+          "reasonCode": "OK",
+          "data": {
+            "state": "terminal",
+            "result": {
+              "class": "completed",
+              "reasonCode": "OK",
+              "data": { "changed": true }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "cancellation is rejected after start",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-cancel-1",
+        "operation": "cancelOperation",
+        "result": {
+          "class": "failed",
+          "reasonCode": "CANCELLATION_REJECTED_ALREADY_STARTED",
+          "message": "The operation already started.",
+          "data": { "state": "rejected_already_started" }
+        }
+      }
+    },
+    {
+      "name": "mutation terminal response echoes both ids",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-mutation-1",
+        "operation": "setSliderValue",
+        "operationId": "op-set-slider-1",
+        "result": {
+          "class": "completed",
+          "reasonCode": "OK",
+          "data": { "changed": true }
+        }
+      }
+    },
+    {
+      "name": "result store backpressure",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-mutation-2",
+        "operation": "applyGraph",
+        "operationId": "op-apply-1",
+        "result": {
+          "class": "busy",
+          "reasonCode": "RESULT_STORE_FULL",
+          "message": "No retained-result slot is available.",
+          "data": { "depth": 64, "capacity": 64 }
+        }
+      }
+    },
+    {
+      "name": "unknown operation gets a correlated protocol error",
+      "value": {
+        "protocolVersion": 2,
+        "requestId": "req-unknown-1",
+        "errorType": "protocol_error",
+        "lifecycleInstanceId": "life-1",
+        "operation": "deleteEverything",
+        "result": {
+          "class": "failed",
+          "reasonCode": "UNKNOWN_OPERATION",
+          "message": "Operation deleteEverything is not defined by protocol v2."
+        }
+      }
+    },
+    {
+      "name": "missing lifecycle id gets a correlated protocol error",
+      "value": {
+        "protocolVersion": 2,
+        "requestId": "req-missing-life-1",
+        "errorType": "protocol_error",
+        "lifecycleInstanceId": null,
+        "operation": "getRuntimeStatus",
+        "result": {
+          "class": "failed",
+          "reasonCode": "MALFORMED_REQUEST",
+          "message": "lifecycleInstanceId is required."
+        }
+      }
+    },
+    {
+      "name": "invalid authentication gets a correlated protocol error",
+      "value": {
+        "protocolVersion": 2,
+        "requestId": "req-auth-1",
+        "errorType": "protocol_error",
+        "lifecycleInstanceId": "life-1",
+        "operation": "getRuntimeStatus",
+        "result": {
+          "class": "failed",
+          "reasonCode": "AUTH_INVALID",
+          "message": "Authentication failed."
+        }
+      }
+    },
+    {
+      "name": "version mismatch gets a v2 correlated protocol error",
+      "value": {
+        "protocolVersion": 2,
+        "requestId": "req-version-1",
+        "errorType": "protocol_error",
+        "lifecycleInstanceId": "life-1",
+        "operation": "getRuntimeStatus",
+        "result": {
+          "class": "failed",
+          "reasonCode": "PROTOCOL_VERSION_UNSUPPORTED",
+          "message": "The server accepts protocol version 2."
+        }
+      }
+    }
+  ],
+  "invalidResponses": [
+    {
+      "name": "Rhino never sends outcome unknown",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-1",
+        "operation": "setSliderValue",
+        "operationId": "op-1",
+        "result": { "class": "outcome_unknown", "reasonCode": "OPERATION_FAILED" }
+      }
+    },
+    {
+      "name": "mutation response requires operation id",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-1",
+        "operation": "setSliderValue",
+        "result": { "class": "completed", "reasonCode": "OK" }
+      }
+    },
+    {
+      "name": "result class and reason code must agree",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-1",
+        "operation": "getCurrentCanvas",
+        "result": { "class": "busy", "reasonCode": "OPERATION_FAILED" }
+      }
+    },
+    {
+      "name": "response envelope is exact",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-1",
+        "operation": "getCurrentCanvas",
+        "result": { "class": "completed", "reasonCode": "OK", "data": {} },
+        "token": "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"
+      }
+    },
+    {
+      "name": "completed status response requires full snapshot",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-1",
+        "operation": "getRuntimeStatus",
+        "result": { "class": "completed", "reasonCode": "OK", "data": { "revision": 1 } }
+      }
+    },
+    {
+      "name": "completed operation lookup has exact state",
+      "value": {
+        "protocolVersion": 2,
+        "lifecycleInstanceId": "life-1",
+        "requestId": "req-1",
+        "operation": "getOperationResult",
+        "result": {
+          "class": "completed",
+          "reasonCode": "OK",
+          "data": { "state": "pending" }
+        }
+      }
+    },
+    {
+      "name": "uncorrelated protocol errors are dropped instead of encoded",
+      "value": {
+        "protocolVersion": 2,
+        "errorType": "protocol_error",
+        "lifecycleInstanceId": null,
+        "operation": null,
+        "result": {
+          "class": "failed",
+          "reasonCode": "MALFORMED_REQUEST",
+          "message": "The request cannot be correlated."
+        }
+      }
+    }
+  ]
+}

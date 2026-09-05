@@ -1,44 +1,44 @@
-import { type ConnectionConfig, resolveConnection, withConnectionToken } from "./connection.js";
+import { classifyOperation, type JsonObject, type OperationName } from "../protocol/v2.js";
+import { getRuntimeRpc, type RuntimeRpc } from "./runtime-rpc.js";
 
+/**
+ * Transitional domain-request facade. It preserves the existing tool call shape
+ * while every request is carried by the process-wide RPC v2 DEALER client.
+ */
 export class Requester {
-	private socket: import("zeromq").Request | null = null;
-	private connection: ConnectionConfig | null = null;
+	constructor(private readonly runtime: RuntimeRpc = getRuntimeRpc()) { }
 
-	async connect(options: { refresh?: boolean } = {}): Promise<void> {
-		const { Request } = await import("zeromq");
-		this.connection = resolveConnection(options);
-		this.socket = new Request();
-		await this.socket.connect(this.connection.reqEndpoint);
+	async connect(): Promise<void> {
+		await this.runtime.connect();
 	}
 
 	async request<T>(data: unknown): Promise<T> {
-		if (!this.socket) {
-			throw new Error("Requester not connected");
+		if (!isRecord(data) || typeof data.type !== "string") {
+			throw new Error("RPC domain request must contain an operation type");
 		}
-		if (!this.connection) {
-			throw new Error("Requester connection not resolved");
+		const operation = data.type;
+		if (!classifyOperation(operation) || isInternalOperation(operation)) {
+			throw new Error(`Unsupported RPC domain operation: ${operation}`);
 		}
-		const payload = JSON.stringify(withConnectionToken(data, this.connection));
-
-		await this.socket.send(payload);
-
-		const [response] = await this.socket.receive();
-
-		return parseJsonResponse<T>(response.toString());
+		const { type: _type, ...args } = data;
+		return this.runtime.request<T>(operation as OperationName, args as JsonObject);
 	}
 
 	async close(): Promise<void> {
-		if (this.socket) {
-			await this.socket.close();
-			this.socket = null;
-		}
+		// The DEALER is intentionally process-scoped. Per-tool callers do not own it.
 	}
 }
 
-function parseJsonResponse<T>(raw: string): T {
-	const parsed: unknown = JSON.parse(raw);
-	if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-		throw new Error("Invalid response: expected JSON object");
-	}
-	return parsed as T;
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isInternalOperation(operation: string): boolean {
+	return [
+		"lifecycleHandshake",
+		"getRuntimeStatus",
+		"startGrasshopper",
+		"getOperationResult",
+		"cancelOperation",
+	].includes(operation);
 }
