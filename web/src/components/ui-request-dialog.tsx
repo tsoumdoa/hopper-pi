@@ -43,7 +43,7 @@ export function UiRequestDialog({
 		>
 			<DialogContent hideClose>
 				<DialogHeader>
-					<DialogKicker>Hopper needs your input{queued > 0 ? ` · ${queued} more waiting` : ""}</DialogKicker>
+					<DialogKicker>Input needed{queued > 0 ? ` · ${queued} more waiting` : ""}</DialogKicker>
 					<DialogTitle>{request.title}</DialogTitle>
 					{request.description && kind !== "confirm" && <DialogDescription>{request.description}</DialogDescription>}
 				</DialogHeader>
@@ -62,7 +62,7 @@ export function UiRequestDialog({
 									<label
 										key={option.id ?? option.value}
 										className={cn(
-											"flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent/35",
+											"flex cursor-pointer items-start gap-3 rounded-sm border p-2.5 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent/40",
 											checked ? "border-accent bg-accent-soft" : "border-line bg-surface hover:border-line-strong hover:bg-surface-muted",
 										)}
 									>
@@ -79,7 +79,7 @@ export function UiRequestDialog({
 											{checked && <Check className="size-3" />}
 										</span>
 										<span className="min-w-0">
-											<span className="block text-sm font-medium text-ink">{option.label}</span>
+											<span className="block text-[13px] font-medium text-ink">{option.label}</span>
 											{option.description && <span className="mt-0.5 block text-xs leading-relaxed text-ink-soft">{option.description}</span>}
 										</span>
 									</label>
@@ -87,7 +87,7 @@ export function UiRequestDialog({
 							})}
 						</div>
 					) : kind === "confirm" ? (
-						<p className="rounded-xl border border-line bg-surface-muted p-3.5 text-sm leading-relaxed text-ink-soft">
+						<p className="rounded-sm border border-line bg-surface-muted p-3 text-[13px] leading-relaxed text-ink-soft">
 							{request.description ?? "Continue?"}
 						</p>
 					) : kind === "editor" ? (

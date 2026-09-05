@@ -17,8 +17,8 @@ export function ConnectionBanner({ connection, onReconnect }: { connection: Hopp
 			role="status"
 			className={
 				lost
-					? "flex items-center gap-3 border-b border-danger/20 bg-danger-soft px-4 py-2 text-xs text-danger sm:px-6 lg:px-10"
-					: "flex items-center gap-3 border-b border-warn/20 bg-warn-soft px-4 py-2 text-xs text-warn sm:px-6 lg:px-10"
+					? "flex items-center gap-3 border-b border-danger/20 bg-danger-soft px-4 py-1.5 text-xs text-danger sm:px-6"
+					: "flex items-center gap-3 border-b border-warn/20 bg-warn-soft px-4 py-1.5 text-xs text-warn sm:px-6"
 			}
 		>
 			{lost ? <WifiOff className="size-4 shrink-0" /> : <Loader2 className="size-4 shrink-0 animate-spin" />}

@@ -18,7 +18,7 @@ function Toast({ notice, onDismiss }: { notice: ToastNotice; onDismiss(): void }
 		<div
 			role={notice.level === "error" ? "alert" : "status"}
 			className={cn(
-				"pointer-events-auto flex items-start gap-2.5 rounded-xl border bg-surface p-3 text-sm shadow-pop animate-pop-in",
+				"pointer-events-auto flex items-start gap-2.5 rounded-md border bg-surface p-3 text-[13px] shadow-pop animate-pop-in",
 				notice.level === "error" && "border-danger/30",
 				notice.level === "warning" && "border-warn/30",
 				notice.level === "success" && "border-accent/30",
@@ -45,7 +45,7 @@ function Toast({ notice, onDismiss }: { notice: ToastNotice; onDismiss(): void }
 			</div>
 			<button
 				type="button"
-				className="-m-1 rounded-md p-1 text-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/35"
+				className="-m-1 rounded-sm p-1 text-muted transition-colors hover:bg-ink/[.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
 				onClick={onDismiss}
 				aria-label="Dismiss notification"
 			>
@@ -57,7 +57,7 @@ function Toast({ notice, onDismiss }: { notice: ToastNotice; onDismiss(): void }
 
 export function ToastRegion({ notices, onDismiss }: { notices: ToastNotice[]; onDismiss(id: string): void }) {
 	return (
-		<div className="pointer-events-none fixed right-4 top-[68px] z-[60] grid w-[min(380px,calc(100%-2rem))] gap-2" aria-live="polite" aria-atomic="false">
+		<div className="pointer-events-none fixed right-4 top-14 z-[60] grid w-[min(360px,calc(100%-2rem))] gap-2" aria-live="polite" aria-atomic="false">
 			{notices.slice(-4).map((notice) => (
 				<Toast key={notice.id} notice={notice} onDismiss={() => onDismiss(notice.id)} />
 			))}

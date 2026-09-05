@@ -4,6 +4,7 @@ import { Composer, type ComposerHandle } from "./components/composer";
 import { ConfirmDialog, type ConfirmRequest } from "./components/confirm-dialog";
 import { ConnectionBanner } from "./components/connection-banner";
 import { Conversation } from "./components/conversation";
+import { ModelControls } from "./components/model-picker";
 import { ProviderDialog } from "./components/provider-dialog";
 import { Sidebar } from "./components/sidebar";
 import { ToastRegion } from "./components/toasts";
@@ -14,6 +15,16 @@ import { useHopperConnection } from "./hooks/use-hopper-connection";
 import { useRuntimeStatus } from "./hooks/use-runtime-status";
 import { providerLabel } from "./lib/utils";
 import type { SendMode } from "./state/hopper-types";
+
+const SIDEBAR_KEY = "hopper.sidebar.collapsed";
+
+function readCollapsed() {
+	try {
+		return window.localStorage.getItem(SIDEBAR_KEY) === "1";
+	} catch {
+		return false;
+	}
+}
 
 function StatusPill({ connectionStatus, streaming, workingMessage }: { connectionStatus: string; streaming: boolean; workingMessage: string | null }) {
 	if (connectionStatus !== "connected") {
@@ -30,23 +41,33 @@ export function App() {
 	const { refresh: refreshRuntime, refreshing } = useRuntimeStatus(token, connected, dispatch, isMockMode);
 
 	const [draft, setDraft] = useState("");
-	const [mode, setMode] = useState<SendMode>("prompt");
+	// Explicit delivery choice made while a turn runs; null means the default for the current state.
+	const [modeOverride, setModeOverride] = useState<SendMode | null>(null);
 	const [providerOpen, setProviderOpen] = useState(false);
 	const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
+	const [sidebarCollapsed, setSidebarCollapsed] = useState(readCollapsed);
 	const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 	const composer = useRef<ComposerHandle>(null);
 
 	const streaming = state.session.isStreaming;
+	// While a turn runs, new text becomes a follow-up unless the user picks otherwise;
+	// when it finishes, go back to starting new turns.
+	const mode: SendMode = modeOverride ?? (streaming ? "follow_up" : "prompt");
 
 	useEffect(() => {
 		document.title = state.session.name ? `${state.session.name} · Hopper` : "Hopper";
 	}, [state.session.name]);
 
-	// Match the old behaviour: while a turn runs, new text becomes a follow-up unless the
-	// user picks otherwise; when it finishes, go back to starting new turns.
 	useEffect(() => {
-		if (streaming) setMode((current) => (current === "prompt" ? "follow_up" : current));
-		else setMode("prompt");
+		try {
+			window.localStorage.setItem(SIDEBAR_KEY, sidebarCollapsed ? "1" : "0");
+		} catch {
+			// Storage may be unavailable; the preference is only a convenience.
+		}
+	}, [sidebarCollapsed]);
+
+	useEffect(() => {
+		if (!streaming) setModeOverride(null);
 	}, [streaming]);
 
 	// A completed sign-in closes the provider dialog.
@@ -119,35 +140,29 @@ export function App() {
 			<Sidebar
 				state={state}
 				connected={connected}
+				collapsed={sidebarCollapsed}
+				onCollapsedChange={setSidebarCollapsed}
 				mobileOpen={mobileSettingsOpen}
 				onMobileOpenChange={setMobileSettingsOpen}
 				onNewSession={newSession}
 				onManageProvider={openProvider}
-				onSelectModel={selectModel}
-				onSelectThinking={(level) => send({ type: "set_thinking", level })}
 				onReconnect={reconnect}
 				onRefreshRuntime={() => void refreshRuntime()}
 				runtimeRefreshing={refreshing}
 			/>
 			<main className="flex min-h-0 min-w-0 flex-1 flex-col">
-				<header className="flex min-h-[56px] shrink-0 items-center justify-between gap-4 border-b border-line bg-canvas/80 px-4 backdrop-blur sm:px-6 lg:px-10">
-					<div className="min-w-0">
-						<p className="text-[11px] font-medium uppercase tracking-[.12em] text-muted max-sm:hidden">Active conversation</p>
-						<h1 className="truncate text-sm font-semibold tracking-tight">{state.session.name}</h1>
-					</div>
-					<div className="flex shrink-0 items-center gap-2">
-						{isMockMode && (
-							<Badge variant="warn" className="max-sm:hidden">
-								<FlaskConical className="size-3" />
-								Mock
-							</Badge>
-						)}
-						<StatusPill connectionStatus={state.connection.status} streaming={streaming} workingMessage={state.workingMessage} />
-						<Button size="sm" variant="ghost" disabled={!connected} onClick={shutdown} title="Stop the local Hopper host">
-							<Power className="size-3.5" />
-							<span className="max-sm:hidden">Shut down</span>
-						</Button>
-					</div>
+				<header className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-4 sm:px-6">
+					<h1 className="min-w-0 flex-1 truncate text-[13px] font-medium tracking-tight">{state.session.name}</h1>
+					{isMockMode && (
+						<Badge variant="warn" className="max-sm:hidden">
+							<FlaskConical className="size-3" />
+							Mock
+						</Badge>
+					)}
+					<StatusPill connectionStatus={state.connection.status} streaming={streaming} workingMessage={state.workingMessage} />
+					<Button size="icon-sm" variant="ghost" className="-mr-1.5" disabled={!connected} onClick={shutdown} aria-label="Shut down the Hopper host" title="Shut down the Hopper host">
+						<Power className="size-3.5" />
+					</Button>
 				</header>
 				<ConnectionBanner connection={state.connection} onReconnect={reconnect} />
 				<Conversation messages={state.session.messages} connected={connected} onSuggestion={useSuggestion} />
@@ -156,11 +171,20 @@ export function App() {
 					draft={draft}
 					onDraftChange={setDraft}
 					mode={mode}
-					onModeChange={setMode}
+					onModeChange={setModeOverride}
 					disabled={!connected}
 					streaming={streaming}
 					onSubmit={submit}
 					onAbort={() => send({ type: "abort" })}
+					controls={
+						<ModelControls
+							state={state}
+							connected={connected}
+							onSelectModel={selectModel}
+							onSelectThinking={(level) => send({ type: "set_thinking", level })}
+							onManageProvider={openProvider}
+						/>
+					}
 				/>
 			</main>
 

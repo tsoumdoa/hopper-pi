@@ -1,41 +1,48 @@
-import { Plus, RefreshCw, Settings2, X } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
-import { cn, providerLabel, thinkingLabel } from "../lib/utils";
+import { KeyRound, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Settings2, X } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { cn, providerLabel } from "../lib/utils";
 import type { HopperState } from "../state/hopper-types";
-import { RuntimeStatusPanel } from "./runtime-status";
+import { RuntimeStatusPanel, summarizeRuntimeStatus } from "./runtime-status";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Label } from "./ui/label";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "./ui/select";
 
 function BrandMark({ className }: { className?: string }) {
 	return (
-		<span aria-hidden="true" className={cn("grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-base font-bold text-white shadow-sm", className)}>
+		<span aria-hidden="true" className={cn("grid size-6 shrink-0 place-items-center rounded-sm bg-accent text-[13px] font-bold leading-none text-white", className)}>
 			H
 		</span>
 	);
 }
 
-function ConnectionCard({ state, onReconnect }: { state: HopperState; onReconnect(): void }) {
+type Tone = "ok" | "warn" | "danger" | "muted";
+
+function toneClass(tone: Tone) {
+	return {
+		ok: "bg-accent",
+		warn: "bg-warn animate-pulse",
+		danger: "bg-danger",
+		muted: "bg-line-strong animate-pulse",
+	}[tone];
+}
+
+function connectionSummary(state: HopperState): { tone: Tone; label: string; canRetry: boolean } {
 	const status = state.connection.status;
 	const label = { connecting: "Connecting", authenticating: "Authenticating", connected: "Connected", disconnected: "Disconnected", error: "Connection failed" }[status];
 	const canRetry = status === "disconnected" || status === "error";
+	const tone: Tone = status === "connected" ? "ok" : canRetry ? "danger" : "warn";
+	return { tone, label, canRetry };
+}
+
+function ConnectionCard({ state, onReconnect }: { state: HopperState; onReconnect(): void }) {
+	const { tone, label, canRetry } = connectionSummary(state);
 	return (
-		<div className="rounded-xl border border-line bg-surface p-3 shadow-card">
-			<div className="flex items-start gap-2.5">
-				<span
-					aria-hidden="true"
-					className={cn(
-						"mt-1.5 size-2 shrink-0 rounded-full",
-						status === "connected" && "bg-accent",
-						(status === "connecting" || status === "authenticating") && "bg-warn animate-pulse",
-						canRetry && "bg-danger",
-					)}
-				/>
+		<div className="rounded-md border border-line bg-surface p-2.5">
+			<div className="flex items-start gap-2">
+				<span aria-hidden="true" className={cn("mt-[5px] size-1.5 shrink-0 rounded-full", toneClass(tone))} />
 				<div className="min-w-0 flex-1">
-					<p className="text-xs font-semibold">{label}</p>
+					<p className="text-xs font-medium">{label}</p>
 					<p className="mt-0.5 text-[11px] leading-4 text-muted">{state.connection.detail}</p>
-					<p className="mt-1 text-[11px] leading-4 text-muted" aria-live="polite">{state.backendDetail}</p>
+					<p className="mt-0.5 text-[11px] leading-4 text-muted" aria-live="polite">{state.backendDetail}</p>
 				</div>
 				{canRetry && (
 					<Button size="xs" variant="secondary" onClick={onReconnect}>
@@ -48,15 +55,37 @@ function ConnectionCard({ state, onReconnect }: { state: HopperState; onReconnec
 	);
 }
 
+function ProviderCard({ state, connected, onManageProvider }: { state: HopperState; connected: boolean; onManageProvider(): void }) {
+	const authenticated = state.providers.filter((provider) => provider.authenticated);
+	const selected = state.selectedModel?.provider ?? authenticated[0]?.id ?? null;
+	const selectedAuthenticated = state.providers.some((provider) => provider.id === selected && provider.authenticated);
+	return (
+		<div className="rounded-md border border-line bg-surface p-2.5">
+			<div className="flex items-center justify-between gap-2">
+				<span className="text-[10px] font-medium uppercase tracking-wider text-muted">Provider</span>
+				<Badge variant={selectedAuthenticated ? "accent" : authenticated.length ? "neutral" : "warn"} dot>
+					{selectedAuthenticated ? "Signed in" : authenticated.length ? "Available" : "Not set up"}
+				</Badge>
+			</div>
+			<div className="mt-1.5 flex items-center justify-between gap-2">
+				<span className="truncate text-xs font-medium">{selected ? providerLabel(selected, state.providers) : "None connected"}</span>
+				<Button size="xs" variant="ghost" className="-mr-1" disabled={!connected} onClick={onManageProvider}>
+					Manage
+				</Button>
+			</div>
+		</div>
+	);
+}
+
 export type SidebarProps = {
 	state: HopperState;
 	connected: boolean;
+	collapsed: boolean;
+	onCollapsedChange(collapsed: boolean): void;
 	mobileOpen: boolean;
 	onMobileOpenChange(open: boolean): void;
 	onNewSession(): void;
 	onManageProvider(): void;
-	onSelectModel(value: string): void;
-	onSelectThinking(level: string): void;
 	onReconnect(): void;
 	onRefreshRuntime(): void;
 	runtimeRefreshing: boolean;
@@ -65,30 +94,17 @@ export type SidebarProps = {
 export function Sidebar({
 	state,
 	connected,
+	collapsed,
+	onCollapsedChange,
 	mobileOpen,
 	onMobileOpenChange,
 	onNewSession,
 	onManageProvider,
-	onSelectModel,
-	onSelectThinking,
 	onReconnect,
 	onRefreshRuntime,
 	runtimeRefreshing,
 }: SidebarProps) {
 	const container = useRef<HTMLElement>(null);
-	const groupedModels = useMemo(() => {
-		const groups = new Map<string, HopperState["models"]>();
-		for (const model of state.models) {
-			const list = groups.get(model.provider) ?? [];
-			list.push(model);
-			groups.set(model.provider, list);
-		}
-		return [...groups.entries()];
-	}, [state.models]);
-	const authenticatedProviders = state.providers.filter((provider) => provider.authenticated);
-	const selectedProvider = state.selectedModel?.provider ?? authenticatedProviders[0]?.id ?? null;
-	const selectedProviderAuthenticated = state.providers.some((provider) => provider.id === selectedProvider && provider.authenticated);
-	const modelValue = state.selectedModel ? `${state.selectedModel.provider}/${state.selectedModel.id}` : "";
 
 	// Mobile settings sheet closes on Escape and on taps outside the sidebar.
 	useEffect(() => {
@@ -107,61 +123,14 @@ export function Sidebar({
 		};
 	}, [mobileOpen, onMobileOpenChange]);
 
-	const settings = (
-		<>
-			<section aria-labelledby="agent-settings-title" className="grid gap-3">
-				<h2 id="agent-settings-title" className="text-[11px] font-semibold uppercase tracking-[.12em] text-muted">Agent</h2>
-				<div className="grid gap-1.5">
-					<Label htmlFor="model-select">Model</Label>
-					<Select disabled={!connected || !state.models.length} value={modelValue} onValueChange={onSelectModel}>
-						<SelectTrigger id="model-select">
-							<SelectValue placeholder={connected && !state.models.length ? "No authenticated models" : "Waiting for models"} />
-						</SelectTrigger>
-						<SelectContent>
-							{groupedModels.map(([provider, models]) => (
-								<SelectGroup key={provider}>
-									<SelectLabel>{providerLabel(provider, state.providers)}</SelectLabel>
-									{models.map((model) => (
-										<SelectItem key={`${model.provider}/${model.id}`} value={`${model.provider}/${model.id}`}>
-											{model.name ?? model.id}
-										</SelectItem>
-									))}
-								</SelectGroup>
-							))}
-						</SelectContent>
-					</Select>
-				</div>
-				<div className="grid gap-1.5">
-					<Label htmlFor="thinking-select">Thinking</Label>
-					<Select disabled={!connected || !state.models.length} value={state.thinkingLevel} onValueChange={onSelectThinking}>
-						<SelectTrigger id="thinking-select">
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							{state.availableThinkingLevels.map((level) => (
-								<SelectItem key={level} value={level}>{thinkingLabel(level)}</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-				</div>
-			</section>
+	const runtime = summarizeRuntimeStatus(state.runtimeStatus, state.runtimeStatusError);
+	const connection = connectionSummary(state);
 
-			<section aria-labelledby="provider-title" className="rounded-xl border border-line bg-surface p-3 shadow-card">
-				<div className="flex items-center justify-between gap-2">
-					<h2 id="provider-title" className="text-[11px] font-semibold uppercase tracking-[.12em] text-muted">Provider</h2>
-					<Badge variant={selectedProviderAuthenticated ? "accent" : authenticatedProviders.length ? "neutral" : "warn"} dot>
-						{selectedProviderAuthenticated ? "Connected" : authenticatedProviders.length ? "Available" : "Not configured"}
-					</Badge>
-				</div>
-				<p className="mt-2 text-xs leading-relaxed text-ink-soft">
-					{selectedProvider
-						? `${providerLabel(selectedProvider, state.providers)} is selected for this session.${authenticatedProviders.length > 1 ? ` ${authenticatedProviders.length} providers are signed in.` : ""}`
-						: "Connect a model provider to start working with Hopper."}
-				</p>
-				<Button className="mt-3 w-full" variant="secondary" size="sm" disabled={!connected} onClick={onManageProvider}>
-					Manage provider
-				</Button>
-			</section>
+	const panels = (
+		<>
+			<ProviderCard state={state} connected={connected} onManageProvider={onManageProvider} />
+			<RuntimeStatusPanel status={state.runtimeStatus} error={state.runtimeStatusError} onRefresh={onRefreshRuntime} refreshing={runtimeRefreshing} />
+			<ConnectionCard state={state} onReconnect={onReconnect} />
 		</>
 	);
 
@@ -169,58 +138,77 @@ export function Sidebar({
 		<aside
 			ref={container}
 			aria-label="Hopper controls"
-			className="relative z-20 flex shrink-0 flex-col gap-3 border-b border-line bg-canvas/95 p-3 backdrop-blur lg:h-full lg:w-[288px] lg:gap-5 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:p-4"
+			className={cn(
+				"relative z-20 flex shrink-0 flex-col border-b border-line bg-panel lg:h-full lg:border-b-0 lg:border-r lg:transition-[width] lg:duration-200",
+				collapsed ? "lg:w-12" : "lg:w-[248px]",
+			)}
 		>
-			<div className="flex items-center gap-3">
+			{/* Mobile top bar */}
+			<div className="flex items-center gap-2 px-3 py-2 lg:hidden">
 				<BrandMark />
-				<div className="min-w-0 flex-1">
-					<p className="text-[15px] font-semibold tracking-tight">Hopper</p>
-					<p className="truncate text-[11px] text-muted">Private agent for Rhino &amp; Grasshopper</p>
-				</div>
-				<div className="flex gap-1.5 lg:hidden">
-					<Button size="sm" disabled={!connected} onClick={onNewSession} aria-label="New session">
-						<Plus className="size-4" />
-						<span className="max-sm:hidden">New session</span>
-					</Button>
-					<Button
-						size="icon-sm"
-						variant={mobileOpen ? "default" : "secondary"}
-						aria-expanded={mobileOpen}
-						aria-controls="mobile-settings-panel"
-						aria-label={mobileOpen ? "Close settings" : "Open settings"}
-						onClick={() => onMobileOpenChange(!mobileOpen)}
-					>
-						{mobileOpen ? <X className="size-4" /> : <Settings2 className="size-4" />}
-					</Button>
-				</div>
+				<span className="flex-1 text-[13px] font-semibold tracking-tight">Hopper</span>
+				<Button size="sm" variant="secondary" disabled={!connected} onClick={onNewSession} aria-label="New session">
+					<Plus className="size-3.5" />
+					<span className="max-sm:hidden">New session</span>
+				</Button>
+				<Button
+					size="icon-sm"
+					variant={mobileOpen ? "default" : "ghost"}
+					aria-expanded={mobileOpen}
+					aria-controls="mobile-settings-panel"
+					aria-label={mobileOpen ? "Close settings" : "Open settings"}
+					onClick={() => onMobileOpenChange(!mobileOpen)}
+				>
+					{mobileOpen ? <X className="size-4" /> : <Settings2 className="size-4" />}
+				</Button>
 			</div>
-
-			<Button className="hidden w-full lg:flex" size="lg" disabled={!connected} onClick={onNewSession}>
-				<Plus className="size-4" />
-				New session
-			</Button>
-
 			<div
 				id="mobile-settings-panel"
 				className={cn(
-					"grid gap-4 lg:contents",
+					"lg:hidden",
 					mobileOpen
-						? "max-lg:absolute max-lg:left-3 max-lg:right-3 max-lg:top-[calc(100%-1px)] max-lg:z-30 max-lg:max-h-[min(70vh,520px)] max-lg:overflow-y-auto max-lg:rounded-xl max-lg:border max-lg:border-line-strong max-lg:bg-canvas max-lg:p-3 max-lg:shadow-pop max-lg:animate-fade-in"
-						: "max-lg:hidden",
+						? "absolute left-2 right-2 top-[calc(100%-1px)] z-30 grid max-h-[min(70vh,520px)] gap-2 overflow-y-auto rounded-md border border-line-strong bg-panel p-2 shadow-pop animate-fade-in"
+						: "hidden",
 				)}
 			>
-				{settings}
-				<div className="grid gap-3 lg:hidden">
-					<RuntimeStatusPanel status={state.runtimeStatus} error={state.runtimeStatusError} onRefresh={onRefreshRuntime} refreshing={runtimeRefreshing} />
-					<ConnectionCard state={state} onReconnect={onReconnect} />
-				</div>
+				{panels}
 			</div>
 
-			<div className="mt-auto hidden gap-3 lg:grid">
-				<RuntimeStatusPanel status={state.runtimeStatus} error={state.runtimeStatusError} onRefresh={onRefreshRuntime} refreshing={runtimeRefreshing} />
-				<ConnectionCard state={state} onReconnect={onReconnect} />
-				<p className="px-1 text-[11px] leading-4 text-muted">This page talks only to the Hopper host running on this computer.</p>
-			</div>
+			{/* Desktop: collapsed rail */}
+			{collapsed ? (
+				<div className="hidden flex-1 flex-col items-center gap-1 py-2 lg:flex">
+					<Button size="icon-sm" variant="ghost" onClick={() => onCollapsedChange(false)} aria-label="Expand sidebar" title="Expand sidebar">
+						<PanelLeftOpen className="size-4" />
+					</Button>
+					<Button size="icon-sm" variant="ghost" disabled={!connected} onClick={onNewSession} aria-label="New session" title="New session">
+						<Plus className="size-4" />
+					</Button>
+					<Button size="icon-sm" variant="ghost" disabled={!connected} onClick={onManageProvider} aria-label="Manage provider" title="Manage provider">
+						<KeyRound className="size-4" />
+					</Button>
+					<div className="mt-auto grid gap-2.5 pb-2" aria-label="Status">
+						<span title={`Rhino runtime · ${runtime.text}`} aria-label={`Rhino runtime: ${runtime.text}`} role="img" className={cn("size-1.5 rounded-full", toneClass(runtime.tone))} />
+						<span title={`Connection · ${connection.label}`} aria-label={`Connection: ${connection.label}`} role="img" className={cn("size-1.5 rounded-full", toneClass(connection.tone))} />
+					</div>
+				</div>
+			) : (
+				<div className="hidden min-h-0 flex-1 flex-col lg:flex">
+					<div className="flex items-center gap-2 px-3 pb-2 pt-2.5">
+						<BrandMark />
+						<span className="flex-1 text-[13px] font-semibold tracking-tight">Hopper</span>
+						<Button size="icon-sm" variant="ghost" className="-mr-1.5" onClick={() => onCollapsedChange(true)} aria-label="Collapse sidebar" title="Collapse sidebar">
+							<PanelLeftClose className="size-4" />
+						</Button>
+					</div>
+					<div className="px-3">
+						<Button className="w-full justify-start" variant="secondary" size="sm" disabled={!connected} onClick={onNewSession}>
+							<Plus className="size-3.5" />
+							New session
+						</Button>
+					</div>
+					<div className="mt-auto grid gap-2 overflow-y-auto p-3">{panels}</div>
+				</div>
+			)}
 		</aside>
 	);
 }

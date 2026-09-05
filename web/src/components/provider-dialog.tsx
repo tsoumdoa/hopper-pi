@@ -5,7 +5,7 @@ import { providerLabel } from "../lib/utils";
 import type { AuthFlow, ProviderSummary } from "../state/hopper-types";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogKicker, DialogTitle } from "./ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -62,10 +62,9 @@ export function ProviderDialog({ onOpenChange, providers, currentProvider, auth,
 		<Dialog open onOpenChange={onOpenChange}>
 			<DialogContent aria-describedby="provider-dialog-description">
 				<DialogHeader>
-					<DialogKicker>Private Hopper settings</DialogKicker>
-					<DialogTitle>Model provider</DialogTitle>
+					<DialogTitle>Model providers</DialogTitle>
 					<DialogDescription id="provider-dialog-description">
-						Credentials use the global Pi auth store by default. Hopper keeps sessions and other settings separate.
+						Credentials are saved in the shared Pi auth store.
 					</DialogDescription>
 				</DialogHeader>
 				<form className="grid gap-4" onSubmit={submit}>
@@ -104,11 +103,11 @@ export function ProviderDialog({ onOpenChange, providers, currentProvider, auth,
 									</SelectContent>
 								</Select>
 							) : (
-								<p className="rounded-lg border border-line bg-surface-muted px-3 py-2 text-sm text-ink-soft">{selectedMethod?.label}</p>
+								<p className="rounded-sm border border-line bg-surface-muted px-2.5 py-1.5 text-[13px] text-ink-soft">{selectedMethod?.label}</p>
 							)}
 						</div>
 					) : (
-						<p className="rounded-lg border border-line bg-surface-muted px-3 py-2.5 text-xs leading-relaxed text-ink-soft">
+						<p className="rounded-sm border border-line bg-surface-muted px-2.5 py-2 text-xs leading-relaxed text-ink-soft">
 							{selected ? `${selected.name} must be configured outside Hopper.` : "No providers are available."}
 						</p>
 					)}
@@ -133,7 +132,7 @@ export function ProviderDialog({ onOpenChange, providers, currentProvider, auth,
 					)}
 
 					{currentAuth?.notice && (
-						<div role="status" className="flex items-start gap-2 rounded-lg border border-accent/20 bg-accent-soft px-3 py-2.5 text-xs text-accent">
+						<div role="status" className="flex items-start gap-2 rounded-sm border border-accent/20 bg-accent-soft px-2.5 py-2 text-xs text-accent">
 							{currentAuth.busy && !currentAuth.url ? <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin" /> : <KeyRound className="mt-0.5 size-3.5 shrink-0" />}
 							<div className="min-w-0 flex-1">
 								<p className="leading-relaxed">{currentAuth.notice}</p>
@@ -147,7 +146,7 @@ export function ProviderDialog({ onOpenChange, providers, currentProvider, auth,
 						</div>
 					)}
 					{error && (
-						<p role="alert" className="rounded-lg border border-danger/20 bg-danger-soft px-3 py-2.5 text-xs leading-relaxed text-danger">{error}</p>
+						<p role="alert" className="rounded-sm border border-danger/20 bg-danger-soft px-2.5 py-2 text-xs leading-relaxed text-danger">{error}</p>
 					)}
 
 					<DialogFooter className="mt-1 justify-between">

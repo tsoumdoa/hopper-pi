@@ -18,7 +18,7 @@ export function ConfirmDialog({ request, onClose }: { request: ConfirmRequest | 
 			}}
 		>
 			{request && (
-				<DialogContent className="w-[min(440px,calc(100%-2rem))]" hideClose>
+				<DialogContent className="w-[min(400px,calc(100%-2rem))]" hideClose>
 					<DialogHeader>
 						<DialogTitle>{request.title}</DialogTitle>
 						<DialogDescription>{request.description}</DialogDescription>

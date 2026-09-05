@@ -1,31 +1,32 @@
 @import "tailwindcss";
 
 @theme {
-  --color-canvas: #f3f2ee;
+  --color-canvas: #ffffff;
+  --color-panel: #f7f7f8;
   --color-surface: #ffffff;
-  --color-surface-muted: #f8f7f4;
-  --color-ink: #1b1d1b;
-  --color-ink-soft: #4a4f4b;
-  --color-muted: #7b817c;
-  --color-line: #e4e3dd;
-  --color-line-strong: #cfcec7;
-  --color-accent: #1f5c45;
-  --color-accent-hover: #174a37;
-  --color-accent-soft: #e3efe8;
-  --color-warn: #b45309;
-  --color-warn-soft: #fdf1e3;
+  --color-surface-muted: #f2f2f4;
+  --color-ink: #121214;
+  --color-ink-soft: #4c4c54;
+  --color-muted: #84848d;
+  --color-line: #e6e6e9;
+  --color-line-strong: #c9c9cf;
+  --color-accent: #e5335d;
+  --color-accent-hover: #c8234a;
+  --color-accent-soft: #fdeef2;
+  --color-warn: #a16207;
+  --color-warn-soft: #fbf5e6;
   --color-danger: #b42318;
   --color-danger-soft: #fdecea;
 
   --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 
-  --shadow-card: 0 1px 2px rgb(27 29 27 / 4%), 0 10px 30px -18px rgb(27 29 27 / 18%);
-  --shadow-pop: 0 2px 6px rgb(27 29 27 / 6%), 0 24px 60px -24px rgb(27 29 27 / 30%);
+  --shadow-card: 0 1px 2px rgb(18 18 20 / 4%);
+  --shadow-pop: 0 1px 2px rgb(18 18 20 / 6%), 0 12px 32px -12px rgb(18 18 20 / 22%);
 
-  --animate-fade-in: fade-in 160ms ease-out;
-  --animate-pop-in: pop-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  --animate-slide-up: slide-up 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-fade-in: fade-in 140ms ease-out;
+  --animate-pop-in: pop-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-slide-up: slide-up 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
   --animate-blink: blink 1s steps(2, start) infinite;
 
   @keyframes fade-in {
@@ -33,11 +34,11 @@
     to { opacity: 1; }
   }
   @keyframes pop-in {
-    from { opacity: 0; transform: translateY(6px) scale(0.98); }
+    from { opacity: 0; transform: translateY(4px) scale(0.99); }
     to { opacity: 1; transform: translateY(0) scale(1); }
   }
   @keyframes slide-up {
-    from { opacity: 0; transform: translateY(12px); }
+    from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
   }
   @keyframes blink {
@@ -52,15 +53,15 @@
   button, input, select, textarea { font: inherit; color: inherit; }
   button { cursor: pointer; }
   button:disabled { cursor: not-allowed; }
-  ::selection { @apply bg-accent text-white; }
+  ::selection { @apply bg-accent/20; }
   * { scrollbar-width: thin; scrollbar-color: var(--color-line-strong) transparent; }
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-thumb { background: var(--color-line-strong); border-radius: 999px; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: var(--color-line-strong); border-radius: 3px; }
   ::-webkit-scrollbar-track { background: transparent; }
 }
 
 @utility skip-link {
-  @apply fixed left-3 top-3 z-[100] -translate-y-[200%] rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white shadow-pop transition-transform;
+  @apply fixed left-3 top-3 z-[100] -translate-y-[200%] rounded-sm bg-accent px-3 py-2 text-sm font-medium text-white shadow-pop transition-transform;
   &:focus { @apply translate-y-0; }
 }
 

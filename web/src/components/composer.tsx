@@ -1,12 +1,19 @@
 import { ArrowUp, Square } from "lucide-react";
 import { forwardRef, useImperativeHandle, useLayoutEffect, useRef } from "react";
-import type { FormEvent, KeyboardEvent } from "react";
+import type { FormEvent, KeyboardEvent, ReactNode } from "react";
 import { cn } from "../lib/utils";
 import type { SendMode } from "../state/hopper-types";
+import { toolbarTriggerClass } from "./model-picker";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 const MAX_HEIGHT = 220;
+
+const MODE_LABELS: Record<SendMode, string> = {
+	follow_up: "Follow up after turn",
+	steer: "Steer current turn",
+	prompt: "New turn",
+};
 
 export type ComposerHandle = { focus(): void };
 
@@ -19,10 +26,12 @@ export type ComposerProps = {
 	streaming: boolean;
 	onSubmit(): void;
 	onAbort(): void;
+	/** Toolbar controls rendered at the start of the bottom row (model, thinking). */
+	controls?: ReactNode;
 };
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-	{ draft, onDraftChange, mode, onModeChange, disabled, streaming, onSubmit, onAbort },
+	{ draft, onDraftChange, mode, onModeChange, disabled, streaming, onSubmit, onAbort, controls },
 	ref,
 ) {
 	const textarea = useRef<HTMLTextAreaElement>(null);
@@ -50,18 +59,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 	};
 
 	const canSend = !disabled && draft.trim().length > 0;
-	const modeHint = mode === "steer"
-		? "Sent immediately to redirect the current turn"
-		: mode === "follow_up"
-			? "Queued until the current turn finishes"
-			: "Enter to send · Shift+Enter for a new line";
 
 	return (
-		<footer className="shrink-0 px-4 pb-3 pt-2 sm:px-6 lg:px-10">
+		<footer className="shrink-0 px-4 pb-4 pt-1 sm:px-6">
 			<form
 				onSubmit={submit}
 				className={cn(
-					"mx-auto w-full max-w-[780px] rounded-2xl border border-line bg-surface shadow-card transition-[box-shadow,border-color] focus-within:border-accent/40 focus-within:ring-4 focus-within:ring-accent/10",
+					"mx-auto w-full max-w-[760px] rounded-md border border-line bg-surface transition-colors focus-within:border-accent/60",
 					disabled && "opacity-70",
 				)}
 			>
@@ -75,22 +79,24 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 					autoComplete="off"
 					onChange={(event) => onDraftChange(event.target.value)}
 					onKeyDown={onKeyDown}
-					placeholder={disabled ? "Waiting for the Hopper host…" : "Ask Hopper to work in Rhino or Grasshopper"}
-					className="block max-h-[220px] w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[15px] leading-6 outline-none placeholder:text-muted disabled:cursor-not-allowed"
+					placeholder={disabled ? "Waiting for the Hopper host…" : "Ask Hopper…"}
+					className="block max-h-[220px] w-full resize-none bg-transparent px-3.5 pb-1 pt-3 text-[14px] leading-6 outline-none placeholder:text-muted disabled:cursor-not-allowed"
 				/>
-				<div className="flex items-center gap-2 px-2 pb-2 pt-1">
-					<Select value={mode} onValueChange={(value) => onModeChange(value as SendMode)}>
-						<SelectTrigger aria-label="Message delivery" className="h-8 w-auto max-w-[190px] gap-1.5 border-transparent bg-transparent px-2 text-xs text-ink-soft shadow-none hover:bg-surface-muted">
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent align="start">
-							<SelectItem value="prompt">New turn</SelectItem>
-							<SelectItem value="steer">Steer current turn</SelectItem>
-							<SelectItem value="follow_up">Follow up after turn</SelectItem>
-						</SelectContent>
-					</Select>
-					<span className="hidden min-w-0 flex-1 truncate text-right text-xs text-muted sm:block">{modeHint}</span>
-					<span className="flex-1 sm:hidden" />
+				<div className="flex flex-wrap items-center gap-1 px-1.5 pb-1.5 pt-0.5">
+					{controls}
+					{streaming && (
+						<Select value={mode} onValueChange={(value) => onModeChange(value as SendMode)}>
+							<SelectTrigger aria-label="Message delivery" className={toolbarTriggerClass}>
+								<SelectValue>{MODE_LABELS[mode]}</SelectValue>
+							</SelectTrigger>
+							<SelectContent align="start">
+								{(Object.keys(MODE_LABELS) as SendMode[]).map((value) => (
+									<SelectItem key={value} value={value}>{MODE_LABELS[value]}</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					)}
+					<span className="flex-1" />
 					{streaming && (
 						<Button type="button" size="sm" variant="destructive" onClick={onAbort}>
 							<Square className="size-3 fill-current" />
@@ -102,9 +108,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 					</Button>
 				</div>
 			</form>
-			<p className="mx-auto mt-2 max-w-[780px] text-center text-[11px] text-muted">
-				Hopper can change the active Rhino document and Grasshopper canvas. Review important edits.
-			</p>
 		</footer>
 	);
 });
