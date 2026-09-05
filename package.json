@@ -64,9 +64,9 @@
 		"zustand": "^5.0.15"
 	},
 	"dependencies": {
-		"@earendil-works/pi-ai": "0.85.0",
-		"@earendil-works/pi-coding-agent": "0.85.0",
-		"@earendil-works/pi-tui": "0.85.0",
+		"@earendil-works/pi-ai": "0.85.1",
+		"@earendil-works/pi-coding-agent": "0.85.1",
+		"@earendil-works/pi-tui": "0.85.1",
 		"fast-xml-parser": "^5.11.1",
 		"ws": "8.21.3",
 		"zeromq": "6.5.0"
