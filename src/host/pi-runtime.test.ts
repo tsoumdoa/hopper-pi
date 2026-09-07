@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { resolveHostConfig } from "./config.js";
 import { isolatedResourceLoaderOptions, providerAuthMethods } from "./pi-runtime.js";
+import { HOPPER_REGISTERED_CATALOG } from "../tools/catalog.js";
 
 describe("embedded Pi isolation", () => {
 	it("loads only Hopper factories; the host supplies the skill catalog", () => {
@@ -31,6 +32,38 @@ describe("embedded Pi isolation", () => {
 		]);
 		expect(providerAuthMethods({ apiKey: { name: "Ambient credentials" } })).toEqual([]);
 	});
+});
+
+it("lists the current session registry and reflects tool activation without changing it", async () => {
+	const { EmbeddedPiHost } = await import("./pi-runtime.js");
+	let active = ["read"];
+	const session = {
+		getActiveToolNames: () => active,
+		getAllTools: () => [
+			{ name: "gh_edit", description: "Edit components", parameters: { type: "object" }, sourceInfo: { path: "/private/extension" } },
+			{ name: "read", description: "Read skills", parameters: { type: "object" } },
+		],
+	};
+	const runtime = { session };
+	const host = Reflect.construct(EmbeddedPiHost, [runtime, {}, {}, {}]) as import("./pi-runtime.js").EmbeddedPiHost;
+	expect(host.listTools().tools).toEqual([
+		{ name: "read", description: "Read skills", parameters: { type: "object" }, active: true },
+		{ name: "gh_edit", description: "Edit components", parameters: { type: "object" }, active: false },
+	]);
+	active = ["read", "gh_edit"];
+	expect(host.listTools().tools.every((tool) => tool.active)).toBe(true);
+	runtime.session = { getActiveToolNames: () => [], getAllTools: () => [] };
+	expect(host.listTools()).toEqual({ tools: [] });
+});
+
+it("preserves all registered tool schemas, including shared definitions", async () => {
+	const { EmbeddedPiHost } = await import("./pi-runtime.js");
+	const tools = HOPPER_REGISTERED_CATALOG.map(({ tool }) => tool);
+	const session = { getActiveToolNames: () => [], getAllTools: () => tools };
+	const host = Reflect.construct(EmbeddedPiHost, [{ session }, {}, {}, {}]) as import("./pi-runtime.js").EmbeddedPiHost;
+	for (const tool of host.listTools().tools) {
+		expect(tool.parameters).toEqual(JSON.parse(JSON.stringify(tools.find((entry) => entry.name === tool.name)!.parameters)));
+	}
 });
 
 it("keeps skill changes out of prompt preparation and an active turn", async () => {

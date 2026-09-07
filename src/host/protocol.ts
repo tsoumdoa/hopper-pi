@@ -1,6 +1,15 @@
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
+export type AgentToolSummary = {
+	name: string;
+	description: string;
+	parameters: JsonValue;
+	active: boolean;
+};
+
+export type AgentToolsSnapshot = { tools: AgentToolSummary[] };
+
 export type SkillSummary = {
 	id: string;
 	name: string;

@@ -155,17 +155,21 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 	const token = options.token ?? randomBytes(32).toString("base64url");
 	const httpServer = createHttpServer((request, response) => {
 		const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
-		if (pathname === "/api/skills") {
+		if (pathname === "/api/skills" || pathname === "/api/tools") {
 			const authorization = request.headers.authorization ?? "";
 			if (!safeEqual(authorization.startsWith("Bearer ") ? authorization.slice(7) : "", token)) {
 				writeJson(response, 403, { error: "Forbidden" });
 				return;
 			}
-			if (request.method !== "GET" && request.method !== "POST") {
+			if (request.method !== "GET" && (pathname === "/api/tools" || request.method !== "POST")) {
 				writeJson(response, 405, { error: "Method not allowed" });
 				return;
 			}
 			void (async () => {
+				if (pathname === "/api/tools") {
+					writeJson(response, 200, options.runtime.listTools());
+					return;
+				}
 				if (request.method === "POST") {
 					const chunks: Buffer[] = [];
 					let bytes = 0;

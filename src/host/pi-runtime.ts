@@ -18,7 +18,7 @@ import hopperChoicesExtension from "../extensions/choices/index.js";
 import { serializeAgentEvent, toWireValue } from "./event-serializer.js";
 import { HostMessageBus } from "./message-bus.js";
 import type { HostPaths } from "./config.js";
-import type { ImageAttachment, HostSnapshot, SkillLibrarySnapshot, SkillLibraryUpdate } from "./protocol.js";
+import type { AgentToolsSnapshot, ImageAttachment, HostSnapshot, SkillLibrarySnapshot, SkillLibraryUpdate } from "./protocol.js";
 import { HostSkillLibrary } from "./skills.js";
 import { BrowserUiContext } from "./web-ui-context.js";
 
@@ -159,6 +159,18 @@ export class EmbeddedPiHost {
 				...(onAccepted ? { preflightResult: (success: boolean) => { if (success) onAccepted(); } } : {}),
 			});
 		} finally { this.promptPending = false; }
+	}
+
+	listTools(): AgentToolsSnapshot {
+		this.assertUsable();
+		const session = this.runtime.session;
+		const active = new Set(session.getActiveToolNames());
+		return { tools: session.getAllTools().map((tool) => ({
+			name: tool.name,
+			description: tool.description,
+			parameters: toWireValue(tool.parameters),
+			active: active.has(tool.name),
+		})).sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)) };
 	}
 
 	async listSkills() {
@@ -369,6 +381,7 @@ export type HostRuntime = Pick<
 	| "snapshot"
 	| "steer"
 	| "listSkills"
+	| "listTools"
 	| "readSkill"
 	| "updateSkills"
 > & {

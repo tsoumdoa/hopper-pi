@@ -2,14 +2,15 @@ import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { JsonValue } from "./protocol.js";
 
 export function toWireValue(value: unknown): JsonValue {
-	const seen = new WeakSet<object>();
-	const serialized = JSON.stringify(value, (_key, current: unknown) => {
+	const ancestors: object[] = [];
+	const serialized = JSON.stringify(value, function (_key, current: unknown) {
 		if (typeof current === "bigint") return current.toString();
 		if (current instanceof Error) return { name: current.name, message: current.message };
 		if (typeof current === "function" || typeof current === "undefined") return undefined;
 		if (current !== null && typeof current === "object") {
-			if (seen.has(current)) return "[Circular]";
-			seen.add(current);
+			while (ancestors.length && ancestors.at(-1) !== this) ancestors.pop();
+			if (ancestors.includes(current)) return "[Circular]";
+			ancestors.push(current);
 		}
 		return current;
 	});
