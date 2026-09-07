@@ -155,6 +155,26 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 	const token = options.token ?? randomBytes(32).toString("base64url");
 	const httpServer = createHttpServer((request, response) => {
 		const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+		if (pathname === "/api/session/export") {
+			const authorization = request.headers.authorization ?? "";
+			if (!safeEqual(authorization.startsWith("Bearer ") ? authorization.slice(7) : "", token)) {
+				writeJson(response, 403, { error: "Forbidden" });
+				return;
+			}
+			if (request.method !== "GET") {
+				writeJson(response, 405, { error: "Method not allowed" });
+				return;
+			}
+			try {
+				const body = JSON.stringify(options.runtime.exportSession(), null, 2);
+				setPageHeaders(response, "application/json; charset=utf-8");
+				response.setHeader("Content-Disposition", 'attachment; filename="hopper-session-debug.json"');
+				response.end(body);
+			} catch {
+				writeJson(response, 500, { error: "Could not export the current session" });
+			}
+			return;
+		}
 		if (pathname === "/api/skills" || pathname === "/api/tools") {
 			const authorization = request.headers.authorization ?? "";
 			if (!safeEqual(authorization.startsWith("Bearer ") ? authorization.slice(7) : "", token)) {

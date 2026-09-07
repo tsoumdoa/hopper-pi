@@ -61,6 +61,7 @@ function fakeRuntime(): HostRuntime {
 		bus: new HostMessageBus(),
 		ui: { replayPending: vi.fn(), respond: vi.fn(() => true) },
 		snapshot,
+		exportSession: vi.fn(() => ({ format: "hopper-session-debug", version: 1 } as ReturnType<HostRuntime["exportSession"]>)),
 		prompt: vi.fn(async () => {}),
 		steer: vi.fn(async () => {}),
 		followUp: vi.fn(async () => {}),
@@ -103,6 +104,28 @@ function nextMessage(socket: WebSocket): Promise<ServerMessage> {
 }
 
 describe("Hopper loopback server", () => {
+	it("exports the current session only with bearer authentication", async () => {
+		const runtime = fakeRuntime();
+		const server = await startHopperServer({ runtime, staticDir: await staticDirectory(), token: "export-secret", protocolHandshake, getRuntimeStatus });
+		servers.push(server);
+		const url = `http://${server.host}:${server.port}/api/session/export`;
+		for (const suffix of ["", "?token=export-secret"]) {
+			expect((await fetch(url + suffix)).status).toBe(403);
+		}
+		expect(runtime.exportSession).not.toHaveBeenCalled();
+		const headers = { Authorization: "Bearer export-secret" };
+		expect((await fetch(url, { method: "POST", headers })).status).toBe(405);
+		const response = await fetch(url, { headers });
+		expect(response.status).toBe(200);
+		expect(response.headers.get("content-disposition")).toContain("hopper-session-debug.json");
+		expect(response.headers.get("cache-control")).toBe("no-store");
+		expect(await response.json()).toEqual(runtime.exportSession());
+		vi.mocked(runtime.exportSession).mockImplementation(() => { throw new Error("private detail"); });
+		const failed = await fetch(url, { headers });
+		expect(failed.status).toBe(500);
+		expect(await failed.text()).not.toContain("private detail");
+	});
+
 	it.each(["prompt", "steer", "follow_up"] as const)("acknowledges %s only when the runtime accepts it", async (type) => {
 		const runtime = fakeRuntime();
 		let accept!: () => void;

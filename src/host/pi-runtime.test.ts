@@ -218,3 +218,45 @@ it("acknowledges prompt preflight before generation completes and does not ackno
 	finish();
 	await turn;
 });
+
+it("exports branches and pre-compaction history using Pi's session manager", async () => {
+	const { EmbeddedPiHost } = await import("./pi-runtime.js");
+	const { SessionManager } = await import("@earendil-works/pi-coding-agent");
+	const manager = SessionManager.inMemory(process.cwd());
+	const root = manager.appendMessage({ role: "user", content: "Run a script", timestamp: 1 });
+	const call = {
+		role: "assistant" as const,
+		content: [{ type: "toolCall" as const, id: "call-1", name: "rh_run_script", arguments: { code: "return 42;" } }],
+		api: "openai-completions" as const, provider: "openai", model: "test",
+		usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+		stopReason: "toolUse" as const, timestamp: 2,
+	};
+	manager.appendMessage(call);
+	const result = {
+		role: "toolResult" as const, toolCallId: "call-1", toolName: "rh_run_script",
+		content: [{ type: "text" as const, text: "42" }, { type: "image" as const, data: "aW1hZ2U=", mimeType: "image/png" }],
+		details: { value: 42 }, isError: false, timestamp: 3,
+	};
+	const resultId = manager.appendMessage(result);
+	manager.appendCompaction("Ran script", resultId, 1000);
+	const compactedContext = manager.buildSessionContext().messages;
+	expect(compactedContext).not.toContainEqual(call);
+	expect(compactedContext).toContainEqual(result);
+	manager.branch(root);
+	const leaf = manager.appendMessage({ ...result, isError: true, content: [{ type: "text", text: "Script failed" }] });
+	const session = {
+		sessionId: manager.getSessionId(), messages: manager.buildSessionContext().messages, systemPrompt: "System instructions",
+		isStreaming: true, isCompacting: false, thinkingLevel: "off",
+		agent: { state: { streamingMessage: call } }, sessionManager: manager,
+	};
+	const host = Reflect.construct(EmbeddedPiHost, [{ session }, {}, {}, {}]) as import("./pi-runtime.js").EmbeddedPiHost;
+	const exported = JSON.parse(JSON.stringify(host.exportSession()));
+	expect(exported.entries).toEqual(manager.getEntries());
+	expect(exported.entries).toContainEqual(expect.objectContaining({ type: "compaction", summary: "Ran script" }));
+	expect(exported.entries).toContainEqual(expect.objectContaining({ message: result }));
+	expect(exported.entries).toContainEqual(expect.objectContaining({ message: expect.objectContaining({ isError: true }) }));
+	expect(exported.messages).toEqual(manager.buildSessionContext().messages);
+	expect(exported.streamingMessage).toEqual(call);
+	expect(exported).toMatchObject({ format: "hopper-session-debug", version: 1, leafId: leaf, isStreaming: true });
+});

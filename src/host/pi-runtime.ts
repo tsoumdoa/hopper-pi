@@ -362,6 +362,28 @@ export class EmbeddedPiHost {
 		this.publishSnapshot();
 	}
 
+	exportSession() {
+		this.assertUsable();
+		const session = this.runtime.session;
+		return {
+			format: "hopper-session-debug",
+			version: 1,
+			exportedAt: new Date().toISOString(),
+			sessionId: session.sessionId,
+			sessionName: session.sessionName,
+			header: session.sessionManager.getHeader(),
+			leafId: session.sessionManager.getLeafId(),
+			entries: session.sessionManager.getEntries(),
+			messages: session.messages,
+			systemPrompt: session.systemPrompt,
+			model: session.model ? modelSummary(session.model) : undefined,
+			thinkingLevel: session.thinkingLevel,
+			isStreaming: session.isStreaming,
+			isCompacting: session.isCompacting,
+			streamingMessage: session.agent.state.streamingMessage ?? null,
+		};
+	}
+
 	private assertUsable(): void {
 		if (this.disposed) throw new Error("Hopper host is stopped");
 	}
@@ -379,6 +401,7 @@ export type HostRuntime = Pick<
 	| "setModel"
 	| "setThinkingLevel"
 	| "snapshot"
+	| "exportSession"
 	| "steer"
 	| "listSkills"
 	| "listTools"

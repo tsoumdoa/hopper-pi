@@ -379,6 +379,36 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 - **Plugin did not install:** Install [.NET 7 SDK](https://dotnet.microsoft.com/download), then run `pnpm run build:gh-plugin`. On Windows, set `HOPPER_GH_LIBRARIES` if auto-detect fails.
 - **Stale plugin after `git pull`:** `node scripts/install-grasshopper-plugin.mjs --force`, then restart Rhino.
 
+### Export the current session for debugging
+
+The running host provides `GET /api/session/export`, authenticated with its bearer token. It downloads a versioned JSON document containing every Pi session entry, including assistant tool-call arguments and tool results with their content, details, and error flags. Entries include earlier branches and history before compaction. The export also includes the current context messages, system prompt, model, thinking level, active leaf ID, and any partial assistant response.
+
+From the developer console in the Hopper page served by the host, run:
+
+```js
+const response = await fetch('/api/session/export', {
+  headers: { Authorization: `Bearer ${sessionStorage.getItem('hopper.sessionToken')}` },
+});
+if (!response.ok) throw new Error(`Export failed: ${response.status}`);
+const url = URL.createObjectURL(await response.blob());
+const link = document.createElement('a');
+link.href = url;
+link.download = 'hopper-session-debug.json';
+link.click();
+setTimeout(() => URL.revokeObjectURL(url), 10000);
+```
+
+For terminal access, use the running host's port and token:
+
+```sh
+curl --fail --show-error --silent \
+  -H "Authorization: Bearer $HOPPER_TOKEN" \
+  "http://127.0.0.1:$HOPPER_PORT/api/session/export" \
+  -o hopper-session-debug.json
+```
+
+This is a point-in-time export. Wait for the turn to finish to include all final tool results. It exports Pi's recorded results, including embedded images, rather than raw network traffic or transient tool progress events. Credentials from the auth store are not included, but conversation and tool content are not redacted, so review the file before sharing it. Exporting does not change or start a session.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
