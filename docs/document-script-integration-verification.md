@@ -34,6 +34,8 @@ The session trace located the first-run Python and C# failures in `WaitForLangua
 
 All 16 focused warmup, diagnostics, and adapter tests passed. `RhinoScriptNativeTests.RunAll` also passed in a freshly launched Mac Rhino instance using isolated rebuilt assemblies and a disposable document. It executed Python and C#, retained output from an intentional Python failure, checked document/settings guards, and verified Undo and document preservation. The native test bootstrap itself uses C#, so this run does not establish cold C# startup. No installed plugin was replaced by this test.
 
+The startup-preload follow-up initializes Python and C# from `HopperCode` and `HopperCodeRestart`, caches successful modes across host restarts, and continues opening the host if one mode fails. All 19 focused .NET tests passed, including repeat, failure-retry, and reentrant callback cases. The extended native test passed with both languages already loaded: the initial preload checks took 1.5082 ms and the cached repeat took 0.0005 ms. These are warm-runtime measurements, not cold-start timings. The test verifies that preloading preserves the active document and document inventory before running the script/Undo checks. It writes `preload-timing.json` beside its isolated test assembly.
+
 Build `grasshopper-plugin.Tests/grasshopper-plugin.Tests.csproj`, then obtain an explicit running instance ID with RhinoCode's `list --json` command. Run each entry point with the helper, for example:
 
 ```sh

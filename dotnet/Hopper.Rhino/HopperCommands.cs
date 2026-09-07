@@ -21,6 +21,7 @@ namespace rhino_zmq_poc
                 return Result.Failure;
             }
 
+            RhinoCodeRunner.PreloadLanguages();
             var result = facade.RequestStart();
             RhinoApp.WriteLine(result.Message);
             return result.Accepted ? Result.Success : Result.Failure;
@@ -81,6 +82,7 @@ namespace rhino_zmq_poc
                 RhinoApp.WriteLine("Hopper runtime adapters are not configured.");
                 return Result.Failure;
             }
+            RhinoCodeRunner.PreloadLanguages();
             var result = facade.RequestRestart();
             RhinoApp.WriteLine(result.Message);
             return result.Accepted ? Result.Success : Result.Nothing;

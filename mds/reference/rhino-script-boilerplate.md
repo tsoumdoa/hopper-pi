@@ -12,6 +12,8 @@ Use this for **Rhino document** work via `rh_run_script`. For a new Grasshopper 
 
 Python and C# both run through **RhinoCode** (`Rhino.Runtime.Code`) in Rhino 8. Hopper prepends the language shebang if you omit it (`#! python 3` / `// #! csharp`).
 
+`HopperCode` and `HopperCodeRestart` initialize both languages on Rhino's UI thread before starting the host. Successful initialization is cached for the Rhino process, so reopening or restarting Hopper skips it. Rhino command history reports each language's initialization time. Preloading needs no active document and executes no user script. If a language fails, Hopper still opens; the other language initializes independently, and failed modes can retry on a later command or script call. Individual scripts still incur their own compilation and execution costs.
+
 ### Failure diagnostics
 
 Script failures include the observed host stages with elapsed times, whether an earlier run of that mode completed through this runner, and whether the language lookup succeeded before warmup. `unknown` means execution failed before that observation. Language availability alone does not prove that Python finished initializing. `code-run` can include lazy initialization and compilation, so do not treat it as proof that user code started.

@@ -22,6 +22,25 @@ public static class RhinoScriptNativeTests
         Exception? failure = null;
         try
         {
+            var preloader = new RhinoScriptPreloader();
+            var preloadMessages = new List<string>();
+            var preloadClock = System.Diagnostics.Stopwatch.StartNew();
+            preloader.Initialize(RhinoCodeRunner.InitializeLanguage, preloadMessages.Add);
+            var firstPreloadMs = preloadClock.Elapsed.TotalMilliseconds;
+            Assert.Equal(2, preloadMessages.Count(m => m.Contains(" ready (")));
+            Assert.DoesNotContain(preloadMessages, m => m.Contains("initialization failed"));
+            var messageCount = preloadMessages.Count;
+            preloadClock.Restart();
+            preloader.Initialize(RhinoCodeRunner.InitializeLanguage, preloadMessages.Add);
+            var repeatedPreloadMs = preloadClock.Elapsed.TotalMilliseconds;
+            Assert.Equal(messageCount, preloadMessages.Count);
+            Assert.True(originalIds.SetEquals(RhinoDoc.OpenDocuments(false).Select(d => d.RuntimeSerialNumber)));
+            Assert.Same(original, RhinoDoc.ActiveDoc);
+            if (original != null) Assert.Equal(originalModified, original.Modified);
+            System.IO.File.WriteAllText(System.IO.Path.Combine(
+                System.IO.Path.GetDirectoryName(typeof(RhinoScriptNativeTests).Assembly.Location)!, "preload-timing.json"),
+                JsonSerializer.Serialize(new { firstPreloadMs, repeatedPreloadMs, preloadMessages }));
+
             var created = service.Execute(RpcOperation.manageRhinoDocument, Json(new { action = "new",
                 expectedActiveDocument = service.ActiveId, affectedDocuments = Array.Empty<object>() })).Data!.Value;
             Assert.True(created.GetProperty("ok").GetBoolean(), created.ToString());
