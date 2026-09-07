@@ -381,6 +381,8 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 
 ### Export the current session for debugging
 
+Click **Export session** in the conversation header to download `hopper-session-debug.json`. On narrow screens, use the download icon. Export is available while connected, including during a response. Wait until the response finishes for complete tool results.
+
 The running host provides `GET /api/session/export`, authenticated with its bearer token. It downloads a versioned JSON document containing every Pi session entry, including assistant tool-call arguments and tool results with their content, details, and error flags. Entries include earlier branches and history before compaction. The export also includes the current context messages, system prompt, model, thinking level, active leaf ID, and any partial assistant response.
 
 From the developer console in the Hopper page served by the host, run:

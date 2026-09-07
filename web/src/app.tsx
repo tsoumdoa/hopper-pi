@@ -4,6 +4,7 @@ import { useHopperStore, useHopperStoreApi } from "./state/hopper-store-context"
 import { Composer, type ComposerHandle } from "./components/composer";
 import { ConfirmDialog, type ConfirmRequest } from "./components/confirm-dialog";
 import { ConnectionBanner } from "./components/connection-banner";
+import { ExportSessionButton } from "./components/export-session-button";
 import { Conversation } from "./components/conversation";
 import { ModelControls } from "./components/model-picker";
 import { ProviderDialog } from "./components/provider-dialog";
@@ -190,6 +191,7 @@ export function App() {
 							Mock
 						</Badge>
 					)}
+					<ExportSessionButton token={token} disabled={!connected || isMockMode} />
 					<StatusPill connectionStatus={connection.status} streaming={streaming} workingMessage={workingMessage} />
 					<Button size="icon-sm" variant="ghost" className="-mr-1.5" disabled={!connected} onClick={shutdown} aria-label="Shut down the Hopper host" title="Shut down the Hopper host">
 						<Power className="size-3.5" />

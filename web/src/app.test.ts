@@ -139,3 +139,44 @@ it("clears a draft only after acceptance and ignores late receipts from previous
 	expect(container.querySelector("img")).toBeNull();
 	expect(container.querySelector("textarea")!.value).toBe("");
 });
+
+it("downloads the full session through the authenticated export endpoint", async () => {
+	let finish!: (response: Response) => void;
+	const fetchMock = vi.fn(() => new Promise<Response>((resolve) => { finish = resolve; }));
+	vi.stubGlobal("fetch", fetchMock);
+	const createUrl = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:session-export");
+	const revokeUrl = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+	const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+		expect(this.download).toBe("hopper-session-debug.json");
+		expect(this.href).toBe("blob:session-export");
+	});
+	try {
+		const button = container.querySelector<HTMLButtonElement>('button[aria-label="Export session"]')!;
+		await act(async () => button.click());
+		expect(button.disabled).toBe(true);
+		expect(fetchMock).toHaveBeenCalledExactlyOnceWith("/api/session/export", { headers: { Authorization: "Bearer test" } });
+		await act(async () => button.click());
+		expect(fetchMock).toHaveBeenCalledOnce();
+		vi.useFakeTimers();
+		await act(async () => finish(new Response('{"entries":[{"toolCallId":"call-1"}]}', { headers: { "Content-Type": "application/json" } })));
+		expect(click).toHaveBeenCalledOnce();
+		expect(await (createUrl.mock.calls[0][0] as Blob).text()).toContain('"toolCallId":"call-1"');
+		expect(button.disabled).toBe(false);
+		expect(document.querySelector('a[download]')).toBeNull();
+		await act(async () => vi.advanceTimersByTime(10_000));
+		expect(revokeUrl).toHaveBeenCalledWith("blob:session-export");
+	} finally {
+		vi.useRealTimers();
+		createUrl.mockRestore(); revokeUrl.mockRestore(); click.mockRestore();
+	}
+});
+
+it("shows export failures and disables export when disconnected", async () => {
+	vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Forbidden", { status: 403 })));
+	const button = container.querySelector<HTMLButtonElement>('button[aria-label="Export session"]')!;
+	await act(async () => button.click());
+	expect(document.body.textContent).toContain("Export failed (403).");
+	expect(button.disabled).toBe(false);
+	await act(async () => store.getState().actions.setConnection("disconnected", "Offline"));
+	expect(button.disabled).toBe(true);
+});
