@@ -46,7 +46,7 @@ function updateActiveAssistant(state: ConversationState, update: (message: Conve
 	let index = messages.findIndex((message) => message.id === state.session.activeAssistantId);
 	if (index === -1) {
 		index = messages.length;
-		messages.push({ id: identifier("assistant"), role: "assistant", text: "", thinking: "", streaming: true, tools: [] });
+		messages.push({ id: identifier("assistant"), role: "assistant", text: "", thinking: "", streaming: true, startedAt: Date.now(), tools: [] });
 	}
 	messages[index] = update(messages[index]);
 	return { ...state, session: { ...state.session, messages, activeAssistantId: messages[index].id } };
@@ -95,7 +95,7 @@ export function settleMessages(state: ConversationState, isStreaming: boolean) {
 			...state.session,
 			isStreaming,
 			activeAssistantId: isStreaming ? state.session.activeAssistantId : null,
-			messages: state.session.messages.map((message) => message.streaming ? { ...message, streaming: false } : message),
+			messages: state.session.messages.map((message) => message.streaming ? { ...message, streaming: false, finishedAt: message.finishedAt ?? Date.now() } : message),
 		},
 	};
 }
@@ -115,6 +115,7 @@ function finishAssistantMessage(state: ConversationState, event: Record<string, 
 		thinking: finalThinking || message.thinking,
 		error,
 		streaming: false,
+		finishedAt: Date.now(),
 	}));
 	return settleMessages(updated, updated.session.isStreaming);
 }
@@ -135,7 +136,7 @@ export function reduceAgentEvent(state: ConversationState, event: Record<string,
 				activeAssistantId: id,
 				messages: [
 					...state.session.messages,
-					{ id, role: "assistant" as const, text: "", thinking: "", streaming: true, tools: [] },
+					{ id, role: "assistant" as const, text: "", thinking: "", streaming: true, startedAt: Date.now(), tools: [] },
 				],
 			},
 		};

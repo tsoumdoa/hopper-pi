@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createHopperStore } from "./hopper-store";
 import type { HostSnapshot } from "../../../src/host/protocol.js";
 
@@ -8,6 +8,22 @@ const emptySnapshot: HostSnapshot = {
 };
 
 describe("Hopper store", () => {
+	it("freezes the reply duration when generation finishes", () => {
+		const clock = vi.spyOn(Date, "now").mockReturnValue(1000);
+		try {
+			const store = createHopperStore();
+			const event = store.getState().actions.applyAgentEvent;
+			event({ type: "message_start", message: { role: "assistant" } });
+			clock.mockReturnValue(44000);
+			event({ type: "message_end", message: { role: "assistant", content: "Done" } });
+			clock.mockReturnValue(50000);
+			event({ type: "agent_end" });
+			expect(store.getState().session.messages[0]).toMatchObject({ startedAt: 1000, finishedAt: 44000, streaming: false });
+		} finally {
+			clock.mockRestore();
+		}
+	});
+
 	it.each([false, true])("replaces partial snapshot arguments with execution input, with existing output=%s", (hasOutput) => {
 		const store = createHopperStore();
 		const { actions } = store.getState();

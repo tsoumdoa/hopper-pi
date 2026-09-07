@@ -55,7 +55,13 @@ export function applySnapshot(state: HopperState, snapshot: HostSnapshot) {
 	const partial = snapshot.isStreaming
 		? toStoredMessages([snapshot.streamingMessage], true).find((message) => message.role === "assistant")
 		: undefined;
-	if (partial) messages.push({ ...partial, streaming: true });
+	if (partial) {
+		const previous = state.session.id === snapshot.sessionId
+			? state.session.messages.find((message) => message.id === state.session.activeAssistantId)
+			: undefined;
+		const payload = snapshot.streamingMessage as Record<string, unknown>;
+		messages.push({ ...partial, streaming: true, startedAt: previous?.startedAt ?? (typeof payload.timestamp === "number" ? payload.timestamp : Date.now()) });
+	}
 	return {
 		connection: { status: "connected" as const, detail: CONNECTED_DETAIL, reconnectAttempt: 0 },
 		session: {

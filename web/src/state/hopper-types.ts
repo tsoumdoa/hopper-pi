@@ -25,6 +25,8 @@ export type ConversationMessage = {
 	thinking: string;
 	/** Provider or agent error reported for this assistant message. */
 	error?: string;
+	startedAt?: number;
+	finishedAt?: number;
 	streaming: boolean;
 	tools: ToolCall[];
 };

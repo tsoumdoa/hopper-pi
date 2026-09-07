@@ -91,16 +91,31 @@ function UserMessage({ message }: { message: ConversationMessage }) {
 	);
 }
 
+function WorkingTime({ message }: { message: ConversationMessage }) {
+	const [now, setNow] = useState(Date.now);
+	useEffect(() => {
+		if (!message.streaming) return;
+		setNow(Date.now());
+		const timer = window.setInterval(() => setNow(Date.now()), 1000);
+		return () => window.clearInterval(timer);
+	}, [message.streaming, message.startedAt]);
+	const seconds = message.startedAt === undefined ? null : Math.max(0, Math.floor(((message.finishedAt ?? now) - message.startedAt) / 1000));
+	const duration = seconds === null ? null : seconds < 60 ? `${seconds}s` : seconds < 3600
+		? `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+		: `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}m`;
+	return (
+		<div className="mb-3 border-b border-line/60 pb-3 text-[13px] text-muted" aria-live="off">
+			{message.streaming ? "Working" : "Worked"}{duration ? ` for ${duration}` : message.streaming ? "…" : ""}
+		</div>
+	);
+}
+
 function AssistantMessage({ message }: { message: ConversationMessage }) {
 	const empty = !message.text && !message.thinking && !message.error && message.tools.length === 0;
 	return (
 		<article className="animate-slide-up" aria-label="Hopper's reply">
-			<div className="mb-1.5 flex items-center gap-2 text-xs">
-				<span aria-hidden="true" className={cn("size-1.5 rounded-full bg-accent", message.streaming && "animate-pulse")} />
-				<span className="font-medium text-ink">Hopper</span>
-				{message.streaming && <span className="text-muted">Working…</span>}
-			</div>
-			<div className="min-w-0 pl-3.5">
+			<WorkingTime message={message} />
+			<div className="min-w-0">
 				{message.thinking && (
 					<div className="mb-2">
 						<ThinkingBlock text={message.thinking} streaming={message.streaming && !message.text} />
