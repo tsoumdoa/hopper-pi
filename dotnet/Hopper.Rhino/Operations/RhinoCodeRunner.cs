@@ -324,7 +324,12 @@ namespace rhino_zmq_poc
                     return fromMode;
             }
 
-            var languageId = DetectLanguageId(script);
+            var languageId = normalizedMode switch
+            {
+                "python" => "mcneel.pythonnet.python",
+                "csharp" => "mcneel.roslyn.csharp",
+                _ => DetectLanguageId(script),
+            };
             return Activator.CreateInstance(languageSpecType, languageId);
         }
 

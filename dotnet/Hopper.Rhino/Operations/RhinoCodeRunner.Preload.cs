@@ -1,18 +1,41 @@
 using System;
 using System.Reflection;
+using System.Diagnostics;
 using Rhino;
 
 namespace rhino_zmq_poc
 {
     internal static partial class RhinoCodeRunner
     {
-        private static readonly RhinoScriptPreloader Preloader = new RhinoScriptPreloader();
+        private static bool preloading;
 
-        internal static void PreloadLanguages() =>
-            Preloader.Initialize(InitializeLanguage, message => RhinoApp.WriteLine(message));
+        internal static void PreloadLanguages(Action<string> report = null)
+        {
+            if (preloading) return; // Runtime initialization can pump UI callbacks.
+            report ??= message => RhinoApp.WriteLine(message);
+            preloading = true;
+            try
+            {
+                foreach (var mode in new[] { "python", "csharp" })
+                {
+                    var clock = Stopwatch.StartNew();
+                    try
+                    {
+                        if (InitializeLanguage(mode, report))
+                            report($"Hopper: {mode} ready ({clock.ElapsedMilliseconds} ms).");
+                    }
+                    catch (Exception ex)
+                    {
+                        report($"Hopper: {mode} initialization failed ({clock.ElapsedMilliseconds} ms). " +
+                            $"Script execution can retry.\n{ex}");
+                    }
+                }
+            }
+            finally { preloading = false; }
+        }
 
         // Initialization needs no active document and runs no user script.
-        internal static void InitializeLanguage(string mode)
+        private static bool InitializeLanguage(string mode, Action<string> report)
         {
             if (!TryResolveRhinoCodeType("Rhino.Runtime.Code.RhinoCode", out var codeType) ||
                 !TryResolveRhinoCodeType("Rhino.Runtime.Code.Languages.LanguageSpec", out var specType))
@@ -25,8 +48,15 @@ namespace rhino_zmq_poc
             if (spec == null || languages == null || queryLatest == null)
                 throw new InvalidOperationException("RhinoCode language registry is unavailable.");
 
+            // Reuse the execution path's cache and recheck that the language
+            // is still registered instead of maintaining a second ready set.
+            if (WarmedModes.Contains(mode) && queryLatest.Invoke(languages, new[] { spec }) != null)
+                return false;
+
+            report($"Hopper: initializing {mode}...");
             if (!EnsureLanguageReady(mode, languages, specType, spec, queryLatest))
                 throw new InvalidOperationException($"RhinoCode {mode} initialization did not complete.");
+            return true;
         }
     }
 }

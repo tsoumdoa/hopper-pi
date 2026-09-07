@@ -7,6 +7,16 @@ namespace grasshopper_plugin.Tests;
 public sealed class RhinoLanguageWarmupTests
 {
     [Theory]
+    [InlineData("python", "mcneel.pythonnet.python")]
+    [InlineData("csharp", "mcneel.roslyn.csharp")]
+    public void MissingStaticLanguagePropertiesStillResolveRequestedMode(string mode, string expectedId)
+    {
+        var resolver = typeof(RhinoCodeRunner).GetMethod("ResolveLanguageSpec", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var spec = (Spec)resolver.Invoke(null, new object[] { typeof(Spec), mode, "" })!;
+        Assert.Equal(expectedId, spec.Mode);
+    }
+
+    [Theory]
     [InlineData("python")]
     [InlineData("csharp")]
     public void WaitLoadsAndReadiesLanguageWithoutCallingNullReporterOverload(string mode)
