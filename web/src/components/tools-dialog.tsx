@@ -1,17 +1,175 @@
-import { useEffect, useState } from "react";
-import { ChevronRight, RefreshCw } from "lucide-react";
-import type { AgentToolsSnapshot } from "../../../src/host/protocol.js";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { ArrowLeft, Box, ChevronRight, RefreshCw, Search, Terminal, Workflow, type LucideIcon } from "lucide-react";
+import type { AgentToolSummary, AgentToolsSnapshot, JsonValue } from "../../../src/host/protocol.js";
+import { cn } from "../lib/utils";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 
-const TOOL_GROUPS = ["Rhino", "Grasshopper", "General"] as const;
+type GroupName = "Rhino" | "Grasshopper" | "General";
 
-function toolGroup(name: string) {
+const TOOL_GROUPS: Array<{ name: GroupName; icon: LucideIcon; hint: string }> = [
+	{ name: "Rhino", icon: Box, hint: "Document objects, scripts, and viewports" },
+	{ name: "Grasshopper", icon: Workflow, hint: "Canvas components, wires, widgets, and scripts" },
+	{ name: "General", icon: Terminal, hint: "Files, search, and questions for you" },
+];
+
+function toolGroup(name: string): GroupName {
 	if (name.startsWith("rh_")) return "Rhino";
 	if (name.startsWith("gh_")) return "Grasshopper";
 	return "General";
+}
+
+// JSON Schema helpers. Tool parameters arrive as plain JSON, so every accessor tolerates missing or odd shapes.
+type Schema = { [key: string]: JsonValue };
+
+function asSchema(value: JsonValue | undefined): Schema | null {
+	return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+
+function variantsOf(schema: Schema): Schema[] | null {
+	const list = schema.anyOf ?? schema.oneOf;
+	if (!Array.isArray(list)) return null;
+	const variants = list.map(asSchema).filter((entry): entry is Schema => entry !== null);
+	return variants.length ? variants : null;
+}
+
+function literal(value: JsonValue) {
+	return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+function literalOptions(schema: Schema): string[] | null {
+	if (Array.isArray(schema.enum)) return schema.enum.map(literal);
+	if (schema.const !== undefined) return [literal(schema.const)];
+	const variants = variantsOf(schema);
+	if (variants?.every((variant) => variant.const !== undefined || Array.isArray(variant.enum))) return variants.flatMap((variant) => literalOptions(variant) ?? []);
+	return null;
+}
+
+export function schemaType(schema: Schema): string {
+	const variants = variantsOf(schema);
+	if (variants) return [...new Set(variants.map(schemaType))].join(" | ");
+	if (Array.isArray(schema.type)) return schema.type.map(String).join(" | ");
+	if (schema.type === "array") {
+		const items = asSchema(schema.items);
+		const inner = items ? schemaType(items) : "any";
+		return inner.includes(" | ") ? `(${inner})[]` : `${inner}[]`;
+	}
+	if (typeof schema.type === "string") return schema.type;
+	if (schema.const !== undefined) return typeof schema.const;
+	if (Array.isArray(schema.enum)) return [...new Set(schema.enum.map((value) => typeof value))].join(" | ");
+	if (schema.properties) return "object";
+	return "any";
+}
+
+// A variant's discriminator is the property fixed to a single literal, such as `action: "add"`.
+function discriminatorOf(variant: Schema) {
+	const properties = asSchema(variant.properties);
+	const entry = properties && Object.entries(properties).find(([, value]) => asSchema(value)?.const !== undefined);
+	return entry ? { name: entry[0], value: literal(asSchema(entry[1])!.const!) } : null;
+}
+
+function rangeLabel(schema: Schema) {
+	const min = typeof schema.minimum === "number" ? schema.minimum : null;
+	const max = typeof schema.maximum === "number" ? schema.maximum : null;
+	if (min === null && max === null) return null;
+	if (min !== null && max !== null) return `${min} to ${max}`;
+	return min !== null ? `at least ${min}` : `at most ${max}`;
+}
+
+const MAX_DEPTH = 4;
+
+function ParameterList({ schema, depth = 0, indent = depth > 0, omit }: { schema: Schema; depth?: number; indent?: boolean; omit?: string }) {
+	const properties = asSchema(schema.properties);
+	if (!properties) return null;
+	const required = new Set(Array.isArray(schema.required) ? schema.required.map(String) : []);
+	const entries = Object.entries(properties).filter(([name]) => name !== omit);
+	if (!entries.length) return <p className="mt-1.5 text-[11px] text-muted">No other fields.</p>;
+	return (
+		<ul className={cn("grid", depth > 0 && "mt-2", indent && "border-l-2 border-line pl-3")}>
+			{entries.map(([name, value]) => {
+				const param = asSchema(value) ?? {};
+				const items = param.type === "array" ? asSchema(param.items) : null;
+				const options = literalOptions(param) ?? (items && literalOptions(items));
+				const nested = asSchema(param.properties) ? param : items && asSchema(items.properties) ? items : null;
+				const variants = nested || options ? null : (variantsOf(param) ?? (items && variantsOf(items)))?.filter((variant) => asSchema(variant.properties));
+				const range = rangeLabel(param);
+				return (
+					<li key={name} className="border-t border-line py-2.5 first:border-t-0 first:pt-0 last:pb-0">
+						<div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+							<code className="font-mono text-xs font-semibold">{name}</code>
+							<span className="font-mono text-[11px] text-muted">{schemaType(param)}</span>
+							{required.has(name) && <span className="text-[10px] font-medium uppercase tracking-wider text-accent">Required</span>}
+							{range && <span className="text-[11px] text-muted">{range}</span>}
+						</div>
+						{typeof param.description === "string" && param.description && <p className="mt-1 text-xs leading-5 text-ink-soft">{param.description}</p>}
+						{options && (
+							<ul aria-label={`${name} options`} className="mt-1.5 flex flex-wrap gap-1">
+								{options.map((option) => <li key={option} className="rounded-sm border border-line bg-panel px-1.5 py-px font-mono text-[11px] text-ink-soft">{option}</li>)}
+							</ul>
+						)}
+						{param.default !== undefined && <p className="mt-1 text-[11px] text-muted">Default <code className="font-mono">{JSON.stringify(param.default)}</code></p>}
+						{nested && depth < MAX_DEPTH && <ParameterList schema={nested} depth={depth + 1} />}
+						{variants?.length && depth < MAX_DEPTH ? (
+							<div className="mt-2 grid gap-2 border-l-2 border-line pl-3">
+								<p className="text-[11px] text-muted">One of {variants.length} shapes</p>
+								{variants.map((variant, index) => {
+									const discriminator = discriminatorOf(variant);
+									return (
+										<div key={index} className="rounded-md border border-line bg-panel/60 p-2.5">
+											<p className="font-mono text-[11px] font-medium text-ink-soft">
+												{discriminator ? <>{discriminator.name} = <span className="text-accent">{discriminator.value}</span></> : `Shape ${index + 1}`}
+											</p>
+											<ParameterList schema={variant} depth={depth + 1} indent={false} omit={discriminator?.name} />
+										</div>
+									);
+								})}
+							</div>
+						) : null}
+					</li>
+				);
+			})}
+		</ul>
+	);
+}
+
+function ToolDetail({ tool, onBack }: { tool: AgentToolSummary; onBack(): void }) {
+	const group = TOOL_GROUPS.find((entry) => entry.name === toolGroup(tool.name))!;
+	const schema = asSchema(tool.parameters);
+	const properties = schema && asSchema(schema.properties);
+	const count = properties ? Object.keys(properties).length : 0;
+	const requiredCount = schema && Array.isArray(schema.required) ? schema.required.length : 0;
+	return (
+		<article aria-labelledby="tool-detail-title" className="min-w-0">
+			<Button variant="ghost" size="xs" className="-ml-2 mb-2 sm:hidden" onClick={onBack}>
+				<ArrowLeft className="size-3" />All tools
+			</Button>
+			<div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted">
+				<group.icon aria-hidden="true" className="size-3" />
+				<span>{group.name}</span>
+			</div>
+			<div className="mt-1 flex flex-wrap items-center gap-2">
+				<h2 id="tool-detail-title" className="break-all font-mono text-base font-semibold tracking-tight">{tool.name}</h2>
+				<Badge variant={tool.active ? "accent" : "neutral"} dot>{tool.active ? "Active" : "Inactive"}</Badge>
+			</div>
+			<p className="mt-3 whitespace-pre-wrap break-words text-[13px] leading-6 text-ink-soft">{tool.description}</p>
+			{!tool.active && <p className="mt-3 rounded-md border border-line bg-panel px-3 py-2 text-xs leading-5 text-ink-soft">Registered but not enabled right now. Hopper activates it when a task needs it.</p>}
+			<section aria-labelledby="tool-parameters-title" className="mt-5">
+				<div className="flex items-baseline justify-between gap-2 border-b border-line pb-2">
+					<h3 id="tool-parameters-title" className="text-xs font-semibold uppercase tracking-wider text-muted">Parameters</h3>
+					<span className="text-[11px] text-muted">{count ? `${count} ${count === 1 ? "parameter" : "parameters"}${requiredCount ? ` · ${requiredCount} required` : ""}` : "None"}</span>
+				</div>
+				{count ? <div className="mt-3"><ParameterList schema={schema!} /></div> : <p className="mt-3 text-xs text-muted">This tool takes no input.</p>}
+			</section>
+			<details className="group mt-5 text-xs">
+				<summary className="flex cursor-pointer list-none items-center gap-1 text-muted hover:text-ink [&::-webkit-details-marker]:hidden">
+					<ChevronRight aria-hidden="true" className="size-3 transition-transform group-open:rotate-90" />JSON schema
+				</summary>
+				<pre className="mt-2 overflow-x-auto rounded-md border border-line bg-panel p-3 font-mono text-[11px] leading-5">{JSON.stringify(tool.parameters, null, 2)}</pre>
+			</details>
+		</article>
+	);
 }
 
 export function ToolsDialog({ token, connected, onOpenChange }: {
@@ -21,9 +179,13 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 }) {
 	const [snapshot, setSnapshot] = useState<AgentToolsSnapshot | null>(null);
 	const [query, setQuery] = useState("");
+	const [activeOnly, setActiveOnly] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [revision, setRevision] = useState(0);
+	const [selectedName, setSelectedName] = useState<string | null>(null);
+	const [detailOpen, setDetailOpen] = useState(false);
+	const list = useRef<HTMLElement>(null);
 
 	useEffect(() => {
 		if (!connected) return;
@@ -53,57 +215,115 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 	}, [connected, token, revision]);
 
 	const search = query.trim().toLowerCase();
-	const visible = snapshot?.tools.filter((tool) => `${toolGroup(tool.name)} ${tool.name} ${tool.description}`.toLowerCase().includes(search)) ?? [];
-	const groups = TOOL_GROUPS.map((name) => ({ name, tools: visible.filter((tool) => toolGroup(tool.name) === name) }))
+	const filtered = search || activeOnly;
+	const visible = snapshot?.tools.filter((tool) => (!activeOnly || tool.active)
+		&& `${toolGroup(tool.name)} ${tool.name} ${tool.description}`.toLowerCase().includes(search)) ?? [];
+	const groups = TOOL_GROUPS.map((group) => ({ ...group, tools: visible.filter((tool) => toolGroup(tool.name) === group.name) }))
 		.filter((group) => group.tools.length > 0);
+	const ordered = groups.flatMap((group) => group.tools);
 	const active = snapshot?.tools.filter((tool) => tool.active).length ?? 0;
+	const selected = ordered.find((tool) => tool.name === selectedName) ?? ordered[0] ?? null;
+
+	useEffect(() => {
+		list.current?.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView?.({ block: "nearest" });
+	}, [selected?.name]);
+
+	const select = (tool: AgentToolSummary, openDetail = false) => {
+		setSelectedName(tool.name);
+		if (openDetail) setDetailOpen(true);
+	};
+
+	const onListKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+		if (!ordered.length) return;
+		const index = ordered.findIndex((tool) => tool.name === selected?.name);
+		const next = event.key === "ArrowDown" ? Math.min(ordered.length - 1, index + 1)
+			: event.key === "ArrowUp" ? Math.max(0, index - 1)
+			: event.key === "Home" ? 0
+			: event.key === "End" ? ordered.length - 1
+			: -1;
+		if (next < 0) return;
+		event.preventDefault();
+		select(ordered[next]);
+		Array.from(list.current?.querySelectorAll<HTMLElement>("[data-tool]") ?? []).find((button) => button.dataset.tool === ordered[next].name)?.focus();
+	};
 
 	return (
 		<Dialog open onOpenChange={onOpenChange}>
-			<DialogContent className="w-[min(760px,calc(100%-2rem))]">
+			<DialogContent className="h-[min(680px,calc(100dvh-2rem))] w-[min(920px,calc(100%-2rem))] overflow-hidden">
 				<DialogHeader>
 					<DialogTitle>Agent tools</DialogTitle>
-					<DialogDescription>Tools registered in this session. Active tools are enabled for the agent. Hopper can discover and activate additional tools as needed.</DialogDescription>
+					<DialogDescription>What Hopper can do in this session. Active tools are available to the agent now; it turns on the rest when a task calls for them.</DialogDescription>
 				</DialogHeader>
 				{!connected && <p role="status" className="text-xs text-warn">Disconnected. Reconnect to update this list.</p>}
 				{error && <p role="alert" className="text-xs text-danger">Could not update tools: {error}</p>}
-				<div className="flex items-center gap-2">
-					<Input aria-label="Search tools" placeholder="Search tools…" value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1" />
+				<div className="flex flex-wrap items-center gap-2">
+					<div className="relative min-w-0 flex-1 basis-48">
+						<Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted" />
+						<Input aria-label="Search tools" placeholder="Search tools…" value={query} onChange={(event) => setQuery(event.target.value)} className="pl-8" />
+					</div>
+					<Button variant={activeOnly ? "default" : "secondary"} size="sm" aria-pressed={activeOnly} onClick={() => setActiveOnly((value) => !value)}>
+						Active only
+					</Button>
 					<Button variant="secondary" size="sm" disabled={!connected || busy} onClick={() => setRevision((value) => value + 1)}>
-						<RefreshCw className="size-3.5" />Refresh
+						<RefreshCw className={cn("size-3.5", busy && "animate-spin")} />Refresh
 					</Button>
 				</div>
-				<p role="status" className="text-xs text-muted">
-					{snapshot ? `${active} active · ${snapshot.tools.length} registered${search ? ` · ${visible.length} matching` : ""}` : connected && busy ? "Loading tools…" : "Tool list unavailable."}
+				<p role="status" className="-mt-2 text-xs text-muted">
+					{snapshot ? `${active} active · ${snapshot.tools.length} registered${filtered ? ` · ${visible.length} matching` : ""}` : connected && busy ? "Loading tools…" : "Tool list unavailable."}
 				</p>
-				<div className="grid min-h-0 gap-5 overflow-y-auto">
-					{groups.map((group) => (
-						<section key={group.name} aria-labelledby={`tools-group-${group.name}`} className="grid gap-2">
-							<div className="flex items-center justify-between gap-2">
-								<h2 id={`tools-group-${group.name}`} className="text-sm font-medium">{group.name}</h2>
-								<span className="text-[11px] text-muted">{group.tools.filter((tool) => tool.active).length} active · {group.tools.length} {search ? "matching" : "tools"}</span>
-							</div>
-							{group.tools.map((tool) => (
-								<article key={tool.name} className="min-w-0 rounded-md border border-line">
-									<details className="group text-xs">
-										<summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto_auto] items-center gap-2 rounded-md p-3 hover:bg-panel focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 [&::-webkit-details-marker]:hidden">
-											<span title={tool.name} className="truncate font-mono font-medium">{tool.name}</span>
-											<span className="truncate text-ink-soft">{tool.description}</span>
-											<Badge variant={tool.active ? "accent" : "neutral"}>{tool.active ? "Active" : "Inactive"}</Badge>
-											<ChevronRight aria-hidden="true" className="size-3.5 text-muted transition-transform group-open:rotate-90" />
-										</summary>
-										<div className="min-w-0 border-t border-line p-3">
-											<h3 className="break-words font-mono font-medium">{tool.name}</h3>
-											<p className="mt-2 whitespace-pre-wrap break-words leading-5 text-ink-soft">{tool.description}</p>
-											<h4 className="mt-3 font-medium text-muted">Parameters</h4>
-											<pre className="mt-2 overflow-x-auto rounded bg-panel p-2 text-[11px]">{JSON.stringify(tool.parameters, null, 2)}</pre>
-										</div>
-									</details>
-								</article>
-							))}
-						</section>
-					))}
-					{snapshot && !visible.length && <p className="py-6 text-center text-xs text-muted">{snapshot.tools.length ? "No tools match your search." : "No tools are registered in this session."}</p>}
+				<div className="grid min-h-0 flex-1 overflow-hidden rounded-md border border-line sm:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
+					<nav
+						ref={list}
+						aria-label="Tools"
+						onKeyDown={onListKeyDown}
+						className={cn("min-h-0 overflow-y-auto bg-panel sm:border-r sm:border-line", detailOpen ? "hidden sm:block" : "block")}
+					>
+						{groups.map((group) => (
+							<section key={group.name} aria-labelledby={`tools-group-${group.name}`}>
+								<div className="sticky top-0 z-10 flex items-center gap-1.5 border-b border-line bg-panel/95 px-3 py-1.5 backdrop-blur">
+									<group.icon aria-hidden="true" className="size-3 text-muted" />
+									<h2 id={`tools-group-${group.name}`} className="text-[11px] font-semibold uppercase tracking-wider text-muted">{group.name}</h2>
+									<span title={`${group.tools.filter((tool) => tool.active).length} active of ${group.tools.length}`} className="ml-auto text-[11px] tabular-nums text-muted">{group.tools.filter((tool) => tool.active).length}/{group.tools.length}</span>
+								</div>
+								<ul className="py-1">
+									{group.tools.map((tool) => {
+										const current = tool.name === selected?.name;
+										return (
+											<li key={tool.name}>
+												<button
+													type="button"
+													data-tool={tool.name}
+													aria-current={current ? "true" : undefined}
+													onClick={() => select(tool, true)}
+													className={cn(
+														"relative grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2 px-3 py-1.5 text-left transition-colors hover:bg-ink/[.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40",
+														current && "bg-surface text-ink before:absolute before:bottom-1 before:left-0 before:top-1 before:w-0.5 before:rounded-r before:bg-accent",
+													)}
+												>
+													<span aria-hidden="true" className={cn("mt-[7px] size-1.5 rounded-full", tool.active ? "bg-accent" : "border border-line-strong")} />
+													<span className="min-w-0">
+														<span title={tool.name} className="block truncate font-mono text-xs font-medium">{tool.name}</span>
+														<span className="block truncate text-[11px] text-muted">{tool.description}</span>
+													</span>
+													<ChevronRight aria-hidden="true" className="mt-1 size-3.5 text-muted sm:hidden" />
+												</button>
+											</li>
+										);
+									})}
+								</ul>
+							</section>
+						))}
+						{snapshot && !visible.length && (
+							<p className="px-4 py-8 text-center text-xs text-muted">
+								{!snapshot.tools.length ? "No tools are registered in this session." : activeOnly && !search ? "No tools are active right now." : "No tools match your search."}
+							</p>
+						)}
+					</nav>
+					<div className={cn("min-h-0 overflow-y-auto bg-surface p-4 sm:p-5", detailOpen ? "block" : "hidden sm:block")}>
+						{selected ? <ToolDetail key={selected.name} tool={selected} onBack={() => setDetailOpen(false)} /> : (
+							<p className="py-8 text-center text-xs text-muted">{snapshot ? "Select a tool to see what it does and what it needs." : connected && busy ? "Loading tools…" : "Tool details unavailable."}</p>
+						)}
+					</div>
 				</div>
 			</DialogContent>
 		</Dialog>
