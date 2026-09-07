@@ -56,6 +56,8 @@
 		"lucide-react": "^1.39.0",
 		"react": "^19.2.8",
 		"react-dom": "^19.2.8",
+		"react-markdown": "^10.1.0",
+		"remark-gfm": "^4.0.1",
 		"tailwind-merge": "^3.6.0",
 		"tailwindcss": "^4.3.3",
 		"tsx": "^4.23.13",
