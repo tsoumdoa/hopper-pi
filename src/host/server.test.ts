@@ -71,6 +71,7 @@ function fakeRuntime(): HostRuntime {
 		login: vi.fn(async () => {}),
 		logout: vi.fn(async () => {}),
 		listSkills: vi.fn(async () => ({ folder: "/skills", skills: [], diagnostics: [] })),
+		listTools: vi.fn(() => ({ tools: [{ name: "read", description: "Read skills", active: true, parameters: { type: "object" } }] })),
 		readSkill: vi.fn(() => "# Test skill"),
 		updateSkills: vi.fn(async () => ({ folder: "/skills", skills: [], diagnostics: [] })),
 		dispose: vi.fn(async () => {}),
@@ -173,6 +174,25 @@ describe("Hopper loopback server", () => {
 		expect(runtime.dispose).not.toHaveBeenCalled();
 		expect(runtime.ui.replayPending).toHaveBeenCalledTimes(2);
 		reopened.close();
+	});
+
+	it("authenticates tool listing and rejects mutations", async () => {
+		const runtime = fakeRuntime();
+		const server = await startHopperServer({ runtime, staticDir: await staticDirectory(), token: "tools-token", protocolHandshake, getRuntimeStatus });
+		servers.push(server);
+		const endpoint = `http://${server.host}:${server.port}/api/tools`;
+		const headers = { Authorization: "Bearer tools-token" };
+		await expect(fetch(endpoint)).resolves.toMatchObject({ status: 403 });
+		await expect(fetch(endpoint, { headers: { Authorization: "Bearer wrong" } })).resolves.toMatchObject({ status: 403 });
+		expect(runtime.listTools).not.toHaveBeenCalled();
+		const response = await fetch(endpoint, { headers });
+		expect(response.headers.get("cache-control")).toBe("no-store");
+		expect(await response.json()).toEqual(runtime.listTools());
+		await expect(fetch(endpoint, { method: "POST", headers })).resolves.toMatchObject({ status: 405 });
+		vi.mocked(runtime.listTools).mockImplementation(() => { throw new Error("Hopper host is stopped"); });
+		const failed = await fetch(endpoint, { headers });
+		expect(failed.status).toBe(400);
+		expect(await failed.json()).toEqual({ error: "Hopper host is stopped" });
 	});
 
 	it("authenticates skill listing, previews and settings, and validates mutations", async () => {

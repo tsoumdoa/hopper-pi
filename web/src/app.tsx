@@ -9,6 +9,7 @@ import { ModelControls } from "./components/model-picker";
 import { ProviderDialog } from "./components/provider-dialog";
 import { Sidebar } from "./components/sidebar";
 import { SkillsDialog } from "./components/skills-dialog";
+import { ToolsDialog } from "./components/tools-dialog";
 import { ToastRegion } from "./components/toasts";
 import { UiRequestDialog } from "./components/ui-request-dialog";
 import { Badge } from "./components/ui/badge";
@@ -58,6 +59,7 @@ export function App() {
 	const [modeOverride, setModeOverride] = useState<SendMode | null>(null);
 	const [providerOpen, setProviderOpen] = useState(false);
 	const [skillsOpen, setSkillsOpen] = useState(false);
+	const [toolsOpen, setToolsOpen] = useState(false);
 	const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(readCollapsed);
 	const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
@@ -176,6 +178,7 @@ export function App() {
 				onNewSession={newSession}
 				onManageProvider={openProvider}
 				onManageSkills={() => { setMobileSettingsOpen(false); setSkillsOpen(true); }}
+				onViewTools={() => { setMobileSettingsOpen(false); setToolsOpen(true); }}
 				onReconnect={reconnect}
 			/>
 			<main className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -227,6 +230,7 @@ export function App() {
 				/>
 			)}
 			{skillsOpen && <SkillsDialog token={token} connected={connected} streaming={streaming} onOpenChange={setSkillsOpen} />}
+			{toolsOpen && <ToolsDialog key={sessionId} token={token} connected={connected} onOpenChange={setToolsOpen} />}
 			<UiRequestDialog send={send} />
 			<ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
 			<ToastRegion />
