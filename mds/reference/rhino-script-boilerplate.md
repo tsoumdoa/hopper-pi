@@ -12,6 +12,16 @@ Use this for **Rhino document** work via `rh_run_script`. For a new Grasshopper 
 
 Python and C# both run through **RhinoCode** (`Rhino.Runtime.Code`) in Rhino 8. Hopper prepends the language shebang if you omit it (`#! python 3` / `// #! csharp`).
 
+`HopperCode` and `HopperCodeRestart` initialize both languages on Rhino's UI thread before starting the host. If the scripting assemblies are absent, Hopper loads Rhino's scripting plugin before resolving the runtime types. Script execution uses the same bootstrap. Successful initialization is cached for the Rhino process, and reopening or restarting Hopper rechecks the language's ready status before skipping it. Rhino command history reports each language's initialization time. Preloading needs no active document and executes no user script. If a language fails, Hopper still opens; the other language initializes independently. Errored languages are not cached as ready, and their initialization messages and diagnostics are reported. Later commands and script calls check them again. Individual scripts still incur their own compilation and execution costs.
+
+### Failure diagnostics
+
+Script failures include the observed host stages with elapsed times, whether an earlier run of that mode completed through this runner, and whether the language lookup succeeded before warmup. `unknown` means execution failed before that observation. Language availability alone does not prove that Python finished initializing. `code-run` can include lazy initialization and compilation, so do not treat it as proof that user code started.
+
+Thrown exceptions retain their stack traces and inner exceptions. Partial script output and captured Rhino loading messages are included in the tool result and session export. Stage names and native stack frames are not user-source line numbers; the automatically prepended shebang can also shift runtime line numbers.
+
+To investigate first-run failures, install a build containing these diagnostics, restart Rhino, and export the session after the first failure. Compare the same source after the runtime has loaded, using a disposable document for scripts that change geometry or layers. Inspect for partial changes before rerunning. Do not automatically replay a failed mutation.
+
 ## Python pattern
 
 ```python

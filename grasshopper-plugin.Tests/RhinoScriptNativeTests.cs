@@ -22,6 +22,30 @@ public static class RhinoScriptNativeTests
         Exception? failure = null;
         try
         {
+            var preloadMessages = new List<string>();
+            var preloadClock = System.Diagnostics.Stopwatch.StartNew();
+            RhinoCodeRunner.PreloadLanguages(message =>
+            {
+                preloadMessages.Add(message);
+                // Exercise the production guard against runtime UI reentry.
+                RhinoCodeRunner.PreloadLanguages(preloadMessages.Add);
+            });
+            var firstPreloadMs = preloadClock.Elapsed.TotalMilliseconds;
+            Assert.True(preloadMessages.Count(m => m.Contains(" ready (")) == 2,
+                string.Join("\n", preloadMessages));
+            Assert.DoesNotContain(preloadMessages, m => m.Contains("initialization failed"));
+            var messageCount = preloadMessages.Count;
+            preloadClock.Restart();
+            RhinoCodeRunner.PreloadLanguages(preloadMessages.Add);
+            var repeatedPreloadMs = preloadClock.Elapsed.TotalMilliseconds;
+            Assert.Equal(messageCount, preloadMessages.Count);
+            Assert.True(originalIds.SetEquals(RhinoDoc.OpenDocuments(false).Select(d => d.RuntimeSerialNumber)));
+            Assert.Same(original, RhinoDoc.ActiveDoc);
+            if (original != null) Assert.Equal(originalModified, original.Modified);
+            System.IO.File.WriteAllText(System.IO.Path.Combine(
+                System.IO.Path.GetDirectoryName(typeof(RhinoScriptNativeTests).Assembly.Location)!, "preload-timing.json"),
+                JsonSerializer.Serialize(new { firstPreloadMs, repeatedPreloadMs, preloadMessages }));
+
             var created = service.Execute(RpcOperation.manageRhinoDocument, Json(new { action = "new",
                 expectedActiveDocument = service.ActiveId, affectedDocuments = Array.Empty<object>() })).Data!.Value;
             Assert.True(created.GetProperty("ok").GetBoolean(), created.ToString());
@@ -42,6 +66,16 @@ public static class RhinoScriptNativeTests
             var csharp = executor.RunScript(new RhinoScriptArguments("csharp",
                 "Rhino.RhinoDoc.ActiveDoc.Objects.AddPoint(new Rhino.Geometry.Point3d(5,6,7));\nSystem.Console.WriteLine(\"csharp native test\");", false, target));
             Assert.True(csharp.Succeeded, csharp.Error);
+            Assert.Equal(2, fixture.Objects.Count);
+
+            var failed = executor.RunScript(new RhinoScriptArguments("python",
+                "print('diagnostic output before failure')\nraise RuntimeError('hopper diagnostic failure')", false, target));
+            Assert.False(failed.Succeeded);
+            Assert.Contains("Rhino script diagnostics: mode=python", failed.Error);
+            Assert.Contains("previousRunCompleted=True", failed.Error);
+            Assert.Contains("code-run", failed.Error);
+            Assert.Contains("hopper diagnostic failure", failed.Error + failed.Output);
+            Assert.Contains("diagnostic output before failure", failed.Output);
             Assert.Equal(2, fixture.Objects.Count);
 
             fixture.ModelAbsoluteTolerance *= 2;

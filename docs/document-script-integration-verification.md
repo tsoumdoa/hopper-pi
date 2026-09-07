@@ -28,6 +28,18 @@ Storage, pinned asset execution, replay, concurrency, restart recovery, and unce
 
 ## Running the native checks
 
+### Language warmup regression, 2026-09-07
+
+The session trace located the first-run Python and C# failures in `WaitForLanguage`, after `WaitStatusComplete` and inside `WaitLoadComplete`. The installed Rhino assembly confirms that `WaitStatusComplete(LanguageSpec)` already invokes loaders with a default responder and waits for readiness. The subsequent `WaitLoadComplete(spec, null)` unconditionally dereferences its reporter, even when no loaders remain. The fix removes that redundant call and reports an explicit error if the status-wait method is unavailable. The same null-reporter call remains in `origin/main` at `72049f7`; it was not introduced by the host split.
+
+All 18 focused warmup, diagnostics, and adapter tests passed, including language-spec fallback when static properties are absent. The adversarial review removed the separate preload coordinator and readiness cache. Preload and script execution now share `WarmedModes` and recheck the registry. The native test calls the production preload entry point, including a reentrant callback and a repeat call, then verifies Python/C# execution, intentional Python failure output, document/settings guards, Undo, and document preservation.
+
+`RhinoScriptNativeTests.RunAll` passed with isolated rebuilt assemblies and a disposable document. With both runtimes already loaded, initial preload checks took 1.7508 ms and the repeat with registry revalidation took 0.1942 ms. These are warm-runtime measurements. The test writes `preload-timing.json` beside its isolated assembly. Those runs did not exercise cold startup because the C# test bootstrap loads scripting assemblies. No installed plugin was replaced by these tests.
+
+The review follow-up adds runtime bootstrap through `PlugIn.LoadPlugIn` before type resolution, shared by preload and script execution. Readiness now checks `ILanguage.Status.IsReady` and rejects errored status before caching a mode. Initialization failures include Rhino's progress message and diagnostics. The installed Rhino implementation exposes `Status` explicitly through `ILanguage`; the regression fixture uses the same interface pattern.
+
+All 23 focused .NET warmup, diagnostics, and adapter tests passed after these fixes. They cover missing runtime types, plugin-load failure, post-load type revalidation, completed-but-errored initialization, retry after failure, and a cached language becoming errored. Both production targets, `net7.0` and `net7.0-windows`, built without warnings. `RhinoScriptNativeTests.RunAll` passed again on macOS Rhino 8.34.26223.11002 with isolated assemblies and a disposable document. Fully cold Rhino startup remains unverified; bootstrap unit tests simulate absent assemblies, and the native launcher itself uses C#.
+
 Build `grasshopper-plugin.Tests/grasshopper-plugin.Tests.csproj`, then obtain an explicit running instance ID with RhinoCode's `list --json` command. Run each entry point with the helper, for example:
 
 ```sh
