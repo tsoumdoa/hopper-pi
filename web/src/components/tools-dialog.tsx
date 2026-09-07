@@ -25,7 +25,22 @@ function toolGroup(name: string): GroupName {
 type Schema = { [key: string]: JsonValue };
 
 function asSchema(value: JsonValue | undefined): Schema | null {
-	return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+	if (!Array.isArray(value.allOf)) return value;
+	// Combine object fields for display without changing the raw schema.
+	const parts = [...value.allOf.map(asSchema).filter((part): part is Schema => part !== null), value];
+	const properties: Schema = Object.create(null);
+	const required = new Set<string>();
+	for (const part of parts) {
+		const fields = asSchema(part.properties);
+		for (const [name, field] of Object.entries(fields ?? {})) {
+			properties[name] = name in properties ? { allOf: [properties[name], field] } : field;
+		}
+		if (Array.isArray(part.required)) part.required.forEach((name) => required.add(String(name)));
+	}
+	if (!Object.keys(properties).length) return value;
+	const { allOf: _allOf, ...rest } = value;
+	return { ...rest, properties, required: [...required] };
 }
 
 function variantsOf(schema: Schema): Schema[] | null {
@@ -48,6 +63,7 @@ function literalOptions(schema: Schema): string[] | null {
 }
 
 export function schemaType(schema: Schema): string {
+	schema = asSchema(schema)!;
 	const variants = variantsOf(schema);
 	if (variants) return [...new Set(variants.map(schemaType))].join(" | ");
 	if (Array.isArray(schema.type)) return schema.type.map(String).join(" | ");
@@ -60,6 +76,7 @@ export function schemaType(schema: Schema): string {
 	if (schema.const !== undefined) return typeof schema.const;
 	if (Array.isArray(schema.enum)) return [...new Set(schema.enum.map((value) => typeof value))].join(" | ");
 	if (schema.properties) return "object";
+	if (Array.isArray(schema.allOf)) return [...new Set(schema.allOf.map(asSchema).filter((part): part is Schema => part !== null).map(schemaType))].join(" & ") || "any";
 	return "any";
 }
 
@@ -259,9 +276,9 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 				<div className="flex flex-wrap items-center gap-2">
 					<div className="relative min-w-0 flex-1 basis-48">
 						<Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted" />
-						<Input aria-label="Search tools" placeholder="Search tools…" value={query} onChange={(event) => setQuery(event.target.value)} className="pl-8" />
+						<Input aria-label="Search tools" placeholder="Search tools…" value={query} onChange={(event) => { setQuery(event.target.value); setDetailOpen(false); }} className="pl-8" />
 					</div>
-					<Button variant={activeOnly ? "default" : "secondary"} size="sm" aria-pressed={activeOnly} onClick={() => setActiveOnly((value) => !value)}>
+					<Button variant={activeOnly ? "default" : "secondary"} size="sm" aria-pressed={activeOnly} onClick={() => { setActiveOnly((value) => !value); setDetailOpen(false); }}>
 						Active only
 					</Button>
 					<Button variant="secondary" size="sm" disabled={!connected || busy} onClick={() => setRevision((value) => value + 1)}>
@@ -320,6 +337,7 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 						)}
 					</nav>
 					<div className={cn("min-h-0 overflow-y-auto bg-surface p-4 sm:p-5", detailOpen ? "block" : "hidden sm:block")}>
+						{!selected && <Button variant="ghost" size="xs" className="-ml-2 mb-2 sm:hidden" onClick={() => setDetailOpen(false)}><ArrowLeft className="size-3" />All tools</Button>}
 						{selected ? <ToolDetail key={selected.name} tool={selected} onBack={() => setDetailOpen(false)} /> : (
 							<p className="py-8 text-center text-xs text-muted">{snapshot ? "Select a tool to see what it does and what it needs." : connected && busy ? "Loading tools…" : "Tool details unavailable."}</p>
 						)}

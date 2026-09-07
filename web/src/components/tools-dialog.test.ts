@@ -146,3 +146,48 @@ it("describes JSON schema types in a compact form", () => {
 	expect(schemaType({ properties: {} })).toBe("object");
 	expect(schemaType({})).toBe("any");
 });
+
+it("renders real widget intersection fields and keeps the original JSON schema", async () => {
+	const { ghCreateWidgetTool } = await import("../../../src/tools/edit-tools/gh-create-widget.js");
+	const { ghMutateWidgetTool } = await import("../../../src/tools/edit-tools/gh-mutate-widget.js");
+	const widgets = [ghCreateWidgetTool, ghMutateWidgetTool];
+	vi.mocked(fetch).mockImplementation(async () => new Response(JSON.stringify({ tools: widgets.map((tool) => ({ name: tool.name, description: tool.description, parameters: tool.parameters, active: true })) })));
+	await render();
+	for (const tool of widgets) {
+		await act(async () => toolButtons().find((button) => button.dataset.tool === tool.name)!.click());
+		const parameters = detail()!.querySelector('section[aria-labelledby="tool-parameters-title"]')!;
+		expect(parameters.textContent).toContain("widgetType = slider");
+		expect(parameters.textContent).not.toContain("any[]");
+		const requiredField = Array.from(parameters.querySelectorAll("li")).find((item) => item.querySelector("code")?.textContent === (tool.name === "gh_create_widget" ? "x" : "targetId"));
+		expect(requiredField?.textContent).toContain("Required");
+		expect(JSON.parse(detail()!.querySelector("pre")!.textContent!)).toEqual(JSON.parse(JSON.stringify(tool.parameters)));
+	}
+});
+
+it("returns to the mobile list when search or active filtering changes", async () => {
+	await render();
+	await act(async () => toolButtons()[0].click());
+	const nav = document.querySelector('nav[aria-label="Tools"]')!;
+	expect(nav.classList.contains("hidden")).toBe(true);
+	await act(async () => setInput(document.querySelector<HTMLInputElement>('[aria-label="Search tools"]')!, "missing"));
+	expect(nav.classList.contains("hidden")).toBe(false);
+	expect(nav.textContent).toContain("No tools match your search.");
+	await act(async () => setInput(document.querySelector<HTMLInputElement>('[aria-label="Search tools"]')!, ""));
+	await act(async () => toolButtons().find((button) => button.dataset.tool === "gh_edit")!.click());
+	await act(async () => Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Active only")!.click());
+	expect(nav.classList.contains("hidden")).toBe(false);
+	expect(toolButtons().map((button) => button.dataset.tool)).not.toContain("gh_edit");
+});
+
+it("keeps mobile back navigation when polling removes the selected tool", async () => {
+	vi.useFakeTimers();
+	await render();
+	await act(async () => toolButtons()[0].click());
+	vi.mocked(fetch).mockImplementation(async () => new Response(JSON.stringify({ tools: [] })));
+	await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+	expect(detail()).toBeNull();
+	const back = Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "All tools");
+	expect(back).toBeDefined();
+	await act(async () => back!.click());
+	expect(document.querySelector('nav[aria-label="Tools"]')!.classList.contains("hidden")).toBe(false);
+});

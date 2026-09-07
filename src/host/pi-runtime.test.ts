@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { resolveHostConfig } from "./config.js";
 import { isolatedResourceLoaderOptions, providerAuthMethods } from "./pi-runtime.js";
+import { HOPPER_REGISTERED_CATALOG } from "../tools/catalog.js";
 
 describe("embedded Pi isolation", () => {
 	it("loads only Hopper factories; the host supplies the skill catalog", () => {
@@ -53,6 +54,16 @@ it("lists the current session registry and reflects tool activation without chan
 	expect(host.listTools().tools.every((tool) => tool.active)).toBe(true);
 	runtime.session = { getActiveToolNames: () => [], getAllTools: () => [] };
 	expect(host.listTools()).toEqual({ tools: [] });
+});
+
+it("preserves all registered tool schemas, including shared definitions", async () => {
+	const { EmbeddedPiHost } = await import("./pi-runtime.js");
+	const tools = HOPPER_REGISTERED_CATALOG.map(({ tool }) => tool);
+	const session = { getActiveToolNames: () => [], getAllTools: () => tools };
+	const host = Reflect.construct(EmbeddedPiHost, [{ session }, {}, {}, {}]) as import("./pi-runtime.js").EmbeddedPiHost;
+	for (const tool of host.listTools().tools) {
+		expect(tool.parameters).toEqual(JSON.parse(JSON.stringify(tools.find((entry) => entry.name === tool.name)!.parameters)));
+	}
 });
 
 it("keeps skill changes out of prompt preparation and an active turn", async () => {
