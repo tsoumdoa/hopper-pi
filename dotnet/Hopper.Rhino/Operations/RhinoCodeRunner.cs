@@ -46,7 +46,24 @@ namespace rhino_zmq_poc
         private static bool IsAvailable()
         {
             return TryResolveRhinoCodeType("Rhino.Runtime.Code.RhinoCode", out _) &&
-                   TryResolveRhinoCodeType("Rhino.Runtime.Code.Execution.RunContext", out _);
+                   TryResolveRhinoCodeType("Rhino.Runtime.Code.Execution.RunContext", out _) &&
+                   TryResolveRhinoCodeType("Rhino.Runtime.Code.Languages.LanguageSpec", out _) &&
+                   TryResolveRhinoCodeType("RhinoCodePlatform.Rhino3D.Registrar", out _);
+        }
+
+        internal static void EnsureRuntimeAvailable(Func<bool> isAvailable = null, Func<bool> loadPlugin = null)
+        {
+            isAvailable ??= IsAvailable;
+            if (isAvailable()) return;
+
+            // RhinoCodePlugin's OnLoad starts the scripting platform without opening
+            // the editor or requiring a document. Let Rhino resolve its dependencies.
+            loadPlugin ??= () => Rhino.PlugIns.PlugIn.LoadPlugIn(
+                new Guid("c9cba87a-23ce-4f15-a918-97645c05cde7"), true, false);
+            if (!loadPlugin())
+                throw new InvalidOperationException("RhinoCode scripting plugin could not be loaded.");
+            if (!isAvailable())
+                throw new InvalidOperationException("RhinoCode scripting runtime is unavailable after loading its plugin.");
         }
 
         public static RhinoCodeRunResult Run(RhinoDoc doc, string mode, string source)
@@ -57,14 +74,6 @@ namespace rhino_zmq_poc
             if (string.IsNullOrWhiteSpace(source))
                 return Fail("Invalid params: source is required");
 
-            if (!IsAvailable())
-            {
-                return Fail(
-                    "RhinoCode (Rhino.Runtime.Code) is not available in this Rhino session. " +
-                    "Requires Rhino 8 with the Script Editor runtime loaded. " +
-                    "Open Script Editor once, or use mode 'command'.");
-            }
-
             var diagnostics = new RhinoScriptDiagnostics(mode, CompletedModes.Contains(mode));
             using var outputStream = new MemoryStream();
             object runContext = null;
@@ -72,6 +81,8 @@ namespace rhino_zmq_poc
             try
             {
                 RhinoApp.CommandWindowCaptureEnabled = true;
+                diagnostics.Enter("runtime-bootstrap");
+                EnsureRuntimeAvailable();
                 diagnostics.Enter("document-context");
                 runContext = CreateRunContext(doc, outputStream);
                 var runError = InvokeRunScript(PrepareSource(mode, source), runContext, mode, diagnostics);
@@ -260,7 +271,7 @@ namespace rhino_zmq_poc
 
             var language = queryLatest.Invoke(languages, new[] { languageSpec });
             diagnostics.LanguageAvailableBeforeWarmup = language != null;
-            if (language == null)
+            if (!IsLanguageReady(language))
             {
                 diagnostics.Enter("language-warmup");
                 if (!EnsureLanguageReady(mode, languages, languageSpecType, languageSpec, queryLatest))
@@ -346,37 +357,69 @@ namespace rhino_zmq_poc
             return "mcneel.pythonnet.python";
         }
 
-        private static bool EnsureLanguageReady(
+        internal static bool EnsureLanguageReady(
             string mode,
             object languages,
             Type languageSpecType,
             object languageSpec,
-            MethodInfo queryLatest)
+            MethodInfo queryLatest,
+            Action startLanguage = null)
         {
             lock (LanguageWarmupLock)
             {
                 if (WarmedModes.Contains(mode) &&
-                    queryLatest.Invoke(languages, new[] { languageSpec }) != null)
+                    IsLanguageReady(queryLatest.Invoke(languages, new[] { languageSpec })))
                     return true;
 
-                if (TryWarmupViaRegistrar(languageSpecType, languageSpec))
-                {
-                    WaitForLanguage(languages, languageSpecType, languageSpec);
-                }
-                else
-                {
+                WarmedModes.Remove(mode);
+                if (startLanguage != null)
+                    startLanguage();
+                else if (!TryWarmupViaRegistrar(languageSpecType, languageSpec))
                     WarmupViaScriptEditorMacro(mode);
-                    WaitForLanguage(languages, languageSpecType, languageSpec);
-                }
 
-                if (queryLatest.Invoke(languages, new[] { languageSpec }) != null)
-                {
-                    WarmedModes.Add(mode);
-                    return true;
-                }
+                WaitForLanguage(languages, languageSpecType, languageSpec);
+                var language = queryLatest.Invoke(languages, new[] { languageSpec });
+                if (language == null) return false;
+                if (!IsLanguageReady(language))
+                    throw new InvalidOperationException($"RhinoCode {mode} initialization did not become ready. " +
+                        ReadLanguageFailure(language));
+
+                WarmedModes.Add(mode);
+                return true;
             }
+        }
 
-            return queryLatest.Invoke(languages, new[] { languageSpec }) != null;
+        private static bool IsLanguageReady(object language)
+        {
+            var status = GetLanguageStatus(language);
+            return TryGetMember(status, "IsReady") is true &&
+                   !(TryGetMember(status, "IsErrored") is true);
+        }
+
+        private static object GetLanguageStatus(object language)
+        {
+            // Rhino implements ILanguage.Status explicitly; it is not a public
+            // property on the concrete language class.
+            if (language == null) return null;
+            foreach (var contract in language.GetType().GetInterfaces())
+            {
+                var property = contract.GetProperty("Status");
+                if (property != null) return property.GetValue(language);
+            }
+            return TryGetMember(language, "Status");
+        }
+
+        private static string ReadLanguageFailure(object language)
+        {
+            var status = GetLanguageStatus(language);
+            var progress = TryGetMember(status, "Progress");
+            var details = new List<string>();
+            if (TryGetMember(progress, "Message") is string message)
+                details.Add(message);
+            if (TryGetMember(progress, "Diagnostics") is System.Collections.IEnumerable diagnostics)
+                foreach (var diagnostic in diagnostics)
+                    details.Add(diagnostic?.ToString() ?? "");
+            return details.Count > 0 ? string.Join("\n", details) : "Language status does not report IsReady=true.";
         }
 
         private static bool TryWarmupViaRegistrar(Type languageSpecType, object languageSpec)
@@ -446,7 +489,8 @@ namespace rhino_zmq_poc
                     "language readiness could not be established.");
 
             // Rhino's one-argument overload creates its own progress responder,
-            // invokes pending loaders, and waits for language status readiness.
+            // invokes pending loaders, and waits for completion, including errors.
+            // EnsureLanguageReady must check IsReady after this call.
             // Do not follow it with WaitLoadComplete(spec, null): that method
             // unconditionally calls the reporter, even with no pending loaders.
             waitStatusComplete.Invoke(languages, new[] { languageSpec });

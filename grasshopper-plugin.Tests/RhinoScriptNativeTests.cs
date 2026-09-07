@@ -31,7 +31,8 @@ public static class RhinoScriptNativeTests
                 RhinoCodeRunner.PreloadLanguages(preloadMessages.Add);
             });
             var firstPreloadMs = preloadClock.Elapsed.TotalMilliseconds;
-            Assert.Equal(2, preloadMessages.Count(m => m.Contains(" ready (")));
+            Assert.True(preloadMessages.Count(m => m.Contains(" ready (")) == 2,
+                string.Join("\n", preloadMessages));
             Assert.DoesNotContain(preloadMessages, m => m.Contains("initialization failed"));
             var messageCount = preloadMessages.Count;
             preloadClock.Restart();

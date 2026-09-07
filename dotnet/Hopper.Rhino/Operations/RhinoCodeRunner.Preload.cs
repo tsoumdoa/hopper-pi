@@ -37,6 +37,7 @@ namespace rhino_zmq_poc
         // Initialization needs no active document and runs no user script.
         private static bool InitializeLanguage(string mode, Action<string> report)
         {
+            EnsureRuntimeAvailable();
             if (!TryResolveRhinoCodeType("Rhino.Runtime.Code.RhinoCode", out var codeType) ||
                 !TryResolveRhinoCodeType("Rhino.Runtime.Code.Languages.LanguageSpec", out var specType))
                 throw new InvalidOperationException("RhinoCode scripting runtime is unavailable.");
@@ -49,8 +50,8 @@ namespace rhino_zmq_poc
                 throw new InvalidOperationException("RhinoCode language registry is unavailable.");
 
             // Reuse the execution path's cache and recheck that the language
-            // is still registered instead of maintaining a second ready set.
-            if (WarmedModes.Contains(mode) && queryLatest.Invoke(languages, new[] { spec }) != null)
+            // is still ready instead of maintaining a second ready set.
+            if (WarmedModes.Contains(mode) && IsLanguageReady(queryLatest.Invoke(languages, new[] { spec })))
                 return false;
 
             report($"Hopper: initializing {mode}...");
