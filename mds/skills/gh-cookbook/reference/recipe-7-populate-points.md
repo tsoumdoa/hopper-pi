@@ -1,43 +1,12 @@
-# Recipe 7 — Populate Points on Surface
+# Recipe 7: Populate surface points
 
-**What:** Grid or random point distribution across a surface, with UV coordinates.
+Create a UV grid or a reproducible random distribution.
 
-**Zone Map:** `[Surface][U_slider][V_slider] → [Divide Surface]`
-
-## Pipeline (Grid)
-
-```
-[Surface]        [U: 10 slider]       [V: 10 slider]
- (target)      (points in U)          (points in V)
-    │                 │                    │
-    ├─────────────────┤                    │
-    │                 ▼                    │
-    │         [Divide Surface] ◄───────────┘
-    │              │    │
-    │             Pt   UV
-    │              │    │
-    ▼              ▼    ▼
-  list of     {x,y,z}  {u,v}
-  points      points   coords
+```text
+Surface, U divisions, V divisions -> Divide Surface -> Points, Normals, UV
+Surface, count, seed -------------> Populate Geometry -> Points
 ```
 
-## Pipeline (Random)
+Division counts describe intervals, not point counts. For an open untrimmed rectangular surface, a grid including both ends has `(U + 1) × (V + 1)` samples. Verify counts, seams, and trimmed boundaries for the actual surface. Equal UV steps need not be equal physical distances.
 
-```
-[Surface]        [Count: slider]        [Seed: slider]
- (target)       (how many)           (variation)
-    │                 │                   │
-    └─────────────────┼───────────────────┘
-                      ▼
-               [Populate Geometry]
-                     │
-                     P
-                     ▼
-            → random points on surface
-```
-
-## Output
-**Grid:** 3D points + matching UV coords · **Random:** scattered points on surface.
-
-## Next Steps
-→ **Evaluate Surface** for normals/tangents at each point · **Circle** + **Recipe 4** extrude for bolts/studs · **Line SDL** + **Recipe 5a** pipe for bristles/quills
+Grid outputs have matching points and UV coordinates; inspect their branch structure. Random output contains points only. Use a fixed seed and Surface Closest Point when UV coordinates are needed for those points.

@@ -1,87 +1,32 @@
-# `gh_apply_graph` — Atomic New-Graph Builds
+# Creating a subgraph with gh_apply_graph
 
-Use `gh_apply_graph` to create a complete new Grasshopper subgraph in one synchronous call. It creates components, widgets, script nodes, wires, and groups; runs one solution; and returns short instance IDs plus runtime and overlap validation.
+Create nodes, widgets, scripts, wires, and groups in one call. Hopper runs one solution and returns local-ref mappings, runtime messages, and overlap checks. Use targeted editing tools for existing objects.
 
-## Canonical workflow
+## Inputs
 
-```text
-resolve unusual or ambiguous component types if necessary
-→ gh_apply_graph once
-→ inspect its integrated validation
-→ use legacy tools only for surgical repair
-```
+At least one component, widget, or script is required. Other arrays are optional.
 
-Do not read a blank canvas merely to obtain IDs. Local `ref` values connect objects within the call, and the result maps each ref to its created short ID. Use `gh_get_canvas` to inspect an existing canvas, selection, or subgraph.
+| Array | Fields |
+|-------|--------|
+| `components` | `ref`, `type`, `x`, `y`, optional `name`, `preview` |
+| `widgets` | `ref`, `kind`, `x`, `y`, and kind-specific fields from the tool schema |
+| `scripts` | `ref`, `language`, `x`, `y`, optional `name`, `code` or `scriptParts`, `inputs`, `outputs` |
+| `wires` | `from: [ref, port]`, `to: [ref, port]` |
+| `groups` | `name`, `refs`, optional `color`, `border` |
 
-## Input
+- Refs are unique within the call and match `^[A-Za-z][A-Za-z0-9_-]{0,31}$`. They are not persistent canvas IDs.
+- `x` and `y` are pivots and must each be at least 20. See [layout](./layout-system.md) for bounds offsets.
+- `type` accepts an exact canonical name, `plugin/name`, or a returned short/full type GUID. Names are case-insensitive, with no fuzzy matching. Resolve missing or ambiguous types with `gh_list_components`.
+- Wire ports use zero-based indices or exact, case-sensitive names/nicknames. Both endpoint refs must belong to this call. Use returned IDs and `gh_edit_wire` to connect existing nodes.
+- Sliders default to `digits: 2`; panels default to `textOutput: "singleString"`. Regular components default to `preview: false`.
+- Python scripts use full `code`; C# preferably uses `scriptParts`. See [script lifecycle](./script-component-lifecycle.md) for port definitions and edits.
 
-All arrays are optional, but at least one component, widget, or script is required.
+## Results and failures
 
-- `components`: `{ ref, type, x, y, name?, preview? }`
-- `widgets`: slider, panel, toggle, swatch, scribble, or value-list nodes
-- `scripts`: `{ ref, language, x, y, name?, code?, scriptParts?, inputs?, outputs? }`
-- `wires`: `{ from: [ref, port], to: [ref, port] }`
-- `groups`: `{ name, refs, color?, border? }`
+The result includes `ok`, `rolledBack`, `timedOut`, counts, ref-to-short-ID mappings, structural errors, runtime messages, overlaps, and elapsed time. Use returned IDs directly; do not reread the canvas just to recover them.
 
-### Refs and coordinates
+Types and graph structure are checked before execution. Hopper snapshots the GH document before creation and attempts restoration after a structural failure. Check `rolledBack`; restoration can fail. Component runtime errors keep a structurally valid graph in place for repair.
 
-- A `ref` is unique within one call and matches `^[A-Za-z][A-Za-z0-9_-]{0,31}$`.
-- Every new node requires `x` and `y`, each at least `20`.
-- Refs are local input labels, not persistent canvas IDs.
+If the 30-second UI-thread window expires, `timedOut: true` means work may still finish after the response. Inspect current state before retrying. Repair or remove only identified failed additions; do not duplicate a completed graph or blindly delete uncertain results.
 
-### Component types
-
-`type` accepts:
-
-- an exact canonical component name;
-- `plugin/name` when exact names collide;
-- a short type GUID previously returned by Hopper;
-- a full type GUID.
-
-Name matching is case-insensitive and exact, never fuzzy. Missing or ambiguous names return candidate information before canvas mutation. Use `gh_list_components` only when a type is unusual, missing, or ambiguous.
-
-### Wires
-
-A port selector is a zero-based index or exact, case-sensitive port name/nickname. `from` always resolves an output; `to` always resolves an input. Both endpoint refs must name nodes in the same call.
-
-### Widgets
-
-- Slider `digits` defaults to `2`.
-- Panel `textOutput` defaults to `singleString`.
-- New regular components default to `preview: false`.
-
-### Scripts
-
-- New C# node in a graph: use `scriptParts` when possible; `code` remains supported.
-- New Python node in a graph: pass the full script in `code`.
-- Edit code on an existing node: use `gh_edit_script`.
-- Change ports only on an existing node: use `gh_edit_param`.
-
-For C#, `scriptParts` contains namespace `references`, the complete `runScript` method, and optional `helpers`. Hopper assembles the class wrapper. Script port type hints are `object`, `double`, `int`, `string`, or `bool`.
-
-## Atomicity and validation
-
-Hopper resolves all component types and validates refs, coordinates, sources, and graph references before sending the request. On the Grasshopper UI thread it snapshots the document, creates all objects, resolves ports, connects without per-wire solutions, creates groups, then runs one solution.
-
-Invalid types, refs, ports, groups, or exceptions leave the starting canvas unchanged — the document is snapshotted before any mutation, and a mid-graph failure restores it (best-effort restoring the original if the restore itself is interrupted, so the canvas is not left empty). Runtime component messages do not roll back a structurally valid graph; they are returned with overlap data for repair.
-
-A successful **standalone** apply records one Grasshopper undo step, so a single Undo restores the canvas to before the build. When the apply runs **inside an agent turn**, the turn-level transaction already owns the single undo step for the whole turn, so the apply does not record a nested step (one Undo still restores the entire turn). The apply never emits more than one undo record.
-
-If the apply does not finish within the 30-second Grasshopper UI-thread window, the result is `ok: false, timedOut: true` — the canvas outcome is **unknown**, because the work may still complete on the UI thread after the response is sent. Treat this as unknown, not as a clean failure: inspect the canvas (`gh_get_canvas`) and remove any partial result before re-applying, otherwise a retry can duplicate the graph.
-
-## Result
-
-The compact result reports:
-
-- `ok`, `rolledBack`, and `timedOut`;
-- created counts by kind;
-- local ref → short instance ID mappings;
-- structural failures;
-- runtime messages and overlap validation;
-- elapsed milliseconds.
-
-It does not emit a job ID or success line for every object.
-
-## Surgical follow-up
-
-Use returned short IDs directly with legacy edit tools when a small repair is needed. Rebuild with `gh_apply_graph` only when replacing the whole new subgraph is clearer than a surgical edit.
+A standalone apply records one GH Undo step. Inside an agent turn, it shares the turn's Undo step. These guarantees cover the GH document, not external side effects caused by components or scripts.

@@ -1,43 +1,15 @@
-# Recipe 9 — Bake Geometry
+# Recipe 9: Reusable bake pipeline
 
-**What:** Builds a reusable Grasshopper-to-Rhino bake pipeline on a named, coloured layer using Model Object + Model Layer (Rhino 8+). For a one-off direct bake of current geometry, use `rh_run_script` instead.
+Build a Rhino 8+ GH pipeline that attaches layer attributes to geometry and passes model content to Content Cache. For a direct/current bake, follow [rhino-document](../../rhino-document/SKILL.md), including its named-script policy.
 
-**Zone Map:** `[Layer_Panel][Color_Swatch] → [Model Layer] → [Model Object] ← [Geometry] → [Cache]`
-
-## Components
-
-| Step | Component | Config | Notes |
-|------|-----------|--------|-------|
-| 1 | **Panel** | Layer name as text (e.g. `"2D::Outline"`) | Nested layer names use `::` separator |
-| 2 | **Swatch** | Pick desired layer color | Drives the baked layer's display color |
-| 3 | **Model Layer** | default | Takes name (Panel) + color (Swatch) → layer definition |
-| 4 | **Geometry** | Right-click → set geometry type | Curve, Brep, Mesh — whatever you want to bake |
-| 5 | **Model Object** | default | Takes geometry + layer → baked model object in Rhino |
-| 6 | **Content Cache** | default | Caches the baked result so it persists across solves |
-
-## Wiring
-
-```
-[Panel]          [Swatch]
-"2D::Outline"     (color)
-  │                 │
-  ├─→ [Model Layer].N
-  │     [Model Layer].Dc ←─┘
-  │           │
-  │       (layer def)
-  │           │
-  │     [Model Object].L ←───┘
-  │
-[Geometry] ──→ [Model Object].G
-                  │
-              (model object)
-                  │
-                  ▼
-             [Content Cache]
+```text
+Layer-name panel, Colour Swatch -> Model Layer
+Geometry, Model Layer ---------> Model Object
+Model Object ------------------> Content Cache content
 ```
 
-## Output
-Baked Rhino objects on the specified layer. The Content Cache ensures the geometry persists in the Rhino document without re-triggering a full solve.
+Use a layer path such as `Structure::Frames`. Confirm available component ports and the Content Cache action controls in the installed Rhino version.
 
-## Typical Next Steps
-→ After any modeling recipe (0–8): swap a preview endpoint for this bake pipeline to commit geometry to the Rhino document · Change the Panel text to organize baked output into separate layers (e.g. `"Structure"`, `"Facade"`, `"Mesh"`) · Combine with **Recipe 6 (Dispatch)** to bake two subsets to different layers.
+Model Object attaches attributes; connecting it does not prove that Rhino objects were created. Content Cache needs an action. Push tracks output for later updates; Bake can create duplicates. Existing object IDs can cause replacement in either mode. An exposed Action input can automate this behavior; a Boolean true runs the configured default action. See McNeel's [Content Cache guide](https://discourse.mcneel.com/t/content-cache-updated-guide/181883/1).
+
+The configured pipeline produces model content. Report Rhino geometry as created only after the intended action completes and document queries confirm its IDs and layer. Keep pipeline configuration and actual model mutation distinct when following the Rhino workflow.

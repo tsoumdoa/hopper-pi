@@ -1,25 +1,25 @@
-# Script Component Lifecycle
+# GH script lifecycle
 
-Shared steps for Grasshopper **Python** and **C#** script components. Language templates → [csharp-boilerplate.md](./csharp-boilerplate.md), [python-boilerplate.md](./python-boilerplate.md).
+Applies to GH C#/Python components. Use [Rhino scripting](./rhino-script-boilerplate.md) for direct Rhino document work.
 
-## Create inside a new graph
+## Create
 
-1. Add the node to `gh_apply_graph.scripts` with its local `ref`, language, position, `code` or `scriptParts`, inputs, and outputs.
-2. Pass Python full `code`; prefer C# `scriptParts`.
-3. Wire the node using its local ref in the same graph request.
+Add the node to `gh_apply_graph.scripts` with a local ref, language, position, source, and port lists. Use full `code` for Python and preferably `scriptParts` for C#. Wire local refs in the same request.
 
-Each port has `name` and optional `typeHint` (`object` default, `double`, `int`, `string`, or `bool`).
+Ports have `name` and optional `typeHint`, `access`, `dataMapping`, `simplify`, and `reverse`. Type hints include `object`, the default, plus `double`, `int`, `string`, and `bool`. Access defaults to `item`; choose `list` or `tree` when needed.
 
-## Edit an existing script
+## Edit
 
-1. `gh_edit_script` `"setCode"`: C# — pass `scriptParts` (preferred) or full `code`. Python — pass full `code`. Include full `inputs`/`outputs` when the signature changes; omit lists if only code changes.
-2. Small edits: `"patchCode"` with line patches — C# default scope `runScriptBody`, Python default scope `full` (line numbers from file top).
-3. Read split code: `"getCodeParts"` — C# only. Python: use `"getCode"`.
+Read current source first. Use `gh_edit_script` with `setCode` for replacement, or `patchCode` for small edits. Include complete `inputs`/`outputs` when the signature changes; omit them for code-only edits. See [C#](./csharp-boilerplate.md) or [Python](./python-boilerplate.md) for source formats and patch scopes.
 
-## Ports only
+Use `gh_edit_param` for port properties, add/remove, or `syncParams` when code variables do not need renaming.
 
-Use `gh_edit_param` for add/remove, access, type hint, mapping, simplify, or reverse changes on an existing script when code variables do not need renaming. Use `syncParams` when the full desired port list is clearer than several one-off edits.
+## Rename ports
 
-## Rename ports atomically
+Use `gh_edit_script` with `setCode`, updating source and complete port lists together. A canvas-only rename can break code. Same-order renames preserve wires. For reordering or name swaps, map identity explicitly:
 
-Rename with `gh_edit_script` `setCode`, updating both code and the complete `inputs`/`outputs` list in the same call. A canvas-only rename can break the solution. Same-order renames update ports in place and preserve wires. For an order change or name swap, map identity explicitly: `{ "name": "radius", "previousName": "r", "typeHint": "double" }`. Omit `previousName` when only changing properties on an existing name.
+```json
+{"name":"radius","previousName":"r","typeHint":"double"}
+```
+
+Omit `previousName` when keeping an existing name.

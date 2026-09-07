@@ -1,21 +1,14 @@
-# Canvas Navigation — Sub-graphs & Filtering
+# Inspecting the canvas
 
-> **When to use:** Query or inspect an existing canvas, selection, or subgraph. New graphs should use [`gh_apply_graph`](./apply-graph.md) local refs and integrated validation.
+Use `gh_get_canvas` for existing structure or selection. New builds return IDs and validation through [gh_apply_graph](./apply-graph.md).
 
-## Sub-graphs
+| Filter | Scope |
+|--------|-------|
+| `subgraph` | One cluster, using an ID returned by the current canvas summary |
+| `selectionOnly: true` | Selected objects; selected groups expand to members |
 
-The canvas is partitioned into **sub-graphs** — wired clusters. Unwired components are singleton sub-graphs. Each sub-graph has **internal wires** (both ends inside) and **external wires** (crossing clusters).
+```json
+{"selectionOnly":true}
+```
 
-## Filter parameters
-
-| Param | Purpose |
-|-------|---------|
-| `subgraph` | Detail for one cluster, e.g. `"subgraph_0"` |
-| `selectionOnly` | Detail for current canvas selection only (groups expand to members). |
-
-**Examples:**
-
-- `gh_get_canvas({ subgraph: "subgraph_0" })`
-- `gh_get_canvas({ selectionOnly: true })`
-
-Do not use `gh_get_canvas` to recover IDs after a new graph build; `gh_apply_graph` returns ref-to-short-ID mappings. Filter only when isolating existing structure or a user selection.
+Subgraph labels describe the current canvas organization. Discover them before filtering; do not assume an earlier `subgraph_0` still identifies the intended objects. Inspect boundary wires when editing a subset.

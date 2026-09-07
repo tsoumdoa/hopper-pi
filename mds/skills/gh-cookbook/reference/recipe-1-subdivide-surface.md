@@ -1,30 +1,14 @@
-# Recipe 1 — Subdivide Surface
+# Recipe 1: Subdivide surface
 
-**What:** Split a surface into a U×V grid of subsurface patches.
+Split a surface's UV domain into U×V patches.
 
-**Zone Map:** `[Surface][U_panel][V_panel] → [Divide] → [Isotrim]`
-
-## Pipeline
-
-```
-[Surface]     [U: 5 panel]       [V: 8 panel]
- (input)     (segments U)        (segments V)
-    │               │                  │
-    ├───────────────┤                  │
-    │               ▼                  │
-    │         [Divide Domain²]         │
-    │               │                  │
-    │               S ─────────────────┘
-    │               ▼
-    │         [Isotrim / SubSrf]
-    │               │
-    └───────────────┘
-                    ▼
-      → list of U×V surface patches (e.g. 40)
+```text
+Surface UV domain ----------------> Divide Domain² domain
+U count, V count -----------------> Divide Domain² counts
+Surface --------------------------> Isotrim surface
+Divide Domain² subdomains --------> Isotrim domain
 ```
 
-## Output
-List of `U × V` subsurfaces.
+Use positive integer counts and the surface's actual domain. If reparameterizing, use the same domain for subdivision and Isotrim. UV subdivision does not guarantee equal physical patch sizes or preserve arbitrary trims.
 
-## Next Steps
-→ **Recipe 4** extrude for thickness/fins · **Recipe 6** dispatch for checkerboard · **Recipe 2** extract edges per patch → **Recipe 5a** pipe
+For one untrimmed rectangular surface, expect `U × V` patches. Inspect branches when processing multiple surfaces. Continue with [extrusion](./recipe-4-extrude.md), [dispatch](./recipe-6-dispatch-pattern.md), or [edges](./recipe-2-extract-edges.md).
