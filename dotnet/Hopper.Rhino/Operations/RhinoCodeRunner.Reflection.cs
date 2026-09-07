@@ -166,7 +166,7 @@ namespace rhino_zmq_poc
         }
 
         private static string FormatException(Exception ex) =>
-            ex == null ? "Unknown error" : $"{ex.GetType().Name}: {ex.Message}";
+            ex?.ToString() ?? "Unknown error";
 
         private static RhinoCodeRunResult Success(string output) =>
             new RhinoCodeRunResult { Ok = true, Output = output?.TrimEnd() ?? "" };

@@ -12,6 +12,14 @@ Use this for **Rhino document** work via `rh_run_script`. For a new Grasshopper 
 
 Python and C# both run through **RhinoCode** (`Rhino.Runtime.Code`) in Rhino 8. Hopper prepends the language shebang if you omit it (`#! python 3` / `// #! csharp`).
 
+### Failure diagnostics
+
+Script failures include the observed host stages with elapsed times, whether an earlier run of that mode completed through this runner, and whether the language lookup succeeded before warmup. `unknown` means execution failed before that observation. Language availability alone does not prove that Python finished initializing. `code-run` can include lazy initialization and compilation, so do not treat it as proof that user code started.
+
+Thrown exceptions retain their stack traces and inner exceptions. Partial script output and captured Rhino loading messages are included in the tool result and session export. Stage names and native stack frames are not user-source line numbers; the automatically prepended shebang can also shift runtime line numbers.
+
+To investigate first-run failures, install a build containing these diagnostics, restart Rhino, and export the session after the first failure. Compare the same source after the runtime has loaded, using a disposable document for scripts that change geometry or layers. Inspect for partial changes before rerunning. Do not automatically replay a failed mutation.
+
 ## Python pattern
 
 ```python

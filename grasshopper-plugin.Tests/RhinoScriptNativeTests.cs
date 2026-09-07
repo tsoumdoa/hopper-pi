@@ -44,6 +44,16 @@ public static class RhinoScriptNativeTests
             Assert.True(csharp.Succeeded, csharp.Error);
             Assert.Equal(2, fixture.Objects.Count);
 
+            var failed = executor.RunScript(new RhinoScriptArguments("python",
+                "print('diagnostic output before failure')\nraise RuntimeError('hopper diagnostic failure')", false, target));
+            Assert.False(failed.Succeeded);
+            Assert.Contains("Rhino script diagnostics: mode=python", failed.Error);
+            Assert.Contains("previousRunCompleted=True", failed.Error);
+            Assert.Contains("code-run", failed.Error);
+            Assert.Contains("hopper diagnostic failure", failed.Error + failed.Output);
+            Assert.Contains("diagnostic output before failure", failed.Output);
+            Assert.Equal(2, fixture.Objects.Count);
+
             fixture.ModelAbsoluteTolerance *= 2;
             var changed = Assert.Throws<DocumentOperationException>(() => executor.RunScript(new RhinoScriptArguments("python",
                 "raise Exception('must not execute')", false, target)));

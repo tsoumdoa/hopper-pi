@@ -31,6 +31,9 @@ namespace rhino_zmq_poc
             "RhinoCodePlatform.Rhino3D",
         };
 
+        private static readonly HashSet<string> CompletedModes =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         private static readonly object LanguageWarmupLock = new object();
         private static readonly HashSet<string> WarmedModes =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -62,39 +65,41 @@ namespace rhino_zmq_poc
                     "Open Script Editor once, or use mode 'command'.");
             }
 
-            var script = PrepareSource(mode, source);
-            var outputStream = new MemoryStream();
-            var capturedLines = Array.Empty<string>();
-
+            var diagnostics = new RhinoScriptDiagnostics(mode, CompletedModes.Contains(mode));
+            using var outputStream = new MemoryStream();
+            object runContext = null;
+            var captureWasEnabled = RhinoApp.CommandWindowCaptureEnabled;
             try
             {
                 RhinoApp.CommandWindowCaptureEnabled = true;
-                try
-                {
-                    var runContext = CreateRunContext(doc, outputStream);
-                    var runError = InvokeRunScript(script, runContext, mode);
-                    capturedLines = RhinoApp.CapturedCommandWindowStrings(true) ?? Array.Empty<string>();
-                    var output = ReadCombinedOutput(outputStream, runContext, capturedLines);
+                diagnostics.Enter("document-context");
+                runContext = CreateRunContext(doc, outputStream);
+                var runError = InvokeRunScript(PrepareSource(mode, source), runContext, mode, diagnostics);
+                if (!string.IsNullOrWhiteSpace(runError))
+                    return Fail(diagnostics.Failure(runError), CaptureOutput(outputStream, runContext));
 
-                    if (!string.IsNullOrWhiteSpace(runError))
-                        return Fail(runError, output);
-
-                    return Success(output);
-                }
-                finally
-                {
-                    RhinoApp.CommandWindowCaptureEnabled = false;
-                }
-            }
-            catch (TargetInvocationException ex)
-            {
-                return Fail(FormatException(ex.InnerException ?? ex), ReadStream(outputStream));
+                diagnostics.Enter("output-capture");
+                var output = CaptureOutput(outputStream, runContext);
+                CompletedModes.Add(mode);
+                return Success(output);
             }
             catch (Exception ex)
             {
-                return Fail(FormatException(ex), ReadStream(outputStream));
+                return Fail(diagnostics.Failure(FormatException(ex)), CaptureOutput(outputStream, runContext));
+            }
+            finally
+            {
+                RhinoApp.CommandWindowCaptureEnabled = captureWasEnabled;
             }
         }
+
+        // Diagnostic reads must not replace the original script error if a getter fails.
+        private static string CaptureOutput(MemoryStream stream, object context) =>
+            RhinoScriptDiagnostics.CollectOutput(
+                () => ReadStream(stream),
+                () => TryReadContextOutput(context),
+                () => string.Join("\n", FilterCapturedCommandLines(
+                    RhinoApp.CapturedCommandWindowStrings(true))));
 
         private static string[] FilterCapturedCommandLines(IEnumerable<string> lines)
         {
@@ -149,6 +154,7 @@ namespace rhino_zmq_poc
                 throw new InvalidOperationException("Failed to create RunContext");
 
             TrySetMember(ctx, "OutputStream", outputStream);
+            TrySetMember(ctx, "ErrorStream", outputStream);
             TrySetMember(ctx, "AutoApplyParams", true);
             // Outer RhinoAgentTransaction already groups one agent turn into one undo step.
             TrySetMember(ctx, "RecordDocumentUndo", !RhinoAgentTransaction.IsActive);
@@ -196,9 +202,9 @@ namespace rhino_zmq_poc
                 TrySetContextOption(options, "grasshopper.runner.asCommand", true);
         }
 
-        private static string InvokeRunScript(string script, object runContext, string mode)
+        private static string InvokeRunScript(string script, object runContext, string mode, RhinoScriptDiagnostics diagnostics)
         {
-            if (TryRunViaLanguageCreateCode(script, runContext, mode, out var languageError))
+            if (TryRunViaLanguageCreateCode(script, runContext, mode, diagnostics, out var languageError))
                 return languageError;
 
             if (!TryResolveRhinoCodeType("Rhino.Runtime.Code.RhinoCode", out var rhinoCodeType))
@@ -213,6 +219,7 @@ namespace rhino_zmq_poc
             if (runScript == null)
                 throw new InvalidOperationException("RhinoCode.RunScript(string, RunContext) was not found");
 
+            diagnostics.Enter("fallback-run-script (compile/execute)");
             var result = runScript.Invoke(null, new[] { script, runContext });
             return InterpretRunResult(result);
         }
@@ -221,9 +228,11 @@ namespace rhino_zmq_poc
             string script,
             object runContext,
             string mode,
+            RhinoScriptDiagnostics diagnostics,
             out string error)
         {
             error = null;
+            diagnostics.Enter("language-lookup");
 
             if (!TryResolveRhinoCodeType("Rhino.Runtime.Code.RhinoCode", out var rhinoCodeType))
                 return false;
@@ -250,8 +259,10 @@ namespace rhino_zmq_poc
                 return false;
 
             var language = queryLatest.Invoke(languages, new[] { languageSpec });
+            diagnostics.LanguageAvailableBeforeWarmup = language != null;
             if (language == null)
             {
+                diagnostics.Enter("language-warmup");
                 if (!EnsureLanguageReady(mode, languages, languageSpecType, languageSpec, queryLatest))
                 {
                     error =
@@ -273,6 +284,7 @@ namespace rhino_zmq_poc
             if (createCode == null)
                 return false;
 
+            diagnostics.Enter("create-code");
             var code = createCode.Invoke(language, new object[] { script });
             if (code == null)
             {
@@ -286,6 +298,7 @@ namespace rhino_zmq_poc
             if (runMethod == null)
                 return false;
 
+            diagnostics.Enter("code-run (may include lazy initialization/compilation)");
             var result = runMethod.Invoke(code, new[] { runContext });
             error = InterpretRunResult(result);
             return true;
@@ -411,7 +424,7 @@ namespace rhino_zmq_poc
             return startScripting != null;
         }
 
-        private static void WaitForLanguage(
+        internal static void WaitForLanguage(
             object languages,
             Type languageSpecType,
             object languageSpec)
@@ -422,21 +435,16 @@ namespace rhino_zmq_poc
                 null,
                 new[] { languageSpecType },
                 null);
-            waitStatusComplete?.Invoke(languages, new[] { languageSpec });
+            if (waitStatusComplete == null)
+                throw new InvalidOperationException(
+                    "RhinoCode language registry does not support WaitStatusComplete(LanguageSpec); " +
+                    "language readiness could not be established.");
 
-            var reporterType = languages.GetType().GetNestedType(
-                "ILanguageLoadReporter",
-                BindingFlags.Public | BindingFlags.NonPublic);
-            if (reporterType == null)
-                return;
-
-            var waitLoadComplete = languages.GetType().GetMethod(
-                "WaitLoadComplete",
-                BindingFlags.Public | BindingFlags.Instance,
-                null,
-                new[] { languageSpecType, reporterType },
-                null);
-            waitLoadComplete?.Invoke(languages, new object[] { languageSpec, null });
+            // Rhino's one-argument overload creates its own progress responder,
+            // invokes pending loaders, and waits for language status readiness.
+            // Do not follow it with WaitLoadComplete(spec, null): that method
+            // unconditionally calls the reporter, even with no pending loaders.
+            waitStatusComplete.Invoke(languages, new[] { languageSpec });
         }
 
         private static void WarmupViaScriptEditorMacro(string mode)
@@ -490,48 +498,6 @@ namespace rhino_zmq_poc
             }
 
             return null;
-        }
-
-        private static string ReadCombinedOutput(
-            MemoryStream outputStream,
-            object runContext,
-            string[] capturedLines)
-        {
-            var parts = new List<string>();
-
-            var streamOutput = ReadStream(outputStream);
-            if (!string.IsNullOrWhiteSpace(streamOutput))
-                parts.Add(streamOutput);
-
-            var contextOutput = TryReadContextOutput(runContext);
-            if (!string.IsNullOrWhiteSpace(contextOutput))
-                parts.Add(contextOutput);
-
-            var commandOutput = string.Join("\n", FilterCapturedCommandLines(capturedLines)).TrimEnd();
-            if (!string.IsNullOrWhiteSpace(commandOutput))
-                parts.Add(commandOutput);
-
-            return DeduplicateOutputParts(parts);
-        }
-
-        private static string DeduplicateOutputParts(IEnumerable<string> parts)
-        {
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            var lines = new List<string>();
-
-            foreach (var part in parts)
-            {
-                if (string.IsNullOrWhiteSpace(part))
-                    continue;
-
-                foreach (var line in part.Replace("\r\n", "\n").Split('\n'))
-                {
-                    if (seen.Add(line))
-                        lines.Add(line);
-                }
-            }
-
-            return string.Join("\n", lines).TrimEnd();
         }
 
         private static string TryReadContextOutput(object runContext)

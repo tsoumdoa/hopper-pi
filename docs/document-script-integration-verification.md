@@ -28,6 +28,12 @@ Storage, pinned asset execution, replay, concurrency, restart recovery, and unce
 
 ## Running the native checks
 
+### Language warmup regression, 2026-09-07
+
+The session trace located the first-run Python and C# failures in `WaitForLanguage`, after `WaitStatusComplete` and inside `WaitLoadComplete`. The installed Rhino assembly confirms that `WaitStatusComplete(LanguageSpec)` already invokes loaders with a default responder and waits for readiness. The subsequent `WaitLoadComplete(spec, null)` unconditionally dereferences its reporter, even when no loaders remain. The fix removes that redundant call and reports an explicit error if the status-wait method is unavailable. The same null-reporter call remains in `origin/main` at `72049f7`; it was not introduced by the host split.
+
+All 16 focused warmup, diagnostics, and adapter tests passed. `RhinoScriptNativeTests.RunAll` also passed in a freshly launched Mac Rhino instance using isolated rebuilt assemblies and a disposable document. It executed Python and C#, retained output from an intentional Python failure, checked document/settings guards, and verified Undo and document preservation. The native test bootstrap itself uses C#, so this run does not establish cold C# startup. No installed plugin was replaced by this test.
+
 Build `grasshopper-plugin.Tests/grasshopper-plugin.Tests.csproj`, then obtain an explicit running instance ID with RhinoCode's `list --json` command. Run each entry point with the helper, for example:
 
 ```sh
