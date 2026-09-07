@@ -74,3 +74,48 @@ it("automatically shows Markdown added to the folder on the next poll", async ()
 		expect(document.body.textContent).toContain("2 of 2 enabled");
 	} finally { vi.useRealTimers(); }
 });
+
+it("filters by search and enabled status and clears an empty result", async () => {
+	library.skills.push({ ...library.skills[0], id: "user:office", name: "office-rules", description: "Office standards", source: "user", enabled: false, path: "/local/office.md", files: ["/local/office.md"] });
+	await render();
+	const search = document.querySelector<HTMLInputElement>('[aria-label="Search skills"]')!;
+	await act(async () => {
+		Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "office");
+		search.dispatchEvent(new Event("input", { bubbles: true }));
+	});
+	expect(document.querySelectorAll("[data-skill]")).toHaveLength(1);
+	expect(document.querySelector("#skill-detail-title")?.textContent).toBe("office-rules");
+	await act(async () => Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Enabled only")!.click());
+	expect(document.body.textContent).toContain("No skills match your filters.");
+	await act(async () => Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Clear filters")!.click());
+	expect(document.querySelectorAll("[data-skill]")).toHaveLength(2);
+});
+
+it("supports keyboard selection and selecting reference files", async () => {
+	library.skills.push({ ...library.skills[0], id: "user:office", name: "office-rules", source: "user", path: "/local/office.md", files: ["/local/office.md"] });
+	await render();
+	await act(async () => document.querySelector('[aria-label="Skills"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true })));
+	expect(document.querySelector("#skill-detail-title")?.textContent).toBe("office-rules");
+	expect(document.activeElement?.getAttribute("data-skill")).toBe("user:office");
+	await act(async () => document.querySelector('[aria-label="Skills"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })));
+	const select = document.querySelector<HTMLSelectElement>("#skill-file")!;
+	await act(async () => { select.value = "/bundled/reference.md"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+	expect(requests.at(-1)?.url).toContain(encodeURIComponent("/bundled/reference.md"));
+});
+
+it("keeps folder edits across polls and submits the chosen folder", async () => {
+	vi.useFakeTimers();
+	try {
+		await render();
+		await act(async () => document.querySelector<HTMLButtonElement>('[aria-controls="skill-folder-settings"]')!.click());
+		const input = document.querySelector<HTMLInputElement>("#skill-folder")!;
+		await act(async () => {
+			Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "/new/markdown");
+			input.dispatchEvent(new Event("input", { bubbles: true }));
+		});
+		await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+		expect(input.value).toBe("/new/markdown");
+		await act(async () => Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Use folder")!.click());
+		expect(requests.find((request) => request.body)?.body).toBe(JSON.stringify({ type: "folder", folder: "/new/markdown" }));
+	} finally { vi.useRealTimers(); }
+});
