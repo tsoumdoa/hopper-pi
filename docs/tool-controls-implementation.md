@@ -20,7 +20,7 @@ External Pi's public extension API does not expose the embedded host's final req
 
 ## Setup and controls
 
-The authenticated, bounded `/api/tools` configuration endpoint transports validated field patches and separate credential actions. Websocket snapshots refresh connected dialogs; reconnect and polling recover missed updates. Switches retain confirmed values while saving, and a conflict refreshes the current snapshot without replaying an edit.
+The authenticated, bounded `/api/tools` configuration endpoint transports validated field patches and separate credential actions. Settings saves reuse the reconciled snapshot for both the response and websocket publication. Connected dialogs apply websocket snapshots directly and reject stale responses; reconnect and polling recover missed updates. Switches retain confirmed values while saving, and a conflict refreshes the current snapshot without replaying an edit.
 
 Firecrawl starts disabled. Setup's "Save key and enable" action authorizes protected storage and enablement together. Managing a replacement key does not change the switch. Removal commits a tombstone before attempting deletion. No Firecrawl credential appears in ordinary settings or session history.
 

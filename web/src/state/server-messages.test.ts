@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import { createHopperStore } from "./hopper-store";
 import { handleServerMessage } from "./server-messages";
@@ -38,4 +39,25 @@ describe("server messages", () => {
 		store.getState().actions.addUserMessage("New prompt", "prompt");
 		expect(store.getState().session.messages[0]?.text).toBe("New prompt");
 	});
+});
+
+
+it("forwards tool snapshots and invalidates tool requests on session replacement", () => {
+	const store = createHopperStore();
+	const received: unknown[] = [];
+	const changed = (event: Event) => received.push((event as CustomEvent).detail);
+	const replaced = () => received.push("session changed");
+	window.addEventListener("hopper-tool-settings", changed);
+	window.addEventListener("hopper-tools-session-changed", replaced);
+	try {
+		const tools = { tools: [] };
+		handleServerMessage(store, { type: "tool_settings", snapshot: tools });
+		handleServerMessage(store, { type: "snapshot", snapshot });
+		handleServerMessage(store, { type: "snapshot", snapshot });
+		handleServerMessage(store, { type: "session_replaced", session: snapshot });
+		expect(received).toEqual([tools, "session changed", "session changed"]);
+	} finally {
+		window.removeEventListener("hopper-tool-settings", changed);
+		window.removeEventListener("hopper-tools-session-changed", replaced);
+	}
 });

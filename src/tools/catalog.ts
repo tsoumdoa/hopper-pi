@@ -173,18 +173,6 @@ export const RH_CAPTURE_VIEW_CATALOG_ENTRY: HopperToolCatalogEntry = {
 /** Tools registered eagerly (backend-guarded) in registration order. */
 export const ALL_TOOLS = HOPPER_REGISTERED_CATALOG.map((entry) => entry.tool);
 
-export function getAlwaysActiveToolNames(
-	catalog: readonly HopperToolCatalogEntry[],
-): string[] {
-	return catalog.filter((entry) => entry.alwaysActive).map((entry) => entry.tool.name);
-}
-
-export function getManagedHopperToolNames(
-	catalog: readonly HopperToolCatalogEntry[],
-): ReadonlySet<string> {
-	return new Set(catalog.map((entry) => entry.tool.name));
-}
-
 export type ToolSchemaSize = {
 	name: string;
 	group: HopperToolGroup;

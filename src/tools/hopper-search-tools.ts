@@ -1,8 +1,6 @@
 import { defineTool, type ExtensionAPI, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "@earendil-works/pi-ai";
 import {
-	getAlwaysActiveToolNames,
-	getManagedHopperToolNames,
 	HOPPER_TOOL_GROUPS,
 	type HopperToolCatalogEntry,
 	type HopperToolGroup,
@@ -12,8 +10,6 @@ import { modelSupportsImages } from "../services/model-capabilities.js";
 export const DEFAULT_SEARCH_LIMIT = 5;
 export const MAX_SEARCH_LIMIT = 10;
 export const MIN_MATCH_SCORE = 15;
-
-export type ProgressiveResetReason = "startup" | "reload" | "new" | "resume" | "fork";
 
 export type ToolSearchMatch = {
 	name: string;
@@ -31,6 +27,7 @@ export type ToolSearchNoMatchHint = {
 
 export type ActivateSearchMatchesOptions = {
 	registeredNames: ReadonlySet<string>;
+	activate(name: string): Promise<void>;
 	limit?: number;
 };
 
@@ -38,7 +35,7 @@ export type ActivateSearchMatchesResult = {
 	matches: ToolSearchMatch[];
 	added: string[];
 	alreadyActive: string[];
-	skippedUnregistered: string[];
+	skippedUnavailable: string[];
 	truncated: boolean;
 	noMatch?: ToolSearchNoMatchHint;
 };
@@ -190,12 +187,12 @@ export function rankHopperTools(
  * Rank catalog tools for a capability query and activate matches additively.
  * Never removes currently active tools.
  */
-export function activateSearchMatches(
-	pi: Pick<ExtensionAPI, "getActiveTools" | "setActiveTools">,
+export async function activateSearchMatches(
+	pi: Pick<ExtensionAPI, "getActiveTools">,
 	catalog: readonly HopperToolCatalogEntry[],
 	query: string,
 	options: ActivateSearchMatchesOptions,
-): ActivateSearchMatchesResult {
+): Promise<ActivateSearchMatchesResult> {
 	const limit = clampSearchLimit(options.limit);
 	const ranked = rankHopperTools(catalog, query, Math.max(limit * 3, MAX_SEARCH_LIMIT));
 	const active = pi.getActiveTools();
@@ -206,7 +203,7 @@ export function activateSearchMatches(
 			matches: [],
 			added: [],
 			alreadyActive: [],
-			skippedUnregistered: [],
+			skippedUnavailable: [],
 			truncated: false,
 			noMatch: ranked.noMatch,
 		};
@@ -214,7 +211,7 @@ export function activateSearchMatches(
 
 	const added: string[] = [];
 	const alreadyActive: string[] = [];
-	const skippedUnregistered: string[] = [];
+	const skippedUnavailable: string[] = [];
 	const reportedMatches: ToolSearchMatch[] = [];
 	let truncated = false;
 
@@ -227,7 +224,7 @@ export function activateSearchMatches(
 
 		if (!options.registeredNames.has(match.name)) {
 			reportedMatches.push(match);
-			skippedUnregistered.push(match.name);
+			skippedUnavailable.push(match.name);
 			continue;
 		}
 
@@ -237,18 +234,19 @@ export function activateSearchMatches(
 		}
 
 		reportedMatches.push(match);
-		added.push(match.name);
-	}
-
-	if (added.length > 0) {
-		pi.setActiveTools([...active, ...added]);
+		try {
+			await options.activate(match.name);
+			added.push(match.name);
+		} catch {
+			skippedUnavailable.push(match.name);
+		}
 	}
 
 	return {
 		matches: reportedMatches,
 		added,
 		alreadyActive,
-		skippedUnregistered,
+		skippedUnavailable,
 		truncated,
 		noMatch: ranked.noMatch,
 	};
@@ -276,11 +274,11 @@ function formatSearchResultText(
 			const flags: string[] = [];
 			if (result.added.includes(match.name)) flags.push("activated");
 			else if (result.alreadyActive.includes(match.name)) flags.push("already active");
-			else if (result.skippedUnregistered.includes(match.name)) {
+			else if (result.skippedUnavailable.includes(match.name)) {
 				flags.push(
 					match.requires === "images"
-						? "unavailable (needs multimodal model / rh_capture_view registration)"
-						: "unavailable (not registered)",
+						? "unavailable (check model support and tool settings)"
+						: "unavailable (check tool settings and availability)",
 				);
 			}
 			const flagText = flags.length > 0 ? ` [${flags.join(", ")}]` : "";
@@ -299,59 +297,10 @@ function formatSearchResultText(
 	return lines.join("\n");
 }
 
-export function parseProgressiveResetReason(reason: string | undefined): ProgressiveResetReason {
-	switch (reason) {
-		case "startup":
-		case "reload":
-		case "new":
-		case "resume":
-		case "fork":
-			return reason;
-		default:
-			return "startup";
-	}
-}
-
-/** Reset progressive Hopper specialists on fresh sessions; keep them across resume/fork. */
-export function shouldResetProgressiveTools(reason: ProgressiveResetReason): boolean {
-	switch (reason) {
-		case "startup":
-		case "reload":
-		case "new":
-			return true;
-		case "resume":
-		case "fork":
-			return false;
-		default: {
-			const _exhaustive: never = reason;
-			void _exhaustive;
-			return false;
-		}
-	}
-}
-
-/**
- * Replace managed Hopper tools in the active set with the always-on core.
- * Preserves non-Hopper tools (built-ins, choice tools, etc.).
- * Does not force-activate image-gated tools; callers should sync rh_capture_view afterward.
- */
-export function resetProgressiveActiveTools(
-	pi: Pick<ExtensionAPI, "getActiveTools" | "setActiveTools" | "getAllTools">,
-	catalog: readonly HopperToolCatalogEntry[],
-): string[] {
-	const managed = getManagedHopperToolNames(catalog);
-	const registered = new Set(pi.getAllTools().map((tool) => tool.name));
-	const core = getAlwaysActiveToolNames(catalog).filter((name) => registered.has(name));
-	const preserved = pi.getActiveTools().filter((name) => !managed.has(name));
-	const next = [...preserved, ...core];
-	pi.setActiveTools(next);
-	return next;
-}
-
 export function createHopperSearchToolsTool(
 	pi: ExtensionAPI,
 	getCatalog: () => readonly HopperToolCatalogEntry[],
-	policy?: { allowedToolNames(): Promise<Set<string>>; activate(id: string): Promise<void> },
+	policy: { allowedToolNames(): Promise<Set<string>>; activateByName(name: string): Promise<void> },
 ): ToolDefinition {
 	return defineTool({
 		name: "hopper_search_tools",
@@ -382,8 +331,8 @@ export function createHopperSearchToolsTool(
 			),
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const allowed = policy ? await policy.allowedToolNames() : undefined;
-			const catalog = getCatalog().filter(entry => !allowed || allowed.has(entry.tool.name));
+			const allowed = await policy.allowedToolNames();
+			const catalog = getCatalog().filter(entry => allowed.has(entry.tool.name));
 			const registeredNames = new Set(pi.getAllTools().map((tool) => tool.name));
 			if (!modelSupportsImages(ctx.model)) {
 				for (const entry of catalog) {
@@ -391,19 +340,11 @@ export function createHopperSearchToolsTool(
 				}
 			}
 			const limit = clampSearchLimit(params.limit);
-			const requested: string[] = [];
-			const activationApi = policy ? {
-				getActiveTools: () => pi.getActiveTools(),
-				setActiveTools: (names: string[]) => { requested.push(...names.filter(name => !pi.getActiveTools().includes(name))); },
-			} : pi;
-			const result = activateSearchMatches(activationApi, catalog, params.query, {
+			const result = await activateSearchMatches(pi, catalog, params.query, {
 				registeredNames,
 				limit,
+				activate: name => policy.activateByName(name),
 			});
-			if (policy) for (const name of requested) {
-				const id = name === "web_search" ? "firecrawl.tool.search" : name === "web_fetch" ? "firecrawl.tool.fetch" : `hopper.tool.${name}`;
-				await policy.activate(id);
-			}
 			return {
 				content: [{ type: "text" as const, text: formatSearchResultText(result, params.query, limit) }],
 				details: result,

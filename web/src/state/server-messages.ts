@@ -10,12 +10,14 @@ export function handleServerMessage(store: HopperStore, message: ServerMessage) 
 	const { toast } = actions;
 	switch (message.type) {
 		case "tool_settings":
-			window.dispatchEvent(new CustomEvent("hopper-tool-settings"));
+			window.dispatchEvent(new CustomEvent("hopper-tool-settings", { detail: message.snapshot }));
 			break;
 		case "snapshot":
+			if (store.getState().session.id !== message.snapshot.sessionId && typeof window !== "undefined") window.dispatchEvent(new Event("hopper-tools-session-changed"));
 			actions.applySnapshot(message.snapshot);
 			break;
 		case "session_replaced":
+			if (typeof window !== "undefined") window.dispatchEvent(new Event("hopper-tools-session-changed"));
 			actions.applySnapshot(message.session);
 			break;
 		case "agent_event":

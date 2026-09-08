@@ -75,6 +75,64 @@ async function fixture(progressive = false) {
 const completed = () => ({ content: [{ type: "text" as const, text: "done" }], details: {} });
 
 describe("shared runtime policy admissions", () => {
+	it.each([false, true])("samples credentials once and publishes the returned save snapshot while busy=%s", async busy => {
+		const f = await fixture();
+		f.tool("web_search", async () => completed());
+		await f.enableFirecrawl();
+		await f.runtime.reconcile();
+		f.runtime.setBusy(busy);
+		const status = vi.spyOn(f.credentials, "status");
+		const read = vi.spyOn(f.credentials, "read");
+		const publish = vi.fn();
+		f.runtime.onChange = publish;
+		const result = await f.runtime.updateToolSettings({
+			type: "patch", expected: await f.store.read(),
+			patch: { target: "tools", id: "hopper.tool.rh_run_script", enabled: false },
+		});
+		expect(result.ok).toBe(true);
+		expect(status).toHaveBeenCalledOnce();
+		expect(read).toHaveBeenCalledOnce();
+		expect(publish).toHaveBeenCalledOnce();
+		expect(publish.mock.calls[0][0]).toBe(result.snapshot);
+		expect(result.snapshot.settings?.credential).toBe("configured");
+	});
+
+	it("activates Rhino tools without consulting protected credentials", async () => {
+		const f = await fixture(true);
+		f.tool("rh_run_script", async () => completed());
+		await f.runtime.reconcile();
+		const status = vi.spyOn(f.credentials, "status");
+		const read = vi.spyOn(f.credentials, "read");
+		await f.runtime.activate("hopper.tool.rh_run_script");
+		expect(status).not.toHaveBeenCalled();
+		expect(read).not.toHaveBeenCalled();
+		await f.runtime.reconcile();
+		expect(f.pi.getActiveTools()).toContain("rh_run_script");
+	});
+
+	it("does not reuse credential status after a concurrent key replacement", async () => {
+		const f = await fixture();
+		f.tool("web_search", async () => completed());
+		await f.enableFirecrawl();
+		const started = deferred(), resume = deferred();
+		vi.spyOn(f.credentials, "status").mockImplementationOnce(async () => {
+			started.resolve();
+			await resume.promise;
+			return "configured";
+		});
+		const publish = vi.fn();
+		f.runtime.onChange = publish;
+		const pending = f.runtime.reconcile();
+		await started.promise;
+		const saved = await f.credentials.save(await f.store.read(), "replacement-secret", false);
+		expect(saved.ok).toBe(true);
+		resume.resolve();
+		await pending;
+		expect(f.pi.getActiveTools()).not.toContain("web_search");
+		expect(publish).toHaveBeenCalledOnce();
+		expect(publish.mock.calls[0][0].settings.credential).toBe("unavailable");
+	});
+
 	it("revokes execution after a paused backend prerequisite despite missed notifications", async () => {
 		const f = await fixture();
 		const execute = vi.fn(async () => completed());

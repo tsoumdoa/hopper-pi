@@ -38,7 +38,7 @@ export class ToolPolicyRuntime {
 	private busy = false;
 	private closed = false;
 	private unsubscribe?: () => void;
-	private reconcileQueue: Promise<void> = Promise.resolve();
+	private reconcileQueue: Promise<unknown> = Promise.resolve();
 	onChange?: (snapshot: AgentToolsSnapshot) => void;
 	abortProvider?: (name?: string) => void;
 
@@ -167,7 +167,7 @@ export class ToolPolicyRuntime {
 		});
 	}
 
-	async admitFirecrawl(name: "web_search" | "web_fetch", signal?: AbortSignal): Promise<{ apiKey: string; signal?: AbortSignal }> {
+	async admitFirecrawl(name: "web_search" | "web_fetch", signal?: AbortSignal): Promise<{ apiKey: string }> {
 		assertCurrentToolDispatchValid();
 		const generation = this.generation;
 		await this.preflight(name, generation, signal);
@@ -184,7 +184,7 @@ export class ToolPolicyRuntime {
 			const state = resolveToolPolicy(this.entry(name), policy, this.runtimeState(policy, "configured"), this.session, true);
 			if (!state.callable) throw new ToolPolicyDenied(state.status);
 		});
-		return { apiKey, signal };
+		return { apiKey };
 	}
 
 	private async locked<T>(fn: (snapshot: PolicySnapshot) => T): Promise<T> {
@@ -209,30 +209,35 @@ export class ToolPolicyRuntime {
 	}
 
 	/** Serialize local boundary reconciliation, never a full prompt or backend probe. */
-	reconcile(boundary = false): Promise<void> {
+	async reconcile(boundary = false): Promise<void> {
+		await this.reconcileSnapshot(boundary);
+	}
+
+	private reconcileSnapshot(boundary = false): Promise<AgentToolsSnapshot> {
 		const pending = this.reconcileQueue.catch(() => {}).then(async () => {
-			if (!this.pi || !this.ctx || this.closed) return;
+			if (!this.pi || !this.ctx || this.closed) return this.getToolSettings();
 			const generation = this.generation;
 			let policy: PolicySnapshot;
 			try { policy = await this.store.read(); }
-			catch { this.observe(null); this.applyBlocked(); await this.publish(); return; }
+			catch { this.observe(null); this.applyBlocked(); return this.publish(this.formatToolSettings(null, "unavailable")); }
 			this.observe(policy);
 			if (getCachedBackendStatus()?.online !== true && this.inventory.some(tool => tool.requirements.includes("backend")
 				&& policy.tools[tool.id]?.enabled && policy.parents[tool.parent]?.enabled)) await probeBackend();
-			const credential = policy.parents.firecrawl.enabled ? await this.credentials.status(policy) : "missing";
-			await this.locked(latest => {
+			const credential = await this.credentials.status(policy);
+			const snapshot = await this.locked(latest => {
 				this.assertSession(generation);
-				if (!boundary && this.busy) return;
 				this.observe(latest);
 				const currentCredential = latest.credentials.firecrawl.generation === policy.credentials.firecrawl.generation
 					&& latest.credentials.firecrawl.reference === policy.credentials.firecrawl.reference && latest.epoch === policy.epoch ? credential : "unavailable";
+				if (!boundary && this.busy) return this.formatToolSettings(latest, currentCredential);
 				const eligible = this.inventory.filter(tool => !this.conflicts.has(tool.id) && this.definitions.has(tool.name));
 				this.session = reconcilePolicySession(eligible, latest, this.runtimeState(latest, currentCredential), this.progressive, new Set(this.manual.keys()));
 				const managed = new Set(this.inventory.filter(tool => !this.conflicts.has(tool.id)).map(tool => tool.name));
 				const preserved = this.pi!.getActiveTools().filter(name => !managed.has(name));
 				this.pi!.setActiveTools([...preserved, ...eligible.filter(tool => this.session.activeIds.has(tool.id)).map(tool => tool.name)]);
+				return this.formatToolSettings(latest, currentCredential);
 			});
-			await this.publish();
+			return this.publish(snapshot);
 		});
 		this.reconcileQueue = pending;
 		return pending;
@@ -244,11 +249,16 @@ export class ToolPolicyRuntime {
 		this.pi?.setActiveTools(this.pi.getActiveTools().filter(name => !managed.has(name)));
 	}
 
+	async activateByName(name: string): Promise<void> {
+		await this.activate(this.entry(name).id);
+	}
+
 	async activate(id: string): Promise<void> {
 		assertCurrentToolDispatchValid();
 		const generation = this.generation;
 		const prepared = await this.store.read();
-		const credential = await this.credentials.status(prepared);
+		const credential = this.inventory.find(tool => tool.id === id)?.owner === "firecrawl"
+			? await this.credentials.status(prepared) : "missing";
 		await this.locked(policy => {
 			assertCurrentToolDispatchValid();
 			this.assertSession(generation);
@@ -272,6 +282,10 @@ export class ToolPolicyRuntime {
 		try { policy = await this.store.read(); } catch { policy = null; }
 		this.observe(policy);
 		const credential = policy ? await this.credentials.status(policy) : "unavailable";
+		return this.formatToolSettings(policy, credential);
+	}
+
+	private formatToolSettings(policy: PolicySnapshot | null, credential: "configured" | "missing" | "unavailable"): AgentToolsSnapshot {
 		const state = this.runtimeState(policy, credential);
 		const discovery = !!policy?.tools["hopper.tool.hopper_search_tools"]?.enabled && !!policy?.parents["hopper.interaction"]?.enabled;
 		const tools: AgentToolSummary[] = this.inventory.map(entry => {
@@ -320,19 +334,17 @@ export class ToolPolicyRuntime {
 			}
 			if (result && !result.ok) return { ok: false, code: result.code === "conflict" ? "conflict" : "error", error: result.code === "conflict"
 				? "Settings changed in another window; review and try again." : "Setting could not be saved.", snapshot: await this.getToolSettings() };
-			this.observe(await this.store.read());
-			if (!this.busy) await this.reconcile();
-			await this.publish();
-			return { ok: true, snapshot: await this.getToolSettings() };
+			const snapshot = this.busy ? await this.publish() : await this.reconcileSnapshot();
+			return { ok: true, snapshot };
 		} catch {
 			return { ok: false, code: "error", error: "Setting could not be saved. Check settings and protected credential storage.", snapshot: await this.getToolSettings() };
 		}
 	}
 
-	private async publish(): Promise<void> {
-		if (!this.onChange || this.closed) return;
-		const snapshot = await this.getToolSettings();
-		if (!this.closed) this.onChange(snapshot);
+	private async publish(prepared?: AgentToolsSnapshot): Promise<AgentToolsSnapshot> {
+		const snapshot = prepared ?? await this.getToolSettings();
+		if (!this.closed) this.onChange?.(snapshot);
+		return snapshot;
 	}
 	async close(): Promise<void> {
 		this.closed = true; this.generation++; this.abortProvider?.(); this.unsubscribe?.();

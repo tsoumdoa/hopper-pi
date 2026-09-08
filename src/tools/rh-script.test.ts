@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { getCachedBackendStatus } from "../infra/backend-status.js";
+import { createRhinoCaptureModelController, promptWantsVisualCapture } from "../services/rhino-capture-model.js";
 import { ToolPolicyRuntime } from "../services/tool-policy-runtime.js";
 import { createHopperPiExtension } from "../index.js";
 import { createRhScriptTool, rhScriptParameters } from "./rh-script.js";
@@ -22,11 +23,10 @@ vi.mock("../ui/backend-status.js", () => ({
 }));
 vi.mock("../ui/tool-schemas.js", () => ({ registerToolSchemasUI: vi.fn() }));
 vi.mock("../services/rhino-capture-model.js", () => ({
-	createRhinoCaptureModelController: () => ({
-		syncCaptureToolForModel: vi.fn(),
-	}),
+	createRhinoCaptureModelController: vi.fn(() => ({
+		maybeSwitchToMultimodalFallback: vi.fn(),
+	})),
 	promptWantsVisualCapture: vi.fn(),
-	rhinoCaptureUnavailableGuidance: vi.fn(),
 }));
 const dirs: string[] = [];
 const policies: ToolPolicyRuntime[] = [];
@@ -189,4 +189,27 @@ it("discovers saved source edits without confusing Grasshopper component editing
 		HOPPER_REGISTERED_CATALOG.find((e) => e.tool.name === "rh_script")!
 			.requires,
 	).toBeUndefined();
+});
+
+
+it("offers the screenshot model fallback only while capture is allowed by policy", async () => {
+	const events = new Map<string, Function>();
+	const policy = {
+		setBusy: vi.fn(), setContext: vi.fn(), reconcile: vi.fn(async () => {}),
+		allowedToolNames: vi.fn(async () => new Set<string>()),
+	};
+	const pi = {
+		registerCommand: vi.fn(), registerFlag: vi.fn(),
+		on: (name: string, handler: Function) => events.set(name, handler),
+	};
+	vi.mocked(promptWantsVisualCapture).mockReturnValue(true);
+	createHopperPiExtension({ toolPolicy: policy as never })(pi as never);
+	const fallback = vi.mocked(createRhinoCaptureModelController).mock.results.at(-1)!.value
+		.maybeSwitchToMultimodalFallback;
+	await events.get("before_agent_start")!({ prompt: "take a screenshot of the Rhino view" }, {});
+	expect(fallback).not.toHaveBeenCalled();
+	policy.allowedToolNames.mockResolvedValue(new Set(["rh_capture_view"]));
+	await events.get("before_agent_start")!({ prompt: "take a screenshot of the Rhino view" }, {});
+	expect(fallback).toHaveBeenCalledOnce();
+	vi.mocked(promptWantsVisualCapture).mockReset();
 });

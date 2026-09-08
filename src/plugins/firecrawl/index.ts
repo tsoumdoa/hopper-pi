@@ -37,5 +37,4 @@ export function createFirecrawlPlugin(options: FirecrawlOptions) {
 	return { descriptor: FIRECRAWL_PLUGIN, tools, abortAll: () => client.abortAll(), abortTool: (name: FirecrawlToolName) => client.abortTool(name) };
 }
 
-export const createFirecrawlTools = (options: FirecrawlOptions): ToolDefinition[] => createFirecrawlPlugin(options).tools;
 export type { FirecrawlOptions, FirecrawlAdmission, FirecrawlToolName } from "./client.js";

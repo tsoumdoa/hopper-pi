@@ -146,7 +146,7 @@ function registerHopperPiExtension(
 	registerBackendStatusUI(pi);
 	registerToolSchemasUI(pi, getCatalog);
 
-	const captureModel = createRhinoCaptureModelController(pi, undefined, { policyManaged: true });
+	const captureModel = createRhinoCaptureModelController(pi);
 
 	// ── Lifecycle: notify on load ──────────────────────────────────
 
@@ -181,7 +181,8 @@ function registerHopperPiExtension(
 		policy.setBusy(true);
 		policy.setContext(ctx);
 		await policy.reconcile(true);
-		if (promptTargetsRhino(event.prompt ?? "") && promptWantsVisualCapture(event.prompt ?? "")) {
+		if (promptTargetsRhino(event.prompt ?? "") && promptWantsVisualCapture(event.prompt ?? "")
+			&& (await policy.allowedToolNames()).has("rh_capture_view")) {
 			await captureModel.maybeSwitchToMultimodalFallback(ctx);
 			await policy.reconcile(true);
 		}

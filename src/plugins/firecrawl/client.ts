@@ -1,7 +1,7 @@
 import { canonicalPublicUrl, domainFilters } from "./url.js";
 
 export type FirecrawlToolName = "web_search" | "web_fetch";
-export type FirecrawlAdmission = { apiKey: string; signal?: AbortSignal; release?: () => void };
+export type FirecrawlAdmission = { apiKey: string };
 export type FirecrawlOptions = {
 	admit: (name: FirecrawlToolName, signal?: AbortSignal) => Promise<FirecrawlAdmission>;
 	fetch?: typeof fetch;
@@ -79,17 +79,11 @@ export class FirecrawlClient {
 		this.pending.set(controller, name);
 		let timedOut = false;
 		const timer = setTimeout(() => { timedOut = true; controller.abort(); }, name === "web_search" ? FIRECRAWL_LIMITS.searchDeadline : FIRECRAWL_LIMITS.fetchDeadline);
-		let signal = callerSignal ? AbortSignal.any([controller.signal, callerSignal]) : controller.signal;
-		let admission: FirecrawlAdmission | undefined;
+		const signal = callerSignal ? AbortSignal.any([controller.signal, callerSignal]) : controller.signal;
 		let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 		try {
 			if (signal.aborted) throw new FirecrawlError("cancelled");
-			const pendingAdmission = this.options.admit(name, signal).then(value => {
-				if (signal.aborted) { value.release?.(); throw new FirecrawlError("cancelled"); }
-				return value;
-			});
-			admission = await bounded(pendingAdmission, signal);
-			if (admission.signal) signal = AbortSignal.any([signal, admission.signal]);
+			const admission = await bounded(this.options.admit(name, signal), signal);
 			if (signal.aborted) throw new FirecrawlError("cancelled");
 			if (!admission.apiKey) throw new FirecrawlError("missing-key");
 			const pendingResponse = (this.options.fetch ?? fetch)(`https://api.firecrawl.dev/v2/${endpoint}`, {
@@ -130,7 +124,6 @@ export class FirecrawlClient {
 			clearTimeout(timer);
 			controller.abort();
 			void reader?.cancel().catch(() => {});
-			try { admission?.release?.(); } catch { /* Never publish a backend error. */ }
 			this.pending.delete(controller);
 		}
 	}

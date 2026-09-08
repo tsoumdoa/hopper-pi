@@ -234,10 +234,32 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 	const [keyExpected, setKeyExpected] = useState<NonNullable<NonNullable<AgentToolsSnapshot["settings"]>["version"]> | null>(null);
 	const mutation = useRef(false);
 	const fetchSequence = useRef(0);
+	const contextSequence = useRef(0);
+	const latestSnapshot = useRef<AgentToolsSnapshot | null>(null);
+	const retiredEpochs = useRef(new Set<string>());
+	const applyToolsSnapshot = (next: AgentToolsSnapshot, allowEqualVersion = true) => {
+		const previous = latestSnapshot.current?.settings?.version;
+		const version = next.settings?.version;
+		if (previous && version) {
+			if (previous.epoch === version.epoch && (version.revision < previous.revision || (!allowEqualVersion && version.revision === previous.revision))) return;
+			if (previous.epoch !== version.epoch) {
+				if (!allowEqualVersion || retiredEpochs.current.has(version.epoch)) return;
+				retiredEpochs.current.add(previous.epoch);
+			}
+		}
+		latestSnapshot.current = next;
+		setSnapshot(next);
+	};
 	const [revision, setRevision] = useState(0);
 	const [selectedName, setSelectedName] = useState<string | null>(null);
 	const [detailOpen, setDetailOpen] = useState(false);
 	const list = useRef<HTMLElement>(null);
+
+	useEffect(() => {
+		latestSnapshot.current = null;
+		retiredEpochs.current.clear();
+		setSnapshot(null);
+	}, [token]);
 
 	useEffect(() => {
 		if (!connected) return;
@@ -252,7 +274,7 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 				const response = await toolsRequest(token, undefined, controller.signal);
 				const result = await response.json();
 				if (!response.ok) throw new Error(result.error || `Tools request failed (${response.status})`);
-				if (!controller.signal.aborted && sequence === fetchSequence.current) { setSnapshot(result); }
+				if (!controller.signal.aborted && sequence === fetchSequence.current) { applyToolsSnapshot(result); }
 			} catch (reason) {
 				if (!controller.signal.aborted && sequence === fetchSequence.current) setError(reason instanceof Error ? reason.message : String(reason));
 			} finally {
@@ -268,27 +290,47 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 	const update = async (action: ToolSettingsAction) => {
 		if (!connected || mutation.current) return;
 		mutation.current = true;
-		fetchSequence.current++;
+		const sequence = ++fetchSequence.current;
+		const context = contextSequence.current;
 		setSaving(true);
 		setError(null);
 		try {
 			const response = await toolsRequest(token, action);
 			const result = await response.json() as ToolSettingsResult;
-			if (result.snapshot) setSnapshot(result.snapshot);
+			if (context !== contextSequence.current) return;
+			if (result.snapshot) applyToolsSnapshot(result.snapshot, sequence === fetchSequence.current);
 			if (!response.ok || !result.ok) {
 				if (result.code === "conflict" && action.type === "credential") { setKey(""); setKeyMode(null); }
 				setError(result.code === "conflict" ? "Settings changed in another window; review and try again." : result.error || "Could not save tool settings. Try again.");
 				return;
 			}
 			if (action.type === "credential") { setKey(""); setKeyMode(null); }
-		} catch { setError("Could not save tool settings. Reconnect and try again."); }
+		} catch { if (context === contextSequence.current) setError("Could not save tool settings. Reconnect and try again."); }
 		finally { mutation.current = false; setSaving(false); }
 	};
 	useEffect(() => {
-		const changed = () => setRevision((value) => value + 1);
+		const changed = (event: Event) => {
+			if (!connected) return;
+			++fetchSequence.current;
+			applyToolsSnapshot((event as CustomEvent<AgentToolsSnapshot>).detail);
+		};
+		const sessionChanged = () => {
+			++contextSequence.current;
+			++fetchSequence.current;
+			latestSnapshot.current = null;
+			retiredEpochs.current.clear();
+			setSnapshot(null);
+			setRevision((value) => value + 1);
+		};
 		window.addEventListener("hopper-tool-settings", changed);
-		return () => window.removeEventListener("hopper-tool-settings", changed);
-	}, []);
+		window.addEventListener("hopper-tools-session-changed", sessionChanged);
+		return () => {
+			++contextSequence.current;
+			++fetchSequence.current;
+			window.removeEventListener("hopper-tool-settings", changed);
+			window.removeEventListener("hopper-tools-session-changed", sessionChanged);
+		};
+	}, [connected, token]);
 	const expected = snapshot?.settings?.version;
 	const controlsDisabled = !connected || saving || !expected;
 	const toggleParent = (id: string, enabled: boolean) => {

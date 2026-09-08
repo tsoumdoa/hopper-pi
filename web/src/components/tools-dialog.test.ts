@@ -39,8 +39,8 @@ afterEach(async () => {
 	vi.unstubAllGlobals();
 });
 
-async function render(connected = true) {
-	await act(async () => root.render(createElement(ToolsDialog, { token: "test-token", connected, onOpenChange: () => {} })));
+async function render(connected = true, token = "test-token") {
+	await act(async () => root.render(createElement(ToolsDialog, { token, connected, onOpenChange: () => {} })));
 }
 
 const toolButtons = () => Array.from(document.querySelectorAll<HTMLButtonElement>("button[data-tool]"));
@@ -244,4 +244,82 @@ it("keeps confirmed settings while saving and blocks changes when disconnected",
 	expect(parent().checked).toBe(true);
 	await render(false);
 	expect(parent().disabled).toBe(true);
+});
+
+const pushSettings = async (snapshot: ReturnType<typeof settingsSnapshot>) => {
+	await act(async () => window.dispatchEvent(new CustomEvent("hopper-tool-settings", { detail: snapshot })));
+};
+const parentEnabled = () => document.querySelector<HTMLInputElement>('[aria-label="Enable Firecrawl"]')!.checked;
+
+it("uses pushed snapshots without a GET and ignores older revisions and retired epochs", async () => {
+	vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(settingsSnapshot(2, true))));
+	await render();
+	await pushSettings(settingsSnapshot(3, false));
+	expect(parentEnabled()).toBe(false);
+	expect(fetch).toHaveBeenCalledTimes(1);
+	await pushSettings(settingsSnapshot(2, true));
+	expect(parentEnabled()).toBe(false);
+	const reset = settingsSnapshot(0, true);
+	reset.settings.version.epoch = "reset-profile";
+	await pushSettings(reset);
+	expect(parentEnabled()).toBe(true);
+	await pushSettings(settingsSnapshot(4, false));
+	expect(parentEnabled()).toBe(true);
+});
+
+it("does not let an older pending GET overwrite a pushed snapshot", async () => {
+	let resolveGet!: (response: Response) => void;
+	vi.mocked(fetch).mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveGet = resolve; }));
+	await render();
+	await pushSettings(settingsSnapshot(2, true));
+	await act(async () => resolveGet(new Response(JSON.stringify(settingsSnapshot(1, false)))));
+	expect(parentEnabled()).toBe(true);
+	expect(fetch).toHaveBeenCalledTimes(1);
+	expect(buttonNamed("Refresh").disabled).toBe(false);
+});
+
+it("does not let a delayed save response overwrite a newer pushed revision or epoch", async () => {
+	let resolveSave!: (response: Response) => void;
+	vi.mocked(fetch).mockImplementation(async (_url, init) => init?.method === "POST" ? new Promise<Response>((resolve) => { resolveSave = resolve; }) : new Response(JSON.stringify(settingsSnapshot(0, true))));
+	await render();
+	await act(async () => document.querySelector<HTMLInputElement>('[aria-label="Enable Firecrawl"]')!.click());
+	await pushSettings(settingsSnapshot(2, true));
+	await act(async () => resolveSave(new Response(JSON.stringify({ ok: true, snapshot: settingsSnapshot(1, false) }))));
+	expect(parentEnabled()).toBe(true);
+	await act(async () => document.querySelector<HTMLInputElement>('[aria-label="Enable Firecrawl"]')!.click());
+	const reset = settingsSnapshot(0, true);
+	reset.settings.version.epoch = "reset-profile";
+	await pushSettings(reset);
+	await act(async () => resolveSave(new Response(JSON.stringify({ ok: true, snapshot: settingsSnapshot(3, false) }))));
+	expect(parentEnabled()).toBe(true);
+});
+
+it("recovers after a session change and discards responses from the old connection", async () => {
+	let resolveSave!: (response: Response) => void;
+	vi.mocked(fetch).mockImplementation(async (_url, init) => init?.method === "POST" ? new Promise<Response>((resolve) => { resolveSave = resolve; }) : new Response(JSON.stringify(settingsSnapshot(0, true))));
+	await render();
+	await act(async () => document.querySelector<HTMLInputElement>('[aria-label="Enable Firecrawl"]')!.click());
+	await render(false);
+	await act(async () => resolveSave(new Response(JSON.stringify({ ok: true, snapshot: settingsSnapshot(1, false) }))));
+	expect(parentEnabled()).toBe(true);
+	await render();
+	vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(settingsSnapshot(0, false))));
+	await act(async () => window.dispatchEvent(new Event("hopper-tools-session-changed")));
+	expect(parentEnabled()).toBe(false);
+});
+
+
+it("resets profile revision history when the host token changes", async () => {
+	vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(settingsSnapshot(2, true))));
+	await render();
+	const reset = settingsSnapshot(0, true);
+	reset.settings.version.epoch = "reset-profile";
+	await pushSettings(reset);
+	const otherProfile = settingsSnapshot(0, false);
+	otherProfile.settings.version.epoch = "third-profile";
+	vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(otherProfile)));
+	await render(true, "another-host-token");
+	expect(parentEnabled()).toBe(false);
+	await pushSettings(settingsSnapshot(3, true));
+	expect(parentEnabled()).toBe(true);
 });

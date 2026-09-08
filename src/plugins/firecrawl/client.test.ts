@@ -97,17 +97,26 @@ describe("Firecrawl adapter", () => {
 	});
 	it("bounds stalled admission and never dispatches after it times out", async () => {
 		vi.useFakeTimers();
-		let admit!: (value: { apiKey: string; release: () => void }) => void;
+		let admit!: (value: { apiKey: string }) => void;
 		const fetcher = vi.fn();
-		const release = vi.fn();
 		const client = new FirecrawlClient({ admit: () => new Promise(resolve => { admit = resolve; }), fetch: fetcher });
 		const request = expect(client.search({ query: "x" })).rejects.toMatchObject({ code: "timeout" });
 		await vi.advanceTimersByTimeAsync(30000);
 		await request;
-		admit({ apiKey: "key", release });
+		admit({ apiKey: "key" });
 		await Promise.resolve();
 		expect(fetcher).not.toHaveBeenCalled();
-		expect(release).toHaveBeenCalledOnce();
+	});
+	it("caller cancellation prevents dispatch after a pending admission resolves", async () => {
+		const caller = new AbortController();
+		let admit!: (value: { apiKey: string }) => void;
+		const fetcher = vi.fn();
+		const client = new FirecrawlClient({ admit: () => new Promise(resolve => { admit = resolve; }), fetch: fetcher });
+		const request = expect(client.search({ query: "x" }, caller.signal)).rejects.toMatchObject({ code: "cancelled" });
+		caller.abort();
+		admit({ apiKey: "key" });
+		await request;
+		expect(fetcher).not.toHaveBeenCalled();
 	});
 	it("child disable cancels its request while another tool remains admitted", async () => {
 		const fetcher = vi.fn(async () => new Response(new ReadableStream()));
