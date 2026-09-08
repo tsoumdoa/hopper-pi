@@ -191,3 +191,57 @@ it("keeps mobile back navigation when polling removes the selected tool", async 
 	await act(async () => back!.click());
 	expect(document.querySelector('nav[aria-label="Tools"]')!.classList.contains("hidden")).toBe(false);
 });
+
+const settingsSnapshot = (revision = 0, enabled = false) => ({
+	tools: [{ name: "web_search", description: "Search public webpages", parameters: { type: "object" }, active: false, id: "firecrawl.web_search", parent: "firecrawl", enabled: true, available: false, status: enabled ? "api-key-required" : "parent-disabled" }],
+	settings: { version: { epoch: "profile", revision }, parents: [{ id: "firecrawl", name: "Firecrawl", enabled }], credential: "missing" },
+});
+const buttonNamed = (name: string) => Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === name)!;
+
+it("cancels setup without enabling and saves the key only with explicit enable authorization", async () => {
+	vi.mocked(fetch).mockImplementation(async (_url, init) => new Response(JSON.stringify(init?.method === "POST" ? { ok: true, snapshot: settingsSnapshot(1, true) } : settingsSnapshot())));
+	await render();
+	const parent = () => document.querySelector<HTMLInputElement>('[aria-label="Enable Firecrawl"]')!;
+	await act(async () => parent().click());
+	expect(document.body.textContent).toContain("Save key and enable");
+	expect(parent().checked).toBe(false);
+	await act(async () => buttonNamed("Cancel").click());
+	expect(vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
+	await act(async () => parent().click());
+	await act(async () => setInput(document.querySelector<HTMLInputElement>('[aria-label="Firecrawl API key"]')!, "test-secret"));
+	await act(async () => buttonNamed("Save key and enable").click());
+	const post = vi.mocked(fetch).mock.calls.find(([, init]) => init?.method === "POST")!;
+	expect(JSON.parse(post[1]!.body as string)).toEqual({ type: "credential", expected: { epoch: "profile", revision: 0 }, action: "save-and-enable", key: "test-secret" });
+	expect(parent().checked).toBe(true);
+	expect(document.querySelector('[aria-label="Firecrawl API key"]')).toBeNull();
+	expect(document.body.textContent).not.toContain("test-secret");
+});
+
+it("manages a key without enabling and refreshes a conflict without replay", async () => {
+	vi.mocked(fetch).mockImplementation(async (_url, init) => new Response(JSON.stringify(init?.method === "POST" ? { ok: false, code: "conflict", snapshot: settingsSnapshot(2) } : settingsSnapshot()), { status: init?.method === "POST" ? 409 : 200 }));
+	await render();
+	await act(async () => buttonNamed("Manage API key").click());
+	await act(async () => setInput(document.querySelector<HTMLInputElement>('[aria-label="Firecrawl API key"]')!, "test-secret"));
+	await act(async () => buttonNamed("Save key").click());
+	const posts = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST");
+	expect(posts).toHaveLength(1);
+	expect(JSON.parse(posts[0][1]!.body as string).action).toBe("save");
+	expect(document.body.textContent).toContain("Settings changed in another window; review and try again.");
+	expect(document.querySelector<HTMLInputElement>('[aria-label="Enable Firecrawl"]')!.checked).toBe(false);
+	expect(document.querySelector('[aria-label="Firecrawl API key"]')).toBeNull();
+});
+
+it("keeps confirmed settings while saving and blocks changes when disconnected", async () => {
+	let resolveSave!: (response: Response) => void;
+	vi.mocked(fetch).mockImplementation(async (_url, init) => init?.method === "POST" ? new Promise<Response>((resolve) => { resolveSave = resolve; }) : new Response(JSON.stringify({ ...settingsSnapshot(0, true), settings: { ...settingsSnapshot(0, true).settings, credential: "configured" } })));
+	await render();
+	const parent = () => document.querySelector<HTMLInputElement>('[aria-label="Enable Firecrawl"]')!;
+	await act(async () => parent().click());
+	expect(parent().checked).toBe(true);
+	expect(parent().disabled).toBe(true);
+	expect(document.body.textContent).toContain("Saving");
+	await act(async () => resolveSave(new Response(JSON.stringify({ ok: false, error: "Could not save tool settings", snapshot: settingsSnapshot(0, true) }), { status: 400 })));
+	expect(parent().checked).toBe(true);
+	await render(false);
+	expect(parent().disabled).toBe(true);
+});

@@ -9,6 +9,9 @@ export function handleServerMessage(store: HopperStore, message: ServerMessage) 
 	const actions = store.getState().actions;
 	const { toast } = actions;
 	switch (message.type) {
+		case "tool_settings":
+			window.dispatchEvent(new CustomEvent("hopper-tool-settings"));
+			break;
 		case "snapshot":
 			actions.applySnapshot(message.snapshot);
 			break;

@@ -171,6 +171,17 @@ function pruneNativeDependencies(nodeModules, targetConfig) {
 		}
 	}
 
+	const nativeSuffix = `${targetConfig.os}-${targetConfig.cpu}${targetConfig.os === "win32" ? "-msvc" : ""}`;
+	for (const [scope, prefix] of [["@lickle", "lock-"], ["@napi-rs", "keyring-"]]) {
+		const directory = join(nodeModules, scope);
+		if (!existsSync(directory)) continue;
+		for (const packageName of readdirSync(directory)) {
+			if (packageName.startsWith(prefix) && packageName !== `${prefix}${nativeSuffix}`) {
+				rmSync(join(directory, packageName), { recursive: true, force: true });
+			}
+		}
+	}
+
 	const clipboardScope = join(nodeModules, "@mariozechner");
 	if (existsSync(clipboardScope)) {
 		for (const packageName of readdirSync(clipboardScope)) {

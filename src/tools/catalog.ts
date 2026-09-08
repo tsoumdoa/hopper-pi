@@ -27,6 +27,7 @@ export const HOPPER_TOOL_GROUPS = [
 	"gh-edit",
 	"gh-script",
 	"interaction",
+	"firecrawl",
 ] as const;
 
 export type HopperToolGroup = (typeof HOPPER_TOOL_GROUPS)[number];
@@ -216,6 +217,7 @@ function emptyGroupTotals(): Record<HopperToolGroup, { count: number; totalBytes
 		"gh-edit": { count: 0, totalBytes: 0 },
 		"gh-script": { count: 0, totalBytes: 0 },
 		interaction: { count: 0, totalBytes: 0 },
+		firecrawl: { count: 0, totalBytes: 0 },
 	};
 }
 

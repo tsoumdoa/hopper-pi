@@ -21,6 +21,8 @@ import type { HostPaths } from "./config.js";
 import type { AgentToolsSnapshot, ImageAttachment, HostSnapshot, SkillLibrarySnapshot, SkillLibraryUpdate } from "./protocol.js";
 import { HostSkillLibrary } from "./skills.js";
 import { BrowserUiContext } from "./web-ui-context.js";
+import { ToolPolicyRuntime } from "../services/tool-policy-runtime.js";
+import type { ToolSettingsAction } from "./protocol.js";
 
 export type EmbeddedPiHostOptions = {
 	paths: HostPaths;
@@ -61,6 +63,16 @@ export function isolatedResourceLoaderOptions(scriptOptions?: HopperExtensionOpt
 	};
 }
 
+/** Pi snapshots tool definitions after compaction for each continuation. */
+export function bindToolPolicyModelBoundary(session: AgentSession, policy: ToolPolicyRuntime): void {
+	const prepare = session.agent.prepareNextTurnWithContext;
+	session.agent.prepareNextTurnWithContext = async (turn, signal) => {
+		const next = await prepare?.(turn, signal);
+		await policy.reconcile(true);
+		return { ...next, context: { ...(next?.context ?? turn.context), tools: session.agent.state.tools.slice(), systemPrompt: session.agent.state.systemPrompt } };
+	};
+}
+
 export class EmbeddedPiHost {
 	readonly bus: HostMessageBus;
 	readonly ui: BrowserUiContext;
@@ -76,6 +88,7 @@ export class EmbeddedPiHost {
 		ui: BrowserUiContext,
 		private readonly skills: HostSkillLibrary,
 		private readonly onShutdownRequest?: () => void,
+		private readonly currentPolicy?: () => ToolPolicyRuntime,
 	) {
 		this.bus = bus;
 		this.ui = ui;
@@ -102,31 +115,39 @@ export class EmbeddedPiHost {
 			modelsStorePath: join(paths.agentDir, "models-store.json"),
 		});
 
+		let host: EmbeddedPiHost | undefined;
+		let currentPolicy: ToolPolicyRuntime;
 		const createRuntime: CreateAgentSessionRuntimeFactory = async ({
 			cwd,
 			sessionManager,
 			sessionStartEvent,
 		}) => {
+			const policy = new ToolPolicyRuntime({ embedded: true, directory: paths.toolConfigDir });
+			currentPolicy = policy;
+			policy.onChange = snapshot => host?.bus.publish({ type: "tool_settings", snapshot });
 			const services = await createAgentSessionServices({
 				cwd,
 				agentDir: paths.agentDir,
 				modelRuntime,
 				resourceLoaderOptions: isolatedResourceLoaderOptions({
+					toolPolicy: policy,
 					scriptWorkspaceDir: paths.scriptWorkspaceDir ?? join(paths.dataDir, "workspaces", "default"),
 					scriptWorkspaceQuotaBytes: paths.scriptWorkspaceQuotaBytes,
 					sessionId: () => sessionManager.getSessionId(),
 				}),
 			});
 			// Keep skill discovery live without reloading extensions or changing active tools.
-			services.resourceLoader.getSkills = () => skills.getSkills();
-			return {
-				...(await createAgentSessionFromServices({
+			services.resourceLoader.getSkills = () => policy.isToolExposed("read") ? skills.getSkills() : { skills: [], diagnostics: [] };
+			const created = await createAgentSessionFromServices({
 					services,
 					sessionManager,
 					sessionStartEvent,
 					noTools: "builtin",
-					customTools: [skills.createReadTool(cwd)],
-				})),
+					customTools: [policy.customTool(skills.createReadTool(cwd))],
+				});
+			bindToolPolicyModelBoundary(created.session, policy);
+			return {
+				...created,
 				services,
 				diagnostics: services.diagnostics,
 			};
@@ -137,8 +158,8 @@ export class EmbeddedPiHost {
 			agentDir: paths.agentDir,
 			sessionManager: SessionManager.continueRecent(paths.workspaceDir, paths.sessionsDir),
 		});
-		const host = new EmbeddedPiHost(runtime, bus, ui, skills, options.onShutdownRequest);
-		runtime.setRebindSession(async (session) => host.bindSession(session, true));
+		host = new EmbeddedPiHost(runtime, bus, ui, skills, options.onShutdownRequest, () => currentPolicy);
+		runtime.setRebindSession(async (session) => host!.bindSession(session, true));
 		await host.bindSession(runtime.session, false);
 		return host;
 	}
@@ -171,6 +192,17 @@ export class EmbeddedPiHost {
 			parameters: toWireValue(tool.parameters),
 			active: active.has(tool.name),
 		})).sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)) };
+	}
+
+	async getToolSettings() {
+		this.assertUsable();
+		return this.currentPolicy ? this.currentPolicy().getToolSettings() : this.listTools();
+	}
+
+	async updateToolSettings(action: ToolSettingsAction) {
+		this.assertUsable();
+		if (!this.currentPolicy) throw new Error("Tool settings are unavailable");
+		return this.currentPolicy().updateToolSettings(action);
 	}
 
 	async listSkills() {
@@ -405,6 +437,8 @@ export type HostRuntime = Pick<
 	| "steer"
 	| "listSkills"
 	| "listTools"
+	| "getToolSettings"
+	| "updateToolSettings"
 	| "readSkill"
 	| "updateSkills"
 > & {

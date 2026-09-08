@@ -129,7 +129,7 @@ it("persists skill choices and the selected model across host restarts and new i
 	const backend = await import("../infra/backend-status.js");
 	const probe = vi.spyOn(backend, "probeBackend").mockResolvedValue({ online: false });
 	const root = await mkdtemp(join(tmpdir(), "hopper-preferences-"));
-	const paths = resolveHostConfig(["--data-dir", root, "--auth-path", join(root, "auth.json")]).paths;
+	const paths = resolveHostConfig(["--data-dir", root, "--tool-config-dir", join(root, "tool-profile"), "--auth-path", join(root, "auth.json")]).paths;
 	let host: import("./pi-runtime.js").EmbeddedPiHost | undefined;
 	try {
 		// Fake credentials allow local model selection; this test sends no model requests.
@@ -157,7 +157,7 @@ it("persists skill choices and the selected model across host restarts and new i
 		await host.dispose();
 		host = undefined;
 		// A different Rhino instance has a fresh workspace but shares the saved preferences.
-		const nextPaths = resolveHostConfig(["--data-dir", root, "--auth-path", paths.authPath, "--instance-id", "another-window"]).paths;
+		const nextPaths = resolveHostConfig(["--data-dir", root, "--tool-config-dir", join(root, "tool-profile"), "--auth-path", paths.authPath, "--instance-id", "another-window"]).paths;
 		host = await EmbeddedPiHost.create({ paths: nextPaths, projectRoot: resolve(".") });
 		expect(host.snapshot().model).toMatchObject({ provider: selected.provider, id: selected.id });
 		const restored = await host.listSkills();

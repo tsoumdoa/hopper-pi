@@ -1,21 +1,50 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { ArrowLeft, Box, ChevronRight, RefreshCw, Search, Terminal, Workflow, type LucideIcon } from "lucide-react";
-import type { AgentToolSummary, AgentToolsSnapshot, JsonValue } from "../../../src/host/protocol.js";
+import type { AgentToolSummary, AgentToolsSnapshot, ToolSettingsAction, ToolSettingsResult, JsonValue } from "../../../src/host/protocol.js";
 import { cn } from "../lib/utils";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 
-type GroupName = "Rhino" | "Grasshopper" | "General";
+async function toolsRequest(token: string, action?: ToolSettingsAction, signal?: AbortSignal): Promise<Response> {
+	if (import.meta.env.MODE === "mock") {
+		const { mockToolSettings } = await import("../mocks/tool-settings-mock");
+		const result = mockToolSettings(action);
+		return new Response(JSON.stringify(result), { status: "ok" in result && !result.ok ? 409 : 200 });
+	}
+	return fetch("/api/tools", {
+		...(action ? { method: "POST", body: JSON.stringify(action) } : {}),
+		headers: { Authorization: `Bearer ${token}`, ...(action ? { "Content-Type": "application/json" } : {}) },
+		cache: "no-store", ...(signal ? { signal } : {}),
+	});
+}
+
+const TOOL_STATUS: Record<NonNullable<AgentToolSummary["status"]>, string> = {
+	"disabled-by-user": "Disabled by you", "parent-disabled": "Plugin or group disabled",
+	"api-key-required": "API key required", "images-required": "Image-capable model required",
+	"backend-unavailable": "Backend unavailable", "ui-unavailable": "User interface unavailable",
+	"settings-unavailable": "Settings unavailable", "credential-store-unavailable": "Credential store unavailable",
+	"available-on-demand": "Available on demand", "activation-required": "Activation required",
+	"active": "Active", "pending-exposure": "Applies before the next model response",
+	"registration-conflict": "Tool name conflicts with another extension",
+};
+
+type GroupName = "Rhino" | "Grasshopper" | "General" | "Firecrawl" | "Interaction" | "Skills";
 
 const TOOL_GROUPS: Array<{ name: GroupName; icon: LucideIcon; hint: string }> = [
 	{ name: "Rhino", icon: Box, hint: "Document objects, scripts, and viewports" },
 	{ name: "Grasshopper", icon: Workflow, hint: "Canvas components, wires, widgets, and scripts" },
+	{ name: "Firecrawl", icon: Search, hint: "Web search and webpage reading" },
+	{ name: "Interaction", icon: Terminal, hint: "Questions and discovery" },
+	{ name: "Skills", icon: Terminal, hint: "Skill references" },
 	{ name: "General", icon: Terminal, hint: "Files, search, and questions for you" },
 ];
 
-function toolGroup(name: string): GroupName {
+function toolGroup(name: string, parent?: string): GroupName {
+	if (parent === "firecrawl" || name === "web_search" || name === "web_fetch") return "Firecrawl";
+	if (parent === "hopper.interaction") return "Interaction";
+	if (parent === "hopper.skills") return "Skills";
 	if (name.startsWith("rh_")) return "Rhino";
 	if (name.startsWith("gh_")) return "Grasshopper";
 	return "General";
@@ -152,7 +181,7 @@ function ParameterList({ schema, depth = 0, indent = depth > 0, omit }: { schema
 }
 
 function ToolDetail({ tool, onBack }: { tool: AgentToolSummary; onBack(): void }) {
-	const group = TOOL_GROUPS.find((entry) => entry.name === toolGroup(tool.name))!;
+	const group = TOOL_GROUPS.find((entry) => entry.name === toolGroup(tool.name, tool.parent))!;
 	const schema = asSchema(tool.parameters);
 	const properties = schema && asSchema(schema.properties);
 	const count = properties ? Object.keys(properties).length : 0;
@@ -168,10 +197,10 @@ function ToolDetail({ tool, onBack }: { tool: AgentToolSummary; onBack(): void }
 			</div>
 			<div className="mt-1 flex flex-wrap items-center gap-2">
 				<h2 id="tool-detail-title" className="break-all font-mono text-base font-semibold tracking-tight">{tool.name}</h2>
-				<Badge variant={tool.active ? "accent" : "neutral"} dot>{tool.active ? "Active" : "Inactive"}</Badge>
+				<Badge variant={tool.active ? "accent" : "neutral"} dot className="h-auto min-h-5 whitespace-normal py-0.5">{tool.status ? TOOL_STATUS[tool.status] : tool.active ? "Active" : "Inactive"}</Badge>
 			</div>
 			<p className="mt-3 whitespace-pre-wrap break-words text-[13px] leading-6 text-ink-soft">{tool.description}</p>
-			{!tool.active && <p className="mt-3 rounded-md border border-line bg-panel px-3 py-2 text-xs leading-5 text-ink-soft">Registered but not enabled right now. Hopper activates it when a task needs it.</p>}
+			{!tool.active && !tool.status && <p className="mt-3 rounded-md border border-line bg-panel px-3 py-2 text-xs leading-5 text-ink-soft">Registered but not enabled right now. Hopper activates it when a task needs it.</p>}
 			<section aria-labelledby="tool-parameters-title" className="mt-5">
 				<div className="flex items-baseline justify-between gap-2 border-b border-line pb-2">
 					<h3 id="tool-parameters-title" className="text-xs font-semibold uppercase tracking-wider text-muted">Parameters</h3>
@@ -199,6 +228,12 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 	const [activeOnly, setActiveOnly] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [saving, setSaving] = useState(false);
+	const [keyMode, setKeyMode] = useState<"save" | "save-and-enable" | null>(null);
+	const [key, setKey] = useState("");
+	const [keyExpected, setKeyExpected] = useState<NonNullable<NonNullable<AgentToolsSnapshot["settings"]>["version"]> | null>(null);
+	const mutation = useRef(false);
+	const fetchSequence = useRef(0);
 	const [revision, setRevision] = useState(0);
 	const [selectedName, setSelectedName] = useState<string | null>(null);
 	const [detailOpen, setDetailOpen] = useState(false);
@@ -209,18 +244,17 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 		const controller = new AbortController();
 		let inFlight = false;
 		const refresh = async () => {
-			if (inFlight) return;
+			if (inFlight || mutation.current) return;
+			const sequence = ++fetchSequence.current;
 			inFlight = true;
 			setBusy(true);
 			try {
-				const response = await fetch("/api/tools", {
-					headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal,
-				});
+				const response = await toolsRequest(token, undefined, controller.signal);
 				const result = await response.json();
 				if (!response.ok) throw new Error(result.error || `Tools request failed (${response.status})`);
-				if (!controller.signal.aborted) { setSnapshot(result); setError(null); }
+				if (!controller.signal.aborted && sequence === fetchSequence.current) { setSnapshot(result); }
 			} catch (reason) {
-				if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason));
+				if (!controller.signal.aborted && sequence === fetchSequence.current) setError(reason instanceof Error ? reason.message : String(reason));
 			} finally {
 				inFlight = false;
 				if (!controller.signal.aborted) setBusy(false);
@@ -231,11 +265,43 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 		return () => { controller.abort(); window.clearInterval(timer); };
 	}, [connected, token, revision]);
 
+	const update = async (action: ToolSettingsAction) => {
+		if (!connected || mutation.current) return;
+		mutation.current = true;
+		fetchSequence.current++;
+		setSaving(true);
+		setError(null);
+		try {
+			const response = await toolsRequest(token, action);
+			const result = await response.json() as ToolSettingsResult;
+			if (result.snapshot) setSnapshot(result.snapshot);
+			if (!response.ok || !result.ok) {
+				if (result.code === "conflict" && action.type === "credential") { setKey(""); setKeyMode(null); }
+				setError(result.code === "conflict" ? "Settings changed in another window; review and try again." : result.error || "Could not save tool settings. Try again.");
+				return;
+			}
+			if (action.type === "credential") { setKey(""); setKeyMode(null); }
+		} catch { setError("Could not save tool settings. Reconnect and try again."); }
+		finally { mutation.current = false; setSaving(false); }
+	};
+	useEffect(() => {
+		const changed = () => setRevision((value) => value + 1);
+		window.addEventListener("hopper-tool-settings", changed);
+		return () => window.removeEventListener("hopper-tool-settings", changed);
+	}, []);
+	const expected = snapshot?.settings?.version;
+	const controlsDisabled = !connected || saving || !expected;
+	const toggleParent = (id: string, enabled: boolean) => {
+		if (!expected) return;
+		if (id === "firecrawl" && enabled && snapshot?.settings?.credential === "missing") { setKey(""); setKeyExpected(expected); setKeyMode("save-and-enable"); return; }
+		void update({ type: "patch", expected, patch: { target: "parents", id, enabled } });
+	};
+
 	const search = query.trim().toLowerCase();
 	const filtered = search || activeOnly;
 	const visible = snapshot?.tools.filter((tool) => (!activeOnly || tool.active)
-		&& `${toolGroup(tool.name)} ${tool.name} ${tool.description}`.toLowerCase().includes(search)) ?? [];
-	const groups = TOOL_GROUPS.map((group) => ({ ...group, tools: visible.filter((tool) => toolGroup(tool.name) === group.name) }))
+		&& `${toolGroup(tool.name, tool.parent)} ${tool.name} ${tool.description}`.toLowerCase().includes(search)) ?? [];
+	const groups = TOOL_GROUPS.map((group) => ({ ...group, tools: visible.filter((tool) => toolGroup(tool.name, tool.parent) === group.name) }))
 		.filter((group) => group.tools.length > 0);
 	const ordered = groups.flatMap((group) => group.tools);
 	const active = snapshot?.tools.filter((tool) => tool.active).length ?? 0;
@@ -269,9 +335,11 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 			<DialogContent className="h-[min(680px,calc(100dvh-2rem))] w-[min(920px,calc(100%-2rem))] overflow-hidden">
 				<DialogHeader>
 					<DialogTitle>Agent tools</DialogTitle>
-					<DialogDescription>What Hopper can do in this session. Active tools are available to the agent now; it turns on the rest when a task calls for them.</DialogDescription>
+					<DialogDescription>Choose which tools Hopper may use. Saved choices apply to current and future conversations in this profile.</DialogDescription>
 				</DialogHeader>
 				{!connected && <p role="status" className="text-xs text-warn">Disconnected. Reconnect to update this list.</p>}
+				{snapshot?.settings?.error && <p role="alert" className="text-xs text-danger">{snapshot.settings.error}</p>}
+				{saving && <p role="status" className="text-xs text-muted">Saving…</p>}
 				{error && <p role="alert" className="text-xs text-danger">Could not update tools: {error}</p>}
 				<div className="flex flex-wrap items-center gap-2">
 					<div className="relative min-w-0 flex-1 basis-48">
@@ -281,10 +349,34 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 					<Button variant={activeOnly ? "default" : "secondary"} size="sm" aria-pressed={activeOnly} onClick={() => { setActiveOnly((value) => !value); setDetailOpen(false); }}>
 						Active only
 					</Button>
-					<Button variant="secondary" size="sm" disabled={!connected || busy} onClick={() => setRevision((value) => value + 1)}>
+					<Button variant="secondary" size="sm" disabled={!connected || busy} onClick={() => { setError(null); setRevision((value) => value + 1); }}>
 						<RefreshCw className={cn("size-3.5", busy && "animate-spin")} />Refresh
 					</Button>
 				</div>
+				{snapshot?.settings && <div className="flex flex-wrap items-center gap-2">
+					<Button size="xs" variant="secondary" disabled={!connected || saving} onClick={() => void update({ type: "check-connection" })}>Check connection</Button>
+					<span className="text-xs text-muted">Firecrawl: {snapshot.settings.credential === "configured" ? "API key saved" : snapshot.settings.credential === "unavailable" ? "Credential store unavailable" : "API key required"}</span>
+					<Button size="xs" variant="secondary" disabled={controlsDisabled} onClick={() => { setKey(""); setKeyExpected(expected ?? null); setKeyMode("save"); }}>Manage API key</Button>
+					<Button size="xs" variant="ghost" disabled={!connected || saving} onClick={() => {
+						if (window.confirm("Restore tool defaults and disconnect the saved Firecrawl key? Firecrawl will be disabled.")) void update(expected ? { type: "reset", expected } : { type: "repair" });
+					}}>{expected ? "Reset tools" : "Repair settings"}</Button>
+				</div>}
+				{keyMode && <Dialog open onOpenChange={(open) => { if (!open && !saving) { setKey(""); setKeyMode(null); } }}>
+					<DialogContent hideClose={saving}>
+					<DialogHeader><DialogTitle>Firecrawl API key</DialogTitle><DialogDescription>{keyMode === "save-and-enable" ? "Set up Firecrawl for web search and webpage reading." : "Save, replace, or remove your Firecrawl key."}</DialogDescription></DialogHeader>
+					<section aria-label="Firecrawl setup" className="grid gap-3">
+					{saving && <p role="status" className="text-xs text-muted">Saving…</p>}
+					{!connected && <p role="status" className="text-xs text-warn">Reconnect to manage your key.</p>}
+					{error && <p role="alert" className="text-xs text-danger">{error}</p>}
+					<p className="text-xs">Search queries and requested URLs are sent to Firecrawl and may consume credits on your account. Your key is kept in your operating system's protected credential store.</p>
+					<Input type="password" aria-label="Firecrawl API key" autoComplete="off" maxLength={4096} value={key} onChange={(event) => setKey(event.target.value)} disabled={saving} />
+					<div className="flex flex-wrap gap-2">
+						<Button size="sm" disabled={controlsDisabled || !key.trim()} onClick={() => { if (keyExpected) { const value = key; setKey(""); void update({ type: "credential", expected: keyExpected, action: keyMode, key: value }); } }}>{keyMode === "save-and-enable" ? "Save key and enable" : snapshot?.settings?.credential === "configured" ? "Save replacement" : "Save key"}</Button>
+						{keyMode === "save" && <Button size="sm" variant="secondary" disabled={controlsDisabled} onClick={() => { if (keyExpected) void update({ type: "credential", expected: keyExpected, action: "remove" }); }}>Remove key</Button>}
+						<Button size="sm" variant="ghost" disabled={saving} onClick={() => { setKey(""); setKeyMode(null); }}>Cancel</Button>
+					</div>
+				</section>
+				</DialogContent></Dialog>}
 				<p role="status" className="-mt-2 text-xs text-muted">
 					{snapshot ? `${active} active · ${snapshot.tools.length} registered${filtered ? ` · ${visible.length} matching` : ""}` : connected && busy ? "Loading tools…" : "Tool list unavailable."}
 				</p>
@@ -300,6 +392,7 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 								<div className="sticky top-0 z-10 flex items-center gap-1.5 border-b border-line bg-panel/95 px-3 py-1.5 backdrop-blur">
 									<group.icon aria-hidden="true" className="size-3 text-muted" />
 									<h2 id={`tools-group-${group.name}`} className="text-[11px] font-semibold uppercase tracking-wider text-muted">{group.name}</h2>
+									{snapshot?.settings?.parents.filter((parent) => group.tools.some((tool) => tool.parent === parent.id)).map((parent) => <input key={parent.id} type="checkbox" role="switch" aria-label={`Enable ${parent.name}`} checked={parent.enabled} disabled={controlsDisabled} onChange={(event) => toggleParent(parent.id, event.target.checked)} className="ml-auto size-4 accent-accent" />)}
 									<span title={`${group.tools.filter((tool) => tool.active).length} active of ${group.tools.length}`} className="ml-auto text-[11px] tabular-nums text-muted">{group.tools.filter((tool) => tool.active).length}/{group.tools.length}</span>
 								</div>
 								<ul className="py-1">
@@ -338,11 +431,19 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 					</nav>
 					<div className={cn("min-h-0 overflow-y-auto bg-surface p-4 sm:p-5", detailOpen ? "block" : "hidden sm:block")}>
 						{!selected && <Button variant="ghost" size="xs" className="-ml-2 mb-2 sm:hidden" onClick={() => setDetailOpen(false)}><ArrowLeft className="size-3" />All tools</Button>}
-						{selected ? <ToolDetail key={selected.name} tool={selected} onBack={() => setDetailOpen(false)} /> : (
+						{selected ? <>
+							{selected.id && snapshot?.settings && <div className="mb-4 grid gap-2">
+								<label className="flex items-center gap-2 text-xs"><input type="checkbox" role="switch" aria-label={`Enable ${selected.name}`} checked={selected.enabled ?? false} disabled={controlsDisabled || !snapshot.settings.parents.find((parent) => parent.id === selected.parent)?.enabled} onChange={(event) => { if (expected) void update({ type: "patch", expected, patch: { target: "tools", id: selected.id!, enabled: event.target.checked } }); }} className="size-4 accent-accent" />Enable tool</label>
+								{selected.available && !selected.active && selected.enabled && snapshot.settings.parents.find((parent) => parent.id === selected.parent)?.enabled && <Button size="xs" variant="secondary" disabled={controlsDisabled} onClick={() => void update({ type: "activate", id: selected.id! })}>Activate for this session</Button>}
+							</div>}
+							{!selected.id && snapshot?.settings && <p className="mb-2 text-xs text-muted">Unmanaged tool</p>}
+							<ToolDetail key={selected.name} tool={selected} onBack={() => setDetailOpen(false)} />
+						</> : (
 							<p className="py-8 text-center text-xs text-muted">{snapshot ? "Select a tool to see what it does and what it needs." : connected && busy ? "Loading tools…" : "Tool details unavailable."}</p>
 						)}
 					</div>
 				</div>
+				<p className="text-[11px] text-muted">Tool switches control named calls. General-purpose script tools may still perform equivalent operations.</p>
 			</DialogContent>
 		</Dialog>
 	);

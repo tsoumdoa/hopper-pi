@@ -351,6 +351,7 @@ export function resetProgressiveActiveTools(
 export function createHopperSearchToolsTool(
 	pi: ExtensionAPI,
 	getCatalog: () => readonly HopperToolCatalogEntry[],
+	policy?: { allowedToolNames(): Promise<Set<string>>; activate(id: string): Promise<void> },
 ): ToolDefinition {
 	return defineTool({
 		name: "hopper_search_tools",
@@ -381,7 +382,8 @@ export function createHopperSearchToolsTool(
 			),
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const catalog = getCatalog();
+			const allowed = policy ? await policy.allowedToolNames() : undefined;
+			const catalog = getCatalog().filter(entry => !allowed || allowed.has(entry.tool.name));
 			const registeredNames = new Set(pi.getAllTools().map((tool) => tool.name));
 			if (!modelSupportsImages(ctx.model)) {
 				for (const entry of catalog) {
@@ -389,10 +391,19 @@ export function createHopperSearchToolsTool(
 				}
 			}
 			const limit = clampSearchLimit(params.limit);
-			const result = activateSearchMatches(pi, catalog, params.query, {
+			const requested: string[] = [];
+			const activationApi = policy ? {
+				getActiveTools: () => pi.getActiveTools(),
+				setActiveTools: (names: string[]) => { requested.push(...names.filter(name => !pi.getActiveTools().includes(name))); },
+			} : pi;
+			const result = activateSearchMatches(activationApi, catalog, params.query, {
 				registeredNames,
 				limit,
 			});
+			if (policy) for (const name of requested) {
+				const id = name === "web_search" ? "firecrawl.tool.search" : name === "web_fetch" ? "firecrawl.tool.fetch" : `hopper.tool.${name}`;
+				await policy.activate(id);
+			}
 			return {
 				content: [{ type: "text" as const, text: formatSearchResultText(result, params.query, limit) }],
 				details: result,

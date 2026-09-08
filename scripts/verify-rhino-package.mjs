@@ -247,6 +247,13 @@ function requiredRuntimeErrors(files, target) {
 	if (![...paths].some((path) => path.startsWith(addonPrefix) && path.endsWith("/addon.node"))) {
 		errors.push(`${addonPrefix}**/addon.node: target-native ZeroMQ addon is missing`);
 	}
+	const suffix = `${expected.os}-${expected.cpu}${expected.os === "win32" ? "-msvc" : ""}`;
+	for (const dependency of [`@lickle/lock-${suffix}`, `@napi-rs/keyring-${suffix}`]) {
+		const prefix = `runtime/host/node_modules/${dependency}/`;
+		if (![...paths].some(path => path.startsWith(prefix) && path.endsWith(".node"))) {
+			errors.push(`${prefix}*.node: target-native policy dependency is missing`);
+		}
+	}
 	return errors;
 }
 

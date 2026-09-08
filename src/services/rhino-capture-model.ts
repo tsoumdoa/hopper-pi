@@ -23,6 +23,7 @@ export function rhinoCaptureUnavailableGuidance(model: ModelLike | null | undefi
 export function createRhinoCaptureModelController(
 	pi: ExtensionAPI,
 	fallbackModelId = MULTIMODAL_FALLBACK_MODEL,
+	options: { policyManaged?: boolean } = {},
 ) {
 	let captureToolRegistered = false;
 
@@ -42,6 +43,7 @@ export function createRhinoCaptureModelController(
 	 * whenever the model supports images.
 	 */
 	function syncCaptureToolForModel(model: ModelLike | null | undefined): void {
+		if (options.policyManaged) return;
 		const supportsImages = modelSupportsImages(model);
 
 		if (!supportsImages) {

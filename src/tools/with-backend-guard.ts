@@ -1,3 +1,4 @@
+import { admitCurrentToolDispatch } from "../services/tool-policy-context.js";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { backendOfflineToolResult } from "../infra/backend-status-cache.js";
 import { refreshBackendIfOffline } from "../infra/backend-status.js";
@@ -11,6 +12,7 @@ export function withBackendGuard<T extends ToolDefinition>(tool: T): T {
 			if (!(await refreshBackendIfOffline())) {
 				return backendOfflineToolResult();
 			}
+			await admitCurrentToolDispatch();
 			return execute(...args);
 		},
 	};

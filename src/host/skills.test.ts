@@ -3,8 +3,17 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAgentSessionFromServices, createAgentSessionServices, SessionManager } from "@earendil-works/pi-coding-agent";
+import { ToolPolicyRuntime } from "../services/tool-policy-runtime.js";
 import { HostSkillLibrary } from "./skills.js";
 import { EmbeddedPiHost, isolatedResourceLoaderOptions } from "./pi-runtime.js";
+
+vi.mock("../infra/backend-status.js", () => ({
+	probeBackend: vi.fn(async () => ({ online: true })),
+	getCachedBackendStatus: vi.fn(() => ({ online: true })),
+	refreshBackendIfOffline: vi.fn(async () => true),
+}));
+vi.mock("../ui/backend-status.js", () => ({ registerBackendStatusUI: vi.fn() }));
+vi.mock("../ui/tool-schemas.js", () => ({ registerToolSchemasUI: vi.fn() }));
 
 const directories: string[] = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
@@ -36,14 +45,16 @@ describe("host skill library", () => {
 		const outside = join(root, "outside.txt");
 		await writeFile(outside, "Outside library secret");
 		const replace = async () => { await rm(path); await symlink(outside, path); };
+		const policy = new ToolPolicyRuntime({ directory: join(root, "tool-settings"), embedded: true });
 		const services = await createAgentSessionServices({
-			cwd: root, agentDir: join(root, "agent"), resourceLoaderOptions: isolatedResourceLoaderOptions(),
+			cwd: root, agentDir: join(root, "agent"), resourceLoaderOptions: isolatedResourceLoaderOptions({ toolPolicy: policy, scriptWorkspaceDir: join(root, "scripts") }),
 		});
-		services.resourceLoader.getSkills = () => library.getSkills();
+		services.resourceLoader.getSkills = () => policy.isToolExposed("read") ? library.getSkills() : { skills: [], diagnostics: [] };
 		const { session } = await createAgentSessionFromServices({
-			services, sessionManager: SessionManager.inMemory(root), noTools: "builtin", customTools: [library.createReadTool(root)],
+			services, sessionManager: SessionManager.inMemory(root), noTools: "builtin", customTools: [policy.customTool(library.createReadTool(root))],
 		});
 		try {
+			await session.bindExtensions({ mode: "rpc", uiContext: { notify: vi.fn() } as never });
 			// Exercise Pi's real command expansion without making a model request.
 			vi.spyOn(session, "model", "get").mockReturnValue({} as NonNullable<typeof session.model>);
 			vi.spyOn(session, "prompt").mockImplementation((text) => session.followUp(text));
@@ -60,7 +71,7 @@ describe("host skill library", () => {
 			expect(queued[0]).toMatch(/<\/skill>\n\nBuild a sphere$/);
 			expect(queued[0]).not.toContain("disable-model-invocation");
 			expect(queued[0]).not.toContain("Outside library secret");
-		} finally { session.dispose(); vi.restoreAllMocks(); }
+		} finally { await policy.close(); session.dispose(); vi.restoreAllMocks(); }
 	});
 
 	it("leaves unknown and disabled skill commands unexpanded", async () => {
@@ -205,16 +216,20 @@ describe("host skill library", () => {
 
 	it("advertises all four real bundled skills in Pi with only the restricted read and Hopper tools", async () => {
 		const { root, library } = await fixture(resolve("."));
+		const policy = new ToolPolicyRuntime({ directory: join(root, "tool-settings"), embedded: true });
 		const services = await createAgentSessionServices({
 			cwd: root, agentDir: join(root, "agent"),
-			resourceLoaderOptions: isolatedResourceLoaderOptions(),
+			resourceLoaderOptions: isolatedResourceLoaderOptions({ toolPolicy: policy, scriptWorkspaceDir: join(root, "scripts") }),
 		});
-		services.resourceLoader.getSkills = () => library.getSkills();
+		services.resourceLoader.getSkills = () => policy.isToolExposed("read") ? library.getSkills() : { skills: [], diagnostics: [] };
 		const { session } = await createAgentSessionFromServices({
-			services, sessionManager: SessionManager.inMemory(root), noTools: "builtin", customTools: [library.createReadTool(root)],
+			services, sessionManager: SessionManager.inMemory(root), noTools: "builtin", customTools: [policy.customTool(library.createReadTool(root))],
 		});
 		try {
+			await session.bindExtensions({ mode: "rpc", uiContext: { notify: vi.fn() } as never });
+			expect(session.getAllTools().map(tool => tool.name)).toEqual(expect.arrayContaining(policy.inventory.map(tool => tool.name)));
 			const active = session.getActiveToolNames();
+			expect(active.every(name => policy.inventory.some(tool => tool.name === name))).toBe(true);
 			expect(active).toContain("read");
 			expect(active).toContain("rh_run_script");
 			expect(active).toContain("ask_user");
@@ -232,6 +247,7 @@ describe("host skill library", () => {
 			expect(session.agent.state.systemPrompt).not.toContain("<name>rhino-document</name>");
 			await expect(read.execute("test-disabled", { path: skill.path })).rejects.toThrow("disabled");
 		} finally {
+			await policy.close();
 			session.dispose();
 		}
 	});

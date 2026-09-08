@@ -104,6 +104,10 @@ async function minimalStage(target: "mac-arm64" | "win-x64"): Promise<string> {
 	await fixtureFile(stage, target === "mac-arm64"
 		? "runtime/host/node_modules/@esbuild/darwin-arm64/bin/esbuild"
 		: "runtime/host/node_modules/@esbuild/win32-x64/esbuild.exe", target === "mac-arm64" ? macho("arm64") : pe("x64"));
+	const suffix = target === "mac-arm64" ? "darwin-arm64" : "win32-x64-msvc";
+	for (const dependency of [`@lickle/lock-${suffix}`, `@napi-rs/keyring-${suffix}`]) {
+		await fixtureFile(stage, `runtime/host/node_modules/${dependency}/addon.node`, target === "mac-arm64" ? macho("arm64") : pe("x64"));
+	}
 	return stage;
 }
 
@@ -307,7 +311,7 @@ describe("Rhino package verifier", () => {
 		const stage = await minimalStage("mac-arm64");
 		const script = join(process.cwd(), "scripts", "verify-rhino-package.mjs");
 		const { stdout } = await execFileAsync(process.execPath, [script, "--target", "mac-arm64", stage]);
-		expect(stdout).toContain("Verified 10 staged files for mac-arm64");
+		expect(stdout).toContain("Verified 12 staged files for mac-arm64");
 		expect(JSON.parse(await readFile(join(stage, "rhino-package-manifest.json"), "utf8")).target)
 			.toBe("mac-arm64");
 	});

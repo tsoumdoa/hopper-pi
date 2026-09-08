@@ -1,3 +1,4 @@
+import { admitCurrentToolDispatch } from "../services/tool-policy-context.js";
 import { randomUUID } from "node:crypto";
 import {
 	PROTOCOL_VERSION,
@@ -271,6 +272,8 @@ export class HopperRpcClient {
 				});
 				return result;
 			}
+			await admitCurrentToolDispatch();
+			if (!this.pending.has(requestId)) return result;
 			// Once send begins, delivery is ambiguous if the socket disconnects. Mark it
 			// before awaiting ZeroMQ so a receive-side failure cannot race this flag.
 			pending.sent = true;

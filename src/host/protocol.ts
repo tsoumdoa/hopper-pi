@@ -1,3 +1,5 @@
+import type { PolicyPatch, PolicyStatus, PolicyVersion } from "../services/tool-policy.js";
+
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
@@ -6,9 +8,57 @@ export type AgentToolSummary = {
 	description: string;
 	parameters: JsonValue;
 	active: boolean;
+	id?: string;
+	parent?: string;
+	enabled?: boolean;
+	available?: boolean;
+	status?: PolicyStatus | "registration-conflict";
 };
 
-export type AgentToolsSnapshot = { tools: AgentToolSummary[] };
+export type AgentToolsSnapshot = {
+	tools: AgentToolSummary[];
+	settings?: {
+		version: PolicyVersion | null;
+		parents: Array<{ id: string; name: string; enabled: boolean }>;
+		credential: "configured" | "missing" | "unavailable";
+		error?: string;
+	};
+};
+
+export type ToolSettingsAction =
+	| { type: "patch"; expected: PolicyVersion; patch: PolicyPatch }
+	| { type: "activate"; id: string }
+	| { type: "check-connection" }
+	| { type: "credential"; expected: PolicyVersion; action: "save" | "save-and-enable"; key: string }
+	| { type: "credential"; expected: PolicyVersion; action: "remove" }
+	| { type: "reset"; expected: PolicyVersion }
+	| { type: "repair" };
+export type ToolSettingsResult = { ok: boolean; code?: "conflict" | "error"; error?: string; snapshot: AgentToolsSnapshot };
+
+/** Validate without echoing input, which may contain a credential. */
+export function parseToolSettingsAction(value: unknown): ToolSettingsAction {
+	if (!isRecord(value)) throw new Error("Invalid tool setting");
+	if (value.type === "check-connection" || value.type === "repair") return { type: value.type };
+	if (value.type === "activate") return { type: value.type, id: stringField(value, "id") };
+	const version = value.expected;
+	if (!isRecord(version) || typeof version.epoch !== "string" || !version.epoch || version.epoch.length > 128
+		|| typeof version.revision !== "number" || !Number.isSafeInteger(version.revision) || version.revision < 0) throw new Error("Invalid settings version");
+	const expected = { epoch: version.epoch, revision: version.revision };
+	if (value.type === "reset") return { type: value.type, expected };
+	if (value.type === "patch" && isRecord(value.patch)) {
+		const patch = value.patch;
+		if ((patch.target === "parents" || patch.target === "tools") && typeof patch.enabled === "boolean") {
+			return { type: value.type, expected, patch: { target: patch.target, id: stringField(patch, "id"), enabled: patch.enabled } };
+		}
+	}
+	if (value.type === "credential") {
+		if (value.action === "remove") return { type: value.type, expected, action: value.action };
+		if ((value.action === "save" || value.action === "save-and-enable") && typeof value.key === "string" && value.key.trim() && value.key.length <= 4096) {
+			return { type: value.type, expected, action: value.action, key: value.key.trim() };
+		}
+	}
+	throw new Error("Invalid tool setting");
+}
 
 export type SkillSummary = {
 	id: string;
@@ -82,6 +132,7 @@ export type HostSnapshot = {
 };
 
 export type ServerMessage =
+	| { type: "tool_settings"; snapshot: AgentToolsSnapshot }
 	| { type: "message_accepted"; requestId: string }
 	| { type: "snapshot"; snapshot: HostSnapshot }
 	| { type: "agent_event"; event: JsonValue }

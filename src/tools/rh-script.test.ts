@@ -3,6 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { getCachedBackendStatus } from "../infra/backend-status.js";
+import { ToolPolicyRuntime } from "../services/tool-policy-runtime.js";
 import { createHopperPiExtension } from "../index.js";
 import { createRhScriptTool, rhScriptParameters } from "./rh-script.js";
 import { createRhRunScriptTool } from "./rh-run-script.js";
@@ -11,7 +13,8 @@ import { RhinoScriptExecution } from "../services/rhino-script-execution.js";
 import { rankHopperTools } from "./hopper-search-tools.js";
 import { HOPPER_REGISTERED_CATALOG } from "./catalog.js";
 vi.mock("../infra/backend-status.js", () => ({
-	probeBackend: vi.fn(),
+	probeBackend: vi.fn(async () => ({ online: false })),
+	getCachedBackendStatus: vi.fn(() => ({ online: false })),
 	refreshBackendIfOffline: vi.fn(async () => false),
 }));
 vi.mock("../ui/backend-status.js", () => ({
@@ -26,32 +29,41 @@ vi.mock("../services/rhino-capture-model.js", () => ({
 	rhinoCaptureUnavailableGuidance: vi.fn(),
 }));
 const dirs: string[] = [];
+const policies: ToolPolicyRuntime[] = [];
 function directory() {
 	const dir = mkdtempSync(join(tmpdir(), "hopper-script-tools-"));
 	dirs.push(dir);
 	return dir;
 }
-afterEach(() => {
+afterEach(async () => {
+	for (const policy of policies.splice(0)) await policy.close();
 	for (const dir of dirs.splice(0))
 		rmSync(dir, { recursive: true, force: true });
 });
-it("registers rh_script without a backend guard and rebinds to persistent session identity", async () => {
+it("registers rh_script with policy but without a backend requirement and rebinds to persistent session identity", async () => {
 	const registered = new Map<string, ToolDefinition>(),
 		events = new Map<string, Function>();
+	let active: string[] = [];
 	const pi = {
+		registerCommand: vi.fn(),
+		getAllTools: () => [...registered.values()],
+		getActiveTools: () => active,
+		setActiveTools: (names: string[]) => { active = names; },
 		registerFlag: vi.fn(),
 		getFlag: () => false,
 		registerTool: (tool: ToolDefinition) => registered.set(tool.name, tool),
 		on: (name: string, handler: Function) => events.set(name, handler),
 	};
 	const workspaceDir = directory();
-	createHopperPiExtension({ scriptWorkspaceDir: workspaceDir })(pi as never);
+	const policy = new ToolPolicyRuntime({ directory: directory() });
+	policies.push(policy);
+	createHopperPiExtension({ scriptWorkspaceDir: workspaceDir, toolPolicy: policy })(pi as never);
 	const context = (id: string) => ({
 		cwd: directory(),
 		sessionManager: { getSessionId: () => id },
 		ui: { notify: vi.fn() },
 	});
-	events.get("session_start")!({ reason: "startup" }, context("session-one"));
+	await events.get("session_start")!({ reason: "startup" }, context("session-one"));
 	const tool = registered.get("rh_script")!;
 	const request = {
 		action: "create",
@@ -67,7 +79,7 @@ it("registers rh_script without a backend guard and rebinds to persistent sessio
 		{} as never,
 	);
 	expect(first).not.toHaveProperty("isError", true);
-	events.get("session_start")!({ reason: "switch" }, context("session-two"));
+	await events.get("session_start")!({ reason: "switch" }, context("session-two"));
 	const second = await tool.execute(
 		"same-call",
 		request,
@@ -78,7 +90,7 @@ it("registers rh_script without a backend guard and rebinds to persistent sessio
 	expect((second.details as { scriptId: string }).scriptId).not.toBe(
 		(first.details as { scriptId: string }).scriptId,
 	);
-	events.get("session_start")!({ reason: "switch" }, context("session-one"));
+	await events.get("session_start")!({ reason: "switch" }, context("session-one"));
 	expect(
 		(
 			await tool.execute(
@@ -90,6 +102,10 @@ it("registers rh_script without a backend guard and rebinds to persistent sessio
 			)
 		).details,
 	).toEqual(first.details);
+	// Expose backend tools while online, then lose the connection before dispatch.
+	vi.mocked(getCachedBackendStatus).mockReturnValue({ online: true });
+	await policy.reconcile();
+	vi.mocked(getCachedBackendStatus).mockReturnValue({ online: false });
 	const run = await registered
 		.get("rh_run_script")!
 		.execute(
@@ -99,7 +115,8 @@ it("registers rh_script without a backend guard and rebinds to persistent sessio
 			undefined,
 			{} as never,
 		);
-	expect(JSON.stringify(run)).toContain("offline");
+	expect(run).toHaveProperty("isError", true);
+	expect(JSON.stringify(run)).toContain("backend-unavailable");
 });
 it("exports provider-compatible object schemas and strictly validates action-specific requirements", async () => {
 	expect(rhScriptParameters).toHaveProperty("type", "object");
