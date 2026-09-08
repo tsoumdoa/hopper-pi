@@ -1,36 +1,16 @@
-# Data Type Guide — Casting, Construction & Tips
+# Data types and panel values
 
-> **When to use:** Mismatched parameter types, constructing panel inputs, or type conversions.
+Use for conversion failures and text inputs. Check the receiving port's type and item/list/tree access before changing data. Do not assume conversions are bidirectional or preserve geometry; use an explicit construction component when shape or orientation matters.
 
-## Safe type casts
+## Panel output
 
-Lightweight type checks via parameter components:
+| `textOutput` | Data | Typical use |
+|--------------|------|-------------|
+| `singleString` | Entire text as one string, including newlines | Labels, paths, a domain such as `0 to 1` |
+| `oneItemPerLine` | One string item per line | Lists of numbers, points, or Boolean pattern values |
 
-- line ↔ polyline
-- point ↔ plane
-- closed polyline ↔ surface
-- rectangle ↔ 2D domain
-- planar surface ↔ 2D domain
-- vector ↔ line
-- color ↔ material
+`gh_apply_graph` defaults to `singleString`. `gh_create_widget` panel creation and `gh_mutate_widget` panel `setProperty` require `textOutput` explicitly. Downstream ports still need to parse or cast the strings.
 
-Remember: a line is two points; a plane needs origin + orientation (not three arbitrary points).
+Use `{0,0,0}` for point/vector text and `-5 to 5` for a domain. For preview color, prefer a Colour Swatch over a text-to-material cast. For Isotrim, feed Divide Domain² with the surface's actual UV domain, then use its subdomains.
 
-## Panel `textOutput` (required on create / setProperty)
-
-| `textOutput` | Downstream data | Use when |
-|--------------|-----------------|----------|
-| `singleString` | One string; line breaks stay inside it (e.g. `"1\n2\n3"`) | Domains (`0 to 1`), paths, labels, any single text value |
-| `oneItemPerLine` | One list item **per line** (e.g. `{1, 2, 3}`) | Several numbers, points, or pattern tokens — one value per row |
-
-## Python tree/list ports
-
-For tree-access inputs/outputs, conversion recipes, and anti-patterns, use [python-boilerplate.md](./python-boilerplate.md#list-vs-tree-access-types). On `Data conversion failed from Goo to …`, run `gh_get_canvas_errors` first for the targeted hint.
-
-## Input construction tips
-
-- Point/vector on panel: `{0,0,0}`
-- Domain on panel: `<start> to <end>` e.g. `-5 to 5`, `0 to 1`
-- IsoTrim `D`: use Divide Domain² output (surface as domain)
-- Graph Mapper: normalized 0–1 only; user sets mapper manually
-- Color/material on panel: rgba `255,105,180` or `255,105,180 (152)`
+For Python tree/list access and conversion errors, read [python-boilerplate.md](./python-boilerplate.md#list-vs-tree-access-types). Inspect the failing port and runtime message; a Goo conversion error alone does not identify the cause.

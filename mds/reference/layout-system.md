@@ -1,115 +1,57 @@
-# Layout System — Bounds-Based Placement
+# Canvas layout
 
-> **When to use:** Tier 3 definitions (25+ components, scripts, multiple paths), or when placement fails. Tier 1–2: use the compact size table in [gh-modeling-expert](../skills/gh-modeling-expert/SKILL.md).
+Use for large or branching graphs, preview placement, and overlap repairs. Plan with bounding boxes, then convert positions to tool pivots.
 
-All layout uses **bounds** (`x y w h` top-left + size), not pivot alone.
+## Spacing and sizes
 
-## General principles
+Use 50px between zones, 30px between tightly coupled nodes, and 40px vertically. Place inputs, processing, and outputs left to right. Group by function and size panels to content.
 
-- Group by function; clear inputs/outputs. No nested groups unless all members share one group.
-- No overlapping components; minimize wire crossings (faint/hidden wires OK).
-- Spacing: `H_GAP` between zones; `V_GAP` between stacked items; `H_GAP_TIGHT` within a tight cluster. Compute from bounds — tight within a zone, standard gap between zones.
-- Adjust panel size to content length.
+| Type | Approximate width × height |
+|------|----------------------------|
+| Slider | 160 × 20 |
+| Toggle | 50 × 20 |
+| Panel | 100 × 52 initially; resize to content |
+| Value List | 100 × 20 |
+| Colour Swatch | 120 × 20 |
+| Create Material | 65 × 105 |
+| Custom Preview | 45 × 60 |
+| Script | 90 × 140 or taller as ports increase |
+| Math / Params | 40–60 × 25–45 |
 
-## Placement protocol (Tier 3)
+These are estimates. Actual bounds take precedence.
 
-1. **Plan the complete graph** — Compute gaps from the size table and assign local refs.
-2. **Compute math internally** — Use source bounds, gap, and resulting x/y; summarize by zone only when helpful or when placement fails.
-3. **Apply once** — Submit every zone, wire, and group in one `gh_apply_graph` call.
-4. **Validate in the result** — Use the returned runtime messages and overlaps; no canvas reread is needed for new IDs.
+## Bounds and pivots
 
-## Horizontal zones
+`gh_apply_graph` and `gh_edit_components` use pivot coordinates. They are not necessarily the top-left corner. Tall or centered components can extend above and left of their pivot.
 
-```
-zone2_x = max(m.x + m.w for m in zone1) + H_GAP
-```
+For bounds `x, y, w, h`:
 
-Gaps (also in gh-modeling-expert): `H_GAP=50`, `H_GAP_TIGHT=30`, `V_GAP=40`.
-
-1. **Parameters** — sliders, toggles, panels
-2. **Processing** — math, scripts, geometry ops
-3. **Output** — preview cluster (rightmost)
-
-## Vertical stacking
-
-```
-next_y = prev_bounds.y + prev_bounds.h + V_GAP
-```
-
-Mixed heights in one row — center on tallest:
-
-```
-row_center_y = tallest.y + tallest.h / 2
-centered_y = row_center_y - shorter.h / 2
+```text
+next_left = previous.x + previous.w + horizontal_gap
+next_top = previous.y + previous.h + vertical_gap
+next_zone_left = max(node.x + node.w for node in previous_zone) + 50
+centered_top = feeding_group_center_y - component_height / 2
+pivot_x = desired_left + pivot_offset_x
+pivot_y = desired_top + pivot_offset_y
 ```
 
-## Group bounds
+Estimate offsets for new nodes; use observed offsets for existing ones. `gh_apply_graph` requires both pivot coordinates to be at least 20, but this alone does not keep bounds out of negative space. Center tall components on the feeding group's midpoint.
 
-`GROUP_PAD = 8`:
+For an estimated group box with 8px padding:
 
-```
-group_x = min(m.x) - GROUP_PAD
-group_y = min(m.y) - GROUP_PAD
-group_w = max(m.x + m.w) - group_x + GROUP_PAD * 2
-group_h = max(m.y + m.h) - group_y + GROUP_PAD * 2
-```
-
-## Preview cluster (output zone)
-
-Right of last processing component. Geometry wire → Custom Preview `G`.
-
-### Default — lightweight (preferred)
-
-```
-[Geometry] ──────────────────────→ [Custom Preview]
-[Colour Swatch] ──H_GAP_TIGHT──→       M
+```text
+left = min(node.x) - 8
+right = max(node.x + node.w) + 8
+top = min(node.y) - 8
+bottom = max(node.y + node.h) + 8
+width = right - left
+height = bottom - top
 ```
 
-Use when diffuse color via swatch on `M` is enough. Swatch left of preview, same y.
+Hopper creates group bounds from members; these estimates are for placement planning.
 
-### Optional — with Create Material
+## Preview and verification
 
-```
-[Colour Swatch] → [Create Material] ─┐
-[Geometry] ────────────────────────┴→ [Custom Preview]
-```
+Place Custom Preview to the right of the last processing node. Connect geometry to `G` and a Colour Swatch to `M`. Add Create Material between the swatch and preview only for extra material properties. Keep intermediates hidden.
 
-Use when Ks/Ke/transparency/etc. matter beyond swatch color. `H_GAP_TIGHT` between cluster nodes.
-
-## Component size table (authoritative)
-
-| Component type | Typical size | Notes |
-|----------------|--------------|-------|
-| Slider | ~160 × 20 | Variable width |
-| Toggle | ~50 × 20 | |
-| Panel (`textOutput: "singleString"`) | ~80–200 × 20 | One string output |
-| Panel (`textOutput: "oneItemPerLine"`, tall) | variable | One list item per line; near consumer |
-| Value List | ~100 × 20 | |
-| Colour Swatch | ~120 × 20 | |
-| Create Material | ~65 × 105 | Tall |
-| Custom Preview | ~45 × 60 | |
-| Script (Python/C#) | ~90 × 140+ | Grows with I/O count |
-| Math / Params | ~40–60 × 25–45 | |
-
-Center tall components on the feeding group's vertical midpoint — do not top-align to the first slider.
-
-## Pivot vs bounds — negative space
-
-`gh_edit_components` x/y are **pivot** positions, not left/top bounds. Tall or center-pivot types (Rectangle, Script, Create Material, Boundary Surfaces, Plane Surface) can extend 30–70px above/left of pivot. When placing processing components after widgets, estimate the component's left bound as `pivot_x - left_offset` and keep that bound right of the previous component's right edge.
-
-- First row: pivot `y ≥ 45`; tall components `y ≥ 65`.
-- Horizontal: pivot `x ≥ 25`.
-- Use `gh_apply_graph` overlap validation for new builds. Use `gh_get_canvas_errors` when checking an existing canvas.
-
-**Worked example (Slider → Circle → Boundary → Area + lightweight preview):**
-
-```
-Slider:    x=25,  y=45,  w≈100  →  right = 125
-Circle:    x=175, w≈56   →  right = 231
-Boundary:  x=281, w≈55   →  right = 336
-Area:      x=386, w≈57   →  right = 443
-Swatch:    x=473, y=Area.pivot_y + V_GAP  (443 + H_GAP_TIGHT from flow end)
-Preview:   x=589, same y  (swatch w≈86 + H_GAP_TIGHT)
-```
-
-**Rule:** `next_x = prev_right + gap`. Preview always in output zone, right of last flow component.
+Submit the planned graph together and inspect `gh_apply_graph` runtime and overlap results. Use returned IDs for repairs. For existing canvas checks, use `gh_get_canvas_errors`; inspect bounds when spacing remains uncertain.

@@ -1,35 +1,12 @@
-# Recipe 2 — Extract Edges
+# Recipe 2: Extract edges
 
-**What:** Get edge curves from a surface/brep, organized by type.
+Extract Brep edge curves, optionally separated by topology.
 
-**Zone Map:** `[Surface/Brep] → [Deconstruct Brep]`
-
-## Pipeline
-
-```
-[Surface / Brep]
-       │
-       ▼
-[Deconstruct Brep]
-       │
-       ├── F → faces (surfaces)
-       ├── E → all edge curves (flat list)
-       └── V → vertices
+```text
+Brep -> Deconstruct Brep -> Edges, Faces, Vertices
+Brep -> Brep Edges ------> Naked, Interior, Non-manifold edge sets
 ```
 
-**Alt — Brep Edges (cleaner for edge-only):**
-```
-[Surface / Brep]
-       │
-       ▼
-  [Brep Edges]
-       │
-       ├── E → exterior (outer boundary) edges
-       └── I → interior (hole/trim loop) edges
-```
+Use Deconstruct Brep for all edges. Brep Edges separates edges by [adjacency](https://developer.rhino3d.com/api/rhinocommon/rhino.geometry.edgeadjacency?version=8.x), not outer boundary versus hole loops. Both an outer boundary and a hole boundary can be naked edges. For loop classification, inspect Brep face loops.
 
-## Output
-Edge curves (flat list or split by type).
-
-## Next Steps
-→ **Recipe 5a** pipe for wireframe/frames · **Offset** edges inward for inset panels · **Loft** offset ↔ original for raised borders · After **Recipe 1**: per-patch edge extraction
+Output is edge curves, with branches determined by the inputs. Adjacent unjoined patches can produce coincident edge curves; deduplicate when the goal is one member per shared edge before [piping](./recipe-5-pipe-sweep.md).

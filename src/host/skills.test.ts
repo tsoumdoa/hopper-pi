@@ -225,7 +225,7 @@ describe("host skill library", () => {
 			const skill = library.snapshot().skills.find((entry) => entry.name === "rhino-document")!;
 			const read = session.agent.state.tools.find((tool) => tool.name === "read")!;
 			const result = await read.execute("test-read", { path: skill.path });
-			expect(JSON.stringify(result.content)).toContain("Rhino Document Expert");
+			expect(JSON.stringify(result.content)).toContain("name: rhino-document");
 			await expect(read.execute("test-outside", { path: join(root, "auth.json") })).rejects.toThrow("unavailable");
 			await library.update({ type: "toggle", id: skill.id, enabled: false });
 			session.setActiveToolsByName(active);

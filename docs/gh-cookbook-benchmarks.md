@@ -27,7 +27,7 @@ These test one recipe in isolation. Should be ~5–10 components max.
 
 > **Prompt:** Make a rectangular surface on the XY plane, 30 units wide and 20 units tall. Use sliders so I can resize it later.
 
-**Expected:** Plane → Surface (or Plane Surface) with X=30, Y=20 as sliders. Clean left-to-right.
+**Expected:** Plane Surface with XY plane and domains [0,30] and [0,20] driven by sliders. Verify the resulting dimensions.
 
 ---
 
@@ -43,7 +43,7 @@ These test one recipe in isolation. Should be ~5–10 components max.
 
 > **Prompt:** Extract all the edge curves from this brep/surface. Give me the outer boundary edges separately from any interior edges.
 
-**Expected:** Deconstruct Brep or Brep Edges component, with E and I outputs identifiable.
+**Expected:** Distinguish outer/hole loops from edge adjacency. Brep Edges separates naked, interior, and non-manifold edges; use face loops if the request means outer boundaries versus holes.
 
 ---
 
@@ -75,7 +75,7 @@ These test one recipe in isolation. Should be ~5–10 components max.
 
 > **Prompt:** Put a 12×8 grid of points evenly distributed across this surface. Show me the points.
 
-**Expected:** Divide Surface with U=12, V=8, output Pt fed into a preview-capable display (or point param with preview).
+**Expected:** On an open rectangular surface, Divide Surface with U=11, V=7 gives 12×8 points including boundaries. Verify count and preview; curved surfaces need additional work if equal physical spacing is intended.
 
 ---
 
@@ -83,7 +83,7 @@ These test one recipe in isolation. Should be ~5–10 components max.
 
 > **Prompt:** I have some points floating above a surface. Project them straight down (Z direction) onto the surface.
 
-**Expected:** Project Point component, D = Unit Z (or {0,0,-1}), P = input points, G = target surface.
+**Expected:** Project Point with downward direction {0,0,-1}, source points, and target surface. Check misses and multiple hits.
 
 ---
 
@@ -119,7 +119,7 @@ These require the agent to recognize that step A feeds into step B. ~10–18 com
 
 > **Prompt:** Make a 20×15 rectangle, subdivide into 8×6 panels, and color them like a chessboard — white and dark grey, alternating. Use dispatch to split them.
 
-**Expected:** Rect → Divide(8×6) → Isotrim → Dispatch(true;false) → two Custom Previews with white/grey swatches.
+**Expected:** Rect → Divide(8×6) → Isotrim → Dispatch with row/column parity → two Custom Previews with white/grey swatches. Verify alternation across rows as well as columns.
 
 ---
 
@@ -127,7 +127,7 @@ These require the agent to recognize that step A feeds into step B. ~10–18 com
 
 > **Prompt:** Generate a 10×10 point grid on this surface. At each point, draw a short pipe (length=2, radius=0.08) pointing straight up in Z.
 
-**Expected:** Divide Surface(Pt) → Line SDL(D={0,0,1}, L=2) → Pipe(R=0.08) → Preview. Or Construct Point with offset Z then vertical line.
+**Expected:** Divide Surface(U=9,V=9) → 100 points → Line SDL(D={0,0,1}, L=2) → Pipe(R=0.08) → Preview. Verify the point count on the actual surface.
 
 ---
 
@@ -143,7 +143,7 @@ These require the agent to recognize that step A feeds into step B. ~10–18 com
 
 > **Prompt:** Create a rectangle 30×25, divide into 4×4 patches, get each patch's outer edges, and offset each edge inward by 0.5 units.
 
-**Expected:** Rect → Divide → Isotrim → Deconstruct Brep(E) → Offset Curve(D=-0.5, inside). Note: offset direction can be tricky — agent should use plane input or negative distance.
+**Expected:** Rect → Divide → Isotrim → per-patch boundary curves → Offset Curve. Check curve orientation and plane to choose the inward direction; a negative distance alone does not establish inside.
 
 ---
 
@@ -154,8 +154,6 @@ Full workflow builds. These are the real stress tests. ~20–35 components.
 ### T3-01 — Facade Screen ⭐ `[Recipe 0+1+4+6]`
 
 > **Prompt:** Design a building facade screen. Start with a 50×30 rectangle. Divide it into 12×8 panels. Dispatch them into alternating groups. Extrude group A outward by 5 units (the "projecting" panels). Leave group B flat. Color A white, B dark grey. Show only the final result in preview.
-
-**This is the composition example from the cookbook. Tests end-to-end pattern recognition.**
 
 **Expected:**
 ```
@@ -171,8 +169,6 @@ All intermediates hidden. Grouped logically.
 
 > **Prompt:** Build a glazed roof structure. Start with a 60×40 rectangular plane. Subdivide into 15×10 cells. Extract every cell's edges and pipe them all with radius 0.2 to look like a space frame. Use a metallic-looking colour for preview.
 
-**This is the second composition example from the cookbook.**
-
 **Expected:**
 ```
 Rect(60×40) → Divide(15×10) → Isotrim → Deconstruct Brep(E) → Pipe(R=0.2) → CustomPreview(metallic swatch)
@@ -185,12 +181,10 @@ Grouped, clean layout, intermediates hidden.
 
 > **Prompt:** Create a decorative "quill" field on a 35×25 surface. Populate a 15×12 grid of points on the surface. At each point, grow a thin pipe (radius 0.05, length 3) pointing in the surface normal direction. The result should look like a field of bristles or acoustic baffles.
 
-**This is the third composition example (Surface Studs). Requires Evaluate Surface for normals.**
-
 **Expected:**
 ```
-Rect(35×25) → Divide Surface(U=15,V=12) → Pt + UV
-  Pt ──→ Evaluate Surface(S=surface, uv=UV) ──→ N (normals)
+Rect(35×25) → Divide Surface(U=14,V=11) → Pt + UV
+  Surface + UV ──→ Evaluate Surface ──→ N (normals)
   Pt ──→ Line SDL(P=Pt, D=N, L=3) ──→ Pipe(R=0.05) → CustomPreview
 ```
 
@@ -243,7 +237,7 @@ These test whether the agent handles underspecified requests gracefully.
 
 > **Prompt:** Subdivide into a 4×4 grid and show me a checkerboard.
 
-**Test:** Agent should realize no surface exists and create one (Recipe 0) first, THEN subdivide (Recipe 1), THEN dispatch (Recipe 6). No error, no "I need a surface" back-and-forth.
+**Test:** In the blank-canvas fixture, create a starting surface, subdivide, and use row/column parity for a checkerboard. State assumed dimensions. Do not assume a blank canvas when running against existing work.
 
 ---
 
@@ -259,7 +253,7 @@ These test whether the agent handles underspecified requests gracefully.
 
 > **Prompt:** Subdivide this curve into a UV grid.
 
-**Test:** Agent should notice a *curve* isn't a surface — either inform the user cleanly OR reasonably interpret (e.g., extrude the curve to a surface first, then subdivide). Should not crash or wire nonsense.
+**Test:** Identify that UV subdivision requires a surface. Inspect the target and clarify the intended surface if multiple constructions would change the result.
 
 ---
 
@@ -272,13 +266,6 @@ These test whether the agent handles underspecified requests gracefully.
 ---
 
 ## Prompt Engineering Notes
-
-### Why these prompts work as benchmarks
-
-1. **Progressive depth:** T1 tests single recipes, T2 chains two, T3 builds full compositions, T4 throws curveballs.
-2. **Real language:** Prompts are written how a user actually talks ("chop it into pieces", "make it look like raindrops"), not in API-speak.
-3. **Cross-cutting concerns:** Every prompt implicitly tests layout discipline, preview hygiene, and the one-call graph workflow — not just component correctness.
-4. **Composition overlap:** T3-01/02/03 are literally the cookbook examples — if the agent can't build those, the cookbook isn't working. T3-04/05/06 go beyond to test generalization.
 
 ### Running a benchmark session
 

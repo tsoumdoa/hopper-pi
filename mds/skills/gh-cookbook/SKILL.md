@@ -1,39 +1,25 @@
 ---
 name: gh-cookbook
-description: Supplemental pattern cards for gh-modeling-expert — rectangle surfaces, subdivision, edges, loft, extrude, pipe/sweep, dispatch, points, projection, and parametric bake pipelines. Load only the one recipe matching a Grasshopper build task.
+description: Supplemental Grasshopper recipes for surfaces, subdivision, edges, lofts, extrusions, pipes, point patterns, projection, and reusable bake pipelines. Use with gh-modeling-expert for a matching task.
 ---
 
-# Grasshopper Cookbook
+# Grasshopper cookbook
 
-## Role
+Follow [gh-modeling-expert](../gh-modeling-expert/SKILL.md) for document context, building, layout, and verification. Read only recipes needed for the requested output; combine them in one new-subgraph request when possible.
 
-Supplement to `gh-modeling-expert`. Each recipe gives a compact component pattern, wiring sketch, output shape, and next steps. Load at most the recipe(s) directly needed for the requested result.
+Recipe diagrams describe data flow. Resolve unfamiliar component names and ports against the current library; diagram labels are not guaranteed tool selectors. Dimensions use the current model units. Preserve branch structure unless the requested result requires changing it.
 
-## How to use
+| Recipe | Result |
+|--------|--------|
+| [0. Rectangle surface](./reference/recipe-0-rectangle-surface.md) | Planar surface with adjustable dimensions |
+| [1. Subdivide surface](./reference/recipe-1-subdivide-surface.md) | U×V patches |
+| [2. Extract edges](./reference/recipe-2-extract-edges.md) | All edges or sets by topology |
+| [3. Loft curves](./reference/recipe-3-loft-curves.md) | Surface through ordered profiles |
+| [4. Extrude](./reference/recipe-4-extrude.md) | Geometry extruded along a vector |
+| [5. Pipe / sweep](./reference/recipe-5-pipe-sweep.md) | Tubes or swept sections |
+| [6. Dispatch pattern](./reference/recipe-6-dispatch-pattern.md) | Two patterned subsets |
+| [7. Populate points](./reference/recipe-7-populate-points.md) | Surface grid or random points |
+| [8. Project points](./reference/recipe-8-project-points.md) | Points projected onto geometry |
+| [9. Bake pipeline](./reference/recipe-9-bake-geometry.md) | Named-layer model content for Rhino |
 
-1. Match the user's goal to a recipe below.
-2. Load the recipe file when the table summary is not enough to build confidently.
-3. Layout and placement → [layout-system.md](../../reference/layout-system.md) (gaps, size table, preview placement).
-4. Build the recipe as one `gh_apply_graph` request and inspect its integrated validation.
-5. Load a second recipe only when the requested output explicitly requires chaining.
-
-**QA / benchmark prompts (humans):** [docs/gh-cookbook-benchmarks.md](../../../docs/gh-cookbook-benchmarks.md)
-
-## Recipes
-
-| # | Recipe | Summary |
-|---|--------|---------|
-| **0** | [Rectangle Surface](./reference/recipe-0-rectangle-surface.md) | Planar rectangle via plane + U/V domain |
-| **1** | [Subdivide Surface](./reference/recipe-1-subdivide-surface.md) | U×V grid of subsurface patches |
-| **2** | [Extract Edges](./reference/recipe-2-extract-edges.md) | Edge curves by type (outer vs interior) |
-| **3** | [Loft Curves](./reference/recipe-3-loft-curves.md) | Lofted surface through 2+ profiles |
-| **4** | [Extrude](./reference/recipe-4-extrude.md) | Linear extrusion along a vector |
-| **5** | [Pipe / Sweep](./reference/recipe-5-pipe-sweep.md) | Pipe radius or custom sweep section |
-| **6** | [Dispatch Pattern](./reference/recipe-6-dispatch-pattern.md) | A/B split with boolean pattern |
-| **7** | [Populate Points](./reference/recipe-7-populate-points.md) | Grid or random points on surface |
-| **8** | [Project Points](./reference/recipe-8-project-points.md) | Ray-cast points onto geometry |
-| **9** | [Bake Geometry](./reference/recipe-9-bake-geometry.md) | Bake to Rhino doc on a named/colored layer via Model Object + Model Layer |
-
-## New recipes
-
-Authoring checklist → [reference/GUIDELINES.md](./reference/GUIDELINES.md) (human maintainers).
+For maintainers: [recipe authoring](./reference/GUIDELINES.md) and [benchmark prompts](../../../docs/gh-cookbook-benchmarks.md).
