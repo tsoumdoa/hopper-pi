@@ -1,6 +1,6 @@
 ---
 name: rhino-document
-description: Inspect and edit Rhino documents, geometry, layers, blocks, materials, and views with persistent scripts. Use for active RhinoDoc work and direct baking; use gh-modeling-expert for Grasshopper canvas editing.
+description: Inspect and edit Rhino documents, geometry, layers, blocks, materials, and views. Use for active RhinoDoc work and direct baking; use gh-modeling-expert for Grasshopper canvas editing.
 ---
 
 # Rhino document
@@ -13,7 +13,7 @@ Use task-specific tools and APIs. Verify unfamiliar methods and overloads agains
 |------|------|
 | Rhino files, document identity, units, tolerances | `rh_document` |
 | Saved Python/C# source and run history | `rh_script` |
-| Geometry, layers, selection, blocks, materials, direct/current bake | `rh_script` then `rh_run_script` |
+| Geometry, layers, selection, blocks, materials, direct/current bake | `rh_run_script` |
 | Viewport, camera, projection, CPlane, zoom | `rh_view_control` |
 | Object filters, counts, IDs | `rh_query_objects` |
 | Visual inspection | `rh_capture_view` when available |
@@ -22,20 +22,22 @@ Use task-specific tools and APIs. Verify unfamiliar methods and overloads agains
 
 Use both tool families for mixed requests. `gh_edit_script` edits a GH component; it does not run Rhino document scripts. For a reusable GH bake pipeline, use [Recipe 9](../gh-cookbook/reference/recipe-9-bake-geometry.md). Clarify ambiguous baking only when the distinction affects the requested result.
 
-## Persistent scripts first
+## Document scripts
 
-Before any model mutation, create or update a named `rh_script`, unless the user explicitly requests an inline disposable action. This includes one-line edits. File and view operations use their dedicated tools above. Read-only inspection needs no saved script.
+Follow `rh_run_script`'s mode guidance. Inspect current document state and relevant objects before mutation, and verify the result afterward. Never assume earlier names, selection, IDs, or geometry still apply.
 
-1. Inspect the current document and relevant objects first. Call `rh_script` with `action: "getExecutionTarget"` for document identity and settings. Never assume earlier names, selection, IDs, or geometry still apply.
+Use a named `rh_script` when source will be reused or revised, or when revision and run history are useful. For saved scripts:
+
+1. Call `rh_script` with `action: "getExecutionTarget"` for document identity and settings.
 2. Create a new named script for each distinct user request. Reuse an asset only for a clear revision of the same operation, after reading its current source and revision. Discover `rh_script` through `hopper_search_tools` if needed.
 3. Record current parameters, units, and targets explicitly in source. Changed parameters or targets require a new revision or new script based on fresh inspection. Use `patch` or `setSource` with the returned `expectedRevision`; never blindly replace stale hardcoded values.
 4. Preserve reproducibility with full object GUIDs or stable tags and recorded generated results. Capture random seeds or generated inputs when needed. Make follow-up edits target verified prior output; rerunning creation code can produce duplicates.
 5. Execute through `rh_run_script.items` with the returned `scriptId`, chosen `revision`, and the execution target's `document` unchanged as `expectedDocument`, including `settingsRevision`. Refresh the target after document/settings changes. Editing source never executes it.
 6. Print affected object IDs and useful results with `print()` or `Console.WriteLine()`, then verify the requested changes with queries or inspection.
 
-Prefer Python for document scripting; C# uses a RhinoCode script-editor body. Command macros are inline and require the explicit disposable-action exception for mutations. Read [scripting reference](../../reference/rhino-script-boilerplate.md) for templates, patch syntax, source pagination, or diagnostics.
+Read [scripting reference](../../reference/rhino-script-boilerplate.md) for templates, patch syntax, source pagination, or diagnostics.
 
-A runtime error can leave partial changes. Inspect before retrying. For uncertain runs, use `rh_script` actions `getRun` and `reconcileRun`; reconciliation never resubmits source. After a host restart, inspect geometry before another run. Geometry Undo does not revert saved source revisions.
+A runtime error can leave partial changes. Inspect before retrying. For uncertain saved-script runs, use `rh_script` actions `getRun` and `reconcileRun`; reconciliation never resubmits source. After a host restart, inspect geometry before another run. Geometry Undo does not revert saved source revisions.
 
 ## Units and files
 

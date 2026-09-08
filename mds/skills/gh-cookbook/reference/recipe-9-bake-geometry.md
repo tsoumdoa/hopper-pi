@@ -1,6 +1,6 @@
 # Recipe 9: Reusable bake pipeline
 
-Build a Rhino 8+ GH pipeline that attaches layer attributes to geometry and passes model content to Content Cache. For a direct/current bake, follow [rhino-document](../../rhino-document/SKILL.md), including its named-script policy.
+Build a Rhino 8+ GH pipeline that attaches layer attributes to geometry and passes model content to Content Cache. For a direct/current bake, follow [rhino-document](../../rhino-document/SKILL.md).
 
 ```text
 Layer-name panel, Colour Swatch -> Model Layer

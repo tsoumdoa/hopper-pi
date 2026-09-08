@@ -14,7 +14,7 @@ Use task-specific tools and APIs. Verify unfamiliar component types, ports, and 
 - Inspect integrated runtime messages and overlaps after building. Repair using returned IDs; use `gh_get_canvas_errors` for existing nodes. A timeout leaves the canvas outcome uncertain, so inspect before retrying.
 - Limit cleanup to touched components. Remove unused additions, fix errors and overlaps, and verify the requested geometry and data structure.
 
-Use [rhino-document](../rhino-document/SKILL.md) for Rhino model edits and direct baking, including its saved-script policy. Use [Recipe 9](../gh-cookbook/reference/recipe-9-bake-geometry.md) for a reusable GH bake pipeline and `rh_view_control` for views. `gh_edit_script` edits GH components, not Rhino document scripts.
+Use [rhino-document](../rhino-document/SKILL.md) for Rhino model edits and direct baking. Use [Recipe 9](../gh-cookbook/reference/recipe-9-bake-geometry.md) for a reusable GH bake pipeline and `rh_view_control` for views. `gh_edit_script` edits GH components, not Rhino document scripts.
 
 ## Modeling and layout
 
@@ -23,7 +23,7 @@ Use [rhino-document](../rhino-document/SKILL.md) for Rhino model edits and direc
 - Prefer C# for geometry scripts and Python for simple list/tree utilities. Respect the user's language choice. Keep GH scripts safe for repeated recomputation.
 - Arrange inputs, processing, and outputs left to right without cyclic wiring. Do not edit components in negative canvas space. Group by function when useful.
 - Use gaps of 50px between zones, 30px within tightly coupled pairs, and 40px vertically, measured from bounds. For large or branching graphs, plan all zones before submission. See [layout reference](../../reference/layout-system.md) for sizes and pivot offsets.
-- Hide intermediate previews. Show final output through Custom Preview with a Colour Swatch; add Create Material only for properties beyond diffuse color. Size panels to their content and choose `textOutput` for the intended data shape.
+- Hide intermediate previews. Set `preview: true` on final Custom Preview components in `gh_apply_graph`; they default to hidden too. Connect a Colour Swatch; add Create Material only for properties beyond diffuse color. Size panels to their content and choose `textOutput` for the intended data shape.
 
 ## Clarification
 

@@ -1,6 +1,6 @@
 # Rhino document scripting
 
-Follow [rhino-document](../skills/rhino-document/SKILL.md#persistent-scripts-first) for model edits. Save a named Python/C# script before mutation, including one-liners. Inline mutations and command macros require an explicit disposable-action request. GH script components use [script lifecycle](./script-component-lifecycle.md).
+Follow [rhino-document](../skills/rhino-document/SKILL.md#document-scripts) for model edits and choosing when to save source. GH script components use [script lifecycle](./script-component-lifecycle.md).
 
 ## Source templates
 
@@ -70,7 +70,7 @@ Editing never executes source. This creation example adds another circle on each
 
 ## Diagnostics and storage
 
-Failure results include stages, elapsed times, exceptions, partial output, and captured Rhino loading messages. `unknown` means a stage was not observed. `code-run` can include initialization or compilation and does not prove user code started. Native stack frames are not user-source lines; an added shebang can shift runtime line numbers. For host initialization investigations, see [native verification notes](../../docs/document-script-integration-verification.md#language-warmup-regression-2026-09-07).
+Failure results include stages, elapsed times, exceptions, partial output, and captured Rhino loading messages. `unknown` means a stage was not observed. `code-run` can include initialization or compilation and does not prove user code started. Native stack frames are not user-source lines; an added shebang can shift runtime line numbers. For host initialization investigations, see [runtime diagnostics](./rhino-script-diagnostics.md).
 
 Source and journals live in `<scriptWorkspaceDir>/.hopper/rhino-scripts`, separately from CAD files. Embedded hosts default to `<dataDir>/workspaces/default`; CLI extensions use the selected project directory. Override with absolute `--script-workspace` or `HOPPER_SCRIPT_WORKSPACE`.
 
