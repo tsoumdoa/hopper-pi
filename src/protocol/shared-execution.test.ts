@@ -56,7 +56,7 @@ describe("shared execution contracts", () => {
   for (const name of names) {
    const policy = SHARED_OPERATION_POLICY[name];
    expect(policy.operationClass).toBe(classifyOperation(name));
-   expect(policy.sharedDispatch).toBe("disabled-pending-native-audit");
+   expect(policy.sharedDispatch).toBe("native-context-guarded");
    expect(policy.dispatchJournal).toBe(policy.operationClass === "mutation" ? "wire-mutation" : policy.operationClass === "control" ? "host-only" : "none");
    const match = entries.find(entry => entry[1] === name)!;
    expect(match.slice(2)).toEqual([policy.binding, policy.dispatchJournal, policy.recovery]);

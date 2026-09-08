@@ -1,0 +1,41 @@
+{
+  "testedAt": "2026-09-08T17:42:51.572Z",
+  "platform": "darwin",
+  "rhinoBuild": "8.34.26223.11002",
+  "nodeVersion": "v26.8.1",
+  "result": "transferred",
+  "taskId": "26339b4d-514f-487f-b748-45ddd47a30f5",
+  "artifactId": "artifact-5d8ff2cc9d3115f4b1d32c2409a88e11",
+  "artifactChecksum": "ca07631743cc8270010f8cfaff831d87e4dade3ba52c0f124de91b37ad6e9604",
+  "artifactByteLength": 10392,
+  "sourceObjectId": "0626a340-d5ca-4a64-b733-7f1fef0ff4b9",
+  "destinationObjectIds": [
+    "4b5e8bd6-6437-407d-9690-268db06029ab"
+  ],
+  "provenance": [
+    {
+      "sourceObjectId": "0626a340-d5ca-4a64-b733-7f1fef0ff4b9",
+      "destinationObjectId": "4b5e8bd6-6437-407d-9690-268db06029ab"
+    }
+  ],
+  "layerId": "de8b5f50-213f-4fe2-83fe-20dde3e6d26d",
+  "sourceVerification": "HOPPER_TEST_VERIFIED={\"id\": \"0626a340-d5ca-4a64-b733-7f1fef0ff4b9\", \"units\": \"Millimeters\", \"layerId\": \"67bfd040-c5c5-4493-9b0e-8061b7d8c488\", \"path\": null, \"maxX\": 1000.0}",
+  "destinationVerification": "HOPPER_TEST_VERIFIED={\"id\": \"4b5e8bd6-6437-407d-9690-268db06029ab\", \"units\": \"Meters\", \"layerId\": \"de8b5f50-213f-4fe2-83fe-20dde3e6d26d\", \"path\": null, \"maxX\": 1.0}",
+  "saves": [
+    {
+      "label": "source",
+      "isModified": false,
+      "pathUpdated": true
+    },
+    {
+      "label": "destination",
+      "isModified": false,
+      "pathUpdated": true
+    }
+  ],
+  "pluginHashes": {
+    "rhinoSha256": "ca86fb295cc87b2fe29baa23d101d5dc3eae0484cda0923cb75c5b49f19d56c5",
+    "coreSha256": "9b559efd79b8d0bc4199ccc3d5ac84f83d416705aa8f7733fc48a1a507d0d63f"
+  },
+  "modelApiCalls": 0
+}

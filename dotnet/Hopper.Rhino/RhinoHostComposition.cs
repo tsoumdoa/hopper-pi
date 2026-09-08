@@ -71,6 +71,7 @@ namespace rhino_zmq_poc
 
         private void Open(Uri ready)
         {
+            if (SharedNativeHost.SuppressBrowser) return;
             try
             {
                 _browser.Open(ready);
@@ -84,6 +85,14 @@ namespace rhino_zmq_poc
                 });
             }
         }
+    }
+
+    internal sealed class SharedAwareHealthObserver : IHopperRunningObserver
+    {
+        private readonly IHopperRunningObserver _inner;
+        public SharedAwareHealthObserver(IHopperRunningObserver inner) => _inner = inner;
+        public void OnRunning() { if (!SharedNativeHost.Enabled) _inner.OnRunning(); }
+        public void Reset() => _inner.Reset();
     }
 
     internal sealed class RhinoHostComposition : IDisposable
@@ -198,7 +207,7 @@ namespace rhino_zmq_poc
                 healthProbe,
                 SystemHealthPollDelay.Instance,
                 lifecycleBackground);
-            var runningObservers = new CompositeHopperRunningObserver(browser, healthMonitor);
+            var runningObservers = new CompositeHopperRunningObserver(browser, new SharedAwareHealthObserver(healthMonitor));
             var facade = new HopperHostFacade(
                 lifecycle,
                 lifecycleBackground,

@@ -1,10 +1,12 @@
 # Shared Hopper host and multiple Rhino instances
 
-Status: implementation plan with platform prototypes still required. Repository and Barkcode observations are source inspection evidence, not completed runtime tests.
+Status: implementation and acceptance contract. See [implementation status](shared-host-implementation-status.md) and [platform checks](shared-host-platform-probes.md) for delivered code and observed native results.
+
+Scope correction, 2026-09-09: the user confirmed that macOS should use one Rhino process. Additional Mac targets are document windows created with Rhino `New`, within that process and its shared serial edit queue. The Mac requirements below reflect this correction. First-process Mac launch with zero attachments remains required. Windows retains independent process launch. A Mac document window must never be reported as an independent process.
 
 Build one independent local Node host per OS user, serving one web application. Conversations belong to the host. Each editing task captures its selected documents, and a coordinator can delegate work across Rhino processes. Every Rhino retains its C# plugin and dedicated ZeroMQ connection.
 
-Agent-driven Rhino launch on Windows and macOS, and geometry transfer between targets, are required parts of this plan. They have delivery milestones and acceptance checks below. The project is not complete when attachment and delegation alone ship. Starting Rhino on Mac and starting a second independent Mac process are separate capabilities; the latter remains an early platform validation requirement.
+Agent-driven Rhino launch on Windows and macOS, and geometry transfer between targets, are required parts of this plan. They have delivery milestones and acceptance checks below. The project is not complete when attachment and delegation alone ship. Mac launches its first process when none is running; additional Mac targets use Rhino New in that process.
 
 Remote machines, replicated hosts, seamless continuation of interrupted model responses, automatic host upgrades, automatic legacy-history import, automatic hung-host termination, and idle shutdown are outside this delivery. Keep owned-child mode available during rollout, but never let it and shared mode control the same lifecycle simultaneously.
 
@@ -307,7 +309,7 @@ Use `spawn`/`execFile` with structured arguments and no shell interpolation. Res
 
 The `rhinocode` path is an internal launch/bootstrap option. Once Hopper registers, all geometry operations use the bound ZeroMQ route and journal. Do not add an unrestricted agent CLI tool that bypasses scheduling. Validate script-server startup on Mac; a successful `open` exit alone does not establish CLI or Hopper readiness.
 
-Prototype first-process Mac launch and a second independent Mac process separately, including a candidate such as `open -n`, supported Rhino builds, plugin initialization, and license dialogs. Success requires distinct PID/start identity and authenticated Hopper readiness while A remains usable. This prototype starts early, not after delegation. An unsupported second process must return a capability error and offer a separate document with serial execution. That fallback does not satisfy a request requiring process isolation; record the platform blocker and do not mark that requirement complete.
+Validate first-process Mac launch, plugin bootstrap, license dialogs, and authenticated document readiness. Create additional Mac targets through a bounded Rhino New command in the existing lifecycle. Verify that the original document stays open, the new document has a distinct identity, and both share one process edit queue. Reject requests for an additional independent Mac process with this capability explanation.
 
 ### Launch tools and persisted flow
 
@@ -374,7 +376,7 @@ The binding, single-controller policy, persistent browser credential, SQLite jou
 
 ## Acceptance checks by milestone
 
-Use multiple fake C# endpoints and injected process/clock adapters for deterministic routing and crash tests. Then run packaged-plugin smoke tests on Windows and macOS. Mocks cannot establish detached lifetime, licensing, independent Mac process support, UI-thread document behavior, or native transfer fidelity.
+Use multiple fake C# endpoints and injected process/clock adapters for deterministic routing and crash tests. Then run packaged-plugin smoke tests on Windows and macOS. Mocks cannot establish detached lifetime, licensing, Mac New document behavior, UI-thread document behavior, or native transfer fidelity.
 
 | Milestone | Scenario | Required result |
 | --- | --- | --- |
@@ -416,7 +418,7 @@ Use multiple fake C# endpoints and injected process/clock adapters for determini
 | 6 | Coordinator and children run with one failed/uncertain dependency | Session events, questions, and usage remain attributable; dependent edits wait; completed siblings remain visible. |
 | 6 | Root cancellation, budget exhaustion, or browser reload | Stop new delegation, enforce limits, restore child entries without duplication, and preserve partial results. |
 | 7 | JS launches Windows Rhino and first Mac Rhino with zero attachments | Targeted bootstrap authenticates and reaches document readiness without opening another Hopper tab. |
-| 2, 7 | JS requests a second Mac process | Verify distinct process and Hopper readiness while A survives, or record an explicit unsupported capability/blocker. A second window is never accepted as independent execution. |
+| 2, 7 | JS requests another Mac target | Execute Rhino New in the selected lifecycle, preserve the first document, and verify two document identities sharing one serial process queue. Reject additional independent-process requests. |
 | 7 | Missing CLI, spaces in paths, license/startup dialog, ambiguous candidate | Actionable failure/waiting/uncertainty; no unrelated instance is selected or authorized. |
 | 7 | Launch timeout/restart/cancellation followed by delayed registration | Reconcile before another spawn; cancelled task gains no authority; leave Rhino and unsaved models open. |
 | 7 | Bootstrap races with intentional stop or worker exceeds its grant | Preserve stopped intent; reject unauthorized launch/target additions. |

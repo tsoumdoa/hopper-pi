@@ -240,13 +240,14 @@ public class OrderedDispatcherTests
         var deadline = clock.UtcNow.AddMinutes(1);
         var observed = DispatcherCancellationState.NotFound;
         dispatcher.SubmitExternal(
-            () => observed = dispatcher.CancelQueuedExternal("op-running"),
+            () => { Assert.True(dispatcher.IsOperationRunning("op-running")); return observed = dispatcher.CancelQueuedExternal("op-running"); },
             deadline,
             operationId: "op-running");
 
         scheduler.RunNext();
 
         Assert.Equal(DispatcherCancellationState.RejectedAlreadyStarted, observed);
+        Assert.False(dispatcher.IsOperationRunning("op-running"));
         Assert.Equal(
             DispatcherCancellationState.NotFound,
             dispatcher.CancelQueuedExternal("op-missing"));

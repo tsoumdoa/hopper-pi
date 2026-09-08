@@ -27,7 +27,7 @@ export class QuestionSuspensionBoundary {
 
 	constructor(
 		private readonly agent: PiAgent,
-		private readonly persistQuestion: (question: SuspendedQuestion) => Promise<void>,
+		private readonly persistQuestion: (question: SuspendedQuestion) => Promise<void | string>,
 	) {
 		if (agent.state.isStreaming) throw new Error("Install question suspension before starting Pi");
 		this.previousBefore = agent.beforeToolCall;
@@ -44,14 +44,15 @@ export class QuestionSuspensionBoundary {
 	}
 
 	/** Called by the task's ask_user tool; persistence failure also stops dispatch. */
-	async suspend(question: SuspendedQuestion): Promise<AgentToolResult<{ status: "awaiting_user"; question: SuspendedQuestion }>> {
+	async suspend(question: SuspendedQuestion, status: "awaiting_user" | "document_handoff" = "awaiting_user"): Promise<AgentToolResult<{ status: "awaiting_user" | "document_handoff"; question: SuspendedQuestion }>> {
 		if (!this.installed || this.stopping) throw new Error("Question suspension is no longer accepting questions");
 		this.stopping = true;
 		const captured = { ...question };
-		await this.persistQuestion({ ...captured });
+		const persistedId = await this.persistQuestion({ ...captured });
+		if (typeof persistedId === "string") captured.questionId = persistedId;
 		return {
-			content: [{ type: "text", text: JSON.stringify({ status: "awaiting_user", questionId: captured.questionId }) }],
-			details: { status: "awaiting_user", question: captured },
+			content: [{ type: "text", text: JSON.stringify({ status, questionId: captured.questionId }) }],
+			details: { status, question: captured },
 		};
 	}
 

@@ -32,12 +32,12 @@ public class SharedExecutionContractTests
     }
 
     [Fact]
-    public void EveryOperationHasAnExplicitDisabledPolicy()
+    public void EveryOperationHasAnExplicitGuardedPolicy()
     {
         foreach (var operation in Enum.GetValues<RpcOperation>())
         {
             var policy = SharedExecutionContract.Policy(operation);
-            Assert.False(policy.SharedDispatchEnabled);
+            Assert.True(policy.SharedDispatchEnabled);
             var expectedJournal = RpcV2Operations.Classify(operation) switch
             {
                 RpcOperationClass.Mutation => "wire-mutation",

@@ -25,16 +25,16 @@ internal sealed class RhinoDocumentOperations : DocumentService<RhinoDoc>, IDisp
         DocumentSession.EnsureRhinoDocumentReady = EnsureDocumentReady;
         DocumentSession.ReadRhinoSettings = id => id == null ? (Active == null ? null : Settings(Active)) : Settings(Resolve(id));
         DocumentSession.ActiveRhinoDocumentId = () => Active == null ? null : Id(Active);
-        EventHandler<Rhino.DocObjects.RhinoObjectEventArgs> AddRhinoObjectHandler = (_, e) => Touch(e.TheObject.Document);
+        EventHandler<Rhino.DocObjects.RhinoObjectEventArgs> AddRhinoObjectHandler = (_, e) => Touch(e.TheObject?.Document);
         RhinoDoc.AddRhinoObject += AddRhinoObjectHandler;
         _unsubscribe.Add(() => RhinoDoc.AddRhinoObject -= AddRhinoObjectHandler);
-        EventHandler<Rhino.DocObjects.RhinoObjectEventArgs> DeleteRhinoObjectHandler = (_, e) => Touch(e.TheObject.Document);
+        EventHandler<Rhino.DocObjects.RhinoObjectEventArgs> DeleteRhinoObjectHandler = (_, e) => Touch(e.TheObject?.Document);
         RhinoDoc.DeleteRhinoObject += DeleteRhinoObjectHandler;
         _unsubscribe.Add(() => RhinoDoc.DeleteRhinoObject -= DeleteRhinoObjectHandler);
         EventHandler<Rhino.DocObjects.RhinoReplaceObjectEventArgs> ReplaceRhinoObjectHandler = (_, e) => Touch(e.Document);
         RhinoDoc.ReplaceRhinoObject += ReplaceRhinoObjectHandler;
         _unsubscribe.Add(() => RhinoDoc.ReplaceRhinoObject -= ReplaceRhinoObjectHandler);
-        EventHandler<Rhino.DocObjects.RhinoObjectEventArgs> UndeleteRhinoObjectHandler = (_, e) => Touch(e.TheObject.Document);
+        EventHandler<Rhino.DocObjects.RhinoObjectEventArgs> UndeleteRhinoObjectHandler = (_, e) => Touch(e.TheObject?.Document);
         RhinoDoc.UndeleteRhinoObject += UndeleteRhinoObjectHandler;
         _unsubscribe.Add(() => RhinoDoc.UndeleteRhinoObject -= UndeleteRhinoObjectHandler);
         EventHandler<Rhino.DocObjects.RhinoModifyObjectAttributesEventArgs> ModifyObjectAttributesHandler = (_, e) => Touch(e.Document);
@@ -98,7 +98,7 @@ internal sealed class RhinoDocumentOperations : DocumentService<RhinoDoc>, IDisp
         Rhino.Commands.Command.UndoRedo += UndoRedoHandler;
         _unsubscribe.Add(() => Rhino.Commands.Command.UndoRedo -= UndoRedoHandler);
     }
-    private void Touch(RhinoDoc doc, bool content = true) { _revisions[doc.RuntimeSerialNumber] = _revisions.GetValueOrDefault(doc.RuntimeSerialNumber) + 1; if (content) _contentRevisions[doc.RuntimeSerialNumber] = _contentRevisions.GetValueOrDefault(doc.RuntimeSerialNumber) + 1; }
+    private void Touch(RhinoDoc? doc, bool content = true) { if (doc is null) return; _revisions[doc.RuntimeSerialNumber] = _revisions.GetValueOrDefault(doc.RuntimeSerialNumber) + 1; if (content) _contentRevisions[doc.RuntimeSerialNumber] = _contentRevisions.GetValueOrDefault(doc.RuntimeSerialNumber) + 1; }
     private void ExternalBoundary()
     {
         if (_managed) return;

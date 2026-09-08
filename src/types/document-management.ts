@@ -10,6 +10,7 @@ export type AffectedDocument = {
 	createDirectories?: boolean;
 };
 export type DocumentRequest = {
+ expectedDestinations?: {path:string;exists:boolean;byteLength?:number;sha256?:string}[];
 	action: DocumentAction;
 	documentId?: string;
 	expectedStateToken?: string;

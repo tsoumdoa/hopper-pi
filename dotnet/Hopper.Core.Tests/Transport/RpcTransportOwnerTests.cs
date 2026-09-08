@@ -30,6 +30,33 @@ public sealed class RpcTransportOwnerTests
         new(2026, 9, 3, 7, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public void SharedReattachmentFencesQueuedMutationOnTheUiQueue()
+    {
+        using var fixture = CreateFixture(shared: true);
+        using var first = ConnectDealer(fixture.RouterEndpoint, "shared-first");
+        first.SendFrame(Request("handshake-first", RpcOperation.lifecycleHandshake, args: new { nodeProcessId = 12, nodeVersion = "v22.0.0", clientIdentity = "shared-first", hostEpoch = "epoch-first" }));
+        var handshake = ReceiveResponse(first);
+        var generation = handshake.Result.Data!.Value.GetProperty("attachmentGeneration").GetString();
+        fixture.Scheduler.WaitAndRunNext();
+        var request = JsonNode.Parse(Request("queued-edit", RpcOperation.runRhinoScript, "edit-wire"))!.AsObject();
+        request["executionOwner"] = JsonSerializer.SerializeToNode(new { taskId = "task", turnId = "turn", attachmentGeneration = generation,
+            binding = new { kind = "rhino", lifecycleInstanceId = LifecycleInstanceId, rhinoDocumentId = "doc" } });
+        first.SendFrame(request.ToJsonString());
+        fixture.Scheduler.WaitForPending();
+        using var replacement = ConnectDealer(fixture.RouterEndpoint, "shared-next");
+        replacement.SendFrame(Request("handshake-next", RpcOperation.lifecycleHandshake, args: new { nodeProcessId = 13, nodeVersion = "v22.0.0", clientIdentity = "shared-next", hostEpoch = "epoch-next" }));
+        Assert.Equal(RpcResultClass.completed, ReceiveResponse(replacement).Result.Class);
+        fixture.Scheduler.RunNext();
+        fixture.Scheduler.WaitAndRunNext();
+        Assert.NotEqual(RpcResultClass.completed, ReceiveResponse(first).Result.Class);
+        Assert.Equal(0, fixture.Handler.CallCount);
+        replacement.SendFrame(Request("lookup-fenced", RpcOperation.getOperationResult, args: new { operationId = "edit-wire" }));
+        var retained = ReceiveResponse(replacement).Result.Data!.Value;
+        Assert.Equal("terminal", retained.GetProperty("state").GetString());
+        Assert.Equal("failed", retained.GetProperty("result").GetProperty("class").GetString());
+    }
+
+    [Fact]
     public void MultiplexesConcurrentRequestsOverOneDealer()
     {
         using var fixture = CreateFixture();
@@ -321,7 +348,8 @@ public sealed class RpcTransportOwnerTests
     private static Fixture CreateFixture(
         bool useInProcessEndpoints = false,
         int dispatcherCapacity = OrderedDispatcher.DefaultCapacity,
-        IRpcHandshakeObserver? handshakeObserver = null)
+        IRpcHandshakeObserver? handshakeObserver = null,
+        bool shared = false)
     {
         var scheduler = new ThreadSafeUiCallbackScheduler();
         var clock = new ManualClock(Now);
@@ -341,6 +369,9 @@ public sealed class RpcTransportOwnerTests
                 PublisherEndpoint = publisherEndpoint,
                 ConnectionToken = Token,
                 LifecycleInstanceId = LifecycleInstanceId,
+                SharedMode = shared,
+                SharedBindingValidator = (_, _) => null,
+                SharedTransactionCleanup = (_, _) => true,
             },
             dispatcher,
             handler,

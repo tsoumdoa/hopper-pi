@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { TaskJournal, type Submission } from "./journal.js";
 
 const cleanup: (() => void)[] = [];
-afterEach(() => { for (const fn of cleanup.splice(0).reverse()) fn(); });
+afterEach(() => {
+	for (const fn of cleanup.splice(0).reverse()) fn();
+});
 function fixture() {
 	const dir = mkdtempSync(join(tmpdir(), "hopper-journal-"));
 	cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
@@ -13,10 +15,27 @@ function fixture() {
 	let journal = new TaskJournal(path);
 	cleanup.push(() => journal.close());
 	journal.registerSession("conversation", "session");
-	return { get journal() { return journal; }, reopen() { journal.close(); journal = new TaskJournal(path); return journal; } };
+	return {
+		get journal() {
+			return journal;
+		},
+		reopen() {
+			journal.close();
+			journal = new TaskJournal(path);
+			return journal;
+		},
+	};
 }
 function submission(requestId = "request"): Submission {
-	return { requestId, conversationId: "conversation", sessionId: "session", kind: "prompt", text: "Build", bindings: [], attachments: [] };
+	return {
+		requestId,
+		conversationId: "conversation",
+		sessionId: "session",
+		kind: "prompt",
+		text: "Build",
+		bindings: [],
+		attachments: [],
+	};
 }
 
 describe("shared task journal foundation", () => {
@@ -26,24 +45,35 @@ describe("shared task journal foundation", () => {
 		const receipt = f.journal.accept(submission());
 		expect(f.reopen().identity).toBe(identity);
 		expect(f.journal.accept(submission())).toEqual(receipt);
-		expect(() => f.journal.accept({ ...submission(), text: "Different" })).toThrow(/conflict/);
+		expect(() =>
+			f.journal.accept({ ...submission(), text: "Different" }),
+		).toThrow(/conflict/);
 		expect(f.journal.snapshot().tasks).toHaveLength(1);
 		expect(f.journal.snapshot().events).toHaveLength(1);
 	});
 	it("rolls back acceptance when the session is not in the conversation", () => {
 		const { journal } = fixture();
-		expect(() => journal.accept({ ...submission(), conversationId: "other" })).toThrow();
+		expect(() =>
+			journal.accept({ ...submission(), conversationId: "other" }),
+		).toThrow();
 		expect(journal.snapshot().tasks).toHaveLength(0);
 		expect(journal.accept(submission()).taskId).toBeTruthy();
-		expect(() => journal.registerSession("other", "session")).toThrow(/another conversation/);
+		expect(() => journal.registerSession("other", "session")).toThrow(
+			/another conversation/,
+		);
 	});
 	it("does not enable an answer before cleanup and creates only one fresh turn", () => {
-		const f = fixture(), j = f.journal;
+		const f = fixture(),
+			j = f.journal;
 		const { taskId, turnId } = j.accept(submission());
 		j.start(taskId, turnId);
 		const question = j.ask(taskId, turnId, "call", { text: "Which size?" });
-		expect(() => j.answer("answer", question, "Large")).toThrow(/not answerable/);
-		expect(() => j.steer("steer", taskId, "session", turnId, "Small")).toThrow();
+		expect(() => j.answer("answer", question, "Large")).toThrow(
+			/not answerable/,
+		);
+		expect(() =>
+			j.steer("steer", taskId, "session", turnId, "Small"),
+		).toThrow();
 		j.confirmSuspension(taskId, turnId);
 		const next = j.accept(submission("next"));
 		expect(() => j.start(next.taskId, next.turnId)).toThrow(/active/);
@@ -51,9 +81,15 @@ describe("shared task journal foundation", () => {
 		expect(answer.turnId).not.toBe(turnId);
 		expect(() => j.settle(taskId, turnId, "cancelled")).toThrow(/current/);
 		expect(f.reopen().answer("answer", question, "Large")).toEqual(answer);
-		expect(() => f.journal.answer("duplicate", question, "Large")).toThrow(/not answerable/);
+		expect(() => f.journal.answer("duplicate", question, "Large")).toThrow(
+			/not answerable/,
+		);
 		f.journal.recover();
-		expect(f.journal.snapshot().turns.map(t => t.state)).toEqual(["suspended", "queued", "queued"]);
+		expect(f.journal.snapshot().turns.map((t) => t.state)).toEqual([
+			"suspended",
+			"queued",
+			"queued",
+		]);
 		f.journal.start(taskId, answer.turnId);
 		f.reopen().recover();
 		expect(f.journal.snapshot().tasks[0].state).toBe("uncertain");
@@ -68,29 +104,42 @@ describe("shared task journal foundation", () => {
 		expect(() => j.answer("late", question, "yes")).toThrow(/not answerable/);
 	});
 	it("preserves unknown steering delivery and never replays possibly started turns", () => {
-		const f = fixture(), j = f.journal;
+		const f = fixture(),
+			j = f.journal;
 		const { taskId, turnId } = j.accept(submission());
 		j.start(taskId, turnId);
 		const delivered = j.steer("s1", taskId, "session", turnId, "One");
 		j.steer("s2", taskId, "session", turnId, "Two");
 		j.markInput(delivered.inputId, "delivering");
 		f.reopen().recover();
-		expect(f.journal.snapshot().inputs.map(i => i.state)).toEqual(["unknown", "not_applied"]);
-		expect(f.journal.steer("s1", taskId, "session", turnId, "One")).toEqual(delivered);
+		expect(f.journal.snapshot().inputs.map((i) => i.state)).toEqual([
+			"unknown",
+			"not_applied",
+		]);
+		expect(f.journal.steer("s1", taskId, "session", turnId, "One")).toEqual(
+			delivered,
+		);
 		expect(() => f.journal.start(taskId, turnId)).toThrow();
 		f.journal.recover();
-		expect(f.journal.snapshot().events.filter(e => e.kind === "recovery_required")).toHaveLength(1);
+		expect(
+			f.journal.snapshot().events.filter((e) => e.kind === "recovery_required"),
+		).toHaveLength(1);
 	});
 	it("serializes conversation execution and rejects stale turn steering", () => {
 		const { journal: j } = fixture();
-		const first = j.accept(submission()), second = j.accept(submission("next"));
+		const first = j.accept(submission()),
+			second = j.accept(submission("next"));
 		expect(() => j.start(second.taskId, second.turnId)).toThrow(/active/);
 		j.start(first.taskId, first.turnId);
 		expect(() => j.start(second.taskId, second.turnId)).toThrow(/active/);
-		expect(() => j.steer("wrong", first.taskId, "other", first.turnId, "x")).toThrow(/session/);
+		expect(() =>
+			j.steer("wrong", first.taskId, "other", first.turnId, "x"),
+		).toThrow(/session/);
 		j.settle(first.taskId, first.turnId, "completed");
 		j.start(second.taskId, second.turnId);
-		expect(() => j.steer("stale", first.taskId, "session", first.turnId, "x")).toThrow();
+		expect(() =>
+			j.steer("stale", first.taskId, "session", first.turnId, "x"),
+		).toThrow();
 	});
 	it("does not let a previously suspended turn settle a newer pending question", () => {
 		const { journal: j } = fixture();
@@ -102,7 +151,9 @@ describe("shared task journal foundation", () => {
 		j.start(second.taskId, second.turnId);
 		j.ask(second.taskId, second.turnId, "second", {});
 		j.confirmSuspension(second.taskId, second.turnId);
-		expect(() => j.settle(first.taskId, first.turnId, "cancelled")).toThrow(/current/);
+		expect(() => j.settle(first.taskId, first.turnId, "cancelled")).toThrow(
+			/current/,
+		);
 		expect(j.snapshot().tasks[0].state).toBe("awaiting_user");
 		j.settle(second.taskId, second.turnId, "cancelled");
 	});
@@ -118,15 +169,92 @@ describe("shared task journal foundation", () => {
 		j.markInput(a.inputId, "applied");
 		j.markInput(b.inputId, "delivering");
 		j.markInput(b.inputId, "applied");
-		expect(j.snapshot().inputs.map(i => i.state)).toEqual(["applied", "applied"]);
+		expect(j.snapshot().inputs.map((i) => i.state)).toEqual([
+			"applied",
+			"applied",
+		]);
 	});
 
 	it("rejects non-JSON payloads instead of deduplicating lossy encodings", () => {
 		const { journal: j } = fixture();
-		expect(() => j.accept({ ...submission(), attachments: [undefined] })).toThrow(/JSON/);
-		expect(() => j.accept({ ...submission(), attachments: [NaN] })).toThrow(/JSON/);
-		expect(() => j.accept({ ...submission(), attachments: new Array(1) })).toThrow(/JSON/);
-		expect(() => j.accept({ ...submission(), attachments: new Array(2) })).toThrow(/JSON/);
+		expect(() =>
+			j.accept({ ...submission(), attachments: [undefined] }),
+		).toThrow(/JSON/);
+		expect(() => j.accept({ ...submission(), attachments: [NaN] })).toThrow(
+			/JSON/,
+		);
+		expect(() =>
+			j.accept({ ...submission(), attachments: new Array(1) }),
+		).toThrow(/JSON/);
+		expect(() =>
+			j.accept({ ...submission(), attachments: new Array(2) }),
+		).toThrow(/JSON/);
 		expect(j.snapshot().tasks).toHaveLength(0);
 	});
+});
+
+it("commits a whole reservation set with dispatch and rolls all of it back on conflict", () => {
+	const j = new TaskJournal(":memory:");
+	j.registerSession("a", "a");
+	j.registerSession("b", "b");
+	const binding = {
+		kind: "rhino" as const,
+		lifecycleInstanceId: "rhino",
+		rhinoDocumentId: "doc",
+	};
+	const a = j.accept({
+		requestId: "a",
+		conversationId: "a",
+		sessionId: "a",
+		kind: "prompt",
+		text: "save",
+		bindings: [binding],
+		attachments: [],
+	});
+	const b = j.accept({
+		requestId: "b",
+		conversationId: "b",
+		sessionId: "b",
+		kind: "prompt",
+		text: "save",
+		bindings: [binding],
+		attachments: [],
+	});
+	const owner = (receipt: { taskId: string; turnId: string }) => ({
+		taskId: receipt.taskId,
+		turnId: receipt.turnId,
+		binding,
+		attachmentGeneration: "generation",
+	});
+	j.start(a.taskId, a.turnId, owner(a));
+	j.start(b.taskId, b.turnId, owner(b));
+	j.operationIntent({
+		taskId: a.taskId,
+		turnId: a.turnId,
+		name: "runRhinoScript",
+		operationClass: "mutation",
+		arguments: {},
+		deadline: 100,
+		owner: owner(a),
+		reservations: [{ identity: "path:b", baseline: { exists: false } }],
+	});
+	expect(() =>
+		j.operationIntent({
+			taskId: b.taskId,
+			turnId: b.turnId,
+			name: "runRhinoScript",
+			operationClass: "mutation",
+			arguments: {},
+			deadline: 100,
+			owner: owner(b),
+			reservations: [
+				{ identity: "path:a", baseline: { exists: false } },
+				{ identity: "path:b", baseline: { exists: false } },
+			],
+		}),
+	).toThrow();
+	expect(j.snapshot().operations).toHaveLength(1);
+	expect(j.snapshot().reservations.map((r) => r.destination)).toEqual([
+		"path:b",
+	]);
 });

@@ -165,6 +165,7 @@ namespace rhino_zmq_poc
         private readonly ChildProcessStatusCoordinator _childStatus;
         private readonly HostStartupErrorBuffer _startupErrors = new HostStartupErrorBuffer();
         private readonly HttpClient _http = new HttpClient();
+        private SharedNodeAttachment _shared;
         private Process _process;
         private DateTime _startedAt;
         private Uri _readyUri;
@@ -191,7 +192,7 @@ namespace rhino_zmq_poc
             get
             {
                 lock (_gate)
-                    return _readyUri;
+                    return _shared?.ReadyUri ?? _readyUri;
             }
         }
 
@@ -200,7 +201,7 @@ namespace rhino_zmq_poc
             get
             {
                 lock (_gate)
-                    return _process != null && !SafeHasExited(_process);
+                    return _shared?.IsAlive ?? (_process != null && !SafeHasExited(_process));
             }
         }
 
@@ -212,7 +213,7 @@ namespace rhino_zmq_poc
                         _lifecycleInstanceId,
                         lifecycleInstanceId,
                         StringComparison.Ordinal)
-                    ? _readyUri
+                    ? (_shared?.ReadyUri ?? _readyUri)
                     : null;
             }
         }
@@ -224,6 +225,13 @@ namespace rhino_zmq_poc
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (SharedNativeHost.Enabled)
+            {
+                _lifecycleInstanceId = lifecycleInstanceId;
+                _shared ??= new SharedNodeAttachment(_hostEntry, _status);
+                _shared.Ready -= SharedReady; _shared.Ready += SharedReady;
+                return _shared.StartAsync(runtime, profilePath, lifecycleInstanceId, cancellationToken);
+            }
             var entry = _hostEntry.Resolve();
             if (string.IsNullOrWhiteSpace(entry))
             {
@@ -300,6 +308,7 @@ namespace rhino_zmq_poc
             TimeSpan timeout,
             CancellationToken cancellationToken)
         {
+            if (_shared is not null) return await _shared.Detach(cancellationToken).ConfigureAwait(false);
             Process process;
             Uri ready;
             lock (_gate)
@@ -342,6 +351,7 @@ namespace rhino_zmq_poc
 
         public void KillVerifiedTreeNoWait()
         {
+            if (_shared is not null) { _shared.StopLocal(); return; }
             Process process;
             DateTime startedAt;
             lock (_gate)
@@ -364,6 +374,7 @@ namespace rhino_zmq_poc
 
         public async Task<bool> WaitForExitAsync(TimeSpan timeout, CancellationToken cancellationToken)
         {
+            if (_shared is not null) return !_shared.IsAlive;
             Process process;
             lock (_gate)
                 process = _process;
@@ -401,8 +412,11 @@ namespace rhino_zmq_poc
                 process.Exited -= OnExited;
                 process.Dispose();
             }
+            _shared?.Dispose();
             _http.Dispose();
         }
+
+        private void SharedReady(Uri ready) => Ready?.Invoke(ready);
 
         private void OnOutput(object sender, DataReceivedEventArgs args)
         {

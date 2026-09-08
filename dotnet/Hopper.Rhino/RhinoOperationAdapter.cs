@@ -37,6 +37,11 @@ public sealed record RhinoScriptExecution(
     string Output,
     string Error);
 
+public interface IRhinoArtifactExecutor
+{
+    OperationResultV2 ArtifactOperation(RpcOperation operation, JsonElement args);
+}
+
 public interface IRhinoDocumentExecutor
 {
     OperationResultV2 DocumentOperation(RpcOperation operation, JsonElement args);
@@ -70,7 +75,9 @@ public sealed class RhinoOperationAdapter : IRhinoOperationAdapter, IAgentTransa
     public OperationDocumentStatus DocumentStatus => _executor.DocumentStatus;
 
     public bool CanExecute(RpcOperation operation) =>
-        operation is RpcOperation.queryRhinoObjects
+        operation is RpcOperation.exportRhinoArtifact
+            or RpcOperation.importRhinoArtifact
+            or RpcOperation.queryRhinoObjects
             or RpcOperation.runRhinoScript
             or RpcOperation.captureRhinoView
             or RpcOperation.controlRhinoView
@@ -90,6 +97,8 @@ public sealed class RhinoOperationAdapter : IRhinoOperationAdapter, IAgentTransa
             if (_executor is IRhinoDocumentExecutor documents && request.Operation is RpcOperation.listRhinoDocuments or RpcOperation.getRhinoDocument or RpcOperation.getRhinoDocumentSettings or RpcOperation.manageRhinoDocument)
                 return documents.DocumentOperation(request.Operation, request.Args);
             DocumentSession.ValidateSegment("rhino", request.Args);
+            if (_executor is IRhinoArtifactExecutor artifacts && request.Operation is RpcOperation.exportRhinoArtifact or RpcOperation.importRhinoArtifact)
+                return artifacts.ArtifactOperation(request.Operation, request.Args);
             return request.Operation switch
             {
                 RpcOperation.queryRhinoObjects => QueryObjects(request.Args),

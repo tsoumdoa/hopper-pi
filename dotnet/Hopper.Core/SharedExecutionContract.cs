@@ -6,13 +6,14 @@ namespace Hopper.Core.Protocol;
 public abstract record TargetBinding(string LifecycleInstanceId);
 public sealed record RhinoTargetBinding(string LifecycleInstanceId, string RhinoDocumentId) : TargetBinding(LifecycleInstanceId);
 public sealed record GrasshopperTargetBinding(string LifecycleInstanceId, string GrasshopperDocumentId, string? AssociatedRhinoDocumentId) : TargetBinding(LifecycleInstanceId);
+public sealed record DocumentActionOwner(string TaskId, string TurnId, string ActionId, string GrantId, string LifecycleInstanceId, string AttachmentGeneration);
 public sealed record ExecutionOwner(string TaskId, string TurnId, TargetBinding Binding, string AttachmentGeneration);
 public sealed record SharedOperationPolicy(string Binding, string DispatchJournal, string Recovery)
 {
-    public bool SharedDispatchEnabled => false;
+    public bool SharedDispatchEnabled => true;
 }
 
-// Parsing is separate from the owned-child RPC envelope. Shared dispatch remains disabled.
+// Shared transports enforce this policy with attachment fencing and native context validation.
 public static class SharedExecutionContract
 {
     private static bool Identifier(JsonElement value) => value.ValueKind == JsonValueKind.String &&
@@ -44,6 +45,14 @@ public static class SharedExecutionContract
         return binding is null ? null : new ExecutionOwner(input.GetProperty("taskId").GetString()!, input.GetProperty("turnId").GetString()!, binding, input.GetProperty("attachmentGeneration").GetString()!);
     }
 
+    public static DocumentActionOwner? ParseDocumentActionOwner(JsonElement input)
+    {
+        var keys = new[] { "taskId", "turnId", "actionId", "grantId", "lifecycleInstanceId", "attachmentGeneration" };
+        if (!Exact(input, keys) || keys.Any(key => !Identifier(input.GetProperty(key)))) return null;
+        return new(input.GetProperty("taskId").GetString()!, input.GetProperty("turnId").GetString()!, input.GetProperty("actionId").GetString()!,
+            input.GetProperty("grantId").GetString()!, input.GetProperty("lifecycleInstanceId").GetString()!, input.GetProperty("attachmentGeneration").GetString()!);
+    }
+
     public static SharedOperationPolicy Policy(RpcOperation operation) => operation switch
     {
         RpcOperation.listRhinoDocuments => new("lifecycle", "none", "revalidate-read"),
@@ -67,6 +76,8 @@ public static class SharedExecutionContract
         RpcOperation.lifecycleHandshake => new("lifecycle", "host-only", "authenticated-attachment"),
         RpcOperation.startGrasshopper => new("lifecycle", "host-only", "runtime-postcondition"),
         RpcOperation.cancelOperation => new("lifecycle", "host-only", "cancelled-mutation-result"),
+        RpcOperation.exportRhinoArtifact => new("rhino", "wire-mutation", "retained-mutation-result"),
+        RpcOperation.importRhinoArtifact => new("rhino", "wire-mutation", "retained-mutation-result"),
         RpcOperation.manageRhinoDocument => new("document-action", "wire-mutation", "retained-mutation-result"),
         RpcOperation.manageGrasshopperDocument => new("document-action", "wire-mutation", "retained-mutation-result"),
         RpcOperation.applyGraph => new("grasshopper", "wire-mutation", "retained-mutation-result"),

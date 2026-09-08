@@ -48,6 +48,8 @@
       "cancelOperation"
     ],
     "mutation": [
+      "exportRhinoArtifact",
+      "importRhinoArtifact",
       "manageRhinoDocument",
       "manageGrasshopperDocument",
       "applyGraph",

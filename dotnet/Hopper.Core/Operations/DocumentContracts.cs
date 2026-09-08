@@ -25,6 +25,39 @@ public static class DocumentSession
     public static Action? EnsureRhinoDocumentReady { get; set; }
     public static Func<string?, object?>? ReadRhinoSettings { get; set; }
     public static Func<string?>? ActiveRhinoDocumentId { get; set; }
+    public static Func<string?>? ActiveGrasshopperDocumentId { get; set; }
+    public static Func<string?>? AssociatedRhinoDocumentId { get; set; }
+    public static Func<string, string?>? GrasshopperAssociationForDocument { get; set; }
+    public static Func<string?>? GrasshopperTransactionDocumentId { get; set; }
+    public static string? ValidateSharedBinding(RpcRequestV2 request, ExecutionOwner owner)
+    {
+        if (owner.Binding.LifecycleInstanceId != LifecycleInstanceId) return "TARGET_STALE: Plugin lifecycle changed.";
+        var rhinoId = owner.Binding is RhinoTargetBinding r ? r.RhinoDocumentId : ((GrasshopperTargetBinding)owner.Binding).AssociatedRhinoDocumentId;
+        var documentId = (SharedExecutionContract.Policy(request.Operation).Binding == "rhino" || request.Operation == RpcOperation.manageRhinoDocument) ? rhinoId : owner.Binding is RhinoTargetBinding rr ? rr.RhinoDocumentId : ((GrasshopperTargetBinding)owner.Binding).GrasshopperDocumentId;
+        var activating = request.Operation is RpcOperation.manageRhinoDocument or RpcOperation.manageGrasshopperDocument &&
+            request.Args.TryGetProperty("action", out var action) && action.GetString() == "activate";
+        if (activating && owner.Binding is GrasshopperTargetBinding captured &&
+            (GrasshopperAssociationForDocument is null || GrasshopperAssociationForDocument(captured.GrasshopperDocumentId) != captured.AssociatedRhinoDocumentId))
+            return "ASSOCIATION_CHANGED: The captured Grasshopper document association changed before activation.";
+        var finishingScope = request.Operation is RpcOperation.commitRhinoAgentTransaction or RpcOperation.cancelRhinoAgentTransaction or RpcOperation.commitAgentTransaction or RpcOperation.cancelAgentTransaction;
+        if (!finishingScope && !activating && owner.Binding is GrasshopperTargetBinding gh)
+        {
+            if (ActiveGrasshopperDocumentId?.Invoke() != gh.GrasshopperDocumentId) return "TARGET_CHANGED: The captured Grasshopper canvas is no longer active.";
+            if (AssociatedRhinoDocumentId?.Invoke() != gh.AssociatedRhinoDocumentId) return "ASSOCIATION_CHANGED: Grasshopper Rhino context changed.";
+            if (gh.AssociatedRhinoDocumentId is null && RpcV2Operations.Classify(request.Operation) == RpcOperationClass.Mutation)
+                return "CAPABILITY_UNAVAILABLE: Grasshopper evaluation without a captured Rhino context has not been validated.";
+        }
+        if (!finishingScope && !activating && rhinoId is not null && ActiveRhinoDocumentId?.Invoke() != rhinoId) return "TARGET_CHANGED: The captured Rhino document is no longer active.";
+        var args = request.Args;
+        if (args.TryGetProperty("documentId", out var supplied) && supplied.GetString() != documentId) return "TARGET_OVERRIDE: documentId conflicts with the captured binding.";
+        if (args.TryGetProperty("expectedDocument", out var expected) && expected.ValueKind == JsonValueKind.Object)
+        {
+            if (expected.TryGetProperty("documentId", out var id) && id.GetString() != documentId) return "TARGET_OVERRIDE: expectedDocument conflicts with the captured binding.";
+            if (expected.TryGetProperty("lifecycleInstanceId", out var lifecycle) && lifecycle.GetString() != LifecycleInstanceId) return "TARGET_OVERRIDE: lifecycle conflicts with the captured binding.";
+        }
+        if (request.Operation == RpcOperation.getDocumentTransactionState && (args.GetProperty("owner").GetString() == "rhino" ? rhinoId is null : owner.Binding is not GrasshopperTargetBinding)) return "TARGET_OVERRIDE: Transaction kind conflicts with the captured binding.";
+        return null;
+    }
     public static void Start(string lifecycleInstanceId) { LifecycleInstanceId = lifecycleInstanceId; Segments.Clear(); }
     public static DocumentSegment Segment(string owner) => Segments.TryGetValue(owner, out var value)
         ? value : new(null, null, 0, "idle", LifecycleInstanceId);

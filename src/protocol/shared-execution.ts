@@ -1,7 +1,6 @@
 import type { OperationName, ValidationResult } from "./v2.js";
 
-// These contracts do not enable shared dispatch. Native document routing must be
-// audited before a caller can use any policy below to admit work.
+// Shared native transports repeat owner and document validation at the UI queue head.
 export type TargetBinding =
  | Readonly<{ lifecycleInstanceId: string; kind: "rhino"; rhinoDocumentId: string }>
  | Readonly<{ lifecycleInstanceId: string; kind: "grasshopper"; grasshopperDocumentId: string; associatedRhinoDocumentId: string | null }>;
@@ -48,12 +47,12 @@ export type OperationPolicy = Readonly<{
  binding: BindingRequirement;
  dispatchJournal: "none" | "host-only" | "wire-mutation";
  recovery: "revalidate-read" | "retained-mutation-result" | "runtime-postcondition" | "cancelled-mutation-result" | "authenticated-attachment";
- // Fail closed until the native routing and settings-context audit is complete.
- sharedDispatch: "disabled-pending-native-audit";
+ // Native adapters validate captured active contexts; managed document actions also require grants.
+ sharedDispatch: "native-context-guarded";
 }>;
 function policy(operationClass: OperationPolicy["operationClass"], binding: BindingRequirement,
  dispatchJournal: OperationPolicy["dispatchJournal"], recovery: OperationPolicy["recovery"]): OperationPolicy {
- return Object.freeze({ operationClass, binding, dispatchJournal, recovery, sharedDispatch: "disabled-pending-native-audit" });
+ return Object.freeze({ operationClass, binding, dispatchJournal, recovery, sharedDispatch: "native-context-guarded" });
 }
 export const SHARED_OPERATION_POLICY = Object.freeze({
  listRhinoDocuments: policy("query", "lifecycle", "none", "revalidate-read"),
@@ -124,6 +123,8 @@ export const SHARED_OPERATION_POLICY = Object.freeze({
  beginRhinoAgentTransaction: policy("mutation", "rhino", "wire-mutation", "retained-mutation-result"),
  commitRhinoAgentTransaction: policy("mutation", "rhino", "wire-mutation", "retained-mutation-result"),
  cancelRhinoAgentTransaction: policy("mutation", "rhino", "wire-mutation", "retained-mutation-result"),
+ exportRhinoArtifact: policy("mutation", "rhino", "wire-mutation", "retained-mutation-result"),
+ importRhinoArtifact: policy("mutation", "rhino", "wire-mutation", "retained-mutation-result"),
  setParamRhinoGeometry: policy("mutation", "associated-pair", "wire-mutation", "retained-mutation-result"),
 } satisfies Record<OperationName, OperationPolicy>);
 
@@ -137,4 +138,13 @@ export function bindingSatisfiesRequirement(binding: TargetBinding, requirement:
   case "associated-pair": return binding.kind === "grasshopper" && binding.associatedRhinoDocumentId !== null;
   case "document-action": return false;
  }
+}
+
+export type DocumentActionOwner = Readonly<{
+ taskId:string;turnId:string;actionId:string;grantId:string;lifecycleInstanceId:string;attachmentGeneration:string;
+}>;
+export function validateDocumentActionOwner(input:unknown):ValidationResult<DocumentActionOwner> {
+ const keys=['taskId','turnId','actionId','grantId','lifecycleInstanceId','attachmentGeneration'];
+ if(!record(input) || !exact(input,keys) || !keys.every(key=>identifier(input[key]))) return {ok:false,errors:['invalid document action owner']};
+ return {ok:true,value:Object.freeze({...input}) as DocumentActionOwner};
 }

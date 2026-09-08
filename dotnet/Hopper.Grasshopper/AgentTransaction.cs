@@ -32,6 +32,7 @@ namespace rhino_zmq_poc
         public static string CommitActive() => Commit(_boundDocument);
 
         public static bool IsActive => State.IsActive;
+        public static string BoundDocumentId => State.IsActive && _boundDocument != null ? GrasshopperDocumentOperations.Instance.DocumentIdentity(_boundDocument) : null;
 
         public static string Begin(GH_Document doc, string name = "Hopper agent")
         {

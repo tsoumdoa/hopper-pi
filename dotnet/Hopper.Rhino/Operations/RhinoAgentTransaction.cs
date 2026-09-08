@@ -9,6 +9,7 @@ namespace rhino_zmq_poc
         private static bool _active;
 
         public static bool IsActive => _active;
+        public static string BoundDocumentId => _active && _doc != null ? $"{Hopper.Core.Operations.DocumentSession.LifecycleInstanceId}:rhino:{_doc.RuntimeSerialNumber}" : null;
 
         public static string Begin(RhinoDoc doc, string name = "Hopper agent")
         {

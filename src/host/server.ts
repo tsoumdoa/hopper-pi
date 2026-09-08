@@ -81,7 +81,7 @@ function setPageHeaders(response: ServerResponse, contentType: string): void {
 	);
 }
 
-function serveStatic(staticDir: string, request: IncomingMessage, response: ServerResponse): void {
+export function serveStatic(staticDir: string, request: IncomingMessage, response: ServerResponse): void {
 	if (request.method !== "GET" && request.method !== "HEAD") {
 		writeJson(response, 405, { error: "Method not allowed" });
 		return;
@@ -343,6 +343,7 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 				attachController();
 				return;
 			}
+			if (controller !== socket) { socket.close(4001, "Replaced by another Hopper tab"); return; }
 			const requestId = "requestId" in parsed && ["prompt", "steer", "follow_up"].includes(parsed.type) ? parsed.requestId : undefined;
 			const accepted = requestId ? () => send(socket, { type: "message_accepted", requestId }) : undefined;
 			void dispatch(options.runtime, parsed, options.onShutdownRequest, accepted).catch((error) => {

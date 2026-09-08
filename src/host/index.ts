@@ -12,6 +12,10 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 	const modulePath = fileURLToPath(import.meta.url);
 	const config = resolveHostConfig(args, { moduleDir: dirname(modulePath) });
 	validateStaticDirectory(config.paths.staticDir);
+	if (args.includes("--shared")) {
+		const { startSharedHost } = await import("./shared/main.js");
+		return startSharedHost(config, args, modulePath);
+	}
 	const runtimeSession = new RuntimeSessionContext({ connectionProfilePath: config.connectionProfile });
 	return runtimeSession.run(() => startOwnedChildHost(config, runtimeSession));
 }

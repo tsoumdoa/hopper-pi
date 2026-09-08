@@ -14,17 +14,6 @@ jobs:
     name: TypeScript typecheck & tests
     runs-on: ubuntu-latest
 
-    # The Grasshopper plugin (grasshopper-plugin/**.cs) and its C# contract tests
-    # (grasshopper-plugin.Tests/ApplyGraphContractTests.cs) require the Rhino/Grasshopper
-    # runtime, which is Windows/macOS-only and not available on Linux runners. We
-    # therefore do NOT build or run the .NET project here. Instead, the TypeScript
-    # contract test (src/services/gh-apply-graph.contract.test.ts) statically asserts the
-    # C# source contract (atomicity, failure-safe restore, timeout-as-unknown-outcome,
-    # single-undo guard) so structural regressions are caught in CI.
-    #
-    # To run the C# contract tests locally on a Rhino-equipped machine:
-    #   dotnet test grasshopper-plugin.Tests/grasshopper-plugin.Tests.csproj
-
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,3 +40,35 @@ jobs:
 
       - name: Test (incl. C# source contract checks)
         run: pnpm test
+
+  shared-host-platform:
+    name: Shared host contracts (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: pnpm
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Install dependencies
+        env:
+          HOPPER_SKIP_GH_PLUGIN: "1"
+        run: pnpm install --frozen-lockfile
+      - name: Shared host control, storage, browser and scheduler contracts
+        run: pnpm exec vitest run src/host/shared
+      - name: Native ownership and document contracts
+        run: dotnet test dotnet/Hopper.Core.Tests/Hopper.Core.Tests.csproj --configuration Release
+      # These runners have no licensed Rhino UI. Packaged bootstrap, UI-thread
+      # document behavior and geometry fidelity still require the native suite.

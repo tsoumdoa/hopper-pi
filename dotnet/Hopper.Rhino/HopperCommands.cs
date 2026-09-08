@@ -21,6 +21,8 @@ namespace rhino_zmq_poc
                 return Result.Failure;
             }
 
+            SharedNativeHost.SuppressBrowser = false;
+            SharedNativeHost.BootstrapTicket = null;
             RhinoCodeRunner.PreloadLanguages();
             var result = facade.RequestStart();
             RhinoApp.WriteLine(result.Message);
@@ -88,4 +90,31 @@ namespace rhino_zmq_poc
             return result.Accepted ? Result.Success : Result.Nothing;
         }
     }
+    [Guid("EA3E8228-E38E-49D3-9EA4-829C0158AB24")]
+    public sealed class HopperBootstrapCommand : Command
+    {
+        public override string EnglishName => "HopperBootstrap";
+        protected override Result RunCommand(RhinoDoc doc, RunMode mode)
+        {
+            // Startup scripts carry only an opaque reference. Credentials remain in the private ticket.
+            using var input = new Rhino.Input.Custom.GetString();
+            input.SetCommandPrompt("Hopper bootstrap ticket");
+            if (input.Get() != Rhino.Input.GetResult.String) return Result.Cancel;
+            var ticket = input.StringResult();
+            if (!System.Text.RegularExpressions.Regex.IsMatch(ticket, "^[a-f0-9]{64}$")) return Result.Failure;
+            try
+            {
+                var record = SharedNativeHost.Read(System.IO.Path.Combine("bootstrap", ticket + ".json"));
+                if (record.GetProperty("expiresAt").GetInt64() <= DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()) return Result.Failure;
+                var facade = HopperRhinoPlugin.HostFacade;
+                if (facade is null || facade.GetStatus().Runtime.Lifecycle.State != Hopper.Core.Protocol.LifecycleState.stopped) return Result.Failure;
+                SharedNativeHost.ForcedShared = true;
+                SharedNativeHost.BootstrapTicket = ticket;
+                SharedNativeHost.SuppressBrowser = true;
+                return facade.RequestStart().Accepted ? Result.Success : Result.Failure;
+            }
+            catch { RhinoApp.WriteLine("Hopper bootstrap ticket is unavailable or invalid."); return Result.Failure; }
+        }
+    }
+
 }

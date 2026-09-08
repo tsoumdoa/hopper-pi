@@ -13,6 +13,39 @@ public sealed class DocumentServiceTests : IDisposable
     private string FilePath(string name) => System.IO.Path.Combine(_directory, name + ".3dm");
     private static JsonElement Args(object value) => JsonSerializer.SerializeToElement(value, RpcV2Contract.JsonOptions);
     private static JsonElement Manage(FakeService service, object args) => service.Execute(RpcOperation.manageRhinoDocument, Args(args)).Data!.Value;
+    [Fact] public void SharedDestinationSymlinkReplacementCannotRedirectMatchingContents()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var service = new FakeService(); var doc = service.Add(null, true); var observed = service.Describe(doc);
+        var path = FilePath("reserved-link"); var other = FilePath("unreserved");
+        File.WriteAllText(path, "before"); File.WriteAllText(other, "before"); var checksum = DocumentFiles.Stamp(path);
+        service.OnFinish = () => { File.Delete(path); File.CreateSymbolicLink(path, other); };
+        var result = Manage(service, new { action = "saveAs", documentId = observed.DocumentId, expectedStateToken = observed.StateToken, path, overwrite = true,
+            expectedDestinations = new[] { new { path = DocumentFiles.Canonical(path), exists = true, byteLength = 6, sha256 = checksum } } });
+        Assert.Contains(result.GetProperty("error").GetProperty("code").GetString(), new[] { "FILE_CHANGED_EXTERNALLY", "DESTINATION_NOT_RESERVED" });
+        Assert.Equal(0, service.Writes); Assert.Equal("before", File.ReadAllText(other));
+    }
+    [Fact] public void SharedDestinationAppearingDuringScopeCompletionIsNotOverwritten()
+    {
+        var service = new FakeService(); var doc = service.Add(null, true); var observed = service.Describe(doc); var path = FilePath("reserved-new");
+        service.OnFinish = () => File.WriteAllText(path, "external");
+        var result = Manage(service, new { action = "saveAs", documentId = observed.DocumentId, expectedStateToken = observed.StateToken, path, overwrite = true,
+            expectedDestinations = new[] { new { path = DocumentFiles.Canonical(path), exists = false } } });
+        Assert.Equal("FILE_CHANGED_EXTERNALLY", result.GetProperty("error").GetProperty("code").GetString());
+        Assert.Equal(0, service.Writes); Assert.Equal("external", File.ReadAllText(path));
+    }
+    [Fact] public void SharedSaveRequiresDisclosedDestinationAndRechecksSameSizeContents()
+    {
+        var service = new FakeService(); var doc = service.Add(null, true); var observed = service.Describe(doc); var path = FilePath("reserved-existing");
+        File.WriteAllText(path, "before"); var checksum = DocumentFiles.Stamp(path);
+        var absent = Manage(service, new { action = "saveAs", documentId = observed.DocumentId, expectedStateToken = observed.StateToken, path, overwrite = true, expectedDestinations = Array.Empty<object>() });
+        Assert.Equal("DESTINATION_NOT_RESERVED", absent.GetProperty("error").GetProperty("code").GetString());
+        service.OnFinish = () => File.WriteAllText(path, "change");
+        var result = Manage(service, new { action = "saveAs", documentId = observed.DocumentId, expectedStateToken = observed.StateToken, path, overwrite = true,
+            expectedDestinations = new[] { new { path = DocumentFiles.Canonical(path), exists = true, byteLength = 6, sha256 = checksum } } });
+        Assert.Equal("FILE_CHANGED_EXTERNALLY", result.GetProperty("error").GetProperty("code").GetString());
+        Assert.Equal(0, service.Writes); Assert.Equal("change", File.ReadAllText(path));
+    }
     [Fact] public void StaleReplacementRejectsEvenAlreadyDirtyDocument()
     {
         var service = new FakeService(); var doc = service.Add(null, true); var observed = service.Describe(doc);
