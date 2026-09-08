@@ -45,6 +45,7 @@
 		"@radix-ui/react-dialog": "^1.1.23",
 		"@radix-ui/react-select": "^2.3.7",
 		"@tailwindcss/vite": "^4.3.3",
+		"@types/hast": "^3.0.5",
 		"@types/node": "^20.19.43",
 		"@types/react": "^19.2.18",
 		"@types/react-dom": "^19.2.5",
