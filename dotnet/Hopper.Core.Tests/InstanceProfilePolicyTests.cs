@@ -310,13 +310,15 @@ public class InstanceProfilePolicyTests
     public void DirectoryScannerPreservesActiveMalformedAndUninspectableProfilesAndDeletesDeadProfile()
     {
         var fileSystem = new FakeFileSystem();
-        fileSystem.Directories.TryAdd("/profiles", 0);
-        fileSystem.Files["/profiles/active.json"] = InstanceProfileCodec.Serialize(
+        var directory = Path.Combine(Path.GetTempPath(), "profile-policy-tests");
+        string Entry(string name) => Path.Combine(directory, name);
+        fileSystem.Directories.TryAdd(directory, 0);
+        fileSystem.Files[Entry("active.json")] = InstanceProfileCodec.Serialize(
             Profile(processId: 1001, instanceId: "active"));
-        fileSystem.Files["/profiles/dead.json"] = InstanceProfileCodec.Serialize(
+        fileSystem.Files[Entry("dead.json")] = InstanceProfileCodec.Serialize(
             Profile(processId: 1002, instanceId: "dead"));
-        fileSystem.Files["/profiles/malformed.json"] = "not-json";
-        fileSystem.Files["/profiles/uninspectable.json"] = InstanceProfileCodec.Serialize(
+        fileSystem.Files[Entry("malformed.json")] = "not-json";
+        fileSystem.Files[Entry("uninspectable.json")] = InstanceProfileCodec.Serialize(
             Profile(processId: 1003, instanceId: "uninspectable"));
         var processes = new MappedProcessInspector(new Dictionary<int, ProcessIdentityObservation>
         {
@@ -330,7 +332,7 @@ public class InstanceProfilePolicyTests
             new FakeClock { UtcNow = CreatedAt.AddMinutes(1) },
             new IncrementingTemporaryPaths());
 
-        var report = scanner.Scan("/profiles");
+        var report = scanner.Scan(directory);
 
         Assert.Null(report.Error);
         Assert.Equal(
@@ -342,20 +344,22 @@ public class InstanceProfilePolicyTests
                 InstanceProfileOwnershipState.Uninspectable,
             },
             report.Entries.Select(entry => entry.Cleanup.OwnershipState));
-        Assert.True(fileSystem.FileExists("/profiles/active.json"));
-        Assert.False(fileSystem.FileExists("/profiles/dead.json"));
-        Assert.True(fileSystem.FileExists("/profiles/dead.verified-dead.json"));
-        Assert.True(fileSystem.FileExists("/profiles/malformed.json"));
-        Assert.True(fileSystem.FileExists("/profiles/uninspectable.json"));
+        Assert.True(fileSystem.FileExists(Entry("active.json")));
+        Assert.False(fileSystem.FileExists(Entry("dead.json")));
+        Assert.True(fileSystem.FileExists(Entry("dead.verified-dead.json")));
+        Assert.True(fileSystem.FileExists(Entry("malformed.json")));
+        Assert.True(fileSystem.FileExists(Entry("uninspectable.json")));
     }
 
     [Fact]
     public void DirectoryScannerRevisitsMarkerAndDeletesOnlyAgedEphemeralLogs()
     {
         var fileSystem = new FakeFileSystem();
-        fileSystem.Directories.TryAdd("/profiles", 0);
-        fileSystem.Directories.TryAdd("/profiles/dead.logs", 0);
-        fileSystem.Files["/profiles/dead.json"] = InstanceProfileCodec.Serialize(
+        var directory = Path.Combine(Path.GetTempPath(), "profile-policy-tests");
+        string Entry(string name) => Path.Combine(directory, name);
+        fileSystem.Directories.TryAdd(directory, 0);
+        fileSystem.Directories.TryAdd(Entry("dead.logs"), 0);
+        fileSystem.Files[Entry("dead.json")] = InstanceProfileCodec.Serialize(
             Profile(processId: 1002, instanceId: "dead"));
         var clock = new FakeClock { UtcNow = CreatedAt.AddMinutes(1) };
         var scanner = new InstanceProfileDirectoryScanner(
@@ -367,14 +371,14 @@ public class InstanceProfilePolicyTests
             clock,
             new IncrementingTemporaryPaths());
 
-        scanner.Scan("/profiles");
+        scanner.Scan(directory);
         clock.UtcNow += InstanceProfileRetentionPolicy.EphemeralLogRetention;
-        var report = scanner.Scan("/profiles");
+        var report = scanner.Scan(directory);
 
         Assert.Single(report.Entries);
         Assert.True(report.Entries[0].Cleanup.LogsDeleted);
-        Assert.False(fileSystem.DirectoryExists("/profiles/dead.logs"));
-        Assert.False(fileSystem.FileExists("/profiles/dead.verified-dead.json"));
+        Assert.False(fileSystem.DirectoryExists(Entry("dead.logs")));
+        Assert.False(fileSystem.FileExists(Entry("dead.verified-dead.json")));
     }
 
     private static InstanceConnectionProfile Profile(
