@@ -1,3 +1,4 @@
+import { RuntimeSessionContext } from "../infra/runtime-session-context.js";
 import { dirname } from "node:path";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -11,20 +12,24 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 	const modulePath = fileURLToPath(import.meta.url);
 	const config = resolveHostConfig(args, { moduleDir: dirname(modulePath) });
 	validateStaticDirectory(config.paths.staticDir);
-	if (config.connectionProfile) process.env.HOPPER_CONNECTION_PROFILE = config.connectionProfile;
+	const runtimeSession = new RuntimeSessionContext({ connectionProfilePath: config.connectionProfile });
+	return runtimeSession.run(() => startOwnedChildHost(config, runtimeSession));
+}
+
+async function startOwnedChildHost(config: ReturnType<typeof resolveHostConfig>, runtimeSession: RuntimeSessionContext): Promise<void> {
 
 	let runtime: EmbeddedPiHost | undefined;
 	let server: HopperServer | undefined;
 	let stopParentWatcher = () => {};
 	let unsubscribeRuntimeNotices = () => {};
 	const shutdown = new HostShutdownCoordinator({
-		cleanup: async () => {
+		cleanup: () => runtimeSession.run(async () => {
 			stopParentWatcher();
 			await server?.close();
 			unsubscribeRuntimeNotices();
 			await runtime?.dispose();
 			await closeRuntimeRpc();
-		},
+		}),
 		exit: (code) => process.exit(code),
 		getExitCode: () => typeof process.exitCode === "number"
 			? process.exitCode
@@ -47,6 +52,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 		}
 		runtime = await EmbeddedPiHost.create({
 			paths: config.paths,
+			runtimeSession,
 			onShutdownRequest: () => { void shutdown.request("normal"); },
 		});
 		unsubscribeRuntimeNotices = runtimeRpc.subscribeNotices((notice) => {

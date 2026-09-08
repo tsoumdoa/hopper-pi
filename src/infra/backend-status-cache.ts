@@ -1,3 +1,4 @@
+import { getRuntimeSessionContext } from "./runtime-session-context.js";
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import { formatEndpoint, resolveConnection } from "./connection.js";
 
@@ -6,19 +7,23 @@ export type BackendStatus = {
 	error?: string;
 };
 
-let cachedStatus: BackendStatus | null = null;
+const backendStatusKey = Symbol("backendStatus");
+function backendState() {
+	return getRuntimeSessionContext().get(backendStatusKey, () => ({ status: null as BackendStatus | null }));
+}
 
 export function getCachedBackendStatus(): BackendStatus | null {
-	return cachedStatus;
+	return backendState().status;
 }
 
 export function setCachedBackendStatus(status: BackendStatus): void {
-	cachedStatus = status;
+	backendState().status = status;
 }
 
 /** True when the last probe reported the backend unreachable. */
 export function isBackendKnownOffline(): boolean {
-	return cachedStatus !== null && !cachedStatus.online;
+	const status = backendState().status;
+	return status !== null && !status.online;
 }
 
 export function formatBackendEndpoint(): string {

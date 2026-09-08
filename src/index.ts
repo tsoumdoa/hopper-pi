@@ -16,6 +16,7 @@
  *   - REQ  :5557  (query/response)
  */
 
+import { RuntimeSessionContext } from "./infra/runtime-session-context.js";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
 	beginRuntimeAgentTurn,
@@ -51,13 +52,42 @@ import { registerToolControlsCommand } from "./ui/tool-controls.js";
 
 export type HopperExtensionOptions = {
 	toolPolicy?: ToolPolicyRuntime;
+	runtimeSession?: RuntimeSessionContext;
 	scriptWorkspaceDir?: string;
 	scriptWorkspaceQuotaBytes?: number;
 	sessionId?: () => string;
 };
 export function createHopperPiExtension(options: HopperExtensionOptions = {}) {
-	return (pi: ExtensionAPI) => registerHopperPiExtension(pi, options);
+	return (pi: ExtensionAPI) => registerHopperPiExtension(
+		options.runtimeSession ? withRuntimeSession(pi, options.runtimeSession) : pi, options,
+	);
 }
+/** Bind every hook and tool, including tools registered later by model selection. */
+function withRuntimeSession(pi: ExtensionAPI, session: RuntimeSessionContext): ExtensionAPI {
+	return new Proxy(pi, {
+		get(target, property) {
+			if (property === "on") {
+				return (event: string, handler: (...args: unknown[]) => unknown) =>
+					Reflect.apply(target.on, target, [event, (...args: unknown[]) => session.run(() => handler(...args))]);
+			}
+			if (property === "registerCommand") {
+				return (name: string, command: Parameters<ExtensionAPI["registerCommand"]>[1]) => target.registerCommand(name, {
+					...command,
+					handler: (...args) => session.run(() => command.handler(...args)),
+				});
+			}
+			if (property === "registerTool") {
+				return (tool: Parameters<ExtensionAPI["registerTool"]>[0]) => target.registerTool({
+					...tool,
+					execute: (...args) => session.run(() => tool.execute(...args)),
+				});
+			}
+			const value = Reflect.get(target, property, target);
+			return typeof value === "function" ? value.bind(target) : value;
+		},
+	});
+}
+
 const PROGRESSIVE_TOOLS_FLAG = "hopper-progressive-tools";
 
 function isProgressiveToolsEnabled(pi: ExtensionAPI): boolean {

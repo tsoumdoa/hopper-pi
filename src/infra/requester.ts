@@ -3,7 +3,7 @@ import { getRuntimeRpc, type RuntimeRpc } from "./runtime-rpc.js";
 
 /**
  * Transitional domain-request facade. It preserves the existing tool call shape
- * while every request is carried by the process-wide RPC v2 DEALER client.
+ * while every request is carried by the current session's RPC v2 DEALER client.
  */
 export class Requester {
 	constructor(private readonly runtime: RuntimeRpc = getRuntimeRpc()) { }

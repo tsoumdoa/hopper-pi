@@ -1,3 +1,5 @@
+import { RuntimeSessionContext } from "../infra/runtime-session-context.js";
+import { closeRuntimeRpc } from "../infra/runtime-rpc.js";
 import { mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,6 +27,7 @@ import { ToolPolicyRuntime } from "../services/tool-policy-runtime.js";
 import type { ToolSettingsAction } from "./protocol.js";
 
 export type EmbeddedPiHostOptions = {
+	runtimeSession?: RuntimeSessionContext;
 	paths: HostPaths;
 	projectRoot?: string;
 	bus?: HostMessageBus;
@@ -89,12 +92,18 @@ export class EmbeddedPiHost {
 		private readonly skills: HostSkillLibrary,
 		private readonly onShutdownRequest?: () => void,
 		private readonly currentPolicy?: () => ToolPolicyRuntime,
+		private readonly runtimeSession = new RuntimeSessionContext(),
 	) {
 		this.bus = bus;
 		this.ui = ui;
 	}
 
 	static async create(options: EmbeddedPiHostOptions): Promise<EmbeddedPiHost> {
+		const runtimeSession = options.runtimeSession ?? new RuntimeSessionContext();
+		return runtimeSession.run(() => EmbeddedPiHost.createInSession(options, runtimeSession));
+	}
+
+	private static async createInSession(options: EmbeddedPiHostOptions, runtimeSession: RuntimeSessionContext): Promise<EmbeddedPiHost> {
 		const projectRoot = options.projectRoot ?? defaultProjectRoot();
 		const { paths } = options;
 		await Promise.all([
@@ -131,6 +140,7 @@ export class EmbeddedPiHost {
 				modelRuntime,
 				resourceLoaderOptions: isolatedResourceLoaderOptions({
 					toolPolicy: policy,
+					runtimeSession,
 					scriptWorkspaceDir: paths.scriptWorkspaceDir ?? join(paths.dataDir, "workspaces", "default"),
 					scriptWorkspaceQuotaBytes: paths.scriptWorkspaceQuotaBytes,
 					sessionId: () => sessionManager.getSessionId(),
@@ -158,7 +168,7 @@ export class EmbeddedPiHost {
 			agentDir: paths.agentDir,
 			sessionManager: SessionManager.continueRecent(paths.workspaceDir, paths.sessionsDir),
 		});
-		host = new EmbeddedPiHost(runtime, bus, ui, skills, options.onShutdownRequest, () => currentPolicy);
+		host = new EmbeddedPiHost(runtime, bus, ui, skills, options.onShutdownRequest, () => currentPolicy, runtimeSession);
 		runtime.setRebindSession(async (session) => host!.bindSession(session, true));
 		await host.bindSession(runtime.session, false);
 		return host;
@@ -362,7 +372,8 @@ export class EmbeddedPiHost {
 		this.unsubscribe?.();
 		this.unsubscribe = undefined;
 		this.ui.cancelAll("Hopper host stopped");
-		await this.runtime.dispose();
+		try { await this.runtime.dispose(); }
+		finally { await this.runtimeSession.run(closeRuntimeRpc); }
 	}
 
 	private async bindSession(session: AgentSession, replaced: boolean): Promise<void> {

@@ -1,3 +1,4 @@
+import { getRuntimeSessionContext } from "./runtime-session-context.js";
 import { clearDocumentGuidAliases } from "../services/guid-shortener.js";
 import type { DocumentTransactionState } from "../types/document-management.js";
 import {
@@ -93,6 +94,7 @@ export class RuntimeRpc {
 	readonly lifecycleInstanceId: string;
 
 	private readonly transport: RuntimeRpcTransport;
+	private readonly aliasSession = getRuntimeSessionContext();
 	private readonly readiness: GrasshopperReadinessCoordinator;
 	private readonly nodeProcessId: number;
 	private readonly nodeVersion: string;
@@ -194,7 +196,7 @@ export class RuntimeRpc {
 		} finally {
 			if (boundary && owner !== "core") {
 				this.transactionOpen[owner] = false;
-				clearDocumentGuidAliases(owner);
+				this.aliasSession.run(() => clearDocumentGuidAliases(owner));
 			}
 		}
 	}
@@ -392,7 +394,7 @@ export class RuntimeRpc {
 		if (data && typeof data === "object" && "activeDocumentId" in data) {
 			if (typeof data.activeDocumentId === "string") this.observeAliasDocument(owner, data.activeDocumentId);
 			else if (data.activeDocumentId === null) {
-				clearDocumentGuidAliases(owner);
+				this.aliasSession.run(() => clearDocumentGuidAliases(owner));
 				delete this.aliasDocuments[owner];
 			}
 		}
@@ -400,7 +402,7 @@ export class RuntimeRpc {
 
 	private observeAliasDocument(owner: TransactionOwner, documentId: string): void {
 		const previous = this.aliasDocuments[owner];
-		if (previous !== undefined && previous !== documentId) clearDocumentGuidAliases(owner);
+		if (previous !== undefined && previous !== documentId) this.aliasSession.run(() => clearDocumentGuidAliases(owner));
 		this.aliasDocuments[owner] = documentId;
 	}
 
@@ -549,39 +551,49 @@ export function requiresGrasshopper(operation: OperationName): boolean {
 	return RPC_OPERATION_OWNERS[operation] === "grasshopper" && !PASSIVE_DOCUMENT_READS.has(operation);
 }
 
-let sharedRuntime: RuntimeRpc | null = null;
-let sharedAgentTurnActive = false;
+const runtimeStateKey = Symbol("runtimeRpc");
+function runtimeState() {
+	return getRuntimeSessionContext().get(runtimeStateKey, () => ({
+		runtime: null as RuntimeRpc | null,
+		agentTurnActive: false,
+	}));
+}
 
 export function beginRuntimeAgentTurn(): void {
-	sharedAgentTurnActive = true;
-	sharedRuntime?.beginAgentTurn();
+	runtimeState().agentTurnActive = true;
+	runtimeState().runtime?.beginAgentTurn();
 }
 
 export async function commitRuntimeAgentTurn(): Promise<void> {
-	sharedAgentTurnActive = false;
-	await sharedRuntime?.commitAgentTurn();
+	runtimeState().agentTurnActive = false;
+	await runtimeState().runtime?.commitAgentTurn();
 }
 
 export async function cancelRuntimeAgentTurn(): Promise<void> {
-	sharedAgentTurnActive = false;
-	await sharedRuntime?.cancelAgentTurn();
+	runtimeState().agentTurnActive = false;
+	await runtimeState().runtime?.cancelAgentTurn();
 }
 
 export function getRuntimeRpc(): RuntimeRpc {
-	if (sharedRuntime) return sharedRuntime;
-	const connection = resolveConnection();
-	const transport = new HopperRpcClient({
-		endpoint: connection.rpcEndpoint,
-		lifecycleInstanceId: connection.lifecycleInstanceId,
-		token: connection.token,
-	});
-	sharedRuntime = new RuntimeRpc({
-		lifecycleInstanceId: connection.lifecycleInstanceId,
-		transport,
-		events: new SubscriberStatusEventSource(connection.pubEndpoint),
-	});
-	if (sharedAgentTurnActive) sharedRuntime.beginAgentTurn();
-	return sharedRuntime;
+	const state = runtimeState();
+	if (state.runtime) return state.runtime;
+	const factory = getRuntimeSessionContext().options.createRuntime;
+	if (factory) {
+		state.runtime = factory();
+	} else {
+		const connection = resolveConnection();
+		state.runtime = new RuntimeRpc({
+			lifecycleInstanceId: connection.lifecycleInstanceId,
+			transport: new HopperRpcClient({
+				endpoint: connection.rpcEndpoint,
+				lifecycleInstanceId: connection.lifecycleInstanceId,
+				token: connection.token,
+			}),
+			events: new SubscriberStatusEventSource(connection.pubEndpoint),
+		});
+	}
+	if (state.agentTurnActive) state.runtime.beginAgentTurn();
+	return state.runtime;
 }
 
 export async function resetRuntimeRpcForTests(): Promise<void> {
@@ -589,8 +601,8 @@ export async function resetRuntimeRpcForTests(): Promise<void> {
 }
 
 export async function closeRuntimeRpc(): Promise<void> {
-	const runtime = sharedRuntime;
-	sharedRuntime = null;
-	sharedAgentTurnActive = false;
+	const runtime = runtimeState().runtime;
+	runtimeState().runtime = null;
+	runtimeState().agentTurnActive = false;
 	if (runtime) await runtime.close();
 }

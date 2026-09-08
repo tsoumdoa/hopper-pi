@@ -1,3 +1,4 @@
+import { getRuntimeSessionContext } from "../infra/runtime-session-context.js";
 import { Requester } from "../infra/requester.js";
 import { withRequester } from "../infra/request-helpers.js";
 import { getRuntimeRpc } from "../infra/runtime-rpc.js";
@@ -9,15 +10,16 @@ import type {
 	ListScriptParamsResponse,
 } from "../types/messages.js";
 
-let _components: ListAllComponentsResponse | null = null;
+const componentsKey = Symbol("componentCatalog");
 
 export async function getCachedOrFetchComponents(): Promise<ListAllComponentsResponse> {
-	if (_components) {
+	const cache = getRuntimeSessionContext().get(componentsKey, () => ({ components: null as ListAllComponentsResponse | null }));
+	if (cache.components) {
 		await getRuntimeRpc().ensureGrasshopperReady();
-		return _components;
+		return cache.components;
 	}
 	const data = await withRequester(fetchAllComponents);
-	_components = data;
+	cache.components = data;
 	return data;
 }
 

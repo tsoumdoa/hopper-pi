@@ -26,6 +26,8 @@ import {
 } from "./rhino-script-store.js";
 import { RhinoScriptWorkspace } from "./rhino-script-workspace.js";
 import { validateRhinoScriptItem } from "./rhino-script-validator.js";
+// Process liveness evidence for durable workspace claims, shared across execution wrappers.
+// Session-local claims would misclassify another session's in-flight run as abandoned.
 const activeRunnerClaims = new Set<string>();
 export interface ScriptExecutionBackend {
 	readonly lifecycleInstanceId: string;

@@ -260,3 +260,34 @@ it("exports branches and pre-compaction history using Pi's session manager", asy
 	expect(exported.streamingMessage).toEqual(call);
 	expect(exported).toMatchObject({ format: "hopper-session-debug", version: 1, leafId: leaf, isStreaming: true });
 });
+
+it("creates independent runtime dependencies for two hosts in the same process", async () => {
+	const { EmbeddedPiHost } = await import("./pi-runtime.js");
+	const { getRuntimeSessionContext } = await import("../infra/runtime-session-context.js");
+	const { toShortRhinoGuid, resolveRhinoGuid } = await import("../services/guid-shortener.js");
+	const backend = await import("../infra/backend-status.js");
+	const contexts: import("../infra/runtime-session-context.js").RuntimeSessionContext[] = [];
+	const probe = vi.spyOn(backend, "probeBackend").mockImplementation(async () => {
+		contexts.push(getRuntimeSessionContext());
+		return { online: false };
+	});
+	const root = await mkdtemp(join(tmpdir(), "hopper-session-isolation-"));
+	const hosts: import("./pi-runtime.js").EmbeddedPiHost[] = [];
+	try {
+		for (const id of ["a", "b"]) {
+			const paths = resolveHostConfig(["--data-dir", join(root, id)]).paths;
+			hosts.push(await EmbeddedPiHost.create({ paths, projectRoot: resolve(".") }));
+		}
+		const sessions = [...new Set(contexts)];
+		expect(sessions).toHaveLength(2);
+		const guid = "11111111-2222-3333-4444-555555555555";
+		const alias = sessions[0].run(() => toShortRhinoGuid(guid));
+		expect(sessions[1].run(() => resolveRhinoGuid(alias))).toBe(alias);
+		await hosts[1].dispose();
+		expect(sessions[0].run(() => resolveRhinoGuid(alias))).toBe(guid);
+	} finally {
+		for (const host of hosts) await host.dispose();
+		probe.mockRestore();
+		await rm(root, { recursive: true, force: true });
+	}
+});
