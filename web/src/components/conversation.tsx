@@ -5,6 +5,7 @@ import { cn, formatValue, summarizeValue } from "../lib/utils";
 import type { ConversationMessage, ToolCall } from "../state/hopper-types";
 import { Button } from "./ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import { MessageMarkdown } from "./message-markdown";
 
 const SUGGESTIONS = [
 	{ label: "Inspect this canvas", prompt: "Inspect the active Grasshopper canvas and summarize its structure and any errors." },
@@ -122,8 +123,8 @@ function AssistantMessage({ message }: { message: ConversationMessage }) {
 					</div>
 				)}
 				{message.text && (
-					<div className="whitespace-pre-wrap break-words text-[14px] leading-7 text-ink">
-						{message.text}
+					<div className="min-w-0 text-[14px] leading-7 text-ink">
+						<MessageMarkdown text={message.text} />
 						{message.streaming && <span aria-hidden="true" className="ml-0.5 inline-block h-[1.1em] w-[2px] translate-y-[3px] bg-accent animate-blink" />}
 					</div>
 				)}
