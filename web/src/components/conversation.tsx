@@ -22,7 +22,7 @@ function ToolStatusIcon({ status }: { status: ToolCall["status"] }) {
 	return <CircleCheck className="size-3.5 text-muted" />;
 }
 
-function ToolCard({ tool }: { tool: ToolCall }) {
+export function ToolCard({ tool }: { tool: ToolCall }) {
 	const [open, setOpen] = useState(tool.status === "error");
 	useEffect(() => {
 		if (tool.status === "error") setOpen(true);

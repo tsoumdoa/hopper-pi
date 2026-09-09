@@ -894,5 +894,88 @@ it("counts working time from the saved start and freezes the completed duration"
   expect(container.querySelector("header")!.textContent).toContain("Ready");
  } finally {
   vi.useRealTimers();
- }
+	}
+});
+
+it("presents an active ask_user question as selectable choices and sends the selected answer", async () => {
+	const task = {
+		id: "question-task", session_id: "session", conversation_id: "conversation",
+		parent_task_id: null, state: "awaiting_user",
+		payload: JSON.stringify({ text: "Choose a size", bindings: [binding] }),
+	};
+	await act(async () => socket.receive({
+		type: "shared_snapshot",
+		snapshot: {
+			...snapshot,
+			tasks: [task],
+			questions: [{
+				id: "size-question", task_id: task.id, answer: null,
+				payload: JSON.stringify({ question: "Which size should I use?", options: ["Small", "Large"] }),
+			}],
+		},
+	}));
+	expect(container.querySelector('[aria-label="Input needed"]')!.textContent).toContain("Which size should I use?");
+	expect(container.querySelector('[role="radiogroup"]')).not.toBeNull();
+	expect(container.querySelector("datalist")).toBeNull();
+	expect(container.querySelector<HTMLInputElement>('input[value="Large"]')!.disabled).toBe(false);
+	expect(container.querySelector("header")!.textContent).toContain("Answer needed");
+	expect(sendButton().disabled).toBe(true);
+	await act(async () => container.querySelector<HTMLInputElement>('input[value="Large"]')!.click());
+	await act(async () => byText("Continue").click());
+	expect(socket.sent.find((command) => command.type === "answer")).toMatchObject({
+		questionId: "size-question", answer: "Large",
+	});
+});
+
+it("shows the tool name and its live and completed state", async () => {
+	const task = {
+		id: "tool-task", session_id: "session", conversation_id: "conversation",
+		parent_task_id: null, state: "running",
+		payload: JSON.stringify({ text: "Inspect the model", bindings: [binding] }),
+	};
+	const call = { type: "toolCall", id: "inspect", name: "rh_query_objects", arguments: { layer: "Walls" } };
+	await act(async () => socket.receive({
+		type: "shared_snapshot",
+		snapshot: {
+			...snapshot, tasks: [task],
+			events: [
+				{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "messages", turnId: "turn", messages: [{ role: "assistant", content: [call] }] }) },
+				{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "tool_progress", phase: "started", toolName: "rh_query_objects", toolCallId: "inspect" }) },
+			],
+		},
+	}));
+	expect(container.textContent).toContain("rh_query_objects");
+	expect(container.textContent).toContain("Running");
+	await act(async () => socket.receive({
+		type: "shared_snapshot",
+		snapshot: {
+			...snapshot, tasks: [task],
+			events: [
+				{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "messages", turnId: "turn", messages: [{ role: "assistant", content: [call] }, { role: "toolResult", toolCallId: "inspect", toolName: "rh_query_objects", content: [{ type: "text", text: "Found 12 objects" }], isError: false }] }) },
+				{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "tool_progress", phase: "completed", toolName: "rh_query_objects", toolCallId: "inspect", isError: false }) },
+			],
+		},
+	}));
+	expect(container.textContent).toContain("Done");
+});
+
+it("renders assistant text and thinking before the turn has finished", async () => {
+	const task = {
+		id: "streaming-task", session_id: "session", conversation_id: "conversation",
+		parent_task_id: null, state: "running",
+		payload: JSON.stringify({ text: "Inspect the model", bindings: [binding] }),
+	};
+	await act(async () => socket.receive({
+		type: "shared_snapshot",
+		snapshot: {
+			...snapshot, tasks: [task],
+			events: [
+				{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "agent_event", turnId: "turn", event: { type: "message_start", message: { role: "assistant" } } }) },
+				{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "agent_event", turnId: "turn", event: { type: "message_update", assistantMessageEvent: { type: "thinking_delta", delta: "Checking the model." } } }) },
+				{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "agent_event", turnId: "turn", event: { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "I found three objects." } } }) },
+			],
+		},
+	}));
+	expect(container.textContent).toContain("Checking the model.");
+	expect(container.textContent).toContain("I found three objects.");
 });

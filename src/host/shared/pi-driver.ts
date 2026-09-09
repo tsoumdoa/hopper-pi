@@ -11,6 +11,7 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { createHopperPiExtension } from "../../index.js";
+import { serializeAgentEvent } from "../event-serializer.js";
 import { RuntimeSessionContext } from "../../infra/runtime-session-context.js";
 import { QuestionSuspensionBoundary } from "../question-suspension.js";
 import type { DriverContext, TaskDriver } from "./task-service.js";
@@ -241,7 +242,6 @@ export async function createPiTaskDriver(
 			.filter((message) => message.role === "assistant")
 			.reduce((sum, message) => sum + message.usage.totalTokens, 0);
 		const unsubscribe = session.subscribe((event) => {
-			// Keep streaming transient; final AgentSession messages are persisted by Pi.
 			if (event.type === "message_start" && event.message.role === "user") {
 				const content =
 					typeof event.message.content === "string"
@@ -256,6 +256,19 @@ export async function createPiTaskDriver(
 						pending.resolve();
 					}
 			}
+			// The shared UI is driven by the durable task journal, so record compact
+			// assistant events as they arrive instead of leaving the conversation blank
+			// until agent_end publishes its final messages.
+			if (
+				(event.type === "message_start" && event.message.role === "assistant") ||
+				event.type === "message_update" ||
+				(event.type === "message_end" && event.message.role === "assistant")
+			)
+				context.publish({
+					type: "agent_event",
+					turnId: context.turnId,
+					event: serializeAgentEvent(event),
+				});
 			if (
 				event.type === "tool_execution_start" ||
 				event.type === "tool_execution_end"

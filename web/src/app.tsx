@@ -11,16 +11,18 @@ import { ToolsDialog } from "./components/tools-dialog";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { useHopperStoreApi } from "./state/hopper-store-context";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { SharedBrowserCommand } from "../../src/host/shared/browser-protocol.js";
 import type { TargetBinding } from "../../src/protocol/shared-execution.js";
 import type { HostSnapshot } from "../../src/host/protocol.js";
 import { MessageMarkdown } from "./components/message-markdown";
 import { WorkingTime } from "./components/working-time";
-import { Composer } from "./components/composer";
+import { Composer, type ComposerHandle } from "./components/composer";
+import { ToolCard } from "./components/conversation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { imageUrl, type DraftImage } from "./lib/image-attachments";
 import { parseImages } from "../../src/host/protocol";
+import type { ToolCall } from "./state/hopper-types";
 
 type Row = Record<string, string | number | null>;
 type Snapshot = {
@@ -86,9 +88,85 @@ function TaskWorkingTime({ task, turns, inline = false }: {
   .map((turn) => Number(turn.started_at))
   .filter((time) => Number.isFinite(time) && time > 0);
  const startedAt = timestamps.length ? Math.min(...timestamps) : Number(task.created_at) || undefined;
+ if (task.state === "awaiting_user")
+  return inline ? <span>Answer needed</span> : <p role="status" className="mb-3 border-b border-line/60 pb-3 text-[13px] text-muted">Waiting for your answer</p>;
  const streaming = task.state === "running" || task.state === "suspending";
  const finishedAt = streaming ? undefined : Number(task.updated_at) || undefined;
  return <WorkingTime streaming={streaming} startedAt={startedAt} finishedAt={finishedAt} inline={inline} />;
+}
+
+function taskTools(events: Row[]): ToolCall[] {
+	const tools = new Map<string, ToolCall>();
+	for (const event of events) {
+		const payload = decode<any>(event.payload, {});
+		if (payload.type === "messages") {
+			for (const message of payload.messages ?? []) {
+				if (message.role === "assistant") for (const part of message.content ?? []) {
+					if (part.type !== "toolCall") continue;
+					const id = String(part.id ?? part.toolCallId ?? "tool");
+					tools.set(id, { id, name: String(part.name ?? part.toolName ?? "Tool call"), args: part.arguments, detail: part.arguments, status: "complete" });
+				}
+				if (message.role === "toolResult") {
+					const id = String(message.toolCallId ?? "tool"), prior = tools.get(id);
+					const text = Array.isArray(message.content) ? message.content.filter((part: any) => part.type === "text").map((part: any) => part.text).join("\n") : undefined;
+					tools.set(id, { id, name: String(message.toolName ?? prior?.name ?? "Tool call"), args: prior?.args, detail: message.details ?? text ?? prior?.detail, status: message.isError ? "error" : "complete" });
+				}
+			}
+		}
+		if (payload.type === "tool_progress") {
+			const id = String(payload.toolCallId ?? "tool"), prior = tools.get(id);
+			tools.set(id, { id, name: String(payload.toolName ?? prior?.name ?? "Tool call"), args: prior?.args, detail: prior?.detail ?? prior?.args, status: payload.phase === "started" ? "running" : payload.isError ? "error" : "complete" });
+		}
+	}
+	return [...tools.values()];
+}
+
+type LiveAssistantMessage = { turnId: string; text: string; thinking: string };
+
+function liveAssistantMessages(
+	events: Row[],
+	completedTurns: Set<string>,
+): LiveAssistantMessage[] {
+	const messages = new Map<string, LiveAssistantMessage>();
+	for (const row of events) {
+		const payload = decode<any>(row.payload, {});
+		if (payload.type !== "agent_event" || !payload.turnId) continue;
+		const event = payload.event ?? {};
+		const turnId = String(payload.turnId);
+		if (event.type === "message_start") {
+			if (event.message?.role === "assistant")
+				messages.set(turnId, { turnId, text: "", thinking: "" });
+			continue;
+		}
+		const message = messages.get(turnId);
+		if (!message) continue;
+		if (event.type === "message_update") {
+			const update = event.assistantMessageEvent ?? {};
+			if (update.type === "text_delta")
+				message.text += String(update.delta ?? update.text ?? "");
+			if (update.type === "thinking_delta")
+				message.thinking += String(update.delta ?? update.text ?? "");
+			continue;
+		}
+		if (event.type === "message_end" && event.message?.role === "assistant") {
+			const content = Array.isArray(event.message.content)
+				? event.message.content
+				: [];
+			const text = content
+				.filter((part: any) => part.type === "text")
+				.map((part: any) => String(part.text ?? ""))
+				.join("\n");
+			const thinking = content
+				.filter((part: any) => part.type === "thinking")
+				.map((part: any) => String(part.thinking ?? part.text ?? ""))
+				.join("\n");
+			if (text) message.text = text;
+			if (thinking) message.thinking = thinking;
+		}
+	}
+	return [...messages.values()].filter(
+		(message) => !completedTurns.has(message.turnId),
+	);
 }
 
 export function App() {
@@ -117,6 +195,10 @@ export function App() {
 	const [selected, setSelected] = useState<TargetBinding[]>([]);
 	const [text, setText] = useState("");
 	const [images, setImages] = useState<DraftImage[]>([]);
+	const composer = useRef<ComposerHandle>(null);
+	const conversationScroller = useRef<HTMLDivElement>(null);
+	const stickToBottom = useRef(true);
+	const [showJump, setShowJump] = useState(false);
 	const currentConversation = useRef(conversationId);
 	currentConversation.current = conversationId;
 	const [modeOverride, setSendMode] = useState<
@@ -294,12 +376,17 @@ export function App() {
 			command.conversationId === conversationId,
 	);
 	const activeRoot = currentTasks.find(
-		(task) => task.parent_task_id === null && task.state === "running",
+		(task) =>
+			task.parent_task_id === null &&
+			["running", "suspending", "awaiting_user"].includes(String(task.state)),
 	);
-	const sendMode = modeOverride ?? (activeRoot ? "follow_up" : "prompt");
+	const taskIsRunning = activeRoot?.state === "running";
+	const taskBlocksComposer =
+		activeRoot?.state === "suspending" || activeRoot?.state === "awaiting_user";
+	const sendMode = modeOverride ?? (taskIsRunning ? "follow_up" : "prompt");
 	useEffect(() => {
-		if (!activeRoot) setSendMode(null);
-	}, [activeRoot?.id]);
+		if (!taskIsRunning) setSendMode(null);
+	}, [taskIsRunning]);
 	const availableTargets =
 		snapshot?.targets.filter((target) => target.admission === "ready") ?? [];
 	const modelBindings = availableTargets.flatMap((target) =>
@@ -354,6 +441,45 @@ export function App() {
 					),
 			),
 	);
+	const activeQuestionId = snapshot?.questions.find(
+		(question) => question.task_id === activeRoot?.id && question.answer === null,
+	)?.id;
+	const title = String(
+		snapshot?.conversations.find((conversation) => conversation.id === conversationId)
+			?.title ?? "New chat",
+	);
+	const compactHeaderStatus = !ready.current
+		? status === "Connecting" || status === "Authenticating"
+			? "Connecting"
+			: "Offline"
+		: activeRoot?.state === "awaiting_user"
+			? "Answer needed"
+			: activeRoot
+				? "Working"
+				: "Ready";
+	useEffect(() => {
+		document.title = conversationId ? `${title} · Hopper` : "Hopper";
+	}, [conversationId, title]);
+	useEffect(() => {
+		if (ready.current && sessionId) composer.current?.focus();
+	}, [conversationId, sessionId]);
+	const onConversationScroll = () => {
+		const node = conversationScroller.current;
+		if (!node) return;
+		const distance = node.scrollHeight - node.scrollTop - node.clientHeight;
+		stickToBottom.current = distance < 80;
+		setShowJump(distance > 240);
+	};
+	const scrollToLatest = (behavior: ScrollBehavior = "smooth") => {
+		const node = conversationScroller.current;
+		if (!node) return;
+		const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+		node.scrollTo({ top: node.scrollHeight, behavior: reducedMotion ? "auto" : behavior });
+	};
+	useLayoutEffect(() => {
+		if (activeQuestionId) stickToBottom.current = true;
+		if (stickToBottom.current) scrollToLatest("auto");
+	}, [activeQuestionId, conversationId, snapshot?.eventCursor, currentTasks.length]);
 	const submit = () => {
 		if (
 			sendMode !== "steer" && (unavailableSelected || !selected.length)
@@ -433,9 +559,9 @@ export function App() {
 						title: "New chat",
 					})
 				}
-				onManageProvider={() => setProviderOpen(true)}
-				onManageSkills={() => setSkillsOpen(true)}
-				onViewTools={() => setToolsOpen(true)}
+				onManageProvider={() => { setMobileSettingsOpen(false); setProviderOpen(true); }}
+				onManageSkills={() => { setMobileSettingsOpen(false); setSkillsOpen(true); }}
+				onViewTools={() => { setMobileSettingsOpen(false); setToolsOpen(true); }}
 				onReconnect={() => {
 					blocked.current = false;
 					setNonce((n) => n + 1);
@@ -446,11 +572,8 @@ export function App() {
 			<main className="flex-1 flex flex-col min-w-0 min-h-0">
 				<header className="border-b px-4 py-3 sm:px-6">
 					<div className="flex items-center gap-3">
-						<h2 className="flex-1 truncate text-[13px] font-medium">
-							{String(
-								snapshot?.conversations.find((c) => c.id === conversationId)
-									?.title ?? "New chat",
-							)}
+						<h2 className="min-w-0 flex-1 truncate text-[13px] font-medium">
+							{title}
 						</h2>
 						<ExportSessionButton
 							token={credential.current ?? ""}
@@ -458,12 +581,22 @@ export function App() {
 							disabled={!ready.current || !conversationId}
 						/>
 						<Badge
+							className="max-w-28 sm:max-w-[min(60vw,20rem)] [&>span:last-child]:truncate"
 							dot
 							variant={
 								ready.current ? (activeRoot ? "accent" : "neutral") : "warn"
 							}
 						>
-							{ready.current ? (activeRoot ? <TaskWorkingTime task={activeRoot} turns={snapshot?.turns ?? []} inline /> : "Ready") : status}
+							<span className="truncate sm:hidden">{compactHeaderStatus}</span>
+							<span className="hidden truncate sm:inline">
+								{ready.current
+									? activeRoot?.state === "suspending"
+										? "Finishing current operation…"
+										: activeRoot
+											? <TaskWorkingTime task={activeRoot} turns={snapshot?.turns ?? []} inline />
+											: "Ready"
+									: status}
+							</span>
 						</Badge>
 						<Button
 							size="icon-sm"
@@ -493,7 +626,14 @@ export function App() {
 						</p>
 					)}
 				</header>
-				<div className="flex-1 overflow-auto px-5 py-8 space-y-8">
+					<div className="relative min-h-0 flex-1">
+						<div
+							ref={conversationScroller}
+							onScroll={onConversationScroll}
+							className="h-full overflow-y-auto px-5 py-8 space-y-8"
+							aria-label="Conversation"
+							aria-live="polite"
+						>
 					{orderedTasks.map((task) => {
 						const input = decode<{
 							text: string;
@@ -513,6 +653,10 @@ export function App() {
 								);
 						}
 						const messages = [...turnMessages.values()].flat();
+						const liveMessages = liveAssistantMessages(
+							events,
+							new Set(turnMessages.keys()),
+						);
 						const progress = events
 							.map((event) => decode<any>(event.payload, {}))
 							.filter((event) => event.type === "tool_progress")
@@ -525,9 +669,10 @@ export function App() {
 										"$1 $2",
 									)} ${progress.phase === "started" ? "is running" : progress.isError ? "returned an error" : "finished"}`
 							: "";
-						const questions = snapshot!.questions.filter(
-							(q) => q.task_id === task.id,
-						);
+							const questions = snapshot!.questions.filter(
+								(q) => q.task_id === task.id,
+							);
+							const tools = taskTools(events);
 						const content = (
 							<article
 								key={String(task.id)}
@@ -593,11 +738,24 @@ export function App() {
 									>
 										Target: {bindingLabel(binding)}
 									</p>
-								))}
+										))}
+									{tools.length > 0 && (
+										<div className="mt-3 grid gap-1">
+											{tools.map((tool) => <ToolCard key={tool.id} tool={tool} />)}
+										</div>
+									)}
 								{messages
 									.filter((message: any) => message.role === "assistant")
 									.map((message: any, i: number) => (
 										<div key={i} className="mt-3">
+											{message.content.some((part: any) => part.type === "thinking") && (
+												<details className="mb-2 text-xs text-muted">
+													<summary className="cursor-pointer">Thinking</summary>
+													<p className="mt-1 whitespace-pre-wrap border-l-2 border-line pl-3 leading-5">
+														{message.content.filter((part: any) => part.type === "thinking").map((part: any) => part.thinking ?? part.text).join("\n")}
+													</p>
+												</details>
+											)}
 											{message.content
 												.filter((part: any) => part.type === "text")
 												.map((part: any, j: number) => (
@@ -605,6 +763,24 @@ export function App() {
 												))}
 										</div>
 									))}
+								{liveMessages.map((message) => (
+									<div key={message.turnId} className="mt-3 min-w-0">
+										{message.thinking && (
+											<details className="mb-2 text-xs text-muted">
+												<summary className="cursor-pointer">Thinking…</summary>
+												<p className="mt-1 whitespace-pre-wrap border-l-2 border-line pl-3 leading-5">{message.thinking}</p>
+											</details>
+										)}
+										{message.text ? (
+											<div className="min-w-0 text-[14px] leading-7">
+												<MessageMarkdown text={message.text} />
+												<span aria-hidden="true" className="ml-0.5 inline-block h-[1.1em] w-[2px] translate-y-[3px] animate-blink bg-accent" />
+											</div>
+										) : !message.thinking ? (
+											<p className="text-xs text-muted" role="status">Getting started…</p>
+										) : null}
+									</div>
+								))}
 								{messages
 									.filter(
 										(message) =>
@@ -788,10 +964,22 @@ export function App() {
 							content
 						);
 					})}
-				</div>
-				<div className="max-h-[70dvh] overflow-y-auto border-t px-4 pt-3 pb-2 space-y-3 sm:px-6">
-					<Composer
-						key={conversationId}
+						</div>
+						{showJump && (
+							<Button
+								size="sm"
+								variant="secondary"
+								className="absolute bottom-3 left-1/2 -translate-x-1/2 shadow-pop animate-pop-in"
+								onClick={() => { stickToBottom.current = true; scrollToLatest(); }}
+							>
+								Jump to latest
+							</Button>
+						)}
+					</div>
+					<div className="max-h-[70dvh] overflow-y-auto border-t px-4 pt-3 pb-2 space-y-3 sm:px-6">
+						<Composer
+							key={conversationId}
+							ref={composer}
 						draft={text}
 						images={images}
 						onImagesChange={setImages}
@@ -799,10 +987,11 @@ export function App() {
 						onDraftChange={setText}
 						mode={sendMode}
 						onModeChange={setSendMode}
-						disabled={
-							!sessionId ||
-							!ready.current ||
-							submitting
+							disabled={
+								!sessionId ||
+								!ready.current ||
+								submitting ||
+								taskBlocksComposer
 						}
 						submitDisabled={sendMode !== "steer" && (unavailableSelected || !selected.length)}
 						destination={
@@ -832,7 +1021,7 @@ export function App() {
 								{unavailableSelected && sendMode !== "steer" && <span role="alert" className="text-xs text-danger">Selected model disconnected. Choose another model.</span>}
 							</div>
 						}
-						streaming={!!activeRoot}
+							streaming={taskIsRunning}
 						onSubmit={submit}
 						onAbort={() => {
 							if (activeRoot)
@@ -853,7 +1042,7 @@ export function App() {
 								onSelectThinking={(level) =>
 									send({ type: "set_thinking", level })
 								}
-								onManageProvider={() => setProviderOpen(true)}
+								onManageProvider={() => { setMobileSettingsOpen(false); setProviderOpen(true); }}
 							/>
 						}
 					/>
@@ -925,7 +1114,7 @@ function UserMessage({
 	return (
 		<div className="flex justify-end">
 			<div className="max-w-[85%] rounded-2xl bg-panel px-4 py-3 space-y-2">
-				{text && <p className="whitespace-pre-wrap">{text}</p>}
+				{text && <p className="whitespace-pre-wrap break-words">{text}</p>}
 				{images?.map((image, index) => (
 					<img
 						key={index}
@@ -952,6 +1141,8 @@ function Question({
 	answer: (value: string) => boolean;
 }) {
 	const [value, setValue] = useState("");
+	const input = useRef<HTMLInputElement>(null);
+	const section = useRef<HTMLElement>(null);
 	const payload = decode<{ question?: string; options?: string[] }>(
 		question.payload,
 		{},
@@ -966,41 +1157,56 @@ function Question({
 					{typeof response === "string" ? response : JSON.stringify(response)}
 				</p>
 			</section>
-		);
+			);
 	}
+	const options = Array.isArray(payload.options) ? payload.options.filter(Boolean) : [];
+	useEffect(() => {
+		if (!enabled) return;
+		section.current?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+		if (!options.length) input.current?.focus();
+	}, [enabled, options.length, question.id]);
 	return (
-		<form
-			className="mt-4 border rounded p-3"
+		<section
+			ref={section}
+			aria-label="Input needed"
+			className="mt-4 rounded-md border border-accent/30 bg-accent-soft p-4 shadow-card"
+		>
+			<form
 			onSubmit={(event) => {
 				event.preventDefault();
 				if (answer(value)) setValue("");
 			}}
 		>
-			<p>{payload.question ?? "Answer needed"}</p>
+			<p className="text-[10px] font-medium uppercase tracking-wider text-accent">Input needed</p>
+			<p className="mt-1 text-sm font-medium">{payload.question ?? "Answer needed"}</p>
 			{!enabled && (
-				<p className="text-xs">
+				<p className="mt-2 text-xs text-ink-soft" role="status">
 					{inactive
 						? "This question is no longer active."
 						: "Finishing the current operation."}
 				</p>
 			)}
-			<input
-				disabled={!enabled}
-				aria-label="Answer"
-				className="border p-2 mt-2 bg-canvas"
-				value={value}
-				onChange={(event) => setValue(event.target.value)}
-				list={String(question.id)}
-			/>
-			<datalist id={String(question.id)}>
-				{payload.options?.map((option) => (
-					<option key={option} value={option} />
-				))}
-			</datalist>
-			<button disabled={!enabled || !value.trim()} className="border p-2 ml-2">
-				Answer
-			</button>
-		</form>
+			{options.length > 0 ? (
+				<div className="mt-3 grid gap-2" role="radiogroup" aria-label={payload.question ?? "Answer options"}>
+					{options.map((option, index) => {
+						const checked = value === option;
+						return (
+							<label key={option} className={`flex cursor-pointer items-center gap-2 rounded-sm border px-3 py-2 text-sm ${checked ? "border-accent bg-surface" : "border-line bg-surface hover:border-line-strong"}`}>
+								<input className="sr-only" type="radio" name={`question-${question.id}`} value={option} checked={checked} disabled={!enabled} autoFocus={enabled && index === 0} onChange={(event) => setValue(event.target.value)} />
+								<span aria-hidden="true" className={`grid size-4 place-items-center rounded-full border ${checked ? "border-accent bg-accent" : "border-line-strong"}`}><span className={checked ? "size-1.5 rounded-full bg-white" : ""} /></span>
+								{option}
+							</label>
+						);
+					})}
+				</div>
+			) : (
+				<input ref={input} disabled={!enabled} aria-label="Answer" className="mt-3 h-8 w-full rounded-sm border border-line bg-surface px-2.5 text-[13px] outline-none focus-visible:border-accent/60 focus-visible:ring-2 focus-visible:ring-accent/15 disabled:cursor-not-allowed disabled:opacity-50" value={value} onChange={(event) => setValue(event.target.value)} />
+			)}
+			<div className="mt-3 flex justify-end">
+				<Button type="submit" size="sm" disabled={!enabled || !value.trim()}>Continue</Button>
+			</div>
+			</form>
+		</section>
 	);
 }
 
