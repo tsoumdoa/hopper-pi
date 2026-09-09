@@ -1050,7 +1050,7 @@ it("restores the original option modal with descriptions, default selection and 
 	expect(socket.sent.find((command) => command.type === "answer")).toMatchObject({ questionId: "pick-question", answer: "Small — Fits the courtyard" });
 });
 
-it("accepts a custom Other answer and keeps it through a repeated snapshot", async () => {
+it("accepts a custom Other answer and keeps it through snapshots and target label changes", async () => {
 	const next = await showPickQuestion();
 	await act(async () => document.querySelector<HTMLInputElement>('input[value="Other"]')!.click());
 	await act(async () => dialogButton("Continue").click());
@@ -1062,6 +1062,9 @@ it("accepts a custom Other answer and keeps it through a repeated snapshot", asy
 	});
 	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: next }));
 	expect(document.querySelector<HTMLInputElement>('[role="dialog"] input')!.value).toBe("Medium with a canopy");
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...next, targets: [{ ...next.targets[0]!, documentLabels: { model: "Renamed facade.3dm" } }] } }));
+	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Renamed facade.3dm");
+	expect(document.querySelector<HTMLInputElement>('[role="dialog"] input')!.value).toBe("Medium with a canopy");
 	await act(async () => dialogButton("Continue").click());
 	expect(socket.sent.find((command) => command.type === "answer")).toMatchObject({ answer: "Other: Medium with a canopy" });
 });
@@ -1070,6 +1073,75 @@ it("sends cancellation from the original picker as a null answer", async () => {
 	await showPickQuestion();
 	await act(async () => dialogButton("Cancel").click());
 	expect(socket.sent.find((command) => command.type === "answer")).toMatchObject({ questionId: "pick-question", answer: null });
+});
+
+it("queues worker pickers with their captured targets and advances only after an acknowledged answer", async () => {
+	const initial = await showPickQuestion();
+	const secondBinding = { ...binding, lifecycleInstanceId: "second-life", rhinoDocumentId: "second-model" };
+	const parent = { ...initial.tasks[0]!, state: "running" };
+	const firstWorker = { ...parent, id: "first-worker", parent_task_id: parent.id, state: "awaiting_user" };
+	const secondWorker = { ...firstWorker, id: "second-worker" };
+	const firstQuestion = { ...initial.questions[0]!, task_id: firstWorker.id };
+	const secondQuestion = { ...firstQuestion, id: "second-question", task_id: secondWorker.id, turn_id: "second-turn" };
+	const otherTask = { ...firstWorker, id: "other-task", conversation_id: "other" };
+	const otherQuestion = { ...firstQuestion, id: "other-question", task_id: otherTask.id };
+	const next = { ...initial, tasks: [parent, firstWorker, secondWorker, otherTask], questions: [firstQuestion, secondQuestion, otherQuestion], turns: [{ id: "second-turn", task_id: secondWorker.id, owner: JSON.stringify({ binding: secondBinding }) }], targets: [
+		...snapshot.targets,
+		{ ...snapshot.targets[0]!, lifecycleInstanceId: "second-life", processId: 43, documents: [secondBinding], documentLabels: { "second-model": "Garden.3dm" } },
+	] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: next }));
+	expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("1 more waiting");
+	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Target: Facade.3dm · Rhino 1");
+	await act(async () => dialogButton("Continue").click());
+	expect(socket.sent.find(command => command.type === "answer")).toMatchObject({ questionId: firstQuestion.id });
+	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Facade.3dm");
+	const answered = { ...next, questions: [{ ...firstQuestion, answer: JSON.stringify("Small") }, secondQuestion, otherQuestion] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: answered }));
+	expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Target: Garden.3dm · Rhino 2");
+	expect(document.querySelector('[role="dialog"]')!.textContent).not.toContain("more waiting");
+	await act(async () => dialogButton("Cancel").click());
+	expect(socket.sent.filter(command => command.type === "answer").at(-1)).toMatchObject({ questionId: secondQuestion.id, answer: null });
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...answered, questions: [answered.questions[0], { ...secondQuestion, answer: "null" }, otherQuestion] } }));
+	expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(0);
+});
+
+it("does not replace an active picker when an earlier worker question finishes cleanup", async () => {
+	const initial = await showPickQuestion();
+	const earlierTask = { ...initial.tasks[0]!, id: "earlier-worker", parent_task_id: "pick-task", state: "suspending" };
+	const earlierQuestion = { ...initial.questions[0]!, id: "earlier-question", task_id: earlierTask.id, payload: JSON.stringify({ question: "Earlier question" }) };
+	const next = { ...initial, tasks: [...initial.tasks, earlierTask], questions: [earlierQuestion, ...initial.questions] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: next }));
+	await act(async () => document.querySelectorAll<HTMLInputElement>('[role="dialog"] input[type="radio"]')[1]!.click());
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...next, tasks: [...initial.tasks, { ...earlierTask, state: "awaiting_user" }] } }));
+	expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Which size?");
+	expect(document.querySelectorAll<HTMLInputElement>('[role="dialog"] input[type="radio"]')[1]!.checked).toBe(true);
+});
+
+it("keeps earlier assistant responses visible through tool turns and final message persistence", async () => {
+	const task = { id: "streaming-task", session_id: "session", conversation_id: "conversation", parent_task_id: null, state: "running", payload: JSON.stringify({ text: "Inspect the model", bindings: [binding] }) };
+	const first = { role: "assistant", content: [{ type: "text", text: "I will inspect the courtyard first." }] };
+	const last = { role: "assistant", content: [{ type: "text", text: "The courtyard has three objects." }] };
+	const event = (event: unknown) => ({ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "agent_event", turnId: "turn", event }) });
+	const events = [
+		event({ type: "message_start", message: { role: "assistant" } }),
+		event({ type: "message_end", message: first }),
+		event({ type: "message_start", message: { role: "assistant" } }),
+		event({ type: "message_end", message: { role: "assistant", content: [{ type: "toolCall", id: "inspect", name: "rh_query_objects", arguments: {} }] } }),
+		event({ type: "message_start", message: { role: "assistant" } }),
+		event({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: last.content[0]!.text } }),
+	];
+	const next = { ...snapshot, tasks: [task], events };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: next }));
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: next }));
+	for (const text of [first.content[0]!.text, last.content[0]!.text]) expect(container.textContent!.split(text)).toHaveLength(2);
+	expect(container.textContent!.indexOf(first.content[0]!.text)).toBeLessThan(container.textContent!.indexOf(last.content[0]!.text));
+	expect(container.querySelectorAll(".animate-blink")).toHaveLength(1);
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...next, tasks: [{ ...task, state: "completed" }], events: [...events, { task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "messages", turnId: "turn", messages: [first, last] }) }] } }));
+	for (const text of [first.content[0]!.text, last.content[0]!.text]) expect(container.textContent!.split(text)).toHaveLength(2);
+	expect(container.querySelectorAll(".animate-blink")).toHaveLength(0);
 });
 
 it("expands live tool cards with input and partial output before the final messages arrive", async () => {

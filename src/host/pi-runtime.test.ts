@@ -6,6 +6,41 @@ import { resolveHostConfig } from "./config.js";
 import { isolatedResourceLoaderOptions, providerAuthMethods } from "./pi-runtime.js";
 import { HOPPER_REGISTERED_CATALOG } from "../tools/catalog.js";
 
+it("refreshes external Pi credentials and model availability without restarting or changing the selected model", async () => {
+	const { EmbeddedPiHost } = await import("./pi-runtime.js");
+	const backend = await import("../infra/backend-status.js");
+	const probe = vi.spyOn(backend, "probeBackend").mockResolvedValue({ online: false });
+	const root = await mkdtemp(join(tmpdir(), "hopper-auth-refresh-"));
+	const paths = resolveHostConfig(["--data-dir", root, "--auth-path", join(root, "auth.json")]).paths;
+	let host: import("./pi-runtime.js").EmbeddedPiHost | undefined;
+	try {
+		await writeFile(paths.authPath, "{}");
+		host = await EmbeddedPiHost.create({ paths, projectRoot: resolve(".") });
+		expect(host.snapshot().providers.find(p => p.id === "anthropic")?.authenticated).toBe(false);
+		const receive = vi.fn();
+		host.bus.subscribe(receive);
+		await writeFile(paths.authPath, JSON.stringify({ anthropic: { type: "api_key", key: "test-only-not-a-real-key" } }));
+		await Promise.all([host.refreshAuth(), host.refreshAuth()]);
+		const available = host.snapshot();
+		expect(available.providers.find(p => p.id === "anthropic")?.authenticated).toBe(true);
+		const model = available.models.find(model => model.provider === "anthropic")!;
+		expect(model).toBeDefined();
+		expect(receive).toHaveBeenCalledWith(expect.objectContaining({ type: "snapshot", snapshot: expect.objectContaining({ models: expect.arrayContaining([model]) }) }));
+		await host.setModel(model.provider, model.id);
+		await host.refreshAuth();
+		expect(host.snapshot().model).toEqual(model);
+		await writeFile(paths.authPath, "{}");
+		await host.refreshAuth();
+		expect(host.snapshot().providers.find(p => p.id === "anthropic")?.authenticated).toBe(false);
+		expect(host.snapshot().models.some(model => model.provider === "anthropic")).toBe(false);
+		await expect(host.setModel(model.provider, model.id)).rejects.toThrow("Provider is not authenticated");
+	} finally {
+		await host?.dispose();
+		probe.mockRestore();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 describe("embedded Pi isolation", () => {
 	it("loads only Hopper factories; the host supplies the skill catalog", () => {
 		const options = isolatedResourceLoaderOptions();

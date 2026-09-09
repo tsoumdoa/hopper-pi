@@ -257,7 +257,6 @@ export function App() {
 	const steeringDestination = activeBindings.length ? activeBindings.map(labelFor).join(", ") : "Conversation";
 	const unavailableSelected = selected.some((binding) => !availableTargets.some((target) => target.documents.some((document) => sameBinding(document, binding))));
 	const needsTarget = sendMode !== "steer" && (unavailableSelected || !selected.length);
-	const activeQuestionId = snapshot?.questions.find((question) => question.task_id === activeRoot?.id && question.answer === null)?.id;
 	const title = String(snapshot?.conversations.find((conversation) => conversation.id === conversationId)?.title ?? "New chat");
 
 	useEffect(() => {
@@ -399,7 +398,6 @@ export function App() {
 					snapshot={snapshot}
 					tasks={orderedTasks}
 					connected={connected}
-					activeQuestionId={activeQuestionId === undefined ? undefined : String(activeQuestionId)}
 					conversationId={conversationId}
 					labelFor={labelFor}
 					commands={commands}

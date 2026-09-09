@@ -36,8 +36,9 @@ export function RequestDialog({ request, queued = 0, respond }: {
 	queued?: number;
 	respond(value: string | boolean | null): boolean;
 }) {
-	const [value, setValue] = useState("");
-	useEffect(() => setValue(request?.prefill ?? request?.options?.[0]?.value ?? ""), [request]);
+	const initialValue = request.prefill ?? request.options?.[0]?.value ?? "";
+	const [value, setValue] = useState(initialValue);
+	useEffect(() => setValue(initialValue), [request.requestId, request.kind, initialValue]);
 	const kind = resolveKind(request);
 	const finish = (cancelled = false) => {
 		const result = cancelled ? (kind === "confirm" ? false : null) : kind === "confirm" ? true : value;

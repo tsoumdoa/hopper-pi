@@ -11,6 +11,57 @@ import { createPiTaskDriver } from "./pi-driver.js";
 import type { DriverContext } from "./task-service.js";
 import { HostSkillLibrary } from "../skills.js";
 
+it("continues conversation history across task workspaces and isolates other sessions", async () => {
+	const root = await realpath(await mkdtemp(join(tmpdir(), "shared-driver-history-")));
+	const context: DriverContext = {
+		taskId: "first", turnId: "first-turn", sessionId: "session", conversationId: "conversation",
+		binding: null, owner: null, text: "Remember the courtyard width is 42 metres", attachments: [], continuation: null,
+		signal: new AbortController().signal, ask: () => "question", requestDocumentAction: () => "handoff", publish: () => {},
+	};
+	let activeSession: AgentSession;
+	const prompts: unknown[] = [];
+	const options = {
+		dataDirectory: root, authPath: join(root, "auth.json"),
+		configureSession(session: AgentSession) {
+			activeSession = session;
+			session.agent.streamFunction = (model, providerContext) => {
+				prompts.push(providerContext.messages);
+				const message: AssistantMessage = {
+					role: "assistant", api: model.api, provider: model.provider, model: model.id,
+					timestamp: Date.now(), stopReason: "stop", content: [{ type: "text", text: "Width remembered" }],
+					usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+				};
+				const stream = createAssistantMessageEventStream();
+				stream.push({ type: "done", reason: "stop", message });
+				return stream;
+			};
+		},
+	};
+	let driver: Awaited<ReturnType<typeof createPiTaskDriver>> | undefined;
+	try {
+		for (const taskId of ["first", "second", "third"]) {
+			driver = await createPiTaskDriver({ ...context, taskId, turnId: `${taskId}-turn`, text: taskId === "first" ? context.text : `Follow-up ${taskId}` }, options);
+			expect(await driver.run()).toEqual({ usage: 2 });
+			await driver.cleanup();
+			driver = undefined;
+		}
+		expect(JSON.stringify(prompts[1])).toContain("42 metres");
+		expect(JSON.stringify(prompts[2])).toContain("42 metres");
+		expect(JSON.stringify(prompts[2])).toContain("Follow-up second");
+		expect(await SessionManager.listAll(join(root, "sessions", "conversation", "sessions", "session"))).toHaveLength(1);
+		for (const identity of [{ sessionId: "worker" }, { conversationId: "other-conversation" }]) {
+			driver = await createPiTaskDriver({ ...context, ...identity, taskId: "isolated" }, options);
+			expect(activeSession!.messages).toEqual([]);
+			await driver.cleanup();
+			driver = undefined;
+		}
+	} finally {
+		await driver?.cleanup();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 it.each([
 	{ toolName: "ask_user", args: { question: "Which size?" }, answer: "Large" },
 	{ toolName: "pick_option", args: { question: "Which size?", options: [

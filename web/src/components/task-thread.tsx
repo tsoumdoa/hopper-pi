@@ -1,5 +1,5 @@
 import { ArrowDown, Box, ChevronRight, CircleAlert, Loader2, Square } from "lucide-react";
-import { useMemo, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { parseImages, type ImageAttachment } from "../../../src/host/protocol";
 import type { TargetBinding } from "../../../src/protocol/shared-execution.js";
 import { imageUrl } from "../lib/image-attachments";
@@ -21,7 +21,7 @@ const ACTIVE_STATES = ["running", "suspending", "awaiting_user"];
 const SETTLED_STATES = ["completed", "cancelled", "failed", "interrupted", "uncertain"];
 
 type TaskInput = { text: string; bindings: TargetBinding[]; attachments?: unknown; kind?: SendMode };
-type LiveAssistantMessage = { turnId: string; text: string; thinking: string };
+type LiveAssistantMessage = { id: string; turnId: string; text: string; thinking: string; streaming: boolean };
 
 /** Elapsed time for a task, taken from its saved turn timestamps so reconnects keep the clock. */
 export function TaskWorkingTime({ task, turns, inline = false }: { task: Row; turns: Row[]; inline?: boolean }) {
@@ -37,17 +37,24 @@ export function TaskWorkingTime({ task, turns, inline = false }: { task: Row; tu
 
 /** Assistant text that is still streaming: agent events for turns without a saved message list yet. */
 function liveAssistantMessages(events: Row[], completedTurns: Set<string>): LiveAssistantMessage[] {
-	const messages = new Map<string, LiveAssistantMessage>();
+	const messages: LiveAssistantMessage[] = [];
+	const current = new Map<string, LiveAssistantMessage>();
 	for (const row of events) {
 		const payload = decode<any>(row.payload, {});
 		if (payload.type !== "agent_event" || !payload.turnId) continue;
 		const event = payload.event ?? {};
 		const turnId = String(payload.turnId);
 		if (event.type === "message_start") {
-			if (event.message?.role === "assistant") messages.set(turnId, { turnId, text: "", thinking: "" });
+			if (event.message?.role === "assistant") {
+				const previous = current.get(turnId);
+				if (previous) previous.streaming = false;
+				const message = { id: `${turnId}:${messages.length}`, turnId, text: "", thinking: "", streaming: true };
+				messages.push(message);
+				current.set(turnId, message);
+			}
 			continue;
 		}
-		const message = messages.get(turnId);
+		const message = current.get(turnId);
 		if (!message) continue;
 		if (event.type === "message_update") {
 			const update = event.assistantMessageEvent ?? {};
@@ -56,6 +63,7 @@ function liveAssistantMessages(events: Row[], completedTurns: Set<string>): Live
 			continue;
 		}
 		if (event.type === "message_end" && event.message?.role === "assistant") {
+			message.streaming = false;
 			const content = Array.isArray(event.message.content) ? event.message.content : [];
 			const text = content.filter((part: any) => part.type === "text").map((part: any) => String(part.text ?? "")).join("\n");
 			const thinking = content.filter((part: any) => part.type === "thinking").map((part: any) => String(part.thinking ?? part.text ?? "")).join("\n");
@@ -63,7 +71,7 @@ function liveAssistantMessages(events: Row[], completedTurns: Set<string>): Live
 			if (thinking) message.thinking = thinking;
 		}
 	}
-	return [...messages.values()].filter((message) => !completedTurns.has(message.turnId));
+	return messages.filter((message) => !completedTurns.has(message.turnId) && (message.streaming || message.text || message.thinking));
 }
 
 function safeImages(attachments: unknown): ImageAttachment[] {
@@ -111,7 +119,15 @@ function Notice({ tone, children }: { tone: "danger" | "warn" | "muted"; childre
 	);
 }
 
-function Question({ question, enabled, inactive, answer }: { question: Row; enabled: boolean; inactive?: boolean; answer(value: string | null): boolean }) {
+function Question({ question, enabled, inactive, waiting, target, queued = 0, answer }: {
+	question: Row;
+	enabled: boolean;
+	inactive?: boolean;
+	waiting?: boolean;
+	target?: string;
+	queued?: number;
+	answer(value: string | null): boolean;
+}) {
 	const [other, setOther] = useState(false);
 	const payload = useMemo(() => decode<{ kind?: string; question?: string; placeholder?: string; options?: (string | PickOption)[] }>(question.payload, {}), [question.payload]);
 	const prompt = payload.question ?? "Answer needed";
@@ -124,10 +140,11 @@ function Question({ question, enabled, inactive, answer }: { question: Row; enab
 			type: "ui_request", requestId: String(question.id),
 			kind: other || !options.length ? "input" : "select",
 			title: other ? "Please specify:" : prompt,
+			description: target,
 			placeholder: other ? prompt : payload.placeholder,
 			...(other ? {} : { options: options.map((option, index) => ({ ...option, id: String(index) })) }),
 		};
-	}, [question.id, payload, prompt, other]);
+	}, [question.id, payload, prompt, other, target]);
 	if (question.answer !== null) {
 		const response = decode<unknown>(question.answer, question.answer);
 		return (
@@ -138,8 +155,8 @@ function Question({ question, enabled, inactive, answer }: { question: Row; enab
 			</section>
 		);
 	}
-	if (!enabled) return <p role="status" className="text-xs text-muted">{inactive ? "This question is no longer active." : "Finishing the current operation."}</p>;
-	return <RequestDialog key={other ? "other" : "choice"} request={request} respond={(value) => {
+	if (!enabled) return <p role="status" className="text-xs text-muted">{inactive ? "This question is no longer active." : waiting ? "Waiting for your answer." : "Finishing the current operation."}</p>;
+	return <RequestDialog key={other ? "other" : "choice"} request={request} queued={queued} respond={(value) => {
 		if (!other && payload.kind === "pick_option" && value === OTHER_OPTION_LABEL) { setOther(true); return true; }
 		const sent = answer(typeof value === "string" ? other ? `Other: ${value.trim()}` : value.trim() : null);
 		return sent;
@@ -266,12 +283,12 @@ function TaskReply({ task, snapshot, labelFor, commands, stoppable }: {
 					);
 				})}
 				{liveMessages.map((message) => (
-					<div key={message.turnId} className="min-w-0">
-						{message.thinking && <div className="mb-2"><ThinkingBlock text={message.thinking} streaming={!message.text} /></div>}
+					<div key={message.id} className="min-w-0">
+						{message.thinking && <div className="mb-2"><ThinkingBlock text={message.thinking} streaming={message.streaming && !message.text} /></div>}
 						{message.text ? (
 							<div className="min-w-0 text-[14px] leading-7 text-ink">
 								<MessageMarkdown text={message.text} />
-								<span aria-hidden="true" className="ml-0.5 inline-block h-[1.1em] w-[2px] translate-y-[3px] bg-accent animate-blink" />
+								{message.streaming && <span aria-hidden="true" className="ml-0.5 inline-block h-[1.1em] w-[2px] translate-y-[3px] bg-accent animate-blink" />}
 							</div>
 						) : !message.thinking ? (
 							<p className="flex items-center gap-2 text-[13px] text-muted" role="status">
@@ -302,7 +319,8 @@ function TaskReply({ task, snapshot, labelFor, commands, stoppable }: {
 					<Question
 						key={String(question.id)}
 						question={question}
-						enabled={state === "awaiting_user"}
+						enabled={false}
+						waiting={state === "awaiting_user"}
 						inactive={SETTLED_STATES.includes(state)}
 						answer={(value) => commands.answer(String(question.id), value)}
 					/>
@@ -401,12 +419,11 @@ function ChildTask({ task, snapshot, labelFor, commands }: {
 	);
 }
 
-export function TaskThread({ snapshot, tasks, connected, activeQuestionId, conversationId, labelFor, commands, onSuggestion }: {
+export function TaskThread({ snapshot, tasks, connected, conversationId, labelFor, commands, onSuggestion }: {
 	snapshot: SharedSnapshot | undefined;
 	/** Root tasks in order, each followed by its child tasks. */
 	tasks: Row[];
 	connected: boolean;
-	activeQuestionId?: string;
 	conversationId: string;
 	labelFor(binding: TargetBinding): string;
 	commands: TaskThreadCommands;
@@ -415,6 +432,20 @@ export function TaskThread({ snapshot, tasks, connected, activeQuestionId, conve
 	const scroller = useRef<HTMLDivElement>(null);
 	const stickToBottom = useRef(true);
 	const [showJump, setShowJump] = useState(false);
+	const [focusedQuestionId, setFocusedQuestionId] = useState<string>();
+	// Show one answerable question at a time, including questions from workers.
+	const waitingTasks = new Map(tasks.filter((task) => task.state === "awaiting_user").map((task) => [task.id, task]));
+	const pendingQuestions = snapshot?.questions.filter((question) => question.answer === null && waitingTasks.has(question.task_id)) ?? [];
+	const activeQuestion = pendingQuestions.find((question) => question.id === focusedQuestionId) ?? pendingQuestions[0];
+	const activeQuestionId = activeQuestion?.id;
+	useEffect(() => {
+		setFocusedQuestionId(activeQuestionId === undefined ? undefined : String(activeQuestionId));
+	}, [activeQuestionId]);
+	const questionTask = activeQuestion && waitingTasks.get(activeQuestion.task_id);
+	const questionTurn = snapshot?.turns.find((turn) => turn.id === activeQuestion?.turn_id);
+	const questionOwner = decode<{ binding?: TargetBinding }>(questionTurn?.owner, {});
+	const questionBindings = questionOwner.binding ? [questionOwner.binding] : decode<TaskInput>(questionTask?.payload, { text: "", bindings: [] }).bindings;
+	const questionTarget = questionBindings.length ? `Target: ${questionBindings.map(labelFor).join(", ")}` : "Conversation";
 
 	const scrollToLatest = (behavior: ScrollBehavior = "smooth") => {
 		const node = scroller.current;
@@ -437,6 +468,15 @@ export function TaskThread({ snapshot, tasks, connected, activeQuestionId, conve
 
 	return (
 		<div className="relative min-h-0 flex-1">
+			{activeQuestion && <Question
+				key={String(activeQuestion.id)}
+				question={activeQuestion}
+				enabled
+				waiting
+				target={questionTarget}
+				queued={pendingQuestions.length - 1}
+				answer={(value) => commands.answer(String(activeQuestion.id), value)}
+			/>}
 			<div ref={scroller} onScroll={onScroll} className="h-full overflow-y-auto px-4 py-6 sm:px-6" aria-label="Conversation" aria-live="polite">
 				<div className="mx-auto flex w-full max-w-[760px] flex-col gap-6 pb-4">
 					{!snapshot || tasks.length === 0 ? (

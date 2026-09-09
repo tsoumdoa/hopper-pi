@@ -192,9 +192,14 @@ export async function createPiTaskDriver(
 			);
 			if (!model) throw new Error("Selected model is unavailable");
 		}
+		// The journal's conversation/session directory owns the history. Task
+		// workspaces change between prompts, so Pi's cwd-filtered discovery loses it.
+		const previousSession = (await SessionManager.listAll(sessionRoot))[0];
 		const created = await createAgentSessionFromServices({
 			services,
-			sessionManager: SessionManager.continueRecent(workspace, sessionRoot),
+			sessionManager: previousSession
+				? SessionManager.open(previousSession.path, sessionRoot, workspace)
+				: SessionManager.create(workspace, sessionRoot),
 			noTools: "builtin",
 			customTools: [...tools, skills.createReadTool(workspace)],
 			...(model ? { model } : {}),

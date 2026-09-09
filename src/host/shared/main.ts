@@ -428,8 +428,7 @@ export async function startSharedHost(
 		refresh = setInterval(() => {
 			if (refreshing || closing) return;
 			refreshing = true;
-			refreshWork = native!
-				.refresh()
+			refreshWork = Promise.all([native!.refresh(), admin!.refreshAuth()])
 				.then(async () => {
 					if (closing) return;
 					await launches!.refresh();

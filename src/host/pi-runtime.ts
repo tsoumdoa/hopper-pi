@@ -82,6 +82,7 @@ export class EmbeddedPiHost {
 	private unsubscribe?: () => void;
 	private disposed = false;
 	private skillUpdate?: Promise<void>;
+	private authRefresh?: Promise<void>;
 	private promptPending = false;
 	private promptGeneration = 0;
 
@@ -289,6 +290,7 @@ export class EmbeddedPiHost {
 
 	async setModel(provider: string, id: string): Promise<void> {
 		this.assertUsable();
+		await this.refreshAuth();
 		const model = this.runtime.services.modelRuntime.getModel(provider, id);
 		if (!model) throw new Error(`Unknown model: ${provider}/${id}`);
 		if (!this.runtime.services.modelRuntime.hasConfiguredAuth(provider)) {
@@ -310,6 +312,17 @@ export class EmbeddedPiHost {
 		if (!selected) throw new Error(`Thinking level is unavailable: ${level}`);
 		this.runtime.session.setThinkingLevel(selected, { persist: true });
 		this.publishSnapshot();
+	}
+
+	/** Reload credentials changed by the global Pi CLI without fetching model catalogs. */
+	async refreshAuth(): Promise<void> {
+		this.assertUsable();
+		if (!this.authRefresh) {
+			this.authRefresh = this.runtime.services.modelRuntime.refresh({ allowNetwork: false })
+				.then(() => { if (!this.disposed) this.publishSnapshot(); })
+				.finally(() => { this.authRefresh = undefined; });
+		}
+		await this.authRefresh;
 	}
 
 	async login(provider: string, authType: AuthType, apiKey?: string): Promise<void> {
@@ -368,6 +381,7 @@ export class EmbeddedPiHost {
 	async dispose(): Promise<void> {
 		if (this.disposed) return;
 		this.disposed = true;
+		await this.authRefresh?.catch(() => {});
 		if (this.skillUpdate) await this.skillUpdate.catch(() => {});
 		this.unsubscribe?.();
 		this.unsubscribe = undefined;
