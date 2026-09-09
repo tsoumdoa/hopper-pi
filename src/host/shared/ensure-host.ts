@@ -80,7 +80,7 @@ export async function ensureSharedHost(
 			await new Promise<void>((resolve, reject) => {
 				const child = spawn(
 					process.execPath,
-					[options.entrypoint, "--shared", ...(options.hostArguments ?? [])],
+					[options.entrypoint, ...(options.hostArguments ?? [])],
 					{
 						detached: true,
 						stdio: ["ignore", log, log],

@@ -18,8 +18,6 @@ internal static class SharedNativeHost
 {
     public static string BootstrapTicket { get; set; }
     public static bool SuppressBrowser { get; set; }
-    public static bool ForcedShared { get; set; }
-    public static bool Enabled => ForcedShared || BootstrapTicket != null || Environment.GetEnvironmentVariable("HOPPER_SHARED_HOST") == "1";
     public static string ControlDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".hopper", "shared-control");
     public static JsonElement Read(string name) => JsonDocument.Parse(File.ReadAllText(Path.Combine(ControlDirectory, name))).RootElement.Clone();
     public static bool CompatibleDiscovery(JsonElement control, JsonElement discovery) =>
@@ -46,6 +44,7 @@ internal sealed class SharedNodeAttachment : IDisposable
 {
     private readonly HopperHostEntryResolver _entry;
     private readonly RuntimeStatusStore _status;
+    private readonly SharedHostAttachmentRecovery _recovery;
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(5) };
     private CancellationTokenSource _lifetime;
     private string _profile, _lifecycle, _epoch;
@@ -56,7 +55,11 @@ internal sealed class SharedNodeAttachment : IDisposable
     public Uri ReadyUri { get; private set; }
     public event Action<Uri> Ready;
     public bool IsAlive => _attached;
-    public SharedNodeAttachment(HopperHostEntryResolver entry, RuntimeStatusStore status) => (_entry, _status) = (entry, status);
+    public SharedNodeAttachment(HopperHostEntryResolver entry, RuntimeStatusStore status)
+    {
+        (_entry, _status) = (entry, status);
+        _recovery = new SharedHostAttachmentRecovery(DiscoverOrStart, IsCurrentRegistration, Register);
+    }
 
     public async Task<ChildStartResult> StartAsync(NodeRuntime runtime, string profile, string lifecycle, CancellationToken cancellationToken)
     {
@@ -64,13 +67,33 @@ internal sealed class SharedNodeAttachment : IDisposable
         _lifetime?.Cancel(); _lifetime = new CancellationTokenSource();
         try
         {
-            await DiscoverOrStart(explicitStart: SharedNativeHost.BootstrapTicket == null, cancellationToken).ConfigureAwait(false);
-            await Register(cancellationToken).ConfigureAwait(false);
+            await _recovery.EnsureAsync(SharedNativeHost.BootstrapTicket == null, true, cancellationToken).ConfigureAwait(false);
             _attached = true;
             _ = Reconnect(_lifetime.Token);
             return new(true, true, "Attached to the shared Hopper host.");
         }
         catch (Exception error) { _lifetime.Cancel(); return new(false, false, error.Message); }
+    }
+
+    // An explicit HopperCode command may restart a host the browser intentionally stopped.
+    // The background reconnect path continues to respect the stopped intent.
+    public Task EnsureRunningAsync() => _recovery.EnsureAsync(true, false, _lifetime?.Token ?? CancellationToken.None);
+
+    private bool IsCurrentRegistration()
+    {
+        if (!_attached) return false;
+        try
+        {
+            var control = SharedNativeHost.Read("control.json");
+            var discovery = SharedNativeHost.Read("discovery.json");
+            using var process = Process.GetProcessById(discovery.GetProperty("pid").GetInt32());
+            return SharedNativeHost.CompatibleDiscovery(control, discovery) &&
+                control.GetProperty("desiredState").GetString() == "running" &&
+                control.GetProperty("revision").GetInt64() == discovery.GetProperty("revision").GetInt64() &&
+                discovery.GetProperty("hostEpoch").GetString() == _epoch &&
+                !process.HasExited && process.StartTime.ToUniversalTime().Ticks == _hostProcessStartTicks;
+        }
+        catch { return false; }
     }
 
     private async Task DiscoverOrStart(bool explicitStart, CancellationToken cancellationToken)
@@ -79,7 +102,7 @@ internal sealed class SharedNodeAttachment : IDisposable
         // The startup launcher performs singleton control and detached spawning. It has no Rhino parent watchdog.
         var info = new ProcessStartInfo(_runtime.ExecutablePath) { UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardOutput = true, RedirectStandardError = true, WorkingDirectory = Path.GetDirectoryName(entry) };
-        info.ArgumentList.Add(entry); info.ArgumentList.Add("--shared"); info.ArgumentList.Add("--ensure-host");
+        info.ArgumentList.Add(entry); info.ArgumentList.Add("--ensure-host");
         if (explicitStart) info.ArgumentList.Add("--explicit-start");
         using var launcher = Process.Start(info) ?? throw new InvalidOperationException("Could not start shared host launcher.");
         var stdout = launcher.StandardOutput.ReadToEndAsync(); var stderr = launcher.StandardError.ReadToEndAsync();
@@ -130,7 +153,7 @@ internal sealed class SharedNodeAttachment : IDisposable
         }
         _epoch = epoch;
         _bootstrapRegistered = true;
-        ReadyUri = new Uri($"http://127.0.0.1:{port}/shared#{control.GetProperty("browserCredential").GetString()}");
+        ReadyUri = new Uri($"http://127.0.0.1:{port}/#{control.GetProperty("browserCredential").GetString()}");
         Ready?.Invoke(ReadyUri);
     }
 
@@ -161,8 +184,7 @@ internal sealed class SharedNodeAttachment : IDisposable
                 }
                 catch { /* Missing discovery or an exited PID needs singleton discovery/replacement. */ }
                 if (sameLiveHost) continue;
-                await DiscoverOrStart(false, cancellationToken).ConfigureAwait(false);
-                await Register(cancellationToken).ConfigureAwait(false);
+                await _recovery.EnsureAsync(false, false, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
             catch (Exception error) { _status.UpdateError(RuntimeStatusComponent.Host, new RuntimeErrorV2 { Code = RpcReasonCode.HANDSHAKE_REJECTED, Message = "Shared host reconnect: " + error.Message }); }

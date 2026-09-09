@@ -19,6 +19,8 @@ function setup(authorizeDocument = vi.fn(async () => {})) {
 	const admin = {
 		bus: { subscribe: () => () => {} },
 		snapshot: () => ({}),
+		setThinkingLevel: vi.fn(),
+		logout: vi.fn(async () => {}),
 		ui: { replayPending: () => {} },
 	} as unknown as HostRuntime;
 	const recoverLaunch = vi.fn(async () => ({ id: "launch" }));
@@ -48,6 +50,7 @@ function setup(authorizeDocument = vi.fn(async () => {})) {
 	};
 	return {
 		journal,
+		admin,
 		registry,
 		tasks,
 		backend,
@@ -244,6 +247,31 @@ it("scopes launch recovery to the launch's original root and conversation", asyn
 		s.journal.snapshot().records.find((row) => row.id === "launch")!.state,
 	).toBe("cancelled");
 	await s.tasks.stop();
+	s.backend.dispose();
+	s.journal.close();
+});
+
+
+it("normal UI thinking and logout settings reach the task host admin", async () => {
+	const s = setup();
+	await s.backend.command({ type: "set_thinking", level: "high" });
+	await s.backend.command({ type: "logout", provider: "provider" });
+	expect(s.admin.setThinkingLevel).toHaveBeenCalledWith("high");
+	expect(s.admin.logout).toHaveBeenCalledWith("provider");
+	s.backend.dispose();
+	s.journal.close();
+});
+
+it("exports only the selected durable conversation and rejects missing selections", () => {
+	const s = setup();
+	s.journal.createConversation("other", "Private other conversation");
+	const exported = s.backend.exportConversation(s.command.conversationId);
+	expect(exported.format).toBe("hopper-conversation-debug");
+	expect(exported.conversation.id).toBe(s.command.conversationId);
+	expect(exported.sessions).toHaveLength(1);
+	expect(JSON.stringify(exported)).not.toContain("Private other conversation");
+	expect(() => s.backend.exportConversation(null)).toThrow("Select a conversation");
+	expect(() => s.backend.exportConversation("missing")).toThrow("Select a conversation");
 	s.backend.dispose();
 	s.journal.close();
 });

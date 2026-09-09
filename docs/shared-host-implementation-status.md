@@ -1,12 +1,12 @@
 # Shared host implementation status
 
-The implementation now covers all eight code milestones in [the plan](shared-host-multi-rhino-plan.md). Shared mode remains opt-in during native acceptance. The reusable packaged Mac fixture passed authenticated first-process bootstrap, New in one process, captured activation, a 1000 mm to 1 m geometry transfer with new identities and provenance, and both managed saves. Separate checks verified host survival after Rhino exits. Windows acceptance still requires a Windows Rhino runner. Tests with injected native adapters do not establish Windows runtime behavior.
+The implementation now covers all eight code milestones in [the plan](shared-host-multi-rhino-plan.md). The shared host is the normal HopperCode runtime. The reusable packaged Mac fixture passed authenticated first-process bootstrap, New in one process, captured activation, a 1000 mm to 1 m geometry transfer with new identities and provenance, and both managed saves. Separate checks verified host survival after Rhino exits. Windows acceptance still requires a Windows Rhino runner. Tests with injected native adapters do not establish Windows runtime behavior.
 
-## Running shared mode
+## Running Hopper
 
-Build the host and native plugins with the repository's normal package workflow. Set `HOPPER_SHARED_HOST=1` in Rhino's environment and run `HopperCode`. The native launcher runs the short-lived `--shared --ensure-host` path. It attaches to the user's existing shared host or starts one detached host. Owned-child mode remains available when the flag is absent; a lifecycle cannot belong to both modes.
+Build and install the host and native plugins with the repository's normal package workflow. Open Rhino normally and run `HopperCode`. The native launcher uses the short-lived `--ensure-host` path to attach to the user's existing host or start one detached host. No environment flag or special Rhino launch command is needed.
 
-For a direct development start, use `node dist/host/index.js --shared --ensure-host --explicit-start`. The native command opens the authenticated `/shared` application. Browser credentials remain in the private control directory and the URL fragment, never in the ordinary host log. Closing a browser tab or Rhino does not stop the host. The browser's Stop host action records stopped intent; a later explicit start is required.
+For a direct development start, use `node dist/host/index.js --ensure-host --explicit-start`. The native command opens the authenticated application at `/`. Browser credentials remain in the private control directory and the URL fragment, never in the ordinary host log. Closing a browser tab or Rhino does not stop the host. The browser's Stop host action records stopped intent; a later explicit start is required.
 
 Control state lives in `~/.hopper/shared-control`, independently of `--data-dir`. It pins one endpoint, one canonical storage directory, and the SQLite identity. A different data directory, missing journal, incompatible owner, or occupied unhealthy endpoint produces a conflict instead of another host. Shared storage is separate from legacy histories, which are preserved.
 
@@ -23,7 +23,7 @@ Control state lives in `~/.hopper/shared-control`, independently of `--data-dir`
 | 7. Rhino launch | Persisted count-bounded launch grants, installation/build capability checks, opaque single-use bootstrap tickets, PID/start correlation, readiness verification, cancellation/timeout reconciliation without respawn. Mac permits one process and creates additional targets with Rhino New. Windows has a separate process adapter. |
 | 8. Geometry transfer | Native selected-object `.3dm` export, immutable artifact/checksum publication, supported-object validation, units and tolerance metadata, scaled import with new identities and provenance, source-save-path preservation, sequential ownership for two Mac documents. |
 
-The shared browser provides conversations, process/document selection, task and child history, steering, questions, recovery acknowledgements, bounded document and launch controls, model selection and authentication. Task execution continues without a connected browser. A replacement tab takes control without cancelling tasks.
+The normal browser UI provides conversations, process/document selection, task and child history, steering, questions, recovery acknowledgements, bounded document and launch controls, model selection and authentication. Task execution continues without a connected browser. A replacement tab takes control without cancelling tasks.
 
 ## Limits and storage rules
 
@@ -45,4 +45,8 @@ Independent adversarial reviews covered task admission, question suspension, ste
 
 Windows ACLs, detached lifetime, first/additional process launch and native transfer require the Windows packaged acceptance suite before rollout there. Sleep/wake and the full native crash matrix remain platform acceptance work. These gates are not marked passed by unit tests.
 
-Final local verification passed `pnpm build`, 630 TypeScript tests across 75 files, 242 C# Core tests, and 101 shared-host tests on Node 22.19.0. Rhino and Grasshopper builds passed. The checked-in `scripts/shared-host-native-smoke.mjs` passed against the packaged Mac plugin. The final adversarial review also checked launch recovery across restart, including late spawn evidence.
+Before the default-startup cleanup, local verification passed `pnpm build`, 630 TypeScript tests across 75 files, 242 C# Core tests, and 101 shared-host tests on Node 22.19.0. Rhino and Grasshopper builds passed. The checked-in `scripts/shared-host-native-smoke.mjs` passed against the packaged Mac plugin. The final adversarial review also checked launch recovery across restart, including late spawn evidence.
+
+The default-startup cleanup removes the opt-in environment setting, owned-child host entry, and separate browser application. The normal UI retains model/provider/thinking controls, skills, tools, exports and image composition while showing available documents and exact task destinations. Independent review found and fixed explicit reopen after Stop host, unnecessary same-host re-registration, and mismatched skill-setting paths. Native recovery contract tests now cover stopped-host restart, healthy reopen, concurrent discovery and cancellation. Desktop and mobile browser fixtures were visually checked. These checks do not replace a fresh packaged native acceptance run for the startup changes.
+
+Cleanup validation passed the production build, 631 TypeScript tests across 74 files, and 245 C# Core tests. Rhino builds passed; Grasshopper builds passed with the existing platform warnings.

@@ -1,6 +1,6 @@
 # Pi question suspension prototype
 
-The shipped `@earendil-works/pi-coding-agent` 0.85.1 and its `pi-agent-core` 0.85.1 dependency support the model/tool stopping boundary required by milestone 1. The prototype is in `src/host/question-suspension.ts`; it is not connected to the owned-child host or browser question handler.
+The shipped `@earendil-works/pi-coding-agent` 0.85.1 and its `pi-agent-core` 0.85.1 dependency support the model/tool stopping boundary required by milestone 1. The prototype is in `src/host/question-suspension.ts`; it is a standalone proof of the boundary, separate from the production task driver and browser question handler.
 
 Install the boundary on `session.agent` after AgentSession construction and before prompting. It preserves the existing tool authorization hook, selects sequential tool execution, blocks remaining calls after a question, and uses `shouldStopAfterTurn` to end the run. The task's question tool calls `suspend` with its stable question, task, session, turn, and Pi tool-call identities. An injected persistence function must commit the question before the tool returns `awaiting_user`. A failed commit still stops dispatch and leaves an error tool result. The scheduler must interpret that failure and retain ownership until it has resolved cleanup.
 

@@ -108,7 +108,6 @@ namespace rhino_zmq_poc
                 if (record.GetProperty("expiresAt").GetInt64() <= DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()) return Result.Failure;
                 var facade = HopperRhinoPlugin.HostFacade;
                 if (facade is null || facade.GetStatus().Runtime.Lifecycle.State != Hopper.Core.Protocol.LifecycleState.stopped) return Result.Failure;
-                SharedNativeHost.ForcedShared = true;
                 SharedNativeHost.BootstrapTicket = ticket;
                 SharedNativeHost.SuppressBrowser = true;
                 return facade.RequestStart().Accepted ? Result.Success : Result.Failure;

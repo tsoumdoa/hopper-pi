@@ -70,6 +70,8 @@ export type SharedBrowserCommand =
 	  }
 	| { type: "stop_host"; requestId: string; hostEpoch: string }
 	| { type: "set_model"; provider: string; modelId: string }
+	| { type: "set_thinking"; level: string }
+	| { type: "logout"; provider: string }
 	| {
 			type: "login";
 			provider: string;
@@ -112,6 +114,8 @@ export function parseSharedBrowserCommand(raw: string): SharedBrowserCommand {
 			provider: string(v, "provider"),
 			modelId: string(v, "modelId"),
 		};
+	if (type === "set_thinking") return { type, level: string(v, "level") };
+	if (type === "logout") return { type, provider: string(v, "provider") };
 	if (type === "login") {
 		if (v.authType !== "api_key" && v.authType !== "oauth")
 			throw new Error("Invalid authentication method");

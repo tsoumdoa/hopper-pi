@@ -1,12 +1,14 @@
 import { timingSafeEqual } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
-import { serveStatic, validateStaticDirectory } from "../server.js";
+import { serveStatic, validateStaticDirectory, handleUiApi } from "../server.js";
 import { MAX_IMAGES, MAX_IMAGE_BASE64 } from "../protocol.js";
 import {
 	parseSharedBrowserCommand,
 	type SharedBrowserCommand,
 } from "./browser-protocol.js";
+
+import type { HostRuntime } from "../pi-runtime.js";
 
 export interface SharedBrowserBackend {
 	snapshot(): unknown;
@@ -24,6 +26,8 @@ export function createSharedBrowserServer(options: {
 	registrationCredential?: string;
 	onRegistrationError?: (error: unknown) => void;
 	health?: () => unknown;
+	uiRuntime?: () => HostRuntime | undefined;
+	exportConversation?: (conversationId: string | null) => unknown;
 }): { server: Server; close(): Promise<void> } {
 	const staticDir = validateStaticDirectory(options.staticDir);
 	const equal = (a: string, b: string) =>
@@ -82,7 +86,8 @@ export function createSharedBrowserServer(options: {
 			});
 			return;
 		}
-		if (pathname === "/shared") request.url = "/";
+		const uiRuntime = options.uiRuntime?.();
+		if (uiRuntime && handleUiApi(request, response, { runtime: uiRuntime, token: options.browserCredential, exportSession: options.exportConversation })) return;
 		serveStatic(staticDir, request, response);
 	});
 	const sockets = new WebSocketServer({

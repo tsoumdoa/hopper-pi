@@ -8,7 +8,7 @@ Build one independent local Node host per OS user, serving one web application. 
 
 Agent-driven Rhino launch on Windows and macOS, and geometry transfer between targets, are required parts of this plan. They have delivery milestones and acceptance checks below. The project is not complete when attachment and delegation alone ship. Mac launches its first process when none is running; additional Mac targets use Rhino New in that process.
 
-Remote machines, replicated hosts, seamless continuation of interrupted model responses, automatic host upgrades, automatic legacy-history import, automatic hung-host termination, and idle shutdown are outside this delivery. Keep owned-child mode available during rollout, but never let it and shared mode control the same lifecycle simultaneously.
+Remote machines, replicated hosts, seamless continuation of interrupted model responses, automatic host upgrades, automatic legacy-history import, automatic hung-host termination, and idle shutdown are outside this delivery. HopperCode always discovers or starts the shared host and opens the normal application. Do not require a feature flag or a separate application route.
 
 ## Terms and target contract
 
@@ -196,7 +196,7 @@ Shared mode rejects `--parent-pid` and `--instance-id`; lifecycle registration h
 
 Under the per-user control lock, first startup records the canonical data directory and a journal identity. Include both identities in the user-private discovery record. Subsequent launches without `--data-dir` use the recorded directory, including replacement hosts after a crash. An explicit different directory is a configuration conflict: show the running/recorded directory and reject attachment or startup without creating another journal. If the recorded directory is missing or inaccessible, block with an actionable error rather than falling back to an empty default directory. Changing storage requires an explicit offline migration/reset procedure outside this delivery; Stop Host and a new invocation do not implicitly change it.
 
-Legacy `instances/*/sessions`, including `instances/standalone/sessions`, remain intact and readable through owned-child mode. Shared mode starts with new conversations. A later explicit import must be versioned, resumable, deduplicated, preserve originals/artifact references, and import no live authorization or pending execution. Automatic import is not a launch requirement. Never call `continueRecent` across unrelated conversation or worker directories.
+Legacy `instances/*/sessions`, including `instances/standalone/sessions`, remain intact on disk. The shared host starts with new conversations; legacy history is not automatically shown in the new journal. A later explicit import must be versioned, resumable, deduplicated, preserve originals/artifact references, and import no live authorization or pending execution. Automatic import is not a launch requirement. Never call `continueRecent` across unrelated conversation or worker directories.
 
 ## Process scheduling and document actions
 
@@ -353,7 +353,7 @@ Export and import may target different documents in one Mac process; they still 
 
 | Milestone | Deliverable and gate |
 | --- | --- |
-| 1. Isolate runtime state | Inject binding/task/session contexts in owned-child mode. Preserve existing single-instance behavior. Finalize journal schemas, task/input transitions, recovery dispositions, and the packaged SQLite adapter. Prove Pi question suspension and fresh-turn history before shared execution. |
+| 1. Isolate runtime state | Inject binding/task/session contexts throughout the runtime. Preserve single-document behavior while making the shared host the default. Finalize journal schemas, task/input transitions, recovery dispositions, and the packaged SQLite adapter. Prove Pi question suspension and fresh-turn history before shared execution. |
 | 2. Prove platform lifetime and launch | Prototype singleton endpoint/control locking, pinned storage identity, detached Node lifetime, reattachment, browser credential persistence, Windows launch/bootstrap, Mac first/additional process launch, and sleep/wake. Record supported builds and unresolved blockers. This can proceed alongside milestone 1. |
 | 3. Shared host with one attachment | Behind a flag, serve conversations with zero or one attached Rhino, durable prompt/steer/follow-up admission, question suspension, process ownership, browser takeover/reconnect, intentional stop, and transaction recovery including acknowledged unknown outcomes. Complete the exposed-operation document audit and native focus/association tests. Serialize all edits and reject unsupported routing. No history import or automatic upgrades. |
 | 4. Multiple attachments, one selected binding per task | Add registry/picker grouped by process, extend validated document routing across attachments, instance-only stop, cross-conversation scheduling, and save reservations before concurrent writers. Select already-open documents. |
@@ -380,7 +380,7 @@ Use multiple fake C# endpoints and injected process/clock adapters for determini
 
 | Milestone | Scenario | Required result |
 | --- | --- | --- |
-| 1 | Two injected sessions use aliases, scripts, and turn hooks | No shared mutable state or cross-session begin/finish/cancel. Existing owned-child tests pass. |
+| 1 | Two injected sessions use aliases, scripts, and turn hooks | No shared mutable state or cross-session begin/finish/cancel. Existing runtime isolation tests pass. |
 | 1, 3 | Task asks a question after edits, including a tool batch | Persist an awaiting-user tool result, prevent subsequent model/tool dispatch, settle in-flight work, and confirm scope cleanup before releasing ownership or enabling an answer. A later answer starts a fresh turn. |
 | 1, 3 | Crash before/after task commit, acknowledgement, and RPC send | Uncommitted work never dispatches; retried acceptance returns one task; missing mutation evidence remains uncertain. |
 | 1, 3 | Duplicate request with changed payload | Conflict without creating or executing another task. |

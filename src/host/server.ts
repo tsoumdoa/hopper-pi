@@ -150,82 +150,94 @@ async function dispatch(
 	}
 }
 
+/** Normal UI settings and export endpoints, shared by the host's HTTP adapters. */
+export function handleUiApi(request: IncomingMessage, response: ServerResponse, options: {
+	runtime: HostRuntime;
+	token: string;
+	exportSession?: (conversationId: string | null) => unknown;
+}): boolean {
+	const token = options.token;
+	const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+	if (pathname === "/api/session/export") {
+		const authorization = request.headers.authorization ?? "";
+		if (!safeEqual(authorization.startsWith("Bearer ") ? authorization.slice(7) : "", token)) {
+			writeJson(response, 403, { error: "Forbidden" });
+			return true;
+		}
+		if (request.method !== "GET") {
+			writeJson(response, 405, { error: "Method not allowed" });
+			return true;
+		}
+		try {
+			const body = JSON.stringify((options.exportSession ? options.exportSession(new URL(request.url ?? "/", "http://localhost").searchParams.get("conversationId")) : options.runtime.exportSession()), null, 2);
+			setPageHeaders(response, "application/json; charset=utf-8");
+			response.setHeader("Content-Disposition", 'attachment; filename="hopper-session-debug.json"');
+			response.end(body);
+		} catch {
+			writeJson(response, 500, { error: "Could not export the current session" });
+		}
+		return true;
+	}
+	if (pathname === "/api/skills" || pathname === "/api/tools") {
+		const authorization = request.headers.authorization ?? "";
+		if (!safeEqual(authorization.startsWith("Bearer ") ? authorization.slice(7) : "", token)) {
+			writeJson(response, 403, { error: "Forbidden" });
+			return true;
+		}
+		if (request.method !== "GET" && request.method !== "POST") {
+			writeJson(response, 405, { error: "Method not allowed" });
+			return true;
+		}
+		void (async () => {
+			if (pathname === "/api/tools") {
+				if (request.method === "GET") {
+					writeJson(response, 200, await options.runtime.getToolSettings());
+				} else {
+					const chunks: Buffer[] = [];
+					let bytes = 0;
+					for await (const chunk of request) {
+						bytes += chunk.length;
+						if (bytes > 16_384) throw new Error("Tool setting is too large");
+						chunks.push(chunk);
+					}
+					const action = parseToolSettingsAction(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+					const result = await options.runtime.updateToolSettings(action);
+					writeJson(response, result.ok ? 200 : result.code === "conflict" ? 409 : 400, result);
+				}
+				return;
+			}
+			if (request.method === "POST") {
+				const chunks: Buffer[] = [];
+				let bytes = 0;
+				for await (const chunk of request) {
+					bytes += chunk.length;
+					if (bytes > 16_384) throw new Error("Skill setting is too large");
+					chunks.push(chunk);
+				}
+				const updated = await options.runtime.updateSkills(parseSkillLibraryUpdate(JSON.parse(Buffer.concat(chunks).toString("utf8"))));
+				writeJson(response, 200, updated);
+				return true;
+			}
+			const file = new URL(request.url ?? "/", "http://localhost").searchParams.get("file");
+			if (request.method === "GET" && file) {
+				writeJson(response, 200, { content: options.runtime.readSkill(file) });
+			} else {
+				writeJson(response, 200, await options.runtime.listSkills());
+			}
+		})().catch((error) => writeJson(response, 400, {
+			error: pathname === "/api/tools" ? "Could not update tool settings. Reconnect and try again." : error instanceof Error ? error.message : String(error),
+		}));
+		return true;
+	}
+	return false;
+}
+
 export async function startHopperServer(options: HopperServerOptions): Promise<HopperServer> {
 	const staticDir = validateStaticDirectory(options.staticDir);
 	const token = options.token ?? randomBytes(32).toString("base64url");
 	const httpServer = createHttpServer((request, response) => {
 		const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
-		if (pathname === "/api/session/export") {
-			const authorization = request.headers.authorization ?? "";
-			if (!safeEqual(authorization.startsWith("Bearer ") ? authorization.slice(7) : "", token)) {
-				writeJson(response, 403, { error: "Forbidden" });
-				return;
-			}
-			if (request.method !== "GET") {
-				writeJson(response, 405, { error: "Method not allowed" });
-				return;
-			}
-			try {
-				const body = JSON.stringify(options.runtime.exportSession(), null, 2);
-				setPageHeaders(response, "application/json; charset=utf-8");
-				response.setHeader("Content-Disposition", 'attachment; filename="hopper-session-debug.json"');
-				response.end(body);
-			} catch {
-				writeJson(response, 500, { error: "Could not export the current session" });
-			}
-			return;
-		}
-		if (pathname === "/api/skills" || pathname === "/api/tools") {
-			const authorization = request.headers.authorization ?? "";
-			if (!safeEqual(authorization.startsWith("Bearer ") ? authorization.slice(7) : "", token)) {
-				writeJson(response, 403, { error: "Forbidden" });
-				return;
-			}
-			if (request.method !== "GET" && request.method !== "POST") {
-				writeJson(response, 405, { error: "Method not allowed" });
-				return;
-			}
-			void (async () => {
-				if (pathname === "/api/tools") {
-					if (request.method === "GET") {
-						writeJson(response, 200, await options.runtime.getToolSettings());
-					} else {
-						const chunks: Buffer[] = [];
-						let bytes = 0;
-						for await (const chunk of request) {
-							bytes += chunk.length;
-							if (bytes > 16_384) throw new Error("Tool setting is too large");
-							chunks.push(chunk);
-						}
-						const action = parseToolSettingsAction(JSON.parse(Buffer.concat(chunks).toString("utf8")));
-						const result = await options.runtime.updateToolSettings(action);
-						writeJson(response, result.ok ? 200 : result.code === "conflict" ? 409 : 400, result);
-					}
-					return;
-				}
-				if (request.method === "POST") {
-					const chunks: Buffer[] = [];
-					let bytes = 0;
-					for await (const chunk of request) {
-						bytes += chunk.length;
-						if (bytes > 16_384) throw new Error("Skill setting is too large");
-						chunks.push(chunk);
-					}
-					const updated = await options.runtime.updateSkills(parseSkillLibraryUpdate(JSON.parse(Buffer.concat(chunks).toString("utf8"))));
-					writeJson(response, 200, updated);
-					return;
-				}
-				const file = new URL(request.url ?? "/", "http://localhost").searchParams.get("file");
-				if (request.method === "GET" && file) {
-					writeJson(response, 200, { content: options.runtime.readSkill(file) });
-				} else {
-					writeJson(response, 200, await options.runtime.listSkills());
-				}
-			})().catch((error) => writeJson(response, 400, {
-				error: pathname === "/api/tools" ? "Could not update tool settings. Reconnect and try again." : error instanceof Error ? error.message : String(error),
-			}));
-			return;
-		}
+		if (handleUiApi(request, response, { runtime: options.runtime, token })) return;
 		if (pathname === "/health") {
 			// Rhino's health monitor has a two-second HTTP deadline. Leave room for
 			// response serialization after the authenticated status round trip.
@@ -265,7 +277,7 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 			void options.getRuntimeStatus().then(
 				(status) => writeJson(response, 200, status),
 				(error) => writeJson(response, 503, {
-					error: error instanceof Error ? error.message : String(error),
+					error: pathname === "/api/tools" ? "Could not update tool settings. Reconnect and try again." : error instanceof Error ? error.message : String(error),
 				}),
 			);
 			return;

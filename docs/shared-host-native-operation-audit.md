@@ -1,6 +1,6 @@
 # Shared native operation routing audit
 
-The shared transport is enabled by `HOPPER_SHARED_HOST=1` or authenticated `HopperBootstrap`. Owned-child envelopes remain available and cannot carry a shared execution owner. Native builds and deterministic transport tests verify the checks below. Packaged Rhino focus, document-window and transfer fidelity tests remain separate acceptance evidence.
+The native launcher always attaches the shared transport. Authenticated `HopperBootstrap` uses the same attachment path for host-launched Rhino. The wire schema retains unowned envelopes for protocol compatibility, but the Rhino lifecycle requires the shared host handshake and execution fence. Standalone external Pi clients cannot bypass task ownership. Native builds and deterministic transport tests verify the checks below. Packaged Rhino focus, document-window and transfer fidelity tests remain separate acceptance evidence.
 
 ## Dispatch and attachment checks
 
@@ -41,4 +41,4 @@ Import hashes the actual byte buffer passed to `File3dm.FromByteArray`, checks s
 
 ## Deterministic verification
 
-`SharedExecutionFenceTests` covers stable and retired attachments, queued stale owners, recovery failure, scope ownership across tasks, active-document revalidation and transport responsiveness during running native work. `RpcTransportOwnerTests.SharedReattachmentFencesQueuedMutationOnTheUiQueue` uses actual NetMQ routes and verifies that a fenced queued mutation gets a retained failed result without invoking the native handler. Shared and owned-child request schemas are checked in TypeScript, C# and the JSON schema.
+`SharedExecutionFenceTests` covers stable and retired attachments, queued stale owners, recovery failure, scope ownership across tasks, active-document revalidation and transport responsiveness during running native work. `RpcTransportOwnerTests.SharedReattachmentFencesQueuedMutationOnTheUiQueue` uses actual NetMQ routes and verifies that a fenced queued mutation gets a retained failed result without invoking the native handler. Shared and external-client request schemas are checked in TypeScript, C# and the JSON schema.

@@ -195,7 +195,7 @@ namespace rhino_zmq_poc
                     PublisherEndpoint = endpoints.Publisher,
                     ConnectionToken = token,
                     LifecycleInstanceId = lifecycleInstanceId,
-                    SharedMode = SharedNativeHost.Enabled,
+                    SharedMode = true,
                     SharedBindingValidator = DocumentSession.ValidateSharedBinding,
                     SharedTransactionCleanup = (rhinoOwner, grasshopperOwner) => {
                         var rhinoDocument = RhinoAgentTransaction.BoundDocumentId;
@@ -313,7 +313,7 @@ namespace rhino_zmq_poc
 
         public RpcHandshakeObservation OnAuthenticatedHandshake(LifecycleHandshakeArgsV2 handshake)
         {
-            if (SharedNativeHost.Enabled && !SharedNativeHost.IsCurrentHandshake(handshake))
+            if (!SharedNativeHost.IsCurrentHandshake(handshake))
                 return RpcHandshakeObservation.Reject("Shared host discovery identity changed.");
             var acceptance = _status.TryAcceptInitialHostHandshake(
                 handshake.NodeProcessId,
@@ -321,7 +321,7 @@ namespace rhino_zmq_poc
             return acceptance.Accepted
                 ? RpcHandshakeObservation.Allow(acceptance.StatusRevision)
                 : RpcHandshakeObservation.Reject(
-                    "The handshake process ID does not match the managed Node child.");
+                    "The handshake process ID does not match the registered Hopper host.");
         }
 
         public CancelOperationState Cancel(string operationId)

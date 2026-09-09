@@ -3,134 +3,805 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "./app";
-import { createHopperStore } from "./state/hopper-store";
-import type { HopperStore } from "./state/hopper-types";
 import { HopperStoreProvider } from "./state/hopper-store-context";
-import type { PromptReceipt } from "./hooks/use-hopper-connection";
-import type { DraftImage } from "./lib/image-attachments";
-
-const { prompt } = vi.hoisted(() => ({ prompt: vi.fn<(...args: unknown[]) => boolean>(() => true) }));
-
-vi.mock("./hooks/use-hopper-connection", () => ({
-	useHopperConnection: () => {
-		return { token: "test", send: () => true, prompt, login: () => true, logout: () => true, reconnect: () => {}, isMockMode: false };
-	},
-}));
-vi.mock("./hooks/use-runtime-status", () => ({ useRuntimeStatus: () => ({ refresh: async () => {}, refreshing: false }) }));
-vi.mock("./lib/image-attachments", async (load) => ({
-	...await load<typeof import("./lib/image-attachments")>(),
-	readImage: async () => ({ id: "draft-image", name: "plan.png", width: 800, height: 500,
-		image: { type: "image", mimeType: "image/png", data: "bWFya2Vk" },
-		original: { type: "image", mimeType: "image/png", data: "cGxhbg==" },
-		scene: { elements: [], files: {}, appState: { currentItemStrokeColor: "red" } },
-	}),
+vi.mock("./hooks/use-runtime-status", () => ({
+	useRuntimeStatus: () => ({ refresh: async () => {}, refreshing: false }),
 }));
 vi.mock("./components/image-annotation-dialog", () => ({
-	ImageAnnotationDialog: ({ attachment }: { attachment: DraftImage }) => createElement("div", { role: "dialog" },
-		attachment.scene?.appState.currentItemStrokeColor === "red" ? "Editable annotations restored" : "Missing annotations"),
+	ImageAnnotationDialog: () => null,
 }));
-
-let root: Root;
-let container: HTMLDivElement;
-let store: HopperStore;
+vi.mock("./lib/image-attachments", async (load) => ({
+	...(await load<typeof import("./lib/image-attachments")>()),
+	readImage: async (file: File) => ({
+		id: file.name,
+		name: file.name,
+		width: 10,
+		height: 10,
+		image: { type: "image", mimeType: "image/png", data: btoa(file.name) },
+		original: { type: "image", mimeType: "image/png", data: btoa(file.name) },
+	}),
+}));
+class Socket {
+	static OPEN = 1;
+	static sockets: Socket[] = [];
+	readyState = 1;
+	sent: any[] = [];
+	onopen: (() => void) | null = null;
+	onmessage: ((event: { data: string }) => void) | null = null;
+	onclose: ((event: { code: number; reason: string }) => void) | null = null;
+	constructor() {
+		Socket.sockets.push(this);
+	}
+	send(data: string) {
+		this.sent.push(JSON.parse(data));
+	}
+	close() {}
+	receive(data: unknown) {
+		this.onmessage?.({ data: JSON.stringify(data) });
+	}
+}
+const binding = {
+	kind: "rhino",
+	lifecycleInstanceId: "life",
+	rhinoDocumentId: "model",
+};
+const snapshot = {
+	conversations: [
+		{ id: "conversation", title: "First" },
+		{ id: "other", title: "Second" },
+	],
+	sessions: [
+		{ id: "session", conversation_id: "conversation" },
+		{ id: "other-session", conversation_id: "other" },
+	],
+	tasks: [],
+	turns: [],
+	events: [],
+	recoveries: [],
+	questions: [],
+	targets: [
+		{
+			label: "Rhino",
+			lifecycleInstanceId: "life",
+			processId: 42,
+			admission: "ready",
+			documents: [binding],
+			documentLabels: { model: "Facade.3dm" },
+		},
+	],
+	installations: [{ id: "rhino", build: "8", bootstrapVerified: true }],
+	runtime: {
+		messages: [],
+		thinkingLevel: "off",
+		availableThinkingLevels: ["off"],
+		model: { provider: "test", id: "test" },
+		models: [{ provider: "test", id: "test", input: ["text", "image"] }],
+		providers: [],
+	},
+	eventCursor: 0,
+};
+let root: Root, container: HTMLDivElement, socket: Socket;
+const byText = (text: string) =>
+	[...container.querySelectorAll("button")].find(
+		(button) => button.textContent === text,
+	)!;
+const sendButton = () =>
+	container.querySelector<HTMLButtonElement>(
+		'button[aria-label="Send message"]',
+	)!;
+async function value(selector: string, text: string) {
+	const input = container.querySelector<
+		HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+	>(selector)!;
+	await act(async () => {
+		const prototype =
+			input instanceof HTMLTextAreaElement
+				? HTMLTextAreaElement.prototype
+				: input instanceof HTMLSelectElement
+					? HTMLSelectElement.prototype
+					: HTMLInputElement.prototype;
+		Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(input, text);
+		input.dispatchEvent(
+			new Event(input instanceof HTMLSelectElement ? "change" : "input", {
+				bubbles: true,
+			}),
+		);
+	});
+}
+async function upload(name: string) {
+	const input =
+		container.querySelector<HTMLInputElement>('input[type="file"]')!;
+	Object.defineProperty(input, "files", {
+		configurable: true,
+		value: [new File(["image"], name, { type: "image/png" })],
+	});
+	await act(async () =>
+		input.dispatchEvent(new Event("change", { bubbles: true })),
+	);
+}
 beforeEach(async () => {
 	vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-	store = createHopperStore();
-	store.getState().actions.applySnapshot({
-		sessionId: "session-1", messages: [], isStreaming: true, thinkingLevel: "off", availableThinkingLevels: ["off"],
-		models: [{ provider: "openai", id: "test-model", name: "Test model" }], model: { provider: "openai", id: "test-model" },
-		providers: [{ id: "openai", name: "OpenAI", authenticated: true, authMethods: [{ type: "api_key", label: "API key" }] }],
-		streamingMessage: { id: "assistant-1", role: "assistant", content: [{ type: "text", text: "Checking " }] },
-	});
+	vi.stubGlobal("WebSocket", Socket);
+	Socket.sockets = [];
+	history.replaceState(null, "", "/#credential");
+	sessionStorage.clear();
 	container = document.createElement("div");
 	document.body.append(container);
 	root = createRoot(container);
-	await act(async () => root.render(createElement(HopperStoreProvider, { store, children: createElement(App) })));
-	vi.clearAllMocks();
+	await act(async () =>
+		root.render(
+			createElement(HopperStoreProvider, { children: createElement(App) }),
+		),
+	);
+	socket = Socket.sockets[0]!;
+	await act(async () => {
+		socket.onopen?.();
+		socket.receive({ type: "shared_snapshot", snapshot });
+	});
 });
 afterEach(async () => {
 	await act(async () => root.unmount());
 	container.remove();
 	vi.unstubAllGlobals();
 });
-
-async function submitAnnotatedDraft() {
-	const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
-	Object.defineProperty(input, "files", { value: [new File(["image"], "plan.png", { type: "image/png" })] });
-	await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
-	await act(async () => {
-		const textarea = container.querySelector("textarea")!;
-		Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, "Inspect the marked area");
-		textarea.dispatchEvent(new Event("input", { bubbles: true }));
+it("captures explicit replacement save policy and clears save authority on discard", async () => {
+	await act(async () => byText("New Rhino document").click());
+	await value('select[aria-label="Modified document policy"]', "save");
+	await value('input[aria-label="Replacement save path"]', "/models/copy.3dm");
+	await act(async () =>
+		container
+			.querySelector<HTMLInputElement>(
+				'input[aria-label="Allow overwriting the save destination"]',
+			)!
+			.click(),
+	);
+	await value("#composer-input", "Create a new document");
+	await act(async () => sendButton().click());
+	const command = socket.sent.find((command) => command.type === "submit");
+	expect(command.documentAction).toMatchObject({
+		modifiedPolicy: "save",
+		savePath: "/models/copy.3dm",
+		overwrite: true,
 	});
-	await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Send message"]')!.click());
-	return prompt.mock.calls.at(-1)![3] as PromptReceipt;
-}
-
-it("retains text and editable annotations after a rejected submission and snapshot", async () => {
-	const receipt = await submitAnnotatedDraft();
-	expect(container.querySelector("textarea")!.disabled).toBe(true);
-	expect(container.querySelector("img")!.src).toContain("bWFya2Vk");
-	await act(async () => {
-		receipt.onRejected();
-		store.getState().actions.applySnapshot({ sessionId: "session-1", messages: [], isStreaming: false,
-			thinkingLevel: "off", availableThinkingLevels: [], models: [], providers: [] });
+	await act(async () =>
+		socket.receive({
+			type: "command_accepted",
+			requestId: command.requestId,
+			result: { taskId: "task" },
+		}),
+	);
+	await act(async () => byText("New Rhino document").click());
+	await value('select[aria-label="Modified document policy"]', "save");
+	await value('input[aria-label="Replacement save path"]', "/models/stale.3dm");
+	await value('select[aria-label="Modified document policy"]', "discard");
+	await value("#composer-input", "Replace with explicit discard");
+	await act(async () => sendButton().click());
+	const second = socket.sent
+		.filter((command) => command.type === "submit")
+		.at(-1);
+	expect(second.documentAction.modifiedPolicy).toBe("discard");
+	expect(second.documentAction).not.toHaveProperty("savePath");
+	expect(second.documentAction).not.toHaveProperty("overwrite");
+});
+it("launch starts a coordinator without inheriting selected document bindings", async () => {
+	expect(container.textContent).toContain("Facade.3dm");
+	await act(async () =>
+		container
+			.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+			.click(),
+	);
+	await act(async () => byText("Authorize one Rhino launch · rhino").click());
+	await value("#composer-input", "Launch Rhino");
+	await act(async () => sendButton().click());
+	const command = socket.sent.find((command) => command.type === "submit");
+	expect(command.bindings).toEqual([]);
+	expect(command.launch.installationId).toBe("rhino");
+});
+it("sends image-only input with the existing image limit and retains it on rejection", async () => {
+	await upload("plan.png");
+	expect(container.querySelectorAll("img")).toHaveLength(1);
+	await act(async () => sendButton().click());
+	const command = socket.sent.find((command) => command.type === "submit");
+	expect(command.text).toBe("");
+	expect(command.attachments).toEqual([
+		{ type: "image", mimeType: "image/png", data: btoa("plan.png") },
+	]);
+	expect(sendButton().disabled).toBe(true);
+	await act(async () =>
+		socket.receive({
+			type: "error",
+			requestId: command.requestId,
+			message: "Not accepted",
+		}),
+	);
+	expect(container.querySelectorAll("img")).toHaveLength(1);
+	expect(sendButton().disabled).toBe(false);
+});
+it("late acceptance in another conversation cannot erase the new draft or authorization", async () => {
+	await value("#composer-input", "First task");
+	await act(async () => sendButton().click());
+	const command = socket.sent.find((command) => command.type === "submit");
+	await act(async () => byText("Second").click());
+	await value("#composer-input", "Second task");
+	await act(async () => byText("New Rhino document").click());
+	await act(async () =>
+		socket.receive({
+			type: "command_accepted",
+			requestId: command.requestId,
+			result: { taskId: "task" },
+		}),
+	);
+	expect(
+		container.querySelector<HTMLTextAreaElement>("#composer-input")!.value,
+	).toBe("Second task");
+	expect(
+		container.querySelector('select[aria-label="Modified document policy"]'),
+	).not.toBeNull();
+});
+it("groups compact child entries under their root with usage, artifact metadata and tool progress", async () => {
+	const rootTask = {
+		id: "root",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "running",
+		payload: JSON.stringify({ text: "Compare options", bindings: [] }),
+	};
+	const nextTask = {
+		id: "next",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "queued",
+		payload: JSON.stringify({ text: "Next task", bindings: [] }),
+	};
+	const child = {
+		id: "child",
+		conversation_id: "conversation",
+		parent_task_id: "root",
+		state: "running",
+		payload: JSON.stringify({ text: "Explore facade", bindings: [binding] }),
+	};
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				tasks: [rootTask, nextTask, child],
+				turns: [{ id: "turn", task_id: "child", state: "running", usage: 123 }],
+				events: [
+					{
+						task_id: "child",
+						kind: "progress",
+						payload: JSON.stringify({
+							type: "tool_progress",
+							phase: "started",
+							toolName: "queryRhinoObjects",
+							toolCallId: "call",
+						}),
+					},
+				],
+				records: [
+					{
+						kind: "artifact",
+						id: "artifact",
+						task_id: "child",
+						state: "published",
+						payload: JSON.stringify({
+							format: "3dm",
+							units: "Meters",
+							objectIds: ["source"],
+							checksum: "abc",
+							path: "/retained/geometry.3dm",
+						}),
+					},
+				],
+			},
+		}),
+	);
+	const article = container.querySelector("article")!,
+		details = article.nextElementSibling as HTMLDetailsElement;
+	expect(details.tagName).toBe("DETAILS");
+	expect(details.open).toBe(false);
+	expect(details.querySelector("summary")!.textContent).toContain("123 tokens");
+	expect(details.querySelector("summary")!.textContent).toContain("Facade.3dm");
+	expect(details.querySelector("summary")!.textContent).toContain(
+		"query Rhino Objects is running",
+	);
+	expect(
+		details.querySelector('[aria-label="Geometry artifacts and imports"]')!
+			.textContent,
+	).toContain("/retained/geometry.3dm");
+	expect(details.nextElementSibling!.textContent).toContain("Next task");
+});
+it("keeps assistant output from each turn and the answered question after continuation", async () => {
+	const task = {
+		id: "root",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "completed",
+		payload: JSON.stringify({ text: "Explore", bindings: [] }),
+	};
+	const event = (turnId: string, text: string) => ({
+		task_id: "root",
+		kind: "progress",
+		payload: JSON.stringify({
+			type: "messages",
+			turnId,
+			messages: [{ role: "assistant", content: [{ type: "text", text }] }],
+		}),
 	});
-	expect(container.querySelector("textarea")!.value).toBe("Inspect the marked area");
-	expect(container.querySelector("textarea")!.disabled).toBe(false);
-	await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Annotate plan.png"]')!.click());
-	expect(container.textContent).toContain("Editable annotations restored");
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				tasks: [task],
+				turns: [],
+				events: [
+					event("first", "Outdated draft"),
+					event("first", "First turn result"),
+					event("second", "Second turn result"),
+				],
+				questions: [
+					{
+						id: "question",
+						task_id: "root",
+						answer: JSON.stringify("Use meters"),
+						payload: JSON.stringify({ question: "Which units?" }),
+					},
+				],
+			},
+		}),
+	);
+	expect(container.textContent).toContain("First turn result");
+	expect(container.textContent).toContain("Second turn result");
+	expect(container.textContent).toContain("Which units?");
+	expect(container.textContent).toContain("Answer: Use meters");
+	const article = container.querySelector("article")!;
+	expect(
+		[...article.children]
+			.filter((child) => child.tagName !== "DETAILS")
+			.map((child) => child.textContent)
+			.join(" "),
+	).not.toContain("Outdated draft");
+});
+it("switches document kind with a fresh safe replacement policy", async () => {
+	await act(async () => byText("New Rhino document").click());
+	await value('select[aria-label="Modified document policy"]', "save");
+	await value('input[aria-label="Replacement save path"]', "/models/rhino.3dm");
+	await value('select[aria-label="Document action kind"]', "grasshopper");
+	expect(
+		container.querySelector<HTMLSelectElement>(
+			'select[aria-label="Modified document policy"]',
+		)!.value,
+	).toBe("refuse");
+	expect(
+		container.querySelector('input[aria-label="Replacement save path"]'),
+	).toBeNull();
+	await value("#composer-input", "Create a canvas");
+	await act(async () => sendButton().click());
+	expect(
+		socket.sent.find((command) => command.type === "submit").documentAction,
+	).toMatchObject({ kind: "grasshopper", modifiedPolicy: "refuse" });
+});
+it("shows captured tool images as visual child evidence", async () => {
+	const rootTask = {
+		id: "root",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "completed",
+		payload: JSON.stringify({ text: "Compare", bindings: [] }),
+	};
+	const child = {
+		id: "child",
+		conversation_id: "conversation",
+		parent_task_id: "root",
+		state: "completed",
+		payload: JSON.stringify({ text: "Capture", bindings: [binding] }),
+	};
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				tasks: [rootTask, child],
+				events: [
+					{
+						task_id: "child",
+						kind: "progress",
+						payload: JSON.stringify({
+							type: "messages",
+							turnId: "turn",
+							messages: [
+								{
+									role: "toolResult",
+									toolName: "Capture Rhino view",
+									toolCallId: "capture",
+									content: [
+										{ type: "image", mimeType: "image/png", data: "aGk=" },
+									],
+								},
+							],
+						}),
+					},
+				],
+			},
+		}),
+	);
+	const image = container.querySelector<HTMLImageElement>(
+		'img[alt="Capture from Capture Rhino view"]',
+	)!;
+	expect(image).not.toBeNull();
+	expect(image.src).toContain("data:image/png;base64,aGk=");
 });
 
-it("clears a draft only after acceptance and ignores late receipts from previous submissions", async () => {
-	const first = await submitAnnotatedDraft();
-	await act(async () => first.onRejected());
-	await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Send message"]')!.click());
-	const second = prompt.mock.calls.at(-1)![3] as PromptReceipt;
-	await act(async () => first.onAccepted());
-	expect(container.querySelector("img")).not.toBeNull();
-	await act(async () => second.onAccepted());
-	expect(container.querySelector("img")).toBeNull();
-	expect(container.querySelector("textarea")!.value).toBe("");
-});
-
-it("downloads the full session through the authenticated export endpoint", async () => {
-	let finish!: (response: Response) => void;
-	const fetchMock = vi.fn(() => new Promise<Response>((resolve) => { finish = resolve; }));
-	vi.stubGlobal("fetch", fetchMock);
-	const createUrl = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:session-export");
-	const revokeUrl = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
-	const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
-		expect(this.download).toBe("hopper-session-debug.json");
-		expect(this.href).toBe("blob:session-export");
-	});
-	try {
-		const button = container.querySelector<HTMLButtonElement>('button[aria-label="Export session"]')!;
-		await act(async () => button.click());
-		expect(button.disabled).toBe(true);
-		expect(fetchMock).toHaveBeenCalledExactlyOnceWith("/api/session/export", { headers: { Authorization: "Bearer test" } });
-		await act(async () => button.click());
-		expect(fetchMock).toHaveBeenCalledOnce();
-		vi.useFakeTimers();
-		await act(async () => finish(new Response('{"entries":[{"toolCallId":"call-1"}]}', { headers: { "Content-Type": "application/json" } })));
-		expect(click).toHaveBeenCalledOnce();
-		expect(await (createUrl.mock.calls[0][0] as Blob).text()).toContain('"toolCallId":"call-1"');
-		expect(button.disabled).toBe(false);
-		expect(document.querySelector('a[download]')).toBeNull();
-		await act(async () => vi.advanceTimersByTime(10_000));
-		expect(revokeUrl).toHaveBeenCalledWith("blob:session-export");
-	} finally {
-		vi.useRealTimers();
-		createUrl.mockRestore(); revokeUrl.mockRestore(); click.mockRestore();
-	}
-});
-
-it("shows export failures and disables export when disconnected", async () => {
-	vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Forbidden", { status: 403 })));
-	const button = container.querySelector<HTMLButtonElement>('button[aria-label="Export session"]')!;
-	await act(async () => button.click());
-	expect(document.body.textContent).toContain("Export failed (403).");
-	expect(button.disabled).toBe(false);
-	await act(async () => store.getState().actions.setConnection("disconnected", "Offline"));
+it("requires inspection for launch recovery and preserves the original outcome after confirmation", async () => {
+	const task = {
+		id: "root",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "cancelled",
+		payload: JSON.stringify({ text: "Launch Rhino", bindings: [] }),
+	};
+	const launch = {
+		kind: "launch",
+		id: "original-launch",
+		task_id: "root",
+		state: "cancelled",
+		payload: JSON.stringify({
+			dispatchAttempted: true,
+			request: { installationId: "rhino", independentProcess: false },
+			detail: "Registration outcome unknown",
+		}),
+	};
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				installations: [{ id: "rhino", platform: "darwin" }],
+				tasks: [task],
+				records: [launch],
+			},
+		}),
+	);
+	const button = byText("Acknowledge and verify launch recovery");
 	expect(button.disabled).toBe(true);
+	await value(
+		'textarea[aria-label="Launch recovery inspection"]',
+		"Inspected startup dialogs and closed Rhino",
+	);
+	await act(async () => button.click());
+	expect(
+		socket.sent.find((command) => command.type === "recover_launch"),
+	).toMatchObject({
+		conversationId: "conversation",
+		taskId: "root",
+		launchRequestId: "original-launch",
+		acknowledgement: "Inspected startup dialogs and closed Rhino",
+	});
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				tasks: [task],
+				records: [
+					launch,
+					{
+						kind: "launch_recovery",
+						id: "original-launch",
+						task_id: "root",
+						state: "confirmed",
+						payload: "{}",
+					},
+				],
+			},
+		}),
+	);
+	expect(container.textContent).toContain("Original launch outcome: cancelled");
+	expect(container.textContent).toContain("Launch recovery confirmed");
+	expect(
+		container.querySelector(
+			'textarea[aria-label="Launch recovery inspection"]',
+		),
+	).toBeNull();
+});
+it("keeps unsupported platform launch uncertainty visible without offering recovery", async () => {
+	const task = {
+		id: "root",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "cancelled",
+		payload: JSON.stringify({ text: "Launch", bindings: [] }),
+	};
+	const launch = {
+		kind: "launch",
+		id: "launch",
+		task_id: "root",
+		state: "uncertain",
+		payload: JSON.stringify({
+			dispatchAttempted: true,
+			request: { installationId: "rhino", independentProcess: false },
+		}),
+	};
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				installations: [{ id: "rhino", platform: "linux" }],
+				tasks: [task],
+				records: [launch],
+			},
+		}),
+	);
+	expect(container.textContent).toContain("Original launch outcome: uncertain");
+	expect(container.textContent).toContain(
+		"Automatic launch recovery is unavailable",
+	);
+	expect(
+		container.querySelector(
+			'textarea[aria-label="Launch recovery inspection"]',
+		),
+	).toBeNull();
+});
+
+it("offers conservative inspected recovery for Windows independent launches", async () => {
+	const task = {
+		id: "root",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "cancelled",
+		payload: JSON.stringify({ text: "Launch", bindings: [] }),
+	};
+	const launch = {
+		kind: "launch",
+		id: "launch",
+		task_id: "root",
+		state: "uncertain",
+		payload: JSON.stringify({
+			dispatchAttempted: true,
+			request: { installationId: "rhino", independentProcess: true },
+		}),
+	};
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				installations: [{ id: "rhino", platform: "win32" }],
+				tasks: [task],
+				records: [launch],
+			},
+		}),
+	);
+	expect(container.textContent).toContain("close all Rhino processes");
+	expect(
+		container.querySelector(
+			'textarea[aria-label="Launch recovery inspection"]',
+		),
+	).not.toBeNull();
+});
+it("shows available documents and the explicit destination in the normal UI", async () => {
+	const targets = container.querySelector(
+		'section[aria-label="Rhino targets"]',
+	)!;
+	expect(targets.closest("details")).toBeNull();
+	expect(targets.textContent).toContain("1 available instance · 1 document");
+	expect(targets.textContent).toContain("PID 42 · ready");
+	expect(
+		container.querySelector('[aria-label="Message destination"]')!.textContent,
+	).toContain("Discussion only");
+	await act(async () =>
+		targets.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click(),
+	);
+	expect(
+		container.querySelector('[aria-label="Message destination"]')!.textContent,
+	).toContain("Sending to: Facade.3dm · Rhino 42");
+	await value("#composer-input", "Edit the selected document");
+	await act(async () => sendButton().click());
+	expect(
+		socket.sent.find((command) => command.type === "submit").bindings,
+	).toEqual([binding]);
+	expect(location.pathname).toBe("/");
+	expect(container.textContent).not.toContain("Shared host");
+});
+it("does not silently switch a selected destination when its Rhino disconnects", async () => {
+	await act(async () =>
+		container
+			.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+			.click(),
+	);
+	await value("#composer-input", "Create a sphere");
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				targets: [
+					{ ...snapshot.targets[0], admission: "detached", documents: [] },
+				],
+			},
+		}),
+	);
+	expect(sendButton().disabled).toBe(true);
+	expect(container.textContent).toContain("Your target has not changed");
+	expect(
+		container.querySelector('[aria-label="Message destination"]')!.textContent,
+	).toContain("Facade.3dm");
+	await act(async () => byText("Clear selected targets").click());
+	expect(sendButton().disabled).toBe(false);
+	await act(async () => sendButton().click());
+	expect(
+		socket.sent.find((command) => command.type === "submit").bindings,
+	).toEqual([]);
+});
+it("keeps a task target distinct from the next message selection", async () => {
+	const otherBinding = {
+		kind: "rhino",
+		lifecycleInstanceId: "other-life",
+		rhinoDocumentId: "other-model",
+	};
+	const task = {
+		id: "root",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "completed",
+		payload: JSON.stringify({ text: "Created in facade", bindings: [binding] }),
+	};
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				tasks: [task],
+				targets: [
+					...snapshot.targets,
+					{
+						label: "Rhino",
+						lifecycleInstanceId: "other-life",
+						processId: 43,
+						admission: "ready",
+						documents: [otherBinding],
+						documentLabels: { "other-model": "Roof.3dm" },
+					},
+				],
+			},
+		}),
+	);
+	const choices = container.querySelectorAll<HTMLInputElement>(
+		'section[aria-label="Rhino targets"] input[type="checkbox"]',
+	);
+	await act(async () => choices[1]!.click());
+	expect(
+		container.querySelector('[aria-label="Message destination"]')!.textContent,
+	).toContain("Roof.3dm · Rhino 43");
+	expect(container.querySelector("article")!.textContent).toContain(
+		"Target: Facade.3dm · Rhino 42",
+	);
+});
+it("preserves normal sidebar controls and exports the selected durable conversation", async () => {
+	expect(
+		container.querySelector('button[aria-label="Export session"]'),
+	).not.toBeNull();
+	expect(container.textContent).toContain("Skills & Markdown");
+	expect(container.textContent).toContain("Agent tools");
+	const fetcher = vi.fn().mockResolvedValue({ ok: false, status: 409 });
+	vi.stubGlobal("fetch", fetcher);
+	await act(async () =>
+		container
+			.querySelector<HTMLButtonElement>('button[aria-label="Export session"]')!
+			.click(),
+	);
+	expect(fetcher).toHaveBeenCalledWith(
+		"/api/session/export?conversationId=conversation",
+		expect.objectContaining({
+			headers: { Authorization: "Bearer credential" },
+		}),
+	);
+	expect(container.textContent).toContain("Export failed (409)");
+});
+it("defaults to a follow-up while a task runs and returns to a new task afterward", async () => {
+	const task = {
+		id: "root",
+		session_id: "session",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "running",
+		payload: JSON.stringify({ text: "First task", bindings: [] }),
+	};
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: { ...snapshot, tasks: [task] },
+		}),
+	);
+	await value("#composer-input", "Then inspect the roof");
+	await act(async () => sendButton().click());
+	const command = socket.sent.find((command) => command.type === "submit");
+	expect(command.kind).toBe("follow_up");
+	await act(async () => {
+		socket.receive({
+			type: "command_accepted",
+			requestId: command.requestId,
+			result: { taskId: "next" },
+		});
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: { ...snapshot, tasks: [{ ...task, state: "completed" }] },
+		});
+	});
+	await value("#composer-input", "Start another task");
+	await act(async () => sendButton().click());
+	expect(
+		socket.sent.filter((command) => command.type === "submit").at(-1).kind,
+	).toBe("prompt");
+});
+it("shows the active turn target when steering instead of the next selected destination", async () => {
+	const oldBinding = {
+		kind: "rhino",
+		lifecycleInstanceId: "life",
+		rhinoDocumentId: "old-model",
+	};
+	const task = {
+		id: "root",
+		session_id: "session",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "running",
+		payload: JSON.stringify({
+			text: "Work in old model",
+			bindings: [oldBinding],
+		}),
+	};
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				tasks: [task],
+				turns: [
+					{
+						id: "turn",
+						task_id: "root",
+						state: "running",
+						owner: JSON.stringify({ binding }),
+					},
+				],
+				targets: [
+					{
+						...snapshot.targets[0],
+						documents: [binding, oldBinding],
+						documentLabels: { model: "Facade.3dm", "old-model": "Old.3dm" },
+					},
+				],
+			},
+		}),
+	);
+	await act(async () =>
+		container
+			.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')[1]!
+			.click(),
+	);
+	await act(async () =>
+		container
+			.querySelector<HTMLButtonElement>(
+				'button[aria-label="Message delivery"]',
+			)!
+			.click(),
+	);
+	const option = [
+		...document.querySelectorAll<HTMLElement>('[role="option"]'),
+	].find((option) => option.textContent?.includes("Steer"))!;
+	await act(async () => option.click());
+	const destination = container.querySelector(
+		'[aria-label="Message destination"]',
+	)!.textContent;
+	expect(destination).toContain("Steering: Facade.3dm · Rhino 42");
+	expect(destination).not.toContain("Old.3dm");
+	await value("#composer-input", "Make it larger");
+	await act(async () => sendButton().click());
+	expect(socket.sent.find((command) => command.type === "steer")).toMatchObject(
+		{ taskId: "root", turnId: "turn" },
+	);
 });

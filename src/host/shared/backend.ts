@@ -72,6 +72,30 @@ export class SharedBackend implements SharedBrowserBackend {
 			eventCursor: Number(journal.events.at(-1)?.id ?? 0),
 		};
 	}
+	exportConversation(conversationId: string | null) {
+		const snapshot = this.tasks.snapshot();
+		const conversation = snapshot.conversations.find((row) => row.id === conversationId);
+		if (!conversation) throw new Error("Select a conversation to export");
+		const tasks = snapshot.tasks.filter((row) => row.conversation_id === conversationId);
+		const taskIds = new Set(tasks.map((row) => row.id));
+		const belongs = (row: Record<string, unknown>) => taskIds.has(String(row.task_id));
+		return {
+			format: "hopper-conversation-debug",
+			version: 1,
+			exportedAt: new Date().toISOString(),
+			conversation,
+			sessions: snapshot.sessions.filter((row) => row.conversation_id === conversationId),
+			tasks,
+			turns: snapshot.turns.filter(belongs),
+			inputs: snapshot.inputs.filter(belongs),
+			questions: snapshot.questions.filter(belongs),
+			events: snapshot.events.filter(belongs),
+			operations: snapshot.operations.filter(belongs),
+			recoveries: snapshot.recoveries.filter(belongs),
+			records: snapshot.records.filter(belongs),
+			dependencies: snapshot.dependencies.filter(belongs),
+		};
+	}
 	subscribe(listener: (event: unknown) => void): () => void {
 		this.listeners.add(listener);
 		return () => this.listeners.delete(listener);
@@ -309,6 +333,14 @@ export class SharedBackend implements SharedBrowserBackend {
 				await this.configure(() =>
 					this.admin.setModel(command.provider, command.modelId),
 				);
+				this.publish();
+				return null;
+			case "set_thinking":
+				await this.configure(async () => this.admin.setThinkingLevel(command.level));
+				this.publish();
+				return null;
+			case "logout":
+				await this.configure(() => this.admin.logout(command.provider));
 				this.publish();
 				return null;
 			case "login":

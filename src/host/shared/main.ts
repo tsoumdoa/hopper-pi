@@ -42,7 +42,7 @@ export async function startSharedHost(
 		args.includes("--connection-profile")
 	)
 		throw new Error(
-			"Shared mode does not accept owned-child lifecycle options",
+			"Hopper uses one persistent host; per-process host options are no longer supported",
 		);
 	const control = new SharedHostControl();
 	const dataDirectory = args.includes("--data-dir")
@@ -55,7 +55,7 @@ export async function startSharedHost(
 	};
 	if (args.includes("--ensure-host")) {
 		const forwarded = args.filter(
-			(arg) => !["--shared", "--ensure-host", "--explicit-start"].includes(arg),
+			(arg) => !["--ensure-host", "--explicit-start"].includes(arg),
 		);
 		const discovery = await ensureSharedHost({
 			control,
@@ -121,6 +121,11 @@ export async function startSharedHost(
 		browserCredential: state.browserCredential,
 		registrationCredential: registrationToken,
 		staticDir: config.paths.staticDir,
+		uiRuntime: () => admin,
+		exportConversation: (conversationId) => {
+			if (!backend) throw new Error("Host is initializing");
+			return backend.exportConversation(conversationId);
+		},
 		allowedDevOrigin: config.uiDevOrigin,
 		onRegistrationError: (error) =>
 			process.stderr.write(
@@ -140,7 +145,7 @@ export async function startSharedHost(
 			tasks!.pump();
 			return {
 				...result,
-				url: `http://127.0.0.1:${state.endpointPort}/shared#${state.browserCredential}`,
+				url: `http://127.0.0.1:${state.endpointPort}/#${state.browserCredential}`,
 			};
 		},
 	});
@@ -188,6 +193,8 @@ export async function startSharedHost(
 					dataDirectory: state.dataDirectory,
 					authPath: config.paths.authPath,
 					model: admin!.snapshot().model,
+					thinkingLevel: admin!.snapshot().thinkingLevel,
+					skillDataDirectory: state.dataDirectory,
 					geometry: (context) => native!.geometry(context),
 					...(journal!
 						.snapshot()
@@ -453,7 +460,7 @@ export async function startSharedHost(
 		await backend.resumeAdmissions();
 		tasks.pump();
 		process.stdout.write(
-			`${JSON.stringify({ type: "ready", mode: "shared", url: `http://127.0.0.1:${state.endpointPort}/shared`, pid: process.pid })}\n`,
+			`${JSON.stringify({ type: "ready", mode: "shared", url: `http://127.0.0.1:${state.endpointPort}/`, pid: process.pid })}\n`,
 		);
 	} catch (error) {
 		await close();

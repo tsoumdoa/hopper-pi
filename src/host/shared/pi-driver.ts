@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Type, type Model, type Api } from "@earendil-works/pi-ai";
 import {
 	createAgentSessionFromServices,
@@ -14,11 +15,16 @@ import { RuntimeSessionContext } from "../../infra/runtime-session-context.js";
 import { QuestionSuspensionBoundary } from "../question-suspension.js";
 import type { DriverContext, TaskDriver } from "./task-service.js";
 import type { ImageAttachment } from "../protocol.js";
+import { HostSkillLibrary } from "../skills.js";
 
 export interface PiDriverOptions {
 	dataDirectory: string;
 	authPath: string;
 	model?: { provider: string; id: string };
+	thinkingLevel?: string;
+	/** Normal host preferences directory, shared with the skills UI. */
+	skillDataDirectory?: string;
+	projectRoot?: string;
 	geometry?: (context: DriverContext) => Promise<{
 		runtimeSession: RuntimeSessionContext;
 		cleanup(): Promise<{ confirmed: boolean; evidence?: unknown }>;
@@ -145,6 +151,15 @@ export async function createPiTaskDriver(
 			: []),
 	];
 	try {
+		const skillDataDirectory = options.skillDataDirectory ?? options.dataDirectory;
+		// Each task gets a snapshot. Later UI changes apply to the next task without
+		// changing the approved files underneath a running model/tool call.
+		const skills = new HostSkillLibrary(
+			options.projectRoot ?? resolve(dirname(fileURLToPath(import.meta.url)), "../../.."),
+			join(skillDataDirectory, "skills-settings.json"),
+			join(skillDataDirectory, "skills"),
+		);
+		await skills.initialize();
 		const services = await createAgentSessionServices({
 			cwd: workspace,
 			agentDir: join(sessionRoot, "agent"),
@@ -173,6 +188,7 @@ export async function createPiTaskDriver(
 					: [],
 			},
 		});
+		services.resourceLoader.getSkills = () => skills.getSkills();
 		let model: Model<Api> | undefined;
 		if (options.model) {
 			model = services.modelRuntime.getModel(
@@ -185,10 +201,15 @@ export async function createPiTaskDriver(
 			services,
 			sessionManager: SessionManager.continueRecent(workspace, sessionRoot),
 			noTools: "builtin",
-			customTools: tools,
+			customTools: [...tools, skills.createReadTool(workspace)],
 			...(model ? { model } : {}),
 		});
 		session = created.session;
+		if (options.thinkingLevel !== undefined) {
+			const level = session.getAvailableThinkingLevels().find((candidate) => candidate === options.thinkingLevel);
+			if (!level) throw new Error(`Thinking level is unavailable: ${options.thinkingLevel}`);
+			session.setThinkingLevel(level);
+		}
 		await session.bindExtensions({
 			mode: "rpc",
 			abortHandler: () => {
@@ -266,7 +287,7 @@ export async function createPiTaskDriver(
 					throw new Error("Task was cancelled before model dispatch");
 				const prompt = context.continuation
 					? `Continue in a fresh turn after ${"documentAction" in Object(context.continuation) ? "the verified document action, using the new captured binding" : "the user's answer"}.\n${JSON.stringify(context.continuation)}`
-					: context.text;
+					: skills.expandCommand(context.text);
 				await session!.agent.prompt(
 					prompt,
 					context.attachments as ImageAttachment[],
@@ -296,7 +317,7 @@ export async function createPiTaskDriver(
 					text: string;
 					attachments?: ImageAttachment[];
 				};
-				const text = `[Steering input ${inputId}]\n${input.text}`;
+				const text = `[Steering input ${inputId}]\n${skills.expandCommand(input.text)}`;
 				const consumed = new Promise<void>((resolve, reject) =>
 					pendingSteering.set(inputId, { text, resolve, reject }),
 				);

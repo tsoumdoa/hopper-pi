@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
@@ -6,9 +6,10 @@ import {
 	createAssistantMessageEventStream,
 	type AssistantMessage,
 } from "@earendil-works/pi-ai";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { SessionManager, type AgentSession } from "@earendil-works/pi-coding-agent";
 import { createPiTaskDriver } from "./pi-driver.js";
 import type { DriverContext } from "./task-service.js";
+import { HostSkillLibrary } from "../skills.js";
 
 it("runs real Pi through a durable question and fresh answer turn without replay or double-counted usage", async () => {
 	const root = await mkdtemp(join(tmpdir(), "shared-driver-"));
@@ -238,6 +239,74 @@ it("cleans a constructed native context when driver initialization fails", async
 		});
 		expect(cleanup).toHaveBeenCalledTimes(1);
 	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+
+it("applies normal UI skill preferences and thinking to new tasks while retaining an active skill snapshot", async () => {
+	const root = await realpath(await mkdtemp(join(tmpdir(), "shared-driver-skills-")));
+	const project = join(root, "project");
+	const settings = join(root, "normal-host");
+	const folder = join(settings, "skills");
+	const skillPath = join(folder, "modeling.md");
+	const context: DriverContext = {
+		taskId: "task", turnId: "first", sessionId: "session", conversationId: "conversation",
+		binding: null, owner: null, text: "/skill:modeling Make a sphere", attachments: [], continuation: null,
+		signal: new AbortController().signal, ask: () => "question", requestDocumentAction: () => "handoff", publish: () => {},
+	};
+	let activeSession: AgentSession | undefined;
+	const prompts: unknown[] = [];
+	const drivers: Awaited<ReturnType<typeof createPiTaskDriver>>[] = [];
+	try {
+		await mkdir(folder, { recursive: true });
+		await writeFile(skillPath, "---\nname: modeling\ndescription: Follow the modeling instructions\n---\nUse the approved sphere procedure.");
+		const library = new HostSkillLibrary(project, join(settings, "skills-settings.json"), folder);
+		await library.initialize();
+		const options = {
+			dataDirectory: join(root, "tasks"), authPath: join(root, "auth.json"),
+			skillDataDirectory: settings, projectRoot: project, thinkingLevel: "off",
+			configureSession(session: AgentSession) {
+				activeSession = session;
+				session.agent.streamFunction = (model, providerContext) => {
+					prompts.push(providerContext.messages);
+					const message: AssistantMessage = {
+						role: "assistant", api: model.api, provider: model.provider, model: model.id,
+						timestamp: Date.now(), stopReason: "stop", content: [{ type: "text", text: "Done" }],
+						usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
+							cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+					};
+					const stream = createAssistantMessageEventStream();
+					stream.push({ type: "done", reason: "stop", message });
+					return stream;
+				};
+			},
+		};
+		const first = await createPiTaskDriver(context, options);
+		drivers.push(first);
+		expect(activeSession!.thinkingLevel).toBe("off");
+		expect(activeSession!.systemPrompt).toContain("Follow the modeling instructions");
+		const read = activeSession!.agent.state.tools.find((tool) => tool.name === "read")!;
+		expect(read).toBeDefined();
+		expect(JSON.stringify(await read.execute("read", { path: skillPath }))).toContain("approved sphere procedure");
+		await expect(read.execute("read", { path: join(root, "auth.json") })).rejects.toThrow("limited to enabled skills");
+		// A UI toggle updates the shared preferences; the already admitted task keeps its snapshot.
+		await library.update({ type: "toggle", id: library.snapshot().skills[0]!.id, enabled: false });
+		await writeFile(skillPath, "Changed after admission");
+		await first.run();
+		expect(JSON.stringify(prompts[0])).toContain("approved sphere procedure");
+		expect(JSON.stringify(prompts[0])).not.toContain("Changed after admission");
+		const second = await createPiTaskDriver({ ...context, taskId: "second", sessionId: "second" }, options);
+		drivers.push(second);
+		expect(activeSession!.systemPrompt).not.toContain("Follow the modeling instructions");
+		const disabledRead = activeSession!.agent.state.tools.find((tool) => tool.name === "read")!;
+		await expect(disabledRead.execute("read", { path: skillPath })).rejects.toThrow("limited to enabled skills");
+		await second.run();
+		expect(JSON.stringify(prompts[1])).toContain("/skill:modeling Make a sphere");
+		await expect(createPiTaskDriver({ ...context, taskId: "invalid" }, { ...options, thinkingLevel: "invalid" }))
+			.rejects.toThrow("Thinking level is unavailable: invalid");
+	} finally {
+		for (const driver of drivers) await driver.cleanup();
 		await rm(root, { recursive: true, force: true });
 	}
 });

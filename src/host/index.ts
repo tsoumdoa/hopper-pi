@@ -1,95 +1,15 @@
-import { RuntimeSessionContext } from "../infra/runtime-session-context.js";
 import { dirname } from "node:path";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolveHostConfig } from "./config.js";
-import { HostShutdownCoordinator, watchParentProcess } from "./lifecycle.js";
-import { EmbeddedPiHost } from "./pi-runtime.js";
-import { startHopperServer, type HopperServer, validateStaticDirectory } from "./server.js";
-import { closeRuntimeRpc, getRuntimeRpc } from "../infra/runtime-rpc.js";
+import { validateStaticDirectory } from "./server.js";
+import { startSharedHost } from "./shared/main.js";
 
 export async function main(args = process.argv.slice(2)): Promise<void> {
 	const modulePath = fileURLToPath(import.meta.url);
 	const config = resolveHostConfig(args, { moduleDir: dirname(modulePath) });
 	validateStaticDirectory(config.paths.staticDir);
-	if (args.includes("--shared")) {
-		const { startSharedHost } = await import("./shared/main.js");
-		return startSharedHost(config, args, modulePath);
-	}
-	const runtimeSession = new RuntimeSessionContext({ connectionProfilePath: config.connectionProfile });
-	return runtimeSession.run(() => startOwnedChildHost(config, runtimeSession));
-}
-
-async function startOwnedChildHost(config: ReturnType<typeof resolveHostConfig>, runtimeSession: RuntimeSessionContext): Promise<void> {
-
-	let runtime: EmbeddedPiHost | undefined;
-	let server: HopperServer | undefined;
-	let stopParentWatcher = () => {};
-	let unsubscribeRuntimeNotices = () => {};
-	const shutdown = new HostShutdownCoordinator({
-		cleanup: () => runtimeSession.run(async () => {
-			stopParentWatcher();
-			await server?.close();
-			unsubscribeRuntimeNotices();
-			await runtime?.dispose();
-			await closeRuntimeRpc();
-		}),
-		exit: (code) => process.exit(code),
-		getExitCode: () => typeof process.exitCode === "number"
-			? process.exitCode
-			: Number(process.exitCode ?? 0),
-		setExitCode: (code) => { process.exitCode = code; },
-		reportError: (error) => {
-			process.stderr.write(`[hopper-host] shutdown failed: ${error instanceof Error ? error.message : String(error)}\n`);
-		},
-	});
-	stopParentWatcher = watchParentProcess(config.parentPid, () => {
-		void shutdown.request("parent_gone");
-	});
-
-	try {
-		const runtimeRpc = getRuntimeRpc();
-		const protocolHandshake = await runtimeRpc.connect();
-		if (!protocolHandshake.protocolHandshakeLive
-			|| protocolHandshake.lifecycleInstanceId !== runtimeRpc.lifecycleInstanceId) {
-			throw new Error("RPC handshake is not live for the current lifecycle instance");
-		}
-		runtime = await EmbeddedPiHost.create({
-			paths: config.paths,
-			runtimeSession,
-			onShutdownRequest: () => { void shutdown.request("normal"); },
-		});
-		unsubscribeRuntimeNotices = runtimeRpc.subscribeNotices((notice) => {
-			runtime?.bus.publish({
-				type: "ui_notification",
-				message: notice.message,
-				level: notice.level,
-			});
-		});
-		server = await startHopperServer({
-			runtime,
-			staticDir: config.paths.staticDir,
-			port: config.port,
-			protocolHandshake,
-			allowedDevOrigin: config.uiDevOrigin,
-			getRuntimeStatus: (completionTimeoutMs = 8_000) => runtimeRpc.getRuntimeStatus(completionTimeoutMs),
-			onShutdownRequest: () => { void shutdown.request("normal"); },
-		});
-	} catch (error) {
-		process.exitCode = 1;
-		process.stderr.write(`[hopper-host] startup failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
-		await shutdown.request("normal");
-		return;
-	}
-	process.once("SIGINT", () => { void shutdown.request("normal"); });
-	process.once("SIGTERM", () => { void shutdown.request("normal"); });
-	process.stdout.write(`${JSON.stringify({
-		type: "ready",
-		url: server.url,
-		pid: process.pid,
-		lifecycleInstanceId: server.lifecycleInstanceId,
-		protocolHandshakeLive: server.protocolHandshakeLive,
-	})}\n`);
+	await startSharedHost(config, args, modulePath);
 }
 
 const isEntrypoint = process.argv[1]

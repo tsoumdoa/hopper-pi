@@ -10,6 +10,7 @@ afterEach(async () => {
 });
 async function fixture(
 	snapshot: () => unknown = () => ({ events: [{ id: 7 }], tasks: [] }),
+	ui: Partial<Parameters<typeof createSharedBrowserServer>[0]> = {},
 ) {
 	const dir = mkdtempSync(join(tmpdir(), "hopper-shared-server-"));
 	writeFileSync(join(dir, "index.html"), "<html>Hopper</html>");
@@ -20,6 +21,7 @@ async function fixture(
 		backend,
 		browserCredential: "secret",
 		staticDir: dir,
+		...ui,
 	});
 	await new Promise<void>((resolve) =>
 		host.server.listen(0, "127.0.0.1", resolve),
@@ -76,7 +78,7 @@ it("replacement tab takes control without invoking cancellation", async () => {
 	expect(await closed).toBe(4001);
 	expect(f.command).not.toHaveBeenCalled();
 });
-it("rejects unauthenticated commands and serves the shared application route", async () => {
+it("rejects unauthenticated commands and serves the normal application root", async () => {
 	const f = await fixture();
 	const socket = await f.connect();
 	const closed = new Promise<number>((resolve) =>
@@ -92,7 +94,7 @@ it("rejects unauthenticated commands and serves the shared application route", a
 	expect(await closed).toBe(4003);
 	expect(f.command).not.toHaveBeenCalled();
 	expect(
-		await (await fetch(`http://127.0.0.1:${f.port}/shared`)).text(),
+		await (await fetch(`http://127.0.0.1:${f.port}/`)).text(),
 	).toContain("Hopper");
 });
 
@@ -112,4 +114,29 @@ it("keeps the host alive when an authenticated browser reconnects during initial
 	retry.send(JSON.stringify({ type: "authenticate", token: "secret" }));
 	expect(await snapshot).toMatchObject({ type: "shared_snapshot" });
 	expect(f.command).not.toHaveBeenCalled();
+});
+
+
+it("normal UI tools, skills and conversation export use the browser credential", async () => {
+	const runtime = {
+		listTools: vi.fn(() => ({ tools: [] })),
+		listSkills: vi.fn(async () => ({ skills: [] })),
+		updateSkills: vi.fn(async () => ({ skills: [] })),
+	};
+	const exportConversation = vi.fn((id) => ({ conversationId: id, tasks: [] }));
+	const f = await fixture(undefined, { uiRuntime: () => runtime as any, exportConversation });
+	for (const path of ["/api/tools", "/api/skills", "/api/session/export?conversationId=selected"]) {
+		expect((await fetch(`http://127.0.0.1:${f.port}${path}`)).status).toBe(403);
+		const response = await fetch(`http://127.0.0.1:${f.port}${path}`, { headers: { Authorization: "Bearer secret" } });
+		expect(response.status).toBe(200);
+	}
+	expect(runtime.listTools).toHaveBeenCalledOnce();
+	expect(runtime.listSkills).toHaveBeenCalledOnce();
+	expect(exportConversation).toHaveBeenCalledWith("selected");
+	const response = await fetch(`http://127.0.0.1:${f.port}/api/skills`, {
+		method: "POST", headers: { Authorization: "Bearer secret", "Content-Type": "application/json" },
+		body: JSON.stringify({ type: "toggle", id: "skill", enabled: false }),
+	});
+	expect(response.status).toBe(200);
+	expect(runtime.updateSkills).toHaveBeenCalledWith({ type: "toggle", id: "skill", enabled: false });
 });
