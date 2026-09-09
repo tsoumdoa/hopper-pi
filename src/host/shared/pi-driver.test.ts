@@ -11,7 +11,12 @@ import { createPiTaskDriver } from "./pi-driver.js";
 import type { DriverContext } from "./task-service.js";
 import { HostSkillLibrary } from "../skills.js";
 
-it("runs real Pi through a durable question and fresh answer turn without replay or double-counted usage", async () => {
+it.each([
+	{ toolName: "ask_user", args: { question: "Which size?" }, answer: "Large" },
+	{ toolName: "pick_option", args: { question: "Which size?", options: [
+		{ label: "Small", value: "size-small", description: "Compact" }, { label: "Large", value: "size-large" },
+	] }, answer: "Large" },
+])("runs real Pi $toolName through a durable question and fresh answer turn without replay or double-counted usage", async ({ toolName, args, answer }) => {
 	const root = await mkdtemp(join(tmpdir(), "shared-driver-"));
 	let providerCalls = 0;
 	const publish = vi.fn();
@@ -41,7 +46,10 @@ it("runs real Pi through a durable question and fresh answer turn without replay
 				>
 			>[0],
 		) => {
-			session.agent.streamFunction = (model) => {
+			expect(session.getActiveToolNames()).toEqual(expect.arrayContaining(["pick_option", "ask_user", "read"]));
+			session.agent.streamFunction = (model, providerContext) => {
+				expect(providerContext.tools?.map((tool) => tool.name)).toEqual(expect.arrayContaining(["pick_option", "ask_user"]));
+				if (providerCalls > 0 && toolName === "pick_option") expect(JSON.stringify(providerContext.messages)).toContain("size-large");
 				providerCalls++;
 				const message: AssistantMessage = {
 					role: "assistant",
@@ -56,8 +64,8 @@ it("runs real Pi through a durable question and fresh answer turn without replay
 									{
 										type: "toolCall",
 										id: "ask",
-										name: "ask_user",
-										arguments: { question: "Which size?" },
+										name: toolName,
+										arguments: args,
 									},
 								]
 							: [{ type: "text", text: "Size accepted" }],
@@ -90,13 +98,16 @@ it("runs real Pi through a durable question and fresh answer turn without replay
 		const first = await createPiTaskDriver(context, options);
 		expect(await first.run()).toEqual({ usage: 5 });
 		expect(providerCalls).toBe(1);
-		expect(ask).toHaveBeenCalledWith("ask", { question: "Which size?" });
+		const payload = toolName === "pick_option" ? { kind: "pick_option", ...args } : args;
+		expect(ask).toHaveBeenCalledWith("ask", payload);
+		expect(publish).toHaveBeenCalledWith(expect.objectContaining({ type: "tool_progress", phase: "started", turnId: "first", event: expect.objectContaining({ args }) }));
+		expect(publish).toHaveBeenCalledWith(expect.objectContaining({ type: "tool_progress", phase: "completed", event: expect.objectContaining({ result: expect.objectContaining({ content: expect.any(Array) }) }) }));
 		expect(await first.cleanup()).toMatchObject({ confirmed: true });
 		const second = await createPiTaskDriver(
 			{
 				...context,
 				turnId: "second",
-				continuation: { questionId: "persisted-question", answer: "Large" },
+				continuation: { questionId: "persisted-question", payload, answer },
 			},
 			options,
 		);

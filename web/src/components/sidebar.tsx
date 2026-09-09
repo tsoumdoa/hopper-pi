@@ -1,16 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
-import {
-	BookOpen,
-	KeyRound,
-	PanelLeftClose,
-	PanelLeftOpen,
-	Plus,
-	RefreshCw,
-	Settings2,
-	Wrench,
-	X,
-} from "lucide-react";
-import { useEffect, useRef } from "react";
+import { BookOpen, KeyRound, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Settings2, Wrench, X } from "lucide-react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useHopperStore } from "../state/hopper-store-context";
 import { useRuntimeStatus } from "../hooks/use-runtime-status";
 import { cn, providerLabel } from "../lib/utils";
@@ -21,19 +11,13 @@ import { Button } from "./ui/button";
 
 function BrandMark({ className }: { className?: string }) {
 	return (
-		<span
-			aria-hidden="true"
-			className={cn(
-				"grid size-6 shrink-0 place-items-center rounded-sm bg-accent text-[13px] font-bold leading-none text-white",
-				className,
-			)}
-		>
+		<span aria-hidden="true" className={cn("grid size-6 shrink-0 place-items-center rounded-sm bg-accent text-[13px] font-bold leading-none text-white", className)}>
 			H
 		</span>
 	);
 }
 
-type Tone = "ok" | "warn" | "danger" | "muted";
+export type Tone = "ok" | "warn" | "danger" | "muted";
 
 function toneClass(tone: Tone) {
 	return {
@@ -46,48 +30,22 @@ function toneClass(tone: Tone) {
 
 function connectionSummary(state: SidebarState) {
 	const status = state.connection.status;
-	const label = {
-		connecting: "Connecting",
-		authenticating: "Authenticating",
-		connected: "Connected",
-		disconnected: "Disconnected",
-		error: "Connection failed",
-	}[status];
+	const label = { connecting: "Connecting", authenticating: "Authenticating", connected: "Connected", disconnected: "Disconnected", error: "Connection failed" }[status];
 	const canRetry = status === "disconnected" || status === "error";
-	const tone: Tone =
-		status === "connected" ? "ok" : canRetry ? "danger" : "warn";
+	const tone: Tone = status === "connected" ? "ok" : canRetry ? "danger" : "warn";
 	return { tone, label, canRetry };
 }
 
-function ConnectionCard({
-	state,
-	onReconnect,
-}: {
-	state: SidebarState;
-	onReconnect(): void;
-}) {
+function ConnectionCard({ state, onReconnect }: { state: SidebarState; onReconnect(): void }) {
 	const { tone, label, canRetry } = connectionSummary(state);
 	return (
 		<div className="rounded-md border border-line bg-surface p-2.5">
 			<div className="flex items-start gap-2">
-				<span
-					aria-hidden="true"
-					className={cn(
-						"mt-[5px] size-1.5 shrink-0 rounded-full",
-						toneClass(tone),
-					)}
-				/>
+				<span aria-hidden="true" className={cn("mt-[5px] size-1.5 shrink-0 rounded-full", toneClass(tone))} />
 				<div className="min-w-0 flex-1">
 					<p className="text-xs font-medium">{label}</p>
-					<p className="mt-0.5 text-[11px] leading-4 text-muted">
-						{state.connection.detail}
-					</p>
-					<p
-						className="mt-0.5 text-[11px] leading-4 text-muted"
-						aria-live="polite"
-					>
-						{state.backendDetail}
-					</p>
+					<p className="mt-0.5 text-[11px] leading-4 text-muted">{state.connection.detail}</p>
+					<p className="mt-0.5 text-[11px] leading-4 text-muted" aria-live="polite">{state.backendDetail}</p>
 				</div>
 				{canRetry && (
 					<Button size="xs" variant="secondary" onClick={onReconnect}>
@@ -100,59 +58,21 @@ function ConnectionCard({
 	);
 }
 
-function ProviderCard({
-	state,
-	connected,
-	onManageProvider,
-}: {
-	state: SidebarState;
-	connected: boolean;
-	onManageProvider(): void;
-}) {
-	const authenticated = state.providers.filter(
-		(provider) => provider.authenticated,
-	);
-	const selected =
-		state.selectedModel?.provider ?? authenticated[0]?.id ?? null;
-	const selectedAuthenticated = state.providers.some(
-		(provider) => provider.id === selected && provider.authenticated,
-	);
+function ProviderCard({ state, connected, onManageProvider }: { state: SidebarState; connected: boolean; onManageProvider(): void }) {
+	const authenticated = state.providers.filter((provider) => provider.authenticated);
+	const selected = state.selectedModel?.provider ?? authenticated[0]?.id ?? null;
+	const selectedAuthenticated = state.providers.some((provider) => provider.id === selected && provider.authenticated);
 	return (
 		<div className="rounded-md border border-line bg-surface p-2.5">
 			<div className="flex items-center justify-between gap-2">
-				<span className="text-[10px] font-medium uppercase tracking-wider text-muted">
-					Provider
-				</span>
-				<Badge
-					variant={
-						selectedAuthenticated
-							? "accent"
-							: authenticated.length
-								? "neutral"
-								: "warn"
-					}
-					dot
-				>
-					{selectedAuthenticated
-						? "Signed in"
-						: authenticated.length
-							? "Available"
-							: "Not set up"}
+				<span className="text-[10px] font-medium uppercase tracking-wider text-muted">Provider</span>
+				<Badge variant={selectedAuthenticated ? "accent" : authenticated.length ? "neutral" : "warn"} dot>
+					{selectedAuthenticated ? "Signed in" : authenticated.length ? "Available" : "Not set up"}
 				</Badge>
 			</div>
 			<div className="mt-1.5 flex items-center justify-between gap-2">
-				<span className="truncate text-xs font-medium">
-					{selected
-						? providerLabel(selected, state.providers)
-						: "None connected"}
-				</span>
-				<Button
-					size="xs"
-					variant="ghost"
-					className="-mr-1"
-					disabled={!connected}
-					onClick={onManageProvider}
-				>
+				<span className="truncate text-xs font-medium">{selected ? providerLabel(selected, state.providers) : "None connected"}</span>
+				<Button size="xs" variant="ghost" className="-mr-1" disabled={!connected} onClick={onManageProvider}>
 					Manage
 				</Button>
 			</div>
@@ -172,9 +92,11 @@ export type SidebarProps = {
 	onManageSkills(): void;
 	onViewTools(): void;
 	onReconnect(): void;
-	conversations?: { id: string; title: string }[];
-	selectedConversationId?: string;
-	onSelectConversation?(id: string): void;
+	/**
+	 * Replaces the single-runtime status panel when the host tracks several Rhino instances.
+	 * The summary drives the status dot on the collapsed rail.
+	 */
+	rhino?: { summary: { tone: Tone; text: string }; panel: ReactNode };
 };
 
 export function Sidebar({
@@ -189,22 +111,14 @@ export function Sidebar({
 	onManageSkills,
 	onViewTools,
 	onReconnect,
-	conversations,
-	selectedConversationId,
-	onSelectConversation,
+	rhino,
 }: SidebarProps) {
-	const state = useHopperStore(
-		useShallow((state) => ({
-			connection: state.connection,
-			backendDetail: state.backendDetail,
-			providers: state.providers,
-			selectedModel: state.selectedModel,
-			runtimeStatus: state.runtimeStatus,
-			runtimeStatusError: state.runtimeStatusError,
-		})),
-	);
-	const { refresh: onRefreshRuntime, refreshing: runtimeRefreshing } =
-		useRuntimeStatus(token, connected && conversations === undefined);
+	const state = useHopperStore(useShallow((state) => ({
+		connection: state.connection, backendDetail: state.backendDetail,
+		providers: state.providers, selectedModel: state.selectedModel,
+		runtimeStatus: state.runtimeStatus, runtimeStatusError: state.runtimeStatusError,
+	})));
+	const { refresh: onRefreshRuntime, refreshing: runtimeRefreshing } = useRuntimeStatus(token, connected && !rhino);
 	const container = useRef<HTMLElement>(null);
 
 	// Mobile settings sheet closes on Escape and on taps outside the sidebar.
@@ -214,11 +128,7 @@ export function Sidebar({
 			if (event.key === "Escape") onMobileOpenChange(false);
 		};
 		const onPointer = (event: PointerEvent) => {
-			if (
-				container.current &&
-				!container.current.contains(event.target as Node)
-			)
-				onMobileOpenChange(false);
+			if (container.current && !container.current.contains(event.target as Node)) onMobileOpenChange(false);
 		};
 		window.addEventListener("keydown", onKey);
 		window.addEventListener("pointerdown", onPointer);
@@ -228,70 +138,19 @@ export function Sidebar({
 		};
 	}, [mobileOpen, onMobileOpenChange]);
 
-	const runtime = summarizeRuntimeStatus(
-		state.runtimeStatus,
-		state.runtimeStatusError,
-	);
+	const runtime = rhino?.summary ?? summarizeRuntimeStatus(state.runtimeStatus, state.runtimeStatusError);
 	const connection = connectionSummary(state);
-
-	const conversationList = conversations && (
-		<nav
-			aria-label="Conversations"
-			className="grid gap-1 max-h-60 overflow-y-auto"
-		>
-			{conversations.map((c) => (
-				<button
-					key={c.id}
-					aria-current={c.id === selectedConversationId ? "page" : undefined}
-					className={cn(
-						"rounded px-2 py-1.5 text-left text-xs truncate",
-						c.id === selectedConversationId
-							? "bg-accent-soft text-accent"
-							: "hover:bg-surface-muted",
-					)}
-					onClick={() => onSelectConversation?.(c.id)}
-				>
-					{c.title}
-				</button>
-			))}
-		</nav>
-	);
 
 	const panels = (
 		<>
-			<ProviderCard
-				state={state}
-				connected={connected}
-				onManageProvider={onManageProvider}
-			/>
-			<Button
-				variant="secondary"
-				size="sm"
-				className="justify-start"
-				disabled={!connected}
-				onClick={onManageSkills}
-			>
-				<BookOpen className="size-3.5" />
-				Skills & Markdown
+			<ProviderCard state={state} connected={connected} onManageProvider={onManageProvider} />
+			<Button variant="secondary" size="sm" className="justify-start" disabled={!connected} onClick={onManageSkills}>
+				<BookOpen className="size-3.5" />Skills & Markdown
 			</Button>
-			<Button
-				variant="secondary"
-				size="sm"
-				className="justify-start"
-				disabled={!connected}
-				onClick={onViewTools}
-			>
-				<Wrench className="size-3.5" />
-				Agent tools
+			<Button variant="secondary" size="sm" className="justify-start" disabled={!connected} onClick={onViewTools}>
+				<Wrench className="size-3.5" />Agent tools
 			</Button>
-			{conversations === undefined && (
-				<RuntimeStatusPanel
-					status={state.runtimeStatus}
-					error={state.runtimeStatusError}
-					onRefresh={onRefreshRuntime}
-					refreshing={runtimeRefreshing}
-				/>
-			)}
+			{rhino?.panel ?? <RuntimeStatusPanel status={state.runtimeStatus} error={state.runtimeStatusError} onRefresh={onRefreshRuntime} refreshing={runtimeRefreshing} />}
 			<ConnectionCard state={state} onReconnect={onReconnect} />
 		</>
 	);
@@ -308,16 +167,8 @@ export function Sidebar({
 			{/* Mobile top bar */}
 			<div className="flex items-center gap-2 px-3 py-2 lg:hidden">
 				<BrandMark />
-				<span className="flex-1 text-[13px] font-semibold tracking-tight">
-					Hopper
-				</span>
-				<Button
-					size="sm"
-					variant="secondary"
-					disabled={!connected}
-					onClick={onNewSession}
-					aria-label="New session"
-				>
+				<span className="flex-1 text-[13px] font-semibold tracking-tight">Hopper</span>
+				<Button size="sm" variant="secondary" disabled={!connected} onClick={onNewSession} aria-label="New session">
 					<Plus className="size-3.5" />
 					<span className="max-sm:hidden">New session</span>
 				</Button>
@@ -329,11 +180,7 @@ export function Sidebar({
 					aria-label={mobileOpen ? "Close settings" : "Open settings"}
 					onClick={() => onMobileOpenChange(!mobileOpen)}
 				>
-					{mobileOpen ? (
-						<X className="size-4" />
-					) : (
-						<Settings2 className="size-4" />
-					)}
+					{mobileOpen ? <X className="size-4" /> : <Settings2 className="size-4" />}
 				</Button>
 			</div>
 			<div
@@ -345,113 +192,47 @@ export function Sidebar({
 						: "hidden",
 				)}
 			>
-				{conversationList}
 				{panels}
 			</div>
 
 			{/* Desktop: collapsed rail */}
 			{collapsed ? (
 				<div className="hidden flex-1 flex-col items-center gap-1 py-2 lg:flex">
-					<Button
-						size="icon-sm"
-						variant="ghost"
-						onClick={() => onCollapsedChange(false)}
-						aria-label="Expand sidebar"
-						title="Expand sidebar"
-					>
+					<Button size="icon-sm" variant="ghost" onClick={() => onCollapsedChange(false)} aria-label="Expand sidebar" title="Expand sidebar">
 						<PanelLeftOpen className="size-4" />
 					</Button>
-					<Button
-						size="icon-sm"
-						variant="ghost"
-						disabled={!connected}
-						onClick={onNewSession}
-						aria-label="New session"
-						title="New session"
-					>
+					<Button size="icon-sm" variant="ghost" disabled={!connected} onClick={onNewSession} aria-label="New session" title="New session">
 						<Plus className="size-4" />
 					</Button>
-					<Button
-						size="icon-sm"
-						variant="ghost"
-						disabled={!connected}
-						onClick={onManageProvider}
-						aria-label="Manage provider"
-						title="Manage provider"
-					>
+					<Button size="icon-sm" variant="ghost" disabled={!connected} onClick={onManageProvider} aria-label="Manage provider" title="Manage provider">
 						<KeyRound className="size-4" />
 					</Button>
-					<Button
-						size="icon-sm"
-						variant="ghost"
-						disabled={!connected}
-						onClick={onManageSkills}
-						aria-label="Skills & Markdown"
-						title="Skills & Markdown"
-					>
+					<Button size="icon-sm" variant="ghost" disabled={!connected} onClick={onManageSkills} aria-label="Skills & Markdown" title="Skills & Markdown">
 						<BookOpen className="size-4" />
 					</Button>
-					<Button
-						size="icon-sm"
-						variant="ghost"
-						disabled={!connected}
-						onClick={onViewTools}
-						aria-label="Agent tools"
-						title="Agent tools"
-					>
+					<Button size="icon-sm" variant="ghost" disabled={!connected} onClick={onViewTools} aria-label="Agent tools" title="Agent tools">
 						<Wrench className="size-4" />
 					</Button>
 					<div className="mt-auto grid gap-2.5 pb-2" aria-label="Status">
-						{conversations === undefined && (
-							<span
-								title={`Rhino runtime · ${runtime.text}`}
-								aria-label={`Rhino runtime: ${runtime.text}`}
-								role="img"
-								className={cn("size-1.5 rounded-full", toneClass(runtime.tone))}
-							/>
-						)}
-						<span
-							title={`Connection · ${connection.label}`}
-							aria-label={`Connection: ${connection.label}`}
-							role="img"
-							className={cn(
-								"size-1.5 rounded-full",
-								toneClass(connection.tone),
-							)}
-						/>
+						<span title={`${rhino ? "Rhino instances" : "Rhino runtime"} · ${runtime.text}`} aria-label={`${rhino ? "Rhino instances" : "Rhino runtime"}: ${runtime.text}`} role="img" className={cn("size-1.5 rounded-full", toneClass(runtime.tone))} />
+						<span title={`Connection · ${connection.label}`} aria-label={`Connection: ${connection.label}`} role="img" className={cn("size-1.5 rounded-full", toneClass(connection.tone))} />
 					</div>
 				</div>
 			) : (
 				<div className="hidden min-h-0 flex-1 flex-col lg:flex">
 					<div className="flex items-center gap-2 px-3 pb-2 pt-2.5">
 						<BrandMark />
-						<span className="flex-1 text-[13px] font-semibold tracking-tight">
-							Hopper
-						</span>
-						<Button
-							size="icon-sm"
-							variant="ghost"
-							className="-mr-1.5"
-							onClick={() => onCollapsedChange(true)}
-							aria-label="Collapse sidebar"
-							title="Collapse sidebar"
-						>
+						<span className="flex-1 text-[13px] font-semibold tracking-tight">Hopper</span>
+						<Button size="icon-sm" variant="ghost" className="-mr-1.5" onClick={() => onCollapsedChange(true)} aria-label="Collapse sidebar" title="Collapse sidebar">
 							<PanelLeftClose className="size-4" />
 						</Button>
 					</div>
 					<div className="px-3">
-						<Button
-							className="w-full justify-start"
-							variant="secondary"
-							size="sm"
-							disabled={!connected}
-							onClick={onNewSession}
-						>
+						<Button className="w-full justify-start" variant="secondary" size="sm" disabled={!connected} onClick={onNewSession}>
 							<Plus className="size-3.5" />
 							New session
 						</Button>
 					</div>
-					<div className="px-3 pt-3">{conversationList}</div>
 					<div className="mt-auto grid gap-2 overflow-y-auto p-3">{panels}</div>
 				</div>
 			)}

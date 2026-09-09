@@ -22,17 +22,26 @@ export function UiRequestDialog({
 	const request = useHopperStore((state) => state.activeUiRequest);
 	const queued = useHopperStore((state) => state.pendingUiRequests.length);
 	const onResolved = useHopperStore((state) => state.actions.resolveUiRequest);
+	if (!request) return null;
+	return <RequestDialog request={request} queued={queued} respond={(value) => {
+		const sent = send({ type: "ui_response", requestId: request.requestId, value });
+		if (sent || value === null || value === false) onResolved();
+		return sent;
+	}} />;
+}
+
+/** The original question dialog, shared by the private and persistent hosts. */
+export function RequestDialog({ request, queued = 0, respond }: {
+	request: UiRequest;
+	queued?: number;
+	respond(value: string | boolean | null): boolean;
+}) {
 	const [value, setValue] = useState("");
 	useEffect(() => setValue(request?.prefill ?? request?.options?.[0]?.value ?? ""), [request]);
-	if (!request) return null;
-
 	const kind = resolveKind(request);
 	const finish = (cancelled = false) => {
 		const result = cancelled ? (kind === "confirm" ? false : null) : kind === "confirm" ? true : value;
-		const sent = send({ type: "ui_response", requestId: request.requestId, value: result });
-		// Allow local dismissal while offline so the user can reach Reconnect.
-		// The host replays unanswered requests when this tab connects again.
-		if (sent || cancelled) onResolved();
+		respond(result);
 	};
 
 	return (

@@ -1,0 +1,471 @@
+import { ArrowDown, Box, ChevronRight, CircleAlert, Loader2, Square } from "lucide-react";
+import { useMemo, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { parseImages, type ImageAttachment } from "../../../src/host/protocol";
+import type { TargetBinding } from "../../../src/protocol/shared-execution.js";
+import { imageUrl } from "../lib/image-attachments";
+import { cn } from "../lib/utils";
+import type { SendMode } from "../state/hopper-types";
+import { decode, type Row, type SharedSnapshot } from "../state/shared-snapshot";
+import { taskTools } from "../state/task-tools";
+import { RequestDialog } from "./ui-request-dialog";
+import type { UiRequest } from "../state/hopper-types";
+import { OTHER_OPTION_LABEL, formatPickOptionLabels, type PickOption } from "../../../src/types/choices";
+import { ThinkingBlock, ToolCard, Welcome } from "./conversation";
+import { MessageMarkdown } from "./message-markdown";
+import { Button } from "./ui/button";
+import { Textarea } from "./ui/textarea";
+import { WorkingTime } from "./working-time";
+
+const KIND_LABELS: Partial<Record<SendMode, string>> = { steer: "Steering note", follow_up: "Follow-up" };
+const ACTIVE_STATES = ["running", "suspending", "awaiting_user"];
+const SETTLED_STATES = ["completed", "cancelled", "failed", "interrupted", "uncertain"];
+
+type TaskInput = { text: string; bindings: TargetBinding[]; attachments?: unknown; kind?: SendMode };
+type LiveAssistantMessage = { turnId: string; text: string; thinking: string };
+
+/** Elapsed time for a task, taken from its saved turn timestamps so reconnects keep the clock. */
+export function TaskWorkingTime({ task, turns, inline = false }: { task: Row; turns: Row[]; inline?: boolean }) {
+	const timestamps = turns
+		.filter((turn) => turn.task_id === task.id)
+		.map((turn) => Number(turn.started_at))
+		.filter((time) => Number.isFinite(time) && time > 0);
+	const startedAt = timestamps.length ? Math.min(...timestamps) : Number(task.created_at) || undefined;
+	const streaming = task.state === "running" || task.state === "suspending";
+	const finishedAt = streaming ? undefined : Number(task.updated_at) || undefined;
+	return <WorkingTime streaming={streaming} startedAt={startedAt} finishedAt={finishedAt} inline={inline} />;
+}
+
+/** Assistant text that is still streaming: agent events for turns without a saved message list yet. */
+function liveAssistantMessages(events: Row[], completedTurns: Set<string>): LiveAssistantMessage[] {
+	const messages = new Map<string, LiveAssistantMessage>();
+	for (const row of events) {
+		const payload = decode<any>(row.payload, {});
+		if (payload.type !== "agent_event" || !payload.turnId) continue;
+		const event = payload.event ?? {};
+		const turnId = String(payload.turnId);
+		if (event.type === "message_start") {
+			if (event.message?.role === "assistant") messages.set(turnId, { turnId, text: "", thinking: "" });
+			continue;
+		}
+		const message = messages.get(turnId);
+		if (!message) continue;
+		if (event.type === "message_update") {
+			const update = event.assistantMessageEvent ?? {};
+			if (update.type === "text_delta") message.text += String(update.delta ?? update.text ?? "");
+			if (update.type === "thinking_delta") message.thinking += String(update.delta ?? update.text ?? "");
+			continue;
+		}
+		if (event.type === "message_end" && event.message?.role === "assistant") {
+			const content = Array.isArray(event.message.content) ? event.message.content : [];
+			const text = content.filter((part: any) => part.type === "text").map((part: any) => String(part.text ?? "")).join("\n");
+			const thinking = content.filter((part: any) => part.type === "thinking").map((part: any) => String(part.thinking ?? part.text ?? "")).join("\n");
+			if (text) message.text = text;
+			if (thinking) message.thinking = thinking;
+		}
+	}
+	return [...messages.values()].filter((message) => !completedTurns.has(message.turnId));
+}
+
+function safeImages(attachments: unknown): ImageAttachment[] {
+	try {
+		return parseImages(attachments) ?? [];
+	} catch {
+		return [];
+	}
+}
+
+function UserBubble({ text, attachments, kind, status }: { text: string; attachments?: unknown; kind?: SendMode; status?: string }) {
+	const label = kind ? KIND_LABELS[kind] : undefined;
+	const images = safeImages(attachments);
+	return (
+		<div className="flex justify-end animate-slide-up" aria-label="Your message">
+			<div className="max-w-[min(85%,560px)]">
+				{label && <p className="mb-1 text-right text-[11px] font-medium text-muted">{label}</p>}
+				<div className="whitespace-pre-wrap break-words rounded-md bg-surface-muted px-3.5 py-2 text-[14px] leading-6 text-ink">
+					{text}
+					{images.map((image, index) => (
+						<a key={index} href={imageUrl(image)} download={`attachment-${index + 1}`} className={cn("block", (text || index > 0) && "mt-2")} title="Download image">
+							<img src={imageUrl(image)} alt="Attached image" className="max-h-72 rounded-sm object-contain" />
+						</a>
+					))}
+				</div>
+				{status && <p className="mt-1 text-right text-[11px] text-muted" role="status">{status}</p>}
+			</div>
+		</div>
+	);
+}
+
+function Notice({ tone, children }: { tone: "danger" | "warn" | "muted"; children: ReactNode }) {
+	if (tone === "muted") return <p className="text-[13px] text-muted" role="status">{children}</p>;
+	return (
+		<p
+			role={tone === "danger" ? "alert" : "status"}
+			className={cn(
+				"flex items-start gap-2 rounded-sm border px-3 py-2 text-[13px] leading-5",
+				tone === "danger" ? "border-danger/30 bg-danger-soft text-danger" : "border-warn/30 bg-warn-soft text-warn",
+			)}
+		>
+			<CircleAlert className="mt-0.5 size-4 shrink-0" />
+			<span>{children}</span>
+		</p>
+	);
+}
+
+function Question({ question, enabled, inactive, answer }: { question: Row; enabled: boolean; inactive?: boolean; answer(value: string | null): boolean }) {
+	const [other, setOther] = useState(false);
+	const payload = useMemo(() => decode<{ kind?: string; question?: string; placeholder?: string; options?: (string | PickOption)[] }>(question.payload, {}), [question.payload]);
+	const prompt = payload.question ?? "Answer needed";
+	const request = useMemo<UiRequest>(() => {
+		const options = (payload.options ?? []).map((option) => typeof option === "string"
+			? { label: option, value: option }
+			: { ...option, value: formatPickOptionLabels([option])[0]! });
+		if (payload.kind === "pick_option") options.push({ label: OTHER_OPTION_LABEL, value: OTHER_OPTION_LABEL });
+		return {
+			type: "ui_request", requestId: String(question.id),
+			kind: other || !options.length ? "input" : "select",
+			title: other ? "Please specify:" : prompt,
+			placeholder: other ? prompt : payload.placeholder,
+			...(other ? {} : { options: options.map((option, index) => ({ ...option, id: String(index) })) }),
+		};
+	}, [question.id, payload, prompt, other]);
+	if (question.answer !== null) {
+		const response = decode<unknown>(question.answer, question.answer);
+		return (
+			<section aria-label="Answered question" className="rounded-md border border-line bg-surface p-3 text-[13px]">
+				<p className="text-[10px] font-medium uppercase tracking-wider text-muted">Input needed</p>
+				<p className="mt-1 font-medium text-ink">{prompt}</p>
+				<p className="mt-1 text-ink-soft">{response === null ? "User cancelled" : `Answer: ${typeof response === "string" ? response : JSON.stringify(response)}`}</p>
+			</section>
+		);
+	}
+	if (!enabled) return <p role="status" className="text-xs text-muted">{inactive ? "This question is no longer active." : "Finishing the current operation."}</p>;
+	return <RequestDialog key={other ? "other" : "choice"} request={request} respond={(value) => {
+		if (!other && payload.kind === "pick_option" && value === OTHER_OPTION_LABEL) { setOther(true); return true; }
+		const sent = answer(typeof value === "string" ? other ? `Other: ${value.trim()}` : value.trim() : null);
+		return sent;
+	}} />;
+}
+
+function Recovery({ recover, launch = false }: { recover(acknowledgement: string): boolean; launch?: boolean }) {
+	const [acknowledgement, setAcknowledgement] = useState("");
+	return (
+		<form
+			className="rounded-md border border-line bg-surface p-3"
+			onSubmit={(event) => {
+				event.preventDefault();
+				recover(acknowledgement);
+			}}
+		>
+			<label className="block text-xs leading-5 text-ink-soft">
+				{launch
+					? "Preserve your models, inspect startup or autosave dialogs, and close all Rhino processes before recovery. Record what you checked. The host verifies that no Rhino process remains before allowing a new grant; it does not close Rhino for you."
+					: "Record what you inspected in the affected Rhino documents and files. This acknowledges the unknown outcome; it does not undo or repeat the operation."}
+				<Textarea
+					aria-label={launch ? "Launch recovery inspection" : "Recovery inspection"}
+					className="mt-2 min-h-20"
+					value={acknowledgement}
+					onChange={(event) => setAcknowledgement(event.target.value)}
+				/>
+			</label>
+			<div className="mt-3 flex justify-end">
+				<Button type="submit" size="sm" variant="secondary" disabled={!acknowledgement.trim()}>
+					{launch ? "Acknowledge and verify launch recovery" : "Acknowledge and verify safe release"}
+				</Button>
+			</div>
+		</form>
+	);
+}
+
+export type TaskThreadCommands = {
+	answer(questionId: string, answer: string | null): boolean;
+	cancel(taskId: string): boolean;
+	recover(taskId: string, acknowledgement: string): boolean;
+	recoverLaunch(taskId: string, launchRequestId: string, acknowledgement: string): boolean;
+};
+
+function TaskReply({ task, snapshot, labelFor, commands, stoppable }: {
+	task: Row;
+	snapshot: SharedSnapshot;
+	labelFor(binding: TargetBinding): string;
+	commands: TaskThreadCommands;
+	stoppable: boolean;
+}) {
+	const state = String(task.state);
+	const input = decode<TaskInput>(task.payload, { text: "", bindings: [] });
+	const events = snapshot.events.filter((event) => event.task_id === task.id && event.kind === "progress");
+	const turnMessages = new Map<string, any[]>();
+	for (const event of events) {
+		const payload = decode<any>(event.payload, {});
+		if (payload.type === "messages") turnMessages.set(String(payload.turnId), payload.messages ?? []);
+	}
+	const messages = [...turnMessages.values()].flat();
+	const liveMessages = liveAssistantMessages(events, new Set(turnMessages.keys()));
+	const tools = taskTools(events);
+	const running = state === "running" || state === "suspending";
+	const questions = snapshot.questions.filter((question) => question.task_id === task.id);
+	const recoveries = snapshot.recoveries ?? [];
+	const launches = (snapshot.records ?? []).filter(
+		(record) => record.kind === "launch" && record.task_id === task.id && ["cancelled", "uncertain"].includes(String(record.state)) && decode<any>(record.payload, {}).dispatchAttempted,
+	);
+	const captures = messages
+		.filter((message) => message.role === "toolResult" && Array.isArray(message.content))
+		.flatMap((message, i) =>
+			message.content
+				.filter((part: any) => part.type === "image")
+				.map((part: any, j: number) => ({ key: `capture-${i}-${j}`, image: safeImages([part])[0], tool: String(message.toolName ?? "Rhino") }))
+				.filter((capture: { image?: ImageAttachment }) => capture.image),
+		);
+	const assistantMessages = messages.filter((message: any) => message.role === "assistant");
+	const idle = running && !assistantMessages.length && !liveMessages.length && !tools.length;
+	const targets = input.bindings?.map(labelFor) ?? [];
+
+	if (state === "queued") {
+		return (
+			<div className="flex items-center justify-between gap-3 text-[13px] text-muted" aria-label="Hopper's reply">
+				<p role="status" className="flex items-center gap-2">
+					<Loader2 className="size-3.5 animate-spin" />
+					Waiting to start…
+				</p>
+				{stoppable && (
+					<Button size="xs" variant="ghost" onClick={() => commands.cancel(String(task.id))}>Cancel</Button>
+				)}
+			</div>
+		);
+	}
+
+	return (
+		<div className="min-w-0 animate-slide-up" aria-label="Hopper's reply">
+			<div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line/60 pb-3 text-[13px] text-muted">
+				{state === "awaiting_user" ? <span role="status">Waiting for your answer</span> : <TaskWorkingTime task={task} turns={snapshot.turns} inline />}
+				{targets.map((target) => (
+					<span key={target} className="inline-flex min-w-0 items-center gap-1 text-[11px]">
+						<Box className="size-3 shrink-0" />
+						<span className="truncate">{`Target: ${target}`}</span>
+					</span>
+				))}
+				{stoppable && state === "awaiting_user" && (
+					<Button size="xs" variant="ghost" className="ml-auto text-danger hover:text-danger" onClick={() => commands.cancel(String(task.id))}>
+						<Square className="size-3 fill-current" />
+						Stop
+					</Button>
+				)}
+			</div>
+			<div className="grid gap-3">
+				{state === "failed" && <Notice tone="danger">Something went wrong. Please try again.</Notice>}
+				{state === "interrupted" && <Notice tone="danger">The connection to Rhino was interrupted before this task finished.</Notice>}
+				{state === "cancelled" && <Notice tone="muted">Stopped.</Notice>}
+				{assistantMessages.map((message: any, i: number) => {
+					const thinking = message.content.filter((part: any) => part.type === "thinking").map((part: any) => part.thinking ?? part.text).join("\n");
+					const text = message.content.filter((part: any) => part.type === "text").map((part: any) => part.text).join("\n");
+					if (!thinking && !text) return null;
+					return (
+						<div key={i} className="min-w-0">
+							{thinking && <div className="mb-2"><ThinkingBlock text={thinking} streaming={false} /></div>}
+							{text && <div className="min-w-0 text-[14px] leading-7 text-ink"><MessageMarkdown text={text} /></div>}
+						</div>
+					);
+				})}
+				{liveMessages.map((message) => (
+					<div key={message.turnId} className="min-w-0">
+						{message.thinking && <div className="mb-2"><ThinkingBlock text={message.thinking} streaming={!message.text} /></div>}
+						{message.text ? (
+							<div className="min-w-0 text-[14px] leading-7 text-ink">
+								<MessageMarkdown text={message.text} />
+								<span aria-hidden="true" className="ml-0.5 inline-block h-[1.1em] w-[2px] translate-y-[3px] bg-accent animate-blink" />
+							</div>
+						) : !message.thinking ? (
+							<p className="flex items-center gap-2 text-[13px] text-muted" role="status">
+								<Loader2 className="size-3.5 animate-spin" />
+								Getting started…
+							</p>
+						) : null}
+					</div>
+				))}
+				{idle && (
+					<p className="flex items-center gap-2 text-[13px] text-muted" role="status">
+						<Loader2 className="size-3.5 animate-spin" />
+						Getting started…
+					</p>
+				)}
+				{tools.length > 0 && (
+					<div className="grid gap-1">
+						{tools.map((tool) => <ToolCard key={tool.id} tool={tool} />)}
+					</div>
+				)}
+				{captures.map((capture: { key: string; image: ImageAttachment; tool: string }) => (
+					<figure key={capture.key} className="min-w-0">
+						<img className="max-w-full rounded-sm border border-line" src={imageUrl(capture.image)} alt={`Capture from ${capture.tool}`} />
+						<figcaption className="mt-1 text-[11px] text-muted">{capture.tool}</figcaption>
+					</figure>
+				))}
+				{questions.map((question) => (
+					<Question
+						key={String(question.id)}
+						question={question}
+						enabled={state === "awaiting_user"}
+						inactive={SETTLED_STATES.includes(state)}
+						answer={(value) => commands.answer(String(question.id), value)}
+					/>
+				))}
+				{launches.map((record) => {
+					const payload = decode<any>(record.payload, {});
+					const supported = snapshot.installations?.some(
+						(installation) => installation.id === payload.request?.installationId
+							&& (installation.platform === "win32" || (installation.platform === "darwin" && !payload.request?.independentProcess)),
+					);
+					const recovered = snapshot.records?.some(
+						(row) => row.kind === "launch_recovery" && row.id === record.id && row.task_id === task.id && row.state === "confirmed",
+					);
+					return (
+						<section key={String(record.id)} aria-label="Launch recovery" className="grid gap-3">
+							<Notice tone="warn">{`Original launch outcome: ${String(record.state)}. ${String(payload.detail ?? "")}`.trim()}</Notice>
+							{recovered ? (
+								<p className="text-[13px] text-ink-soft">Ready to launch Rhino again.</p>
+							) : supported ? (
+								<Recovery launch recover={(acknowledgement) => commands.recoverLaunch(String(task.id), String(record.id), acknowledgement)} />
+							) : (
+								<p className="text-[13px] text-ink-soft">
+									Inspect the original Rhino process and its documents. Automatic launch recovery is unavailable for this launch.
+								</p>
+							)}
+						</section>
+					);
+				})}
+				{state === "uncertain" && (
+					<Notice tone="warn">The operation or cleanup outcome is unknown. Inspect Rhino before starting recovery. This task will not be replayed.</Notice>
+				)}
+				{state === "uncertain" && !recoveries.some((record) => record.task_id === task.id) && (
+					<Recovery recover={(acknowledgement) => commands.recover(String(task.id), acknowledgement)} />
+				)}
+				{recoveries.some((record) => record.task_id === task.id) && (
+					<p className="text-xs text-muted">Unknown outcome acknowledged. Submit a fresh task against the inspected state.</p>
+				)}
+			</div>
+		</div>
+	);
+}
+
+function TaskCard({ task, snapshot, labelFor, commands, stoppable }: {
+	task: Row;
+	snapshot: SharedSnapshot;
+	labelFor(binding: TargetBinding): string;
+	commands: TaskThreadCommands;
+	stoppable: boolean;
+}) {
+	const input = decode<TaskInput>(task.payload, { text: "", bindings: [] });
+	const inputs = snapshot.inputs?.filter((entry) => entry.task_id === task.id) ?? [];
+	return (
+		<article className="flex flex-col gap-6">
+			<UserBubble text={input.text} attachments={input.attachments} kind={input.kind === "follow_up" ? "follow_up" : undefined} />
+			{inputs.map((entry) => {
+				const payload = decode<{ text: string; attachments?: unknown }>(entry.payload, { text: "" });
+				return (
+					<UserBubble
+						key={String(entry.id)}
+						text={payload.text}
+						attachments={payload.attachments}
+						kind="steer"
+						status={entry.state === "not_applied" ? "Not delivered" : entry.state === "unknown" ? "Delivery unconfirmed" : undefined}
+					/>
+				);
+			})}
+			<TaskReply task={task} snapshot={snapshot} labelFor={labelFor} commands={commands} stoppable={stoppable} />
+		</article>
+	);
+}
+
+function ChildTask({ task, snapshot, labelFor, commands }: {
+	task: Row;
+	snapshot: SharedSnapshot;
+	labelFor(binding: TargetBinding): string;
+	commands: TaskThreadCommands;
+}) {
+	const input = decode<TaskInput>(task.payload, { text: "", bindings: [] });
+	const state = String(task.state);
+	return (
+		<details className="group ml-6 rounded-md border border-line bg-surface">
+			<summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-[13px] text-ink-soft outline-none marker:content-none focus-visible:ring-2 focus-visible:ring-accent/40 [&::-webkit-details-marker]:hidden">
+				<ChevronRight className="size-3.5 shrink-0 text-muted transition-transform group-open:rotate-90" />
+				<Box className="size-3.5 shrink-0 text-muted" />
+				<span className="min-w-0 flex-1 truncate font-medium">{input.bindings.map(labelFor).join(", ") || "Rhino work"}</span>
+				<span className={cn("shrink-0 text-xs", state === "failed" ? "text-danger" : "text-muted")}>
+					{state === "running" || state === "suspending"
+						? <TaskWorkingTime task={task} turns={snapshot.turns} inline />
+						: state === "failed" ? "Failed" : state === "completed" ? "Done" : state === "queued" ? "Queued" : ""}
+				</span>
+			</summary>
+			<div className="border-t border-line px-3 py-3">
+				<TaskCard task={task} snapshot={snapshot} labelFor={labelFor} commands={commands} stoppable={false} />
+			</div>
+		</details>
+	);
+}
+
+export function TaskThread({ snapshot, tasks, connected, activeQuestionId, conversationId, labelFor, commands, onSuggestion }: {
+	snapshot: SharedSnapshot | undefined;
+	/** Root tasks in order, each followed by its child tasks. */
+	tasks: Row[];
+	connected: boolean;
+	activeQuestionId?: string;
+	conversationId: string;
+	labelFor(binding: TargetBinding): string;
+	commands: TaskThreadCommands;
+	onSuggestion(prompt: string): void;
+}) {
+	const scroller = useRef<HTMLDivElement>(null);
+	const stickToBottom = useRef(true);
+	const [showJump, setShowJump] = useState(false);
+
+	const scrollToLatest = (behavior: ScrollBehavior = "smooth") => {
+		const node = scroller.current;
+		if (!node) return;
+		const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+		node.scrollTo({ top: node.scrollHeight, behavior: reducedMotion ? "auto" : behavior });
+	};
+	const onScroll = () => {
+		const node = scroller.current;
+		if (!node) return;
+		const distance = node.scrollHeight - node.scrollTop - node.clientHeight;
+		stickToBottom.current = distance < 80;
+		setShowJump(distance > 240);
+	};
+	// A question always reveals itself; otherwise follow only while the reader is near the bottom.
+	useLayoutEffect(() => {
+		if (activeQuestionId) stickToBottom.current = true;
+		if (stickToBottom.current) scrollToLatest("auto");
+	}, [activeQuestionId, conversationId, snapshot?.eventCursor, tasks.length]);
+
+	return (
+		<div className="relative min-h-0 flex-1">
+			<div ref={scroller} onScroll={onScroll} className="h-full overflow-y-auto px-4 py-6 sm:px-6" aria-label="Conversation" aria-live="polite">
+				<div className="mx-auto flex w-full max-w-[760px] flex-col gap-6 pb-4">
+					{!snapshot || tasks.length === 0 ? (
+						<Welcome connected={connected} onSuggestion={onSuggestion} />
+					) : (
+						tasks.map((task) =>
+							task.parent_task_id ? (
+								<ChildTask key={String(task.id)} task={task} snapshot={snapshot} labelFor={labelFor} commands={commands} />
+							) : (
+								<TaskCard key={String(task.id)} task={task} snapshot={snapshot} labelFor={labelFor} commands={commands} stoppable={ACTIVE_STATES.includes(String(task.state)) || task.state === "queued"} />
+							),
+						)
+					)}
+				</div>
+			</div>
+			{showJump && (
+				<Button
+					size="sm"
+					variant="secondary"
+					className="absolute bottom-3 left-1/2 -translate-x-1/2 shadow-pop animate-pop-in"
+					onClick={() => {
+						stickToBottom.current = true;
+						scrollToLatest();
+					}}
+				>
+					<ArrowDown className="size-3.5" />
+					Jump to latest
+				</Button>
+			)}
+		</div>
+	);
+}

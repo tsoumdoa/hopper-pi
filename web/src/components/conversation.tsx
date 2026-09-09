@@ -66,7 +66,7 @@ export function ToolCard({ tool }: { tool: ToolCall }) {
 	);
 }
 
-function ThinkingBlock({ text, streaming }: { text: string; streaming: boolean }) {
+export function ThinkingBlock({ text, streaming }: { text: string; streaming: boolean }) {
 	return (
 		<Collapsible className="text-xs">
 			<CollapsibleTrigger className="group inline-flex items-center gap-1.5 rounded-sm py-0.5 text-muted outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/40">
@@ -139,7 +139,7 @@ function AssistantMessage({ message }: { message: ConversationMessage }) {
 	);
 }
 
-function Welcome({ connected, onSuggestion }: { connected: boolean; onSuggestion(prompt: string): void }) {
+export function Welcome({ connected, onSuggestion }: { connected: boolean; onSuggestion(prompt: string): void }) {
 	return (
 		<section className="mx-auto mt-[max(14vh,2rem)] w-full max-w-[560px] animate-slide-up" aria-labelledby="welcome-title">
 			<span aria-hidden="true" className="grid size-7 place-items-center rounded-sm bg-accent text-[14px] font-bold leading-none text-white">H</span>

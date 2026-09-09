@@ -45,7 +45,7 @@ export type SharedBrowserCommand =
 			requestId: string;
 			conversationId: string;
 			questionId: string;
-			answer: string;
+			answer: string | null;
 	  }
 	| {
 			type: "recover_launch";
@@ -147,7 +147,7 @@ export function parseSharedBrowserCommand(raw: string): SharedBrowserCommand {
 			requestId,
 			conversationId,
 			questionId: string(v, "questionId"),
-			answer: string(v, "answer"),
+			answer: v.answer === null ? null : string(v, "answer"),
 		};
 	if (type === "recover_launch")
 		return {

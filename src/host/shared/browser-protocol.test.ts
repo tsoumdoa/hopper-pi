@@ -195,3 +195,9 @@ it("requires complete original launch scope and explicit recovery acknowledgemen
 			parseSharedBrowserCommand(JSON.stringify({ ...command, [key]: " " })),
 		).toThrow(key);
 });
+
+it("accepts picker cancellation without accepting malformed answers", () => {
+	const command = { type: "answer", requestId: "r", conversationId: "c", questionId: "q", answer: null };
+	expect(parseSharedBrowserCommand(JSON.stringify(command))).toEqual(command);
+	for (const answer of [undefined, {}, [], false]) expect(() => parseSharedBrowserCommand(JSON.stringify({ ...command, answer }))).toThrow();
+});

@@ -32,14 +32,18 @@ export type ComposerProps = {
 	streaming: boolean;
 	onSubmit(): void;
 	onAbort(): void;
-	/** Toolbar controls rendered at the start of the bottom row (model, thinking). */
+	/** Toolbar controls rendered at the start of the bottom row (model, thinking, Rhino target). */
 	controls?: ReactNode;
-	destination?: ReactNode;
+	/** Blocks sending while keeping the draft editable, e.g. when the chosen Rhino model disconnected. */
 	submitDisabled?: boolean;
+	/** Explains why sending is blocked. Shown above the text field like attachment errors. */
+	alert?: ReactNode;
+	/** Overrides the placeholder while the composer is disabled for a reason other than connecting. */
+	placeholder?: string;
 };
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-	{ draft, onDraftChange, images, onImagesChange, imagesSupported, mode, onModeChange, disabled, streaming, onSubmit, onAbort, controls, destination, submitDisabled },
+	{ draft, onDraftChange, images, onImagesChange, imagesSupported, mode, onModeChange, disabled, streaming, onSubmit, onAbort, controls, submitDisabled, alert, placeholder },
 	ref,
 ) {
 	const fileInput = useRef<HTMLInputElement>(null);
@@ -122,6 +126,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 				{loading && <p role="status" className="px-3 pt-2 text-xs text-muted">Opening images…</p>}
 				{imageError && <p role="alert" className="px-3 pt-2 text-xs text-danger">{imageError}</p>}
 				{images.length > 0 && !imagesSupported && <p role="alert" className="px-3 pt-2 text-xs text-danger">Select a model that supports images to send these attachments.</p>}
+				{alert && <p role="alert" className="px-3 pt-2 text-xs text-danger">{alert}</p>}
 				<label className="sr-only" htmlFor="composer-input">Message Hopper</label>
 				<textarea
 					id="composer-input"
@@ -133,7 +138,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 					onChange={(event) => onDraftChange(event.target.value)}
 					onKeyDown={onKeyDown}
 					onPaste={(event) => { const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/")); if (files.length) { event.preventDefault(); void addImages(files); } }}
-					placeholder={disabled ? "Waiting for the Hopper host…" : "Ask Hopper…"}
+					placeholder={disabled ? placeholder ?? "Waiting for the Hopper host…" : "Ask Hopper…"}
 					className="block max-h-[220px] w-full resize-none bg-transparent px-3.5 pb-1 pt-3 text-[14px] leading-6 outline-none placeholder:text-muted disabled:cursor-not-allowed"
 				/>
 				<div className="flex flex-wrap items-center gap-1 px-1.5 pb-1.5 pt-0.5">
@@ -163,7 +168,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 						<ArrowUp className="size-4" />
 					</Button>
 				</div>
-				{destination && <div className="border-t border-line px-2 py-1.5">{destination}</div>}
 			</form>
 			{(editing || newDrawing) && <ImageAnnotationDialog key={editing?.id ?? "new-drawing"} attachment={editing}
 				onClose={() => setEditor(null)}

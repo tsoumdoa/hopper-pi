@@ -46,6 +46,7 @@ const binding = {
 	rhinoDocumentId: "model",
 };
 const snapshot = {
+	hostEpoch: "epoch",
 	conversations: [
 		{ id: "conversation", title: "First" },
 		{ id: "other", title: "Second" },
@@ -138,7 +139,7 @@ beforeEach(async () => {
 		socket.onopen?.();
 		socket.receive({ type: "shared_snapshot", snapshot });
 	});
-	expect(container.querySelector("h2")!.textContent).toBe("New chat");
+	expect(container.querySelector("h1")!.textContent).toBe("New chat");
 	const startup = socket.sent.find((command) => command.type === "create_conversation");
 	expect(startup.title).toBe("New chat");
 	await act(async () => socket.receive({
@@ -249,7 +250,8 @@ it("groups child work under its document without diagnostic history", async () =
 	expect(details.open).toBe(false);
 	expect(details.querySelector("summary")!.textContent).toContain("Facade.3dm");
 	expect(details.querySelector("summary")!.textContent).toContain("Working");
-	expect(details.textContent).toContain("query Rhino Objects is running");
+	expect(details.textContent).toContain("queryRhinoObjects");
+	expect(details.textContent).toContain("Running");
 	expect(container.textContent).not.toContain("tokens");
 	expect(container.textContent).not.toContain("Task history");
 	expect(container.textContent).not.toContain("/retained/geometry.3dm");
@@ -914,14 +916,14 @@ it("presents an active ask_user question as selectable choices and sends the sel
 			}],
 		},
 	}));
-	expect(container.querySelector('[aria-label="Input needed"]')!.textContent).toContain("Which size should I use?");
-	expect(container.querySelector('[role="radiogroup"]')).not.toBeNull();
-	expect(container.querySelector("datalist")).toBeNull();
-	expect(container.querySelector<HTMLInputElement>('input[value="Large"]')!.disabled).toBe(false);
-	expect(container.querySelector("header")!.textContent).toContain("Answer needed");
+	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Which size should I use?");
+	expect(document.querySelector('[role="radiogroup"]')).not.toBeNull();
+	expect(document.querySelector("datalist")).toBeNull();
+	expect(document.querySelector<HTMLInputElement>('input[value="Large"]')!.disabled).toBe(false);
+	expect(document.querySelector("header")!.textContent).toContain("Answer needed");
 	expect(sendButton().disabled).toBe(true);
-	await act(async () => container.querySelector<HTMLInputElement>('input[value="Large"]')!.click());
-	await act(async () => byText("Continue").click());
+	await act(async () => document.querySelector<HTMLInputElement>('input[value="Large"]')!.click());
+	await act(async () => [...document.querySelectorAll("button")].find((button) => button.textContent === "Continue")!.click());
 	expect(socket.sent.find((command) => command.type === "answer")).toMatchObject({
 		questionId: "size-question", answer: "Large",
 	});
@@ -959,6 +961,45 @@ it("shows the tool name and its live and completed state", async () => {
 	expect(container.textContent).toContain("Done");
 });
 
+it("welcomes a fresh chat with prompt suggestions that fill the composer", async () => {
+	expect(container.textContent).toContain("What should Hopper build?");
+	await act(async () => byText("Check the Rhino model").click());
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toContain("Check the active Rhino document");
+	expect(container.querySelector("article")).toBeNull();
+});
+
+it("confirms shutting down in a dialog instead of a native prompt and reports host errors as toasts", async () => {
+	const nativeConfirm = vi.fn(() => true);
+	vi.stubGlobal("confirm", nativeConfirm);
+	await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Shut down the Hopper host"]')!.click());
+	expect(nativeConfirm).not.toHaveBeenCalled();
+	expect(socket.sent.some((command) => command.type === "stop_host")).toBe(false);
+	const dialog = document.querySelector('[role="dialog"]')!;
+	expect(dialog.textContent).toContain("Shut down the Hopper host?");
+	await act(async () => [...dialog.querySelectorAll("button")].find((button) => button.textContent === "Shut down")!.click());
+	const stop = socket.sent.find((command) => command.type === "stop_host");
+	expect(stop).toMatchObject({ hostEpoch: snapshot.hostEpoch });
+	await act(async () => socket.receive({ type: "error", requestId: stop.requestId, message: "Host refused to stop." }));
+	expect(container.querySelector("header")!.textContent).not.toContain("Host refused to stop.");
+	expect(container.textContent).toContain("Host refused to stop.");
+});
+
+it("shows the connection banner while offline and hides it once a snapshot arrives", async () => {
+	expect(container.querySelector('[role="status"]')?.textContent ?? "").not.toContain("Connection to the local Hopper host was lost.");
+	await act(async () => socket.onclose?.({ code: 1006, reason: "" }));
+	expect(container.textContent).toContain("Connection to the local Hopper host was lost.");
+	expect(container.querySelector("header")!.textContent).toContain("Offline");
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.disabled).toBe(true);
+	await act(async () => byText("Retry").click());
+	const reconnected = Socket.sockets.at(-1)!;
+	await act(async () => {
+		reconnected.onopen?.();
+		reconnected.receive({ type: "shared_snapshot", snapshot });
+	});
+	expect(container.textContent).not.toContain("Connection to the local Hopper host was lost.");
+	expect(container.querySelector("header")!.textContent).toContain("Ready");
+});
+
 it("renders assistant text and thinking before the turn has finished", async () => {
 	const task = {
 		id: "streaming-task", session_id: "session", conversation_id: "conversation",
@@ -976,6 +1017,71 @@ it("renders assistant text and thinking before the turn has finished", async () 
 			],
 		},
 	}));
+	expect(container.textContent).not.toContain("Checking the model.");
+	await act(async () => byText("Thinking").click());
 	expect(container.textContent).toContain("Checking the model.");
 	expect(container.textContent).toContain("I found three objects.");
+});
+
+async function showPickQuestion() {
+	const task = {
+		id: "pick-task", session_id: "session", conversation_id: "conversation", parent_task_id: null,
+		state: "awaiting_user", payload: JSON.stringify({ text: "Choose a size", bindings: [binding] }),
+	};
+	const next = { ...snapshot, tasks: [task], questions: [{
+		id: "pick-question", task_id: task.id, answer: null,
+		payload: JSON.stringify({ kind: "pick_option", question: "Which size?", options: [
+			{ label: "Small", value: "size-small", description: "Fits the courtyard" },
+			{ label: "Large", value: "size-large", description: "More seating" },
+		] }),
+	}] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: next }));
+	return next;
+}
+const dialogButton = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) => button.textContent === label)!;
+
+it("restores the original option modal with descriptions, default selection and an automatic Other choice", async () => {
+	await showPickQuestion();
+	const dialog = document.querySelector('[role="dialog"]')!;
+	expect(dialog.textContent).toContain("Fits the courtyard");
+	expect(dialog.querySelectorAll('input[type="radio"]')).toHaveLength(3);
+	expect(dialog.querySelector<HTMLInputElement>('input[type="radio"]')!.checked).toBe(true);
+	await act(async () => dialogButton("Continue").click());
+	expect(socket.sent.find((command) => command.type === "answer")).toMatchObject({ questionId: "pick-question", answer: "Small — Fits the courtyard" });
+});
+
+it("accepts a custom Other answer and keeps it through a repeated snapshot", async () => {
+	const next = await showPickQuestion();
+	await act(async () => document.querySelector<HTMLInputElement>('input[value="Other"]')!.click());
+	await act(async () => dialogButton("Continue").click());
+	expect(socket.sent.some((command) => command.type === "answer")).toBe(false);
+	const input = document.querySelector<HTMLInputElement>('[role="dialog"] input')!;
+	await act(async () => {
+		Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Medium with a canopy");
+		input.dispatchEvent(new Event("input", { bubbles: true }));
+	});
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: next }));
+	expect(document.querySelector<HTMLInputElement>('[role="dialog"] input')!.value).toBe("Medium with a canopy");
+	await act(async () => dialogButton("Continue").click());
+	expect(socket.sent.find((command) => command.type === "answer")).toMatchObject({ answer: "Other: Medium with a canopy" });
+});
+
+it("sends cancellation from the original picker as a null answer", async () => {
+	await showPickQuestion();
+	await act(async () => dialogButton("Cancel").click());
+	expect(socket.sent.find((command) => command.type === "answer")).toMatchObject({ questionId: "pick-question", answer: null });
+});
+
+it("expands live tool cards with input and partial output before the final messages arrive", async () => {
+	const task = { id: "live-tools", session_id: "session", conversation_id: "conversation", parent_task_id: null, state: "running", payload: JSON.stringify({ text: "Run script", bindings: [binding] }) };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [task], events: [
+		{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "tool_progress", turnId: "turn", toolCallId: "call", toolName: "rh_run_script", phase: "started", event: { args: { code: "return 42;" } } }) },
+		{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "tool_progress", turnId: "turn", toolCallId: "call", toolName: "rh_run_script", phase: "updated", event: { partialResult: { content: [{ type: "text", text: "Evaluating script" }] } } }) },
+	] } }));
+	await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("rh_run_script"))!.click());
+	expect(container.textContent).toContain("Input");
+	expect(container.textContent).toContain("Output");
+	expect(container.textContent).toContain("return 42;");
+	expect(container.textContent).toContain("Evaluating script");
+	expect(container.textContent).not.toContain("No details");
 });

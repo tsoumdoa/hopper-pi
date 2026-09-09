@@ -10,12 +10,16 @@ import {
 	type AgentSession,
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import { registerPickOptionTool } from "../../extensions/choices/register-pick-option.js";
+import { registerAskUserTool } from "../../extensions/choices/register-ask-user.js";
+import type { SuspendQuestion } from "../../extensions/choices/ui-helpers.js";
 import { createHopperPiExtension } from "../../index.js";
 import { serializeAgentEvent } from "../event-serializer.js";
 import { RuntimeSessionContext } from "../../infra/runtime-session-context.js";
 import { QuestionSuspensionBoundary } from "../question-suspension.js";
 import type { DriverContext, TaskDriver } from "./task-service.js";
 import type { ImageAttachment } from "../protocol.js";
+import { resolvePickOptionAnswer, type PickOption } from "../../types/choices.js";
 import { HostSkillLibrary } from "../skills.js";
 
 export interface PiDriverOptions {
@@ -65,29 +69,14 @@ export async function createPiTaskDriver(
 	let boundary: QuestionSuspensionBoundary | undefined;
 	let session: AgentSession | undefined;
 	let cleanupResult: { confirmed: boolean; evidence?: unknown } | undefined;
+	const suspend: SuspendQuestion = async (toolCallId, payload) => {
+		if (!boundary) throw new Error("Question boundary is not installed");
+		return boundary.suspend({
+			questionId: "pending", taskId: context.taskId, turnId: context.turnId,
+			sessionId: context.sessionId, toolCallId, question: JSON.stringify(payload),
+		});
+	};
 	const tools: ToolDefinition[] = [
-		{
-			name: "ask_user",
-			label: "Ask a question",
-			description:
-				"Ask the user for information. This ends the current turn; work resumes in a fresh turn after the answer.",
-			parameters: Type.Object({
-				question: Type.String(),
-				options: Type.Optional(Type.Array(Type.String())),
-			}),
-			execute: async (toolCallId, args) => {
-				if (!boundary) throw new Error("Question boundary is not installed");
-				// The boundary stops dispatch before persistence, including a failed commit.
-				return boundary.suspend({
-					questionId: "pending",
-					taskId: context.taskId,
-					turnId: context.turnId,
-					sessionId: context.sessionId,
-					toolCallId,
-					question: JSON.stringify(args),
-				});
-			},
-		},
 		...(!context.binding ? (options.coordinatorTools?.(context) ?? []) : []),
 		...(options.documentActions
 			? [
@@ -175,8 +164,12 @@ export async function createPiTaskDriver(
 				noPromptTemplates: true,
 				noThemes: true,
 				noContextFiles: true,
-				extensionFactories: geometry
-					? [
+				extensionFactories: [
+					{ name: "hopper-choices", factory: (pi) => {
+						registerPickOptionTool(pi, suspend);
+						registerAskUserTool(pi, suspend);
+					} },
+					...(geometry ? [
 							{
 								name: "hopper",
 								factory: createHopperPiExtension({
@@ -186,7 +179,8 @@ export async function createPiTaskDriver(
 								}),
 							},
 						]
-					: [],
+					: []),
+				],
 			},
 		});
 		services.resourceLoader.getSkills = () => skills.getSkills();
@@ -271,17 +265,18 @@ export async function createPiTaskDriver(
 				});
 			if (
 				event.type === "tool_execution_start" ||
+				event.type === "tool_execution_update" ||
 				event.type === "tool_execution_end"
 			)
 				context.publish({
 					type: "tool_progress",
 					phase:
-						event.type === "tool_execution_start" ? "started" : "completed",
+						event.type === "tool_execution_start" ? "started" : event.type === "tool_execution_update" ? "updated" : "completed",
+					turnId: context.turnId,
 					toolName: event.toolName,
 					toolCallId: event.toolCallId,
-					...(event.type === "tool_execution_end"
-						? { isError: event.isError }
-						: {}),
+					event: serializeAgentEvent(event),
+					...(event.type === "tool_execution_end" ? { isError: event.isError } : {}),
 				});
 			if (event.type === "agent_end")
 				context.publish({
@@ -298,8 +293,12 @@ export async function createPiTaskDriver(
 			run: async () => {
 				if (context.signal.aborted)
 					throw new Error("Task was cancelled before model dispatch");
+				const continuation = context.continuation as { payload?: { kind?: string; question: string; options: PickOption[] }; answer: string | null } | null;
+				const answered = continuation?.payload?.kind === "pick_option"
+					? { ...continuation, result: resolvePickOptionAnswer(continuation.payload.question, continuation.payload.options, continuation.answer) }
+					: continuation;
 				const prompt = context.continuation
-					? `Continue in a fresh turn after ${"documentAction" in Object(context.continuation) ? "the verified document action, using the new captured binding" : "the user's answer"}.\n${JSON.stringify(context.continuation)}`
+					? `Continue in a fresh turn after ${"documentAction" in Object(context.continuation) ? "the verified document action, using the new captured binding" : "the user's answer"}.\n${JSON.stringify(answered)}`
 					: skills.expandCommand(context.text);
 				await session!.agent.prompt(
 					prompt,
