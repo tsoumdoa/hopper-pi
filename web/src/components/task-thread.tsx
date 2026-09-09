@@ -244,7 +244,10 @@ function TaskReply({ task, snapshot, labelFor, commands, stoppable }: {
 					Waiting to start…
 				</p>
 				{stoppable && (
-					<Button size="xs" variant="ghost" onClick={() => commands.cancel(String(task.id))}>Cancel</Button>
+					<Button size="sm" variant="destructive" onClick={() => commands.cancel(String(task.id))}>
+						<Square className="size-3 fill-current" />
+						Cancel
+					</Button>
 				)}
 			</div>
 		);
@@ -260,12 +263,6 @@ function TaskReply({ task, snapshot, labelFor, commands, stoppable }: {
 						<span className="truncate">{`Target: ${target}`}</span>
 					</span>
 				))}
-				{stoppable && state === "awaiting_user" && (
-					<Button size="xs" variant="ghost" className="ml-auto text-danger hover:text-danger" onClick={() => commands.cancel(String(task.id))}>
-						<Square className="size-3 fill-current" />
-						Stop
-					</Button>
-				)}
 			</div>
 			<div className="grid gap-3">
 				{state === "failed" && <Notice tone="danger">Something went wrong. Please try again.</Notice>}

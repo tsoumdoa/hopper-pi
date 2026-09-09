@@ -30,6 +30,9 @@ export type ComposerProps = {
 	onModeChange(mode: SendMode): void;
 	disabled: boolean;
 	streaming: boolean;
+	/** Cancellation remains available while work is queued or waiting for input. */
+	canAbort?: boolean;
+	abortDisabled?: boolean;
 	onSubmit(): void;
 	onAbort(): void;
 	/** Toolbar controls rendered at the start of the bottom row (model, thinking, Rhino target). */
@@ -43,7 +46,7 @@ export type ComposerProps = {
 };
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-	{ draft, onDraftChange, images, onImagesChange, imagesSupported, mode, onModeChange, disabled, streaming, onSubmit, onAbort, controls, submitDisabled, alert, placeholder },
+	{ draft, onDraftChange, images, onImagesChange, imagesSupported, mode, onModeChange, disabled, streaming, canAbort = streaming, abortDisabled = false, onSubmit, onAbort, controls, submitDisabled, alert, placeholder },
 	ref,
 ) {
 	const fileInput = useRef<HTMLInputElement>(null);
@@ -158,8 +161,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 						</Select>
 					)}
 					<span className="flex-1" />
-					{streaming && (
-						<Button type="button" size="sm" variant="destructive" onClick={onAbort}>
+					{canAbort && (
+						<Button type="button" size="sm" variant="destructive" disabled={abortDisabled} onClick={onAbort}>
 							<Square className="size-3 fill-current" />
 							Stop
 						</Button>

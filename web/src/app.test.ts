@@ -258,6 +258,31 @@ it("groups child work under its document without diagnostic history", async () =
 	expect(container.textContent).not.toContain("SHA-256");
 	expect(details.nextElementSibling!.textContent).toContain("Next task");
 });
+
+it.each(["queued", "running", "suspending", "awaiting_user"])("keeps the Stop button beside the message input while a task is %s", async (state) => {
+	const task = { id: "cancel-task", conversation_id: "conversation", parent_task_id: null, state, payload: JSON.stringify({ text: "Create a courtyard", bindings: [binding] }) };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [task] } }));
+	const stop = [...container.querySelectorAll<HTMLButtonElement>("footer button")].find(button => button.textContent === "Stop");
+	expect(stop).toBeDefined();
+	expect(stop!.disabled).toBe(false);
+	expect(stop!.classList.contains("border")).toBe(true);
+	expect([...container.querySelectorAll('[aria-label="Conversation"] button')].some(button => button.textContent === "Stop")).toBe(false);
+	await act(async () => stop!.click());
+	expect(socket.sent.find(command => command.type === "cancel")).toMatchObject({ taskId: task.id, conversationId: "conversation" });
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [{ ...task, state: "cancelled" }] } }));
+	expect([...container.querySelectorAll("footer button")].some(button => button.textContent === "Stop")).toBe(false);
+});
+
+it("stops the active task before queued follow-ups and disables Stop while disconnected", async () => {
+	const queued = { id: "queued-task", conversation_id: "conversation", parent_task_id: null, state: "queued", payload: JSON.stringify({ text: "Follow-up", bindings: [binding] }) };
+	const running = { ...queued, id: "running-task", state: "running" };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [queued, running] } }));
+	const stop = [...container.querySelectorAll<HTMLButtonElement>("footer button")].find(button => button.textContent === "Stop")!;
+	await act(async () => stop.click());
+	expect(socket.sent.find(command => command.type === "cancel")).toMatchObject({ taskId: running.id });
+	await act(async () => socket.onclose?.({ code: 4001, reason: "Replaced by another tab" }));
+	expect(stop.disabled).toBe(true);
+});
 it("keeps assistant output from each turn and the answered question after continuation", async () => {
 	const task = {
 		id: "root",

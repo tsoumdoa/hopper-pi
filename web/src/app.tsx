@@ -237,6 +237,7 @@ export function App() {
 	const imagesSupported = selectedModel?.input?.includes("image") !== false;
 	const submitting = [...pending.current.values()].some((command) => (command.type === "submit" || command.type === "steer") && command.conversationId === conversationId);
 	const activeRoot = tasks.find((task) => task.parent_task_id === null && ACTIVE_ROOT_STATES.includes(String(task.state)));
+	const cancellableRoot = activeRoot ?? tasks.find((task) => task.parent_task_id === null && task.state === "queued");
 	const taskIsRunning = activeRoot?.state === "running";
 	const taskBlocksComposer = activeRoot?.state === "suspending" || activeRoot?.state === "awaiting_user";
 	// While a task runs, new text becomes a follow-up unless the user picks otherwise.
@@ -418,8 +419,10 @@ export function App() {
 					submitDisabled={needsTarget}
 					alert={unavailableSelected && sendMode !== "steer" ? "Selected model disconnected. Choose another model." : undefined}
 					streaming={taskIsRunning}
+					canAbort={Boolean(cancellableRoot)}
+					abortDisabled={!connected}
 					onSubmit={submit}
-					onAbort={() => { if (activeRoot) cancelTask(String(activeRoot.id)); }}
+					onAbort={() => { if (cancellableRoot) cancelTask(String(cancellableRoot.id)); }}
 					controls={
 						<>
 							<ModelControls
