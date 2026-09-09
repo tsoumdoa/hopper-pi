@@ -2,9 +2,9 @@ import { ExportSessionButton } from "./components/export-session-button";
 import { UiRequestDialog } from "./components/ui-request-dialog";
 import { ToastRegion } from "./components/toasts";
 import { handleServerMessage } from "./state/server-messages";
-import { Power } from "lucide-react";
+import { Box, Power } from "lucide-react";
 import { Sidebar } from "./components/sidebar";
-import { ModelControls } from "./components/model-picker";
+import { ModelControls, toolbarTriggerClass } from "./components/model-picker";
 import { ProviderDialog } from "./components/provider-dialog";
 import { SkillsDialog } from "./components/skills-dialog";
 import { ToolsDialog } from "./components/tools-dialog";
@@ -12,14 +12,13 @@ import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { useHopperStoreApi } from "./state/hopper-store-context";
 import { useEffect, useRef, useState } from "react";
-import type {
-	NextDocumentAction,
-	SharedBrowserCommand,
-} from "../../src/host/shared/browser-protocol.js";
+import type { SharedBrowserCommand } from "../../src/host/shared/browser-protocol.js";
 import type { TargetBinding } from "../../src/protocol/shared-execution.js";
 import type { HostSnapshot } from "../../src/host/protocol.js";
 import { MessageMarkdown } from "./components/message-markdown";
+import { WorkingTime } from "./components/working-time";
 import { Composer } from "./components/composer";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { imageUrl, type DraftImage } from "./lib/image-attachments";
 import { parseImages } from "../../src/host/protocol";
 
@@ -77,6 +76,21 @@ function targetName(
 		: `${labels?.[binding.grasshopperDocumentId] ?? "Untitled Grasshopper document"}${binding.associatedRhinoDocumentId ? ` / ${labels?.[binding.associatedRhinoDocumentId] ?? "Rhino document"}` : ""}`;
 }
 
+function TaskWorkingTime({ task, turns, inline = false }: {
+ task: Row;
+ turns: Row[];
+ inline?: boolean;
+}) {
+ const timestamps = turns
+  .filter((turn) => turn.task_id === task.id)
+  .map((turn) => Number(turn.started_at))
+  .filter((time) => Number.isFinite(time) && time > 0);
+ const startedAt = timestamps.length ? Math.min(...timestamps) : Number(task.created_at) || undefined;
+ const streaming = task.state === "running" || task.state === "suspending";
+ const finishedAt = streaming ? undefined : Number(task.updated_at) || undefined;
+ return <WorkingTime streaming={streaming} startedAt={startedAt} finishedAt={finishedAt} inline={inline} />;
+}
+
 export function App() {
 	const store = useHopperStoreApi();
 	const [providerOpen, setProviderOpen] = useState(false);
@@ -108,11 +122,6 @@ export function App() {
 	const [modeOverride, setSendMode] = useState<
 		"prompt" | "follow_up" | "steer" | null
 	>(null);
-	const [documentAction, setDocumentAction] = useState<NextDocumentAction>();
-	const [launch, setLaunch] = useState<{
-		installationId: string;
-		independentProcess: boolean;
-	}>();
 	const [status, setStatus] = useState("Connecting");
 	const [error, setError] = useState("");
 	const [nonce, setNonce] = useState(0);
@@ -120,6 +129,7 @@ export function App() {
 	const socket = useRef<WebSocket | undefined>(undefined);
 	const credential = useRef<string>(undefined);
 	const ready = useRef(false);
+	const startupRequested = useRef(false);
 	const pending = useRef(new Map<string, SharedBrowserCommand>());
 	const [, refreshPending] = useState(0);
 	const blocked = useRef(false);
@@ -158,15 +168,18 @@ export function App() {
 					.getState()
 					.actions.setConnection("connected", "Connected to Hopper");
 				setStatus("Connected");
-				setConversationId((current) =>
-					message.snapshot.conversations.some(
-						(conversation: Row) => conversation.id === current,
-					)
-						? current
-						: String(message.snapshot.conversations[0]?.id ?? ""),
-				);
 				if (!ready.current) {
 					ready.current = true;
+					// A new page starts a fresh chat. Reconnects retry the same request.
+					if (!startupRequested.current) {
+						startupRequested.current = true;
+						const command: SharedBrowserCommand = {
+							type: "create_conversation",
+							requestId: crypto.randomUUID(),
+							title: "New chat",
+						};
+						pending.current.set(command.requestId, command);
+					}
 					for (const command of pending.current.values())
 						ws.send(JSON.stringify(command));
 					ws.send(JSON.stringify({ type: "snapshot" }));
@@ -189,19 +202,6 @@ export function App() {
 								),
 						),
 					);
-					if (accepted.type === "submit") {
-						setDocumentAction((current) =>
-							JSON.stringify(current) ===
-							JSON.stringify(accepted.documentAction)
-								? undefined
-								: current,
-						);
-						setLaunch((current) =>
-							JSON.stringify(current) === JSON.stringify(accepted.launch)
-								? undefined
-								: current,
-						);
-					}
 					if (message.result?.admissionError)
 						setError(message.result.admissionError);
 				}
@@ -210,8 +210,6 @@ export function App() {
 					setSelected([]);
 					setText("");
 					setImages([]);
-					setDocumentAction(undefined);
-					setLaunch(undefined);
 				}
 			} else if (message.type === "error") {
 				pending.current.delete(message.requestId);
@@ -302,11 +300,14 @@ export function App() {
 	useEffect(() => {
 		if (!activeRoot) setSendMode(null);
 	}, [activeRoot?.id]);
-	const availableCount =
-		snapshot?.targets.filter((target) => target.admission === "ready").length ??
-		0;
 	const availableTargets =
 		snapshot?.targets.filter((target) => target.admission === "ready") ?? [];
+	const modelBindings = availableTargets.flatMap((target) =>
+		target.documents.filter((binding) => binding.kind === "rhino"),
+	);
+	useEffect(() => {
+		if (!selected.length && modelBindings.length) setSelected([modelBindings[0]!]);
+	}, [snapshot, selected.length]);
 	const bindingLabel = (binding: TargetBinding) => {
 		const target = snapshot?.targets.find(
 			(target) => target.lifecycleInstanceId === binding.lifecycleInstanceId,
@@ -355,13 +356,10 @@ export function App() {
 	);
 	const submit = () => {
 		if (
-			sendMode !== "steer" &&
-			!launch &&
-			!documentAction &&
-			unavailableSelected
+			sendMode !== "steer" && (unavailableSelected || !selected.length)
 		) {
 			setError(
-				"A selected document is unavailable. Choose an available document or clear the selection.",
+				"Choose an available Rhino model.",
 			);
 			return;
 		}
@@ -371,14 +369,6 @@ export function App() {
 			(images.length && !imagesSupported)
 		)
 			return;
-		if (
-			sendMode !== "steer" &&
-			documentAction?.action === "open" &&
-			!documentAction.path?.trim()
-		) {
-			setError("Enter the full path of the document to open.");
-			return;
-		}
 		if (
 			[...pending.current.values()].some(
 				(command) =>
@@ -422,8 +412,6 @@ export function App() {
 			text,
 			bindings: selected,
 			attachments: images.map((image) => image.image),
-			...(documentAction ? { documentAction } : {}),
-			...(launch ? { launch } : {}),
 		});
 	};
 	return (
@@ -442,7 +430,7 @@ export function App() {
 					send({
 						type: "create_conversation",
 						requestId: crypto.randomUUID(),
-						title: `Conversation ${(snapshot?.conversations.length ?? 0) + 1}`,
+						title: "New chat",
 					})
 				}
 				onManageProvider={() => setProviderOpen(true)}
@@ -452,21 +440,8 @@ export function App() {
 					blocked.current = false;
 					setNonce((n) => n + 1);
 				}}
-				conversations={
-					snapshot?.conversations.map((c) => ({
-						id: String(c.id),
-						title: String(c.title ?? "Conversation"),
-					})) ?? []
-				}
-				selectedConversationId={conversationId}
-				onSelectConversation={(id) => {
-					setConversationId(id);
-					setSelected([]);
-					setText("");
-					setImages([]);
-					setDocumentAction(undefined);
-					setLaunch(undefined);
-				}}
+				// Conversation history stays hidden until resuming threads is supported.
+				conversations={[]}
 			/>
 			<main className="flex-1 flex flex-col min-w-0 min-h-0">
 				<header className="border-b px-4 py-3 sm:px-6">
@@ -474,7 +449,7 @@ export function App() {
 						<h2 className="flex-1 truncate text-[13px] font-medium">
 							{String(
 								snapshot?.conversations.find((c) => c.id === conversationId)
-									?.title ?? "Create a conversation to begin",
+									?.title ?? "New chat",
 							)}
 						</h2>
 						<ExportSessionButton
@@ -488,7 +463,7 @@ export function App() {
 								ready.current ? (activeRoot ? "accent" : "neutral") : "warn"
 							}
 						>
-							{ready.current ? (activeRoot ? "Working" : "Ready") : status}
+							{ready.current ? (activeRoot ? <TaskWorkingTime task={activeRoot} turns={snapshot?.turns ?? []} inline /> : "Ready") : status}
 						</Badge>
 						<Button
 							size="icon-sm"
@@ -586,8 +561,6 @@ export function App() {
 									})}
 								{[
 									"queued",
-									"running",
-									"suspending",
 									"failed",
 									"interrupted",
 									"cancelled",
@@ -603,6 +576,9 @@ export function App() {
 														? "Waiting…"
 														: "Working…"}
 									</p>
+								)}
+								{task.state !== "queued" && (
+									<TaskWorkingTime task={task} turns={snapshot?.turns ?? []} />
 								)}
 								{progressLabel &&
 									["running", "suspending"].includes(String(task.state)) && (
@@ -801,7 +777,7 @@ export function App() {
 								<summary className="cursor-pointer text-sm">
 									{input.bindings.map(bindingLabel).join(", ") || "Rhino work"}
 									{task.state === "running"
-										? " · Working…"
+										? <>{ " · " }<TaskWorkingTime task={task} turns={snapshot?.turns ?? []} inline /></>
 										: task.state === "failed"
 											? " · Failed"
 											: ""}
@@ -814,174 +790,6 @@ export function App() {
 					})}
 				</div>
 				<div className="max-h-[70dvh] overflow-y-auto border-t px-4 pt-3 pb-2 space-y-3 sm:px-6">
-					<details
-						aria-label="Rhino targets"
-						className="mx-auto max-w-3xl text-xs"
-					>
-						<summary className="cursor-pointer py-1 text-ink-soft">
-							<span aria-label="Message destination" role="status">
-								{sendMode === "steer"
-									? `Steering: ${steeringDestination}`
-									: documentAction
-										? `${documentAction.action === "new" ? "New" : "Open"} ${documentAction.kind === "rhino" ? "Rhino" : "Grasshopper"} document${availableTargets.length > 1 ? ` · Rhino ${availableTargets.findIndex((target) => target.lifecycleInstanceId === documentAction.lifecycleInstanceId) + 1 || "offline"}` : ""}`
-										: launch
-											? "Launch Rhino"
-											: selected.length
-												? selected.map(bindingLabel).join(", ")
-												: "Chat only"}
-							</span>
-						</summary>
-						<div className="mt-2 max-h-[32dvh] overflow-y-auto rounded-lg border bg-panel p-3 space-y-2">
-							{unavailableSelected && (
-								<p role="alert" className="mt-2 text-xs text-danger">
-									Selected document disconnected. Choose another document or
-									clear the selection.
-								</p>
-							)}
-							{selected.length > 0 && (
-								<button
-									className="text-xs underline my-2"
-									onClick={() => setSelected([])}
-								>
-									Clear selected targets
-								</button>
-							)}
-							{!availableTargets.length && (
-								<p className="text-sm my-2">No Rhino documents available.</p>
-							)}
-							<div className="max-h-[22dvh] overflow-y-auto">
-								{availableTargets.map((target, targetIndex) => (
-									<fieldset
-										key={target.lifecycleInstanceId}
-										className="mt-2 min-w-0"
-									>
-										{availableCount > 1 && (
-											<legend className="text-xs text-muted">
-												Rhino {targetIndex + 1}
-											</legend>
-										)}
-										<button
-											disabled={
-												target.admission !== "ready" || sendMode === "steer"
-											}
-											className="text-xs underline my-1"
-											onClick={() => {
-												setDocumentAction({
-													lifecycleInstanceId: target.lifecycleInstanceId,
-													kind: "rhino",
-													action: "new",
-													modifiedPolicy: "refuse",
-												});
-												setLaunch(undefined);
-											}}
-										>
-											New Rhino document
-										</button>
-										<button
-											disabled={
-												target.admission !== "ready" || sendMode === "steer"
-											}
-											className="text-xs underline ml-3 my-1"
-											onClick={() => {
-												setDocumentAction({
-													lifecycleInstanceId: target.lifecycleInstanceId,
-													kind: "rhino",
-													action: "open",
-													modifiedPolicy: "refuse",
-												});
-												setLaunch(undefined);
-											}}
-										>
-											Open Rhino document
-										</button>
-										{target.documents.map((binding) => (
-											<label
-												key={JSON.stringify(binding)}
-												className="flex gap-2 text-sm my-1 break-words"
-											>
-												<input
-													type="checkbox"
-													disabled={
-														target.admission !== "ready" || sendMode === "steer"
-													}
-													checked={selected.some(
-														(item) =>
-															JSON.stringify(item) === JSON.stringify(binding),
-													)}
-													onChange={(event) =>
-														setSelected((old) =>
-															event.target.checked
-																? [...old, binding]
-																: old.filter(
-																		(item) =>
-																			JSON.stringify(item) !==
-																			JSON.stringify(binding),
-																	),
-														)
-													}
-												/>
-												{bindingLabel(binding)}
-											</label>
-										))}
-									</fieldset>
-								))}
-							</div>
-							{snapshot?.installations
-								?.filter(
-									(installation) =>
-										installation.platform !== "darwin" ||
-										!snapshot.targets.some(
-											(target) => target.admission !== "detached",
-										),
-								)
-								.map((installation) => (
-									<button
-										key={installation.id}
-										disabled={!installation.bootstrapVerified}
-										title={installation.unavailableReason}
-										className="text-xs underline mr-3 disabled:opacity-40"
-										onClick={() => {
-											setLaunch({
-												installationId: installation.id,
-												independentProcess: snapshot.targets.some(
-													(target) => target.admission !== "detached",
-												),
-											});
-											setDocumentAction(undefined);
-											setSelected([]);
-										}}
-									>
-										Launch Rhino {installation.build}
-									</button>
-								))}
-							{documentAction && (
-								<DocumentActionControls
-									action={documentAction}
-									update={setDocumentAction}
-									remove={() => setDocumentAction(undefined)}
-								/>
-							)}
-							{launch && (
-								<p className="text-xs">
-									Launch Rhino with your next message.{" "}
-									<button
-										className="underline"
-										onClick={() => setLaunch(undefined)}
-									>
-										Remove
-									</button>
-								</p>
-							)}
-						</div>
-					</details>
-					{unavailableSelected &&
-						sendMode !== "steer" &&
-						!documentAction &&
-						!launch && (
-							<p role="alert" className="mx-auto max-w-3xl text-xs text-danger">
-								Selected document disconnected. Choose another document.
-							</p>
-						)}
 					<Composer
 						key={conversationId}
 						draft={text}
@@ -992,13 +800,37 @@ export function App() {
 						mode={sendMode}
 						onModeChange={setSendMode}
 						disabled={
-							!conversationId ||
+							!sessionId ||
 							!ready.current ||
-							submitting ||
-							(sendMode !== "steer" &&
-								!documentAction &&
-								!launch &&
-								unavailableSelected)
+							submitting
+						}
+						submitDisabled={sendMode !== "steer" && (unavailableSelected || !selected.length)}
+						destination={
+							<div className="flex min-w-0 flex-wrap items-center gap-2">
+								<Select
+									value={selected[0] ? JSON.stringify(selected[0]) : ""}
+									onValueChange={(value) => {
+										const binding = modelBindings.find((binding) => JSON.stringify(binding) === value);
+										if (binding) setSelected([binding]);
+									}}
+									disabled={!ready.current || sendMode === "steer" || !modelBindings.length}
+								>
+									<SelectTrigger aria-label="Rhino model" className={toolbarTriggerClass + " max-w-full"}>
+										<Box className="size-3.5 shrink-0" />
+										<SelectValue placeholder="No Rhino models connected">
+											<span aria-label="Message destination" className="block truncate">
+												{sendMode === "steer" ? `Steering: ${steeringDestination}` : selected[0] ? bindingLabel(selected[0]) : "No Rhino models connected"}
+											</span>
+										</SelectValue>
+									</SelectTrigger>
+									<SelectContent align="start" side="top" className="max-w-[calc(100vw-2rem)]">
+										{modelBindings.map((binding) => (
+											<SelectItem key={JSON.stringify(binding)} value={JSON.stringify(binding)}>{bindingLabel(binding)}</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+								{unavailableSelected && sendMode !== "steer" && <span role="alert" className="text-xs text-danger">Selected model disconnected. Choose another model.</span>}
+							</div>
 						}
 						streaming={!!activeRoot}
 						onSubmit={submit}
@@ -1210,135 +1042,5 @@ function Recovery({
 					: "Acknowledge and verify safe release"}
 			</button>
 		</form>
-	);
-}
-
-function DocumentActionControls({
-	action,
-	update,
-	remove,
-}: {
-	action: NextDocumentAction;
-	update: (action: NextDocumentAction) => void;
-	remove: () => void;
-}) {
-	const changePolicy = (
-		modifiedPolicy: NextDocumentAction["modifiedPolicy"],
-	) => {
-		const { savePath: _savePath, overwrite: _overwrite, ...base } = action;
-		update({ ...base, modifiedPolicy });
-	};
-	return (
-		<fieldset className="border rounded p-3 space-y-2 text-sm">
-			<legend className="px-1">
-				{action.action === "new" ? "New document" : "Open document"}
-			</legend>
-			<label className="block">
-				Document kind
-				<select
-					aria-label="Document action kind"
-					className="block border rounded bg-canvas p-2 mt-1"
-					value={action.kind}
-					onChange={(event) =>
-						update({
-							lifecycleInstanceId: action.lifecycleInstanceId,
-							action: action.action,
-							kind: event.target.value as NextDocumentAction["kind"],
-							modifiedPolicy: "refuse",
-						})
-					}
-				>
-					<option value="rhino">Rhino model</option>
-					<option value="grasshopper">Grasshopper canvas</option>
-				</select>
-			</label>
-			{action.action === "open" && (
-				<label className="block">
-					Full path to open
-					<input
-						aria-label="Document path to open"
-						className="block w-full border rounded bg-canvas p-2 mt-1"
-						value={action.path ?? ""}
-						onChange={(event) =>
-							update({ ...action, path: event.target.value })
-						}
-						placeholder={
-							action.kind === "rhino"
-								? "Full path to a .3dm file"
-								: "Full path to a .gh or .ghx file"
-						}
-					/>
-				</label>
-			)}
-			<label className="block">
-				If this action replaces a modified document
-				<select
-					aria-label="Modified document policy"
-					className="block border rounded bg-canvas p-2 mt-1"
-					value={action.modifiedPolicy}
-					onChange={(event) =>
-						changePolicy(
-							event.target.value as NextDocumentAction["modifiedPolicy"],
-						)
-					}
-				>
-					<option value="refuse">Keep changes and stop the action</option>
-					<option value="save">Save changes before replacement</option>
-					<option value="discard">
-						Discard unsaved changes before replacement
-					</option>
-				</select>
-			</label>
-			<p className="text-xs text-muted">
-				Rhino on Mac adds a document in the same process. Existing documents
-				stay open and edits run sequentially.
-			</p>
-			{action.modifiedPolicy === "save" && (
-				<>
-					<label className="block">
-						Save path
-						<input
-							aria-label="Replacement save path"
-							className="block w-full border rounded bg-canvas p-2 mt-1"
-							value={action.savePath ?? ""}
-							onChange={(event) => {
-								const { savePath: _old, ...base } = action;
-								update(
-									event.target.value
-										? { ...base, savePath: event.target.value }
-										: base,
-								);
-							}}
-							placeholder="Leave blank to use the document's existing path"
-						/>
-					</label>
-					<p className="text-xs text-muted">
-						An unnamed document needs a full save path.
-					</p>
-					<label className="flex gap-2 items-center">
-						<input
-							type="checkbox"
-							aria-label="Allow overwriting the save destination"
-							checked={action.overwrite === true}
-							onChange={(event) => {
-								const { overwrite: _old, ...base } = action;
-								update(
-									event.target.checked ? { ...base, overwrite: true } : base,
-								);
-							}}
-						/>
-						Allow overwriting an existing file at this save path
-					</label>
-				</>
-			)}
-			{action.modifiedPolicy === "discard" && (
-				<p className="text-xs">
-					Unsaved changes in the replaced document will be lost.
-				</p>
-			)}
-			<button className="text-xs underline" onClick={remove}>
-				Remove document action
-			</button>
-		</fieldset>
 	);
 }

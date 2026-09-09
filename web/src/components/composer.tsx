@@ -34,10 +34,12 @@ export type ComposerProps = {
 	onAbort(): void;
 	/** Toolbar controls rendered at the start of the bottom row (model, thinking). */
 	controls?: ReactNode;
+	destination?: ReactNode;
+	submitDisabled?: boolean;
 };
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-	{ draft, onDraftChange, images, onImagesChange, imagesSupported, mode, onModeChange, disabled, streaming, onSubmit, onAbort, controls },
+	{ draft, onDraftChange, images, onImagesChange, imagesSupported, mode, onModeChange, disabled, streaming, onSubmit, onAbort, controls, destination, submitDisabled },
 	ref,
 ) {
 	const fileInput = useRef<HTMLInputElement>(null);
@@ -89,7 +91,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 		}
 	};
 
-	const canSend = !disabled && !loading && (draft.trim().length > 0 || images.length > 0) && (!images.length || imagesSupported);
+	const canSend = !disabled && !submitDisabled && !loading && (draft.trim().length > 0 || images.length > 0) && (!images.length || imagesSupported);
 
 	return (
 		<footer className="shrink-0 px-4 pb-4 pt-1 sm:px-6">
@@ -161,6 +163,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 						<ArrowUp className="size-4" />
 					</Button>
 				</div>
+				{destination && <div className="border-t border-line px-2 py-1.5">{destination}</div>}
 			</form>
 			{(editing || newDrawing) && <ImageAnnotationDialog key={editing?.id ?? "new-drawing"} attachment={editing}
 				onClose={() => setEditor(null)}

@@ -5,6 +5,7 @@ import { cn, formatValue, summarizeValue } from "../lib/utils";
 import type { ConversationMessage, ToolCall } from "../state/hopper-types";
 import { Button } from "./ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import { WorkingTime } from "./working-time";
 import { MessageMarkdown } from "./message-markdown";
 
 const SUGGESTIONS = [
@@ -92,30 +93,12 @@ function UserMessage({ message }: { message: ConversationMessage }) {
 	);
 }
 
-function WorkingTime({ message }: { message: ConversationMessage }) {
-	const [now, setNow] = useState(Date.now);
-	useEffect(() => {
-		if (!message.streaming) return;
-		setNow(Date.now());
-		const timer = window.setInterval(() => setNow(Date.now()), 1000);
-		return () => window.clearInterval(timer);
-	}, [message.streaming, message.startedAt]);
-	const seconds = message.startedAt === undefined ? null : Math.max(0, Math.floor(((message.finishedAt ?? now) - message.startedAt) / 1000));
-	const duration = seconds === null ? null : seconds < 60 ? `${seconds}s` : seconds < 3600
-		? `${Math.floor(seconds / 60)}m ${seconds % 60}s`
-		: `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}m`;
-	return (
-		<div className="mb-3 border-b border-line/60 pb-3 text-[13px] text-muted" aria-live="off">
-			{message.streaming ? "Working" : "Worked"}{duration ? ` for ${duration}` : message.streaming ? "…" : ""}
-		</div>
-	);
-}
 
 function AssistantMessage({ message }: { message: ConversationMessage }) {
 	const empty = !message.text && !message.thinking && !message.error && message.tools.length === 0;
 	return (
 		<article className="animate-slide-up" aria-label="Hopper's reply">
-			<WorkingTime message={message} />
+			<WorkingTime streaming={message.streaming === true} startedAt={message.startedAt} finishedAt={message.finishedAt} />
 			<div className="min-w-0">
 				{message.thinking && (
 					<div className="mb-2">
