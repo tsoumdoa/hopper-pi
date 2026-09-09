@@ -79,6 +79,7 @@ describe("detached shared host launcher", () => {
 		await expect(
 			ensureSharedHost({
 				...options,
+				timeoutMs: 150,
 				spawnHost: async () => {
 					spawned = true;
 				},
@@ -201,4 +202,57 @@ describe("detached shared host launcher", () => {
 			}),
 		).rejects.toThrow("intentionally stopped");
 	});
+});
+
+it("lets a second Rhino join the winner while it has bound HTTP but not published readiness", async () => {
+	const options = setup();
+	let bound!: () => void;
+	const listening = new Promise<void>((resolve) => { bound = resolve; });
+	let publish!: () => void;
+	const release = new Promise<void>((resolve) => { publish = resolve; });
+	let spawns = 0;
+	const first = ensureSharedHost({
+		...options, explicitStart: true, timeoutMs: 2000,
+		spawnHost: async (state) => {
+			spawns++;
+			const discovery: HostDiscovery = {
+				endpointPort: state.endpointPort, dataDirectory: state.dataDirectory,
+				journalIdentity: state.journalIdentity, revision: state.revision,
+				hostEpoch: "shared-winner", pid: 123, processStartIdentity: "start",
+				protocolVersion: 2, schemaVersion: 2, registrationToken: "private",
+			};
+			let ready = false;
+			const server = createServer((_request, response) => response.end(JSON.stringify(ready ? discovery : { ready: false })));
+			servers.push(server);
+			await options.control.acquireOwnership(server, state.revision);
+			bound();
+			await release;
+			ready = true;
+			await options.control.publish(discovery);
+		},
+	});
+	await listening;
+	const second = ensureSharedHost({ ...options, explicitStart: true, timeoutMs: 2000, spawnHost: async () => { spawns++; } });
+	const timer = setTimeout(publish, 150);
+	try {
+		const [a, b] = await Promise.all([first, second]);
+		expect(b).toEqual(a);
+		expect(b.hostEpoch).toBe("shared-winner");
+		expect(spawns).toBe(1);
+	} finally { clearTimeout(timer); publish(); await first; }
+});
+
+it("honors Stop while another Rhino waits for the initializing owner", async () => {
+	const options = setup();
+	const state = await options.control.initialize(options);
+	const server = createServer((_request, response) => response.end(JSON.stringify({ ready: false })));
+	servers.push(server);
+	await options.control.acquireOwnership(server, state.revision);
+	let spawns = 0;
+	const waiting = ensureSharedHost({ ...options, timeoutMs: 2000, spawnHost: async () => { spawns++; } });
+	await new Promise((resolve) => setTimeout(resolve, 100));
+	await options.control.setDesiredState("stopped", state.revision);
+	await expect(waiting).rejects.toThrow("superseded");
+	expect(spawns).toBe(0);
+	expect(server.listening).toBe(true);
 });

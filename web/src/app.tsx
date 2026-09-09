@@ -1,6 +1,6 @@
-import { Box, Power } from "lucide-react";
+import { Box, Power, Settings2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SharedBrowserCommand } from "../../src/host/shared/browser-protocol.js";
+import type { NextDocumentAction, SharedBrowserCommand } from "../../src/host/shared/browser-protocol.js";
 import type { TargetBinding } from "../../src/protocol/shared-execution.js";
 import { Composer, type ComposerHandle } from "./components/composer";
 import { ConfirmDialog, type ConfirmRequest } from "./components/confirm-dialog";
@@ -13,6 +13,7 @@ import { Sidebar } from "./components/sidebar";
 import { SkillsDialog } from "./components/skills-dialog";
 import { TaskThread, TaskWorkingTime } from "./components/task-thread";
 import { ToastRegion } from "./components/toasts";
+import { TargetSettingsDialog, type LaunchSelection } from "./components/target-settings-dialog";
 import { ToolsDialog } from "./components/tools-dialog";
 import { UiRequestDialog } from "./components/ui-request-dialog";
 import { Badge } from "./components/ui/badge";
@@ -39,7 +40,8 @@ function readCollapsed() {
 
 /** The browser credential arrives in the URL hash once; afterwards it lives in session storage. */
 function readCredential(): string {
-	const raw = location.hash.slice(1);
+	const hash = location.hash.slice(1);
+	const raw = new URLSearchParams(hash).get("token") || (hash.includes("=") ? "" : hash);
 	if (raw) {
 		sessionStorage.setItem("hopper.token", raw);
 		history.replaceState(null, "", location.pathname);
@@ -83,6 +85,11 @@ export function App() {
 	const [snapshot, setSnapshot] = useState<SharedSnapshot>();
 	const [conversationId, setConversationId] = useState("");
 	const [selected, setSelected] = useState<TargetBinding[]>([]);
+	const selectionExplicit = useRef(false);
+	const selectTargets = (bindings: TargetBinding[]) => { selectionExplicit.current = true; setSelected(bindings); };
+	const [targetSettingsOpen, setTargetSettingsOpen] = useState(false);
+	const [documentAction, setDocumentAction] = useState<NextDocumentAction>();
+	const [launch, setLaunch] = useState<LaunchSelection>();
 	const [draft, setDraft] = useState("");
 	const [images, setImages] = useState<DraftImage[]>([]);
 	// Explicit delivery choice made while a task runs; null means the default for the current state.
@@ -124,6 +131,23 @@ export function App() {
 		}
 		let disposed = false;
 		let timer: ReturnType<typeof setTimeout> | undefined;
+		let deadline: ReturnType<typeof setTimeout> | undefined;
+		const isCurrent = () => !disposed && socket.current === ws;
+		const retry = () => {
+			if (!isCurrent() || blocked.current) return;
+			ready.current = false;
+			socket.current = undefined;
+			if (deadline) clearTimeout(deadline);
+			if (timer) clearTimeout(timer);
+			actions.setBackendDetail("Rhino instances unknown while offline");
+			actions.setConnection("disconnected", "Reconnecting to the local Hopper host…");
+			ws.close();
+			timer = setTimeout(() => setNonce((n) => n + 1), 1500);
+		};
+		const armDeadline = () => {
+			if (deadline) clearTimeout(deadline);
+			deadline = setTimeout(retry, 10_000);
+		};
 		actions.setConnection("connecting", nonce ? "Reconnecting to the local Hopper host" : "Opening the local Hopper host");
 		const url = new URL("/ws-shared", location.href);
 		url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
@@ -131,13 +155,20 @@ export function App() {
 		socket.current = ws;
 		ready.current = false;
 		ws.onopen = () => {
+			if (!isCurrent()) return;
 			actions.setConnection("authenticating", "Confirming the Rhino session");
-			ws.send(JSON.stringify({ type: "authenticate", token: credential.current }));
+			try { ws.send(JSON.stringify({ type: "authenticate", token: credential.current })); } catch { retry(); }
 		};
 		ws.onmessage = (event) => {
-			const message = JSON.parse(String(event.data));
+			if (!isCurrent()) return;
+			let message;
+			try { message = JSON.parse(String(event.data)); }
+			catch { toast("Hopper sent an unreadable message."); return; }
+			if (!message || typeof message !== "object") return;
 			switch (message.type) {
 				case "shared_snapshot": {
+					if (deadline) clearTimeout(deadline);
+					deadline = undefined;
 					const next = message.snapshot as SharedSnapshot;
 					setSnapshot(next);
 					actions.applySnapshot(next.runtime);
@@ -152,8 +183,10 @@ export function App() {
 							const command: SharedBrowserCommand = { type: "create_conversation", requestId: crypto.randomUUID(), title: "New chat" };
 							pending.current.set(command.requestId, command);
 						}
-						for (const command of pending.current.values()) ws.send(JSON.stringify(command));
-						ws.send(JSON.stringify({ type: "snapshot" }));
+						try {
+							for (const command of pending.current.values()) ws.send(JSON.stringify(command));
+							ws.send(JSON.stringify({ type: "snapshot" }));
+						} catch { retry(); }
 					}
 					break;
 				}
@@ -164,11 +197,18 @@ export function App() {
 					if ((accepted?.type === "submit" || accepted?.type === "steer") && accepted.conversationId === currentConversation.current) {
 						setDraft((current) => (current === accepted.text ? "" : current));
 						setImages((current) => current.filter((image) => !accepted.attachments.some((attachment) => JSON.stringify(attachment) === JSON.stringify(image.image))));
+						if (accepted.type === "submit") {
+							setDocumentAction((current) => JSON.stringify(current) === JSON.stringify(accepted.documentAction) ? undefined : current);
+							setLaunch((current) => JSON.stringify(current) === JSON.stringify(accepted.launch) ? undefined : current);
+						}
 						if (message.result?.admissionError) toast(String(message.result.admissionError), "warning");
 					}
 					if (accepted?.type === "create_conversation") {
 						setConversationId(message.result.conversationId);
+						selectionExplicit.current = false;
 						setSelected([]);
+						setDocumentAction(undefined);
+						setLaunch(undefined);
 						setDraft("");
 						setImages([]);
 					}
@@ -192,20 +232,48 @@ export function App() {
 			}
 		};
 		ws.onclose = (event) => {
-			if (disposed) return;
+			if (!isCurrent()) return;
+			if (deadline) clearTimeout(deadline);
 			ready.current = false;
 			actions.setBackendDetail("Rhino instances unknown while offline");
 			blocked.current = event.code === 4001 || event.code === 4003;
 			if (blocked.current) {
-				actions.setConnection(event.code === 4003 ? "error" : "disconnected", `${event.reason || "Disconnected"}. Reconnect to take control in this tab.`);
+				socket.current = undefined;
+				actions.setConnection(event.code === 4003 ? "error" : "disconnected", event.code === 4003
+					? `${event.reason || "Authentication failed"}. Run _HopperCode in Rhino to open a fresh link.`
+					: `${event.reason || "Disconnected"}. Reconnect to take control in this tab.`);
 			} else {
-				actions.setConnection("disconnected", "Reconnecting to the local Hopper host…");
-				timer = setTimeout(() => setNonce((n) => n + 1), 1500);
+				retry();
 			}
 		};
+		ws.onerror = retry;
+		armDeadline();
+		// A half-open socket can survive sleep without receiving a close event.
+		const probe = () => {
+			if (!isCurrent() || !ready.current || deadline) return;
+			armDeadline();
+			try { ws.send(JSON.stringify({ type: "snapshot" })); } catch { retry(); }
+		};
+		const wake = () => {
+			if (disposed || blocked.current) return;
+			if (socket.current === ws && ws.readyState === WebSocket.OPEN && ready.current) probe();
+			else setNonce((n) => n + 1);
+		};
+		const visible = () => { if (document.visibilityState === "visible") wake(); };
+		const heartbeat = setInterval(probe, 15_000);
+		window.addEventListener("online", wake);
+		window.addEventListener("pageshow", wake);
+		document.addEventListener("visibilitychange", visible);
 		return () => {
 			disposed = true;
+			ready.current = false;
+			if (socket.current === ws) socket.current = undefined;
 			if (timer) clearTimeout(timer);
+			if (deadline) clearTimeout(deadline);
+			clearInterval(heartbeat);
+			window.removeEventListener("online", wake);
+			window.removeEventListener("pageshow", wake);
+			document.removeEventListener("visibilitychange", visible);
 			ws.close();
 		};
 	}, [nonce, store, toast]);
@@ -220,11 +288,18 @@ export function App() {
 			pending.current.set(command.requestId, command);
 			refreshPending((value) => value + 1);
 		}
-		socket.current.send(JSON.stringify(command));
+		try { socket.current.send(JSON.stringify(command)); }
+		catch {
+			ready.current = false;
+			setNonce((n) => n + 1);
+			toast("Connection lost. Your draft is retained while Hopper reconnects.", "warning");
+			return false;
+		}
 		return true;
 	};
 	const reconnect = () => {
 		blocked.current = false;
+		credential.current = readCredential();
 		setNonce((n) => n + 1);
 	};
 
@@ -249,15 +324,17 @@ export function App() {
 	const availableTargets = readyTargets(snapshot);
 	const modelBindings = availableTargets.flatMap((target) => target.documents.filter((binding) => binding.kind === "rhino"));
 	useEffect(() => {
-		if (!selected.length && modelBindings.length) setSelected([modelBindings[0]!]);
-	}, [snapshot, selected.length]);
+		if (!selectionExplicit.current && !selected.length && !documentAction && !launch && modelBindings.length === 1) setSelected([modelBindings[0]!]);
+	}, [snapshot, selected.length, documentAction, launch]);
 	const labelFor = bindingLabeler(snapshot);
 	const activeTurn = snapshot?.turns.find((turn) => turn.task_id === activeRoot?.id && turn.state === "running");
 	const activeOwner = decode<{ binding?: TargetBinding }>(activeTurn?.owner, {});
 	const activeBindings = activeOwner.binding ? [activeOwner.binding] : decode<{ bindings: TargetBinding[] }>(activeRoot?.payload, { bindings: [] }).bindings;
 	const steeringDestination = activeBindings.length ? activeBindings.map(labelFor).join(", ") : "Conversation";
 	const unavailableSelected = selected.some((binding) => !availableTargets.some((target) => target.documents.some((document) => sameBinding(document, binding))));
-	const needsTarget = sendMode !== "steer" && (unavailableSelected || !selected.length);
+	const actionUnavailable = documentAction && (!availableTargets.some((target) => target.lifecycleInstanceId === documentAction.lifecycleInstanceId) || (documentAction.action === "open" && !documentAction.path?.trim()));
+	const launchUnavailable = launch && (!snapshot?.installations?.some((item) => item.id === launch.installationId && item.bootstrapVerified) || (snapshot?.installations?.find((item) => item.id === launch.installationId)?.platform === "darwin" && snapshot.targets.some((target) => target.admission !== "detached")));
+	const needsTarget = sendMode !== "steer" && Boolean(unavailableSelected || actionUnavailable || launchUnavailable || (!selected.length && !documentAction && !launch));
 	const title = String(snapshot?.conversations.find((conversation) => conversation.id === conversationId)?.title ?? "New chat");
 
 	useEffect(() => {
@@ -290,7 +367,7 @@ export function App() {
 			send({ type: "steer", requestId: crypto.randomUUID(), conversationId, sessionId: String(task.session_id), taskId: String(task.id), turnId: String(turn.id), text: draft, attachments });
 			return;
 		}
-		send({ type: "submit", requestId: crypto.randomUUID(), conversationId, sessionId, kind: sendMode, text: draft, bindings: selected, attachments });
+		send({ type: "submit", requestId: crypto.randomUUID(), conversationId, sessionId, kind: sendMode, text: draft, bindings: selected, attachments, ...(documentAction ? { documentAction } : {}), ...(launch ? { launch } : {}) });
 	};
 
 	const cancelTask = (taskId: string) => send({ type: "cancel", requestId: crypto.randomUUID(), conversationId, taskId });
@@ -343,20 +420,27 @@ export function App() {
 		composer.current?.focus();
 	};
 
+	const destinationLabel = sendMode === "steer" ? `Steering: ${steeringDestination}`
+		: launch ? "Launch Rhino"
+		: documentAction ? `${documentAction.action === "new" ? "New" : "Open"} document${selected.length ? ` + ${selected.length} selected` : ""}`
+		: selected.length > 1 ? `${selected.length} documents selected`
+		: selected[0] ? labelFor(selected[0])
+		: modelBindings.length ? "Choose a Rhino model" : "No Rhino models connected";
 	const rhinoPicker = (
+		<>
 		<Select
-			value={selected[0] ? JSON.stringify(selected[0]) : ""}
+			value={selected.length === 1 && !documentAction && !launch ? JSON.stringify(selected[0]) : ""}
 			onValueChange={(value) => {
 				const binding = modelBindings.find((binding) => JSON.stringify(binding) === value);
-				if (binding) setSelected([binding]);
+				if (binding) { selectTargets([binding]); setDocumentAction(undefined); setLaunch(undefined); }
 			}}
 			disabled={!connected || sendMode === "steer" || !modelBindings.length}
 		>
 			<SelectTrigger aria-label="Rhino model" className={cn(toolbarTriggerClass, unavailableSelected && sendMode !== "steer" && "text-danger hover:text-danger")}>
 				<Box className="size-3.5 shrink-0" />
-				<SelectValue placeholder="No Rhino models connected">
+				<SelectValue placeholder={<span aria-label="Message destination" className="block truncate">{destinationLabel}</span>}>
 					<span aria-label="Message destination" className="block truncate">
-						{sendMode === "steer" ? `Steering: ${steeringDestination}` : selected[0] ? labelFor(selected[0]) : "No Rhino models connected"}
+						{destinationLabel}
 					</span>
 				</SelectValue>
 			</SelectTrigger>
@@ -366,6 +450,8 @@ export function App() {
 				))}
 			</SelectContent>
 		</Select>
+		<Button variant="ghost" size="icon-sm" aria-label="Message target settings" title="Multiple documents, new/open, and launch" disabled={!connected || sendMode === "steer" || submitting} onClick={() => setTargetSettingsOpen(true)}><Settings2 className="size-3.5" /></Button>
+		</>
 	);
 
 	return (
@@ -439,6 +525,8 @@ export function App() {
 					}
 				/>
 			</main>
+
+			{targetSettingsOpen && <TargetSettingsDialog snapshot={snapshot} selected={selected} onSelected={selectTargets} documentAction={documentAction} onDocumentAction={setDocumentAction} launch={launch} onLaunch={setLaunch} disabled={!connected || sendMode === "steer" || submitting} onOpenChange={setTargetSettingsOpen} />}
 
 			{providerOpen && (
 				<ProviderDialog

@@ -1,7 +1,7 @@
 import { createReadStream, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { homedir } from "node:os";
+import { sharedHostProxy } from "./scripts/ui-host-proxy";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
@@ -31,21 +31,6 @@ function excalidrawFonts(): Plugin {
 	};
 }
 
-// Match the host's fixed per-user endpoint without copying its browser credential.
-function hostProxyTarget(): string {
-	if (process.env.HOPPER_UI_PROXY_TARGET) return process.env.HOPPER_UI_PROXY_TARGET;
-	try {
-		const state: unknown = JSON.parse(readFileSync(join(homedir(), ".hopper", "shared-control", "control.json"), "utf8"));
-		const port = state && typeof state === "object" && "endpointPort" in state ? state.endpointPort : undefined;
-		if (typeof port === "number" && Number.isSafeInteger(port) && port > 0 && port <= 65535) return `http://127.0.0.1:${port}`;
-	} catch {
-		// Mock/build workflows need no live host. Real requests fail closed below.
-	}
-	return "http://127.0.0.1:1";
-}
-
-const proxyTarget = hostProxyTarget();
-
 export default defineConfig({
 	plugins: [react(), tailwindcss(), excalidrawFonts()],
 	root: "web",
@@ -58,8 +43,8 @@ export default defineConfig({
 	},
 	server: {
 		proxy: {
-			"/api": proxyTarget,
-			"/ws": { target: proxyTarget, ws: true },
+			"/api": sharedHostProxy(),
+			"/ws": sharedHostProxy(),
 		},
 	},
 });

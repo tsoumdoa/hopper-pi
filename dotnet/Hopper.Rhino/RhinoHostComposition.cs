@@ -22,6 +22,7 @@ namespace rhino_zmq_poc
         private readonly IBrowserLauncher _browser;
         private readonly RuntimeStatusStore _status;
         private bool _running;
+        private readonly BrowserOpenRequest _openRequest = new();
 
         public BrowserAfterRunningCoordinator(
             SharedHostProcessAdapter child,
@@ -37,7 +38,10 @@ namespace rhino_zmq_poc
         public void Reset()
         {
             lock (_gate)
+            {
                 _running = false;
+                _openRequest.Request();
+            }
         }
 
         public void OnRunning()
@@ -48,7 +52,7 @@ namespace rhino_zmq_poc
                     return;
                 _running = true;
                 var ready = _child.ReadyUri;
-                if (ready != null)
+                if (_openRequest.Take(_running, ready))
                     Open(ready);
             }
         }
@@ -56,7 +60,10 @@ namespace rhino_zmq_poc
         public void Reopen()
         {
             lock (_gate)
+            {
                 _running = false;
+                _openRequest.Request();
+            }
             _ = EnsureAndOpenAsync();
         }
 
@@ -89,7 +96,8 @@ namespace rhino_zmq_poc
                 if (!_running
                     || _status.Read().Lifecycle.State != Hopper.Core.Protocol.LifecycleState.running)
                     return;
-                Open(ready);
+                if (_openRequest.Take(_running, ready))
+                    Open(ready);
             }
         }
 

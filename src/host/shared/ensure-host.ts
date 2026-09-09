@@ -41,11 +41,10 @@ export async function ensureSharedHost(
 				...state,
 				revision: previous.revision,
 			}));
-		if (!draining)
-			throw new Error(
-				`Shared endpoint ${state.endpointPort} is occupied but has no compatible healthy host; inspect or restart its owner manually`,
-			);
-		while (await endpointOccupied(state.endpointPort)) {
+		// Another Rhino may have started the winner, which binds the endpoint
+		// before loading its runtime and publishing discovery. Wait for verified
+		// readiness without spawning or replacing that owner.
+		while (!draining || await endpointOccupied(state.endpointPort)) {
 			const current = await options.control.snapshot();
 			if (
 				!current ||
@@ -57,7 +56,9 @@ export async function ensureSharedHost(
 			if (replacement) return replacement;
 			if (Date.now() >= deadline)
 				throw new Error(
-					"Previous shared host is still draining or hung; inspect its owner manually. No fallback host was started",
+					draining
+						? "Previous shared host is still draining or hung; inspect its owner manually. No fallback host was started"
+						: `Shared endpoint ${state.endpointPort} is occupied but has no compatible healthy host; inspect or restart its owner manually. No fallback host was started`,
 				);
 			await new Promise((resolve) => setTimeout(resolve, 100));
 		}

@@ -45,7 +45,12 @@ export function decode<T>(value: unknown, fallback: T): T {
 }
 
 export function sameBinding(a: TargetBinding, b: TargetBinding): boolean {
-	return JSON.stringify(a) === JSON.stringify(b);
+	if (a.lifecycleInstanceId !== b.lifecycleInstanceId || a.kind !== b.kind) return false;
+	return a.kind === "rhino" && b.kind === "rhino"
+		? a.rhinoDocumentId === b.rhinoDocumentId
+		: a.kind === "grasshopper" && b.kind === "grasshopper"
+			&& a.grasshopperDocumentId === b.grasshopperDocumentId
+			&& a.associatedRhinoDocumentId === b.associatedRhinoDocumentId;
 }
 
 export function targetName(binding: TargetBinding, labels?: Record<string, string>): string {
