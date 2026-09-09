@@ -59,6 +59,8 @@ export interface Submission {
 	attachments: readonly unknown[];
 	documentAction?: unknown;
 	launch?: unknown;
+	/** Internal acceptance scripts only; browser submissions cannot set this. */
+	diagnosticFixture?: "shared-host-native-smoke";
 }
 export interface Receipt {
 	taskId: string;

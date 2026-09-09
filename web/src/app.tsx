@@ -34,6 +34,7 @@ type Snapshot = {
 	records?: Row[];
 	recoveries: Row[];
 	questions: Row[];
+	inputs?: Row[];
 	targets: {
 		label: string;
 		lifecycleInstanceId: string;
@@ -72,9 +73,8 @@ function targetName(
 	labels?: Record<string, string>,
 ): string {
 	return binding.kind === "rhino"
-		? (labels?.[binding.rhinoDocumentId] ??
-				`Rhino document ${binding.rhinoDocumentId}`)
-		: `${labels?.[binding.grasshopperDocumentId] ?? `Grasshopper ${binding.grasshopperDocumentId}`}${binding.associatedRhinoDocumentId ? ` / ${labels?.[binding.associatedRhinoDocumentId] ?? `Rhino ${binding.associatedRhinoDocumentId}`}` : ""}`;
+		? (labels?.[binding.rhinoDocumentId] ?? "Untitled Rhino document")
+		: `${labels?.[binding.grasshopperDocumentId] ?? "Untitled Grasshopper document"}${binding.associatedRhinoDocumentId ? ` / ${labels?.[binding.associatedRhinoDocumentId] ?? "Rhino document"}` : ""}`;
 }
 
 export function App() {
@@ -152,15 +152,18 @@ export function App() {
 				store
 					.getState()
 					.actions.setBackendDetail(
-						`${available} Rhino ${available === 1 ? "instance" : "instances"} available. Select documents below your conversation.`,
+						`${available} Rhino ${available === 1 ? "instance" : "instances"} connected`,
 					);
 				store
 					.getState()
 					.actions.setConnection("connected", "Connected to Hopper");
 				setStatus("Connected");
-				setConversationId(
-					(current) =>
-						current || String(message.snapshot.conversations[0]?.id ?? ""),
+				setConversationId((current) =>
+					message.snapshot.conversations.some(
+						(conversation: Row) => conversation.id === current,
+					)
+						? current
+						: String(message.snapshot.conversations[0]?.id ?? ""),
 				);
 				if (!ready.current) {
 					ready.current = true;
@@ -302,16 +305,28 @@ export function App() {
 	const availableCount =
 		snapshot?.targets.filter((target) => target.admission === "ready").length ??
 		0;
-	const documentCount =
-		snapshot?.targets.reduce(
-			(count, target) => count + target.documents.length,
-			0,
-		) ?? 0;
+	const availableTargets =
+		snapshot?.targets.filter((target) => target.admission === "ready") ?? [];
 	const bindingLabel = (binding: TargetBinding) => {
 		const target = snapshot?.targets.find(
 			(target) => target.lifecycleInstanceId === binding.lifecycleInstanceId,
 		);
-		return `${targetName(binding, target?.documentLabels)} · ${target ? `Rhino ${target.processId}` : "disconnected instance"}`;
+		const name = targetName(binding, target?.documentLabels);
+		const index =
+			target?.documents.findIndex(
+				(document) => JSON.stringify(document) === JSON.stringify(binding),
+			) ?? -1;
+		const label =
+			(name.startsWith("Untitled") ||
+				(target?.documents.filter(
+					(document) => targetName(document, target.documentLabels) === name,
+				).length ?? 0) > 1) &&
+			index >= 0
+				? `${name} ${index + 1}`
+				: name;
+		return availableTargets.length > 1 && target
+			? `${label} · Rhino ${availableTargets.indexOf(target) + 1 || "offline"}`
+			: label;
 	};
 	const activeTurn = snapshot?.turns.find(
 		(turn) => turn.task_id === activeRoot?.id && turn.state === "running",
@@ -327,7 +342,7 @@ export function App() {
 			}).bindings;
 	const steeringDestination = activeBindings.length
 		? activeBindings.map(bindingLabel).join(", ")
-		: "coordinator task, no document bound";
+		: "Conversation";
 	const unavailableSelected = selected.some(
 		(binding) =>
 			!snapshot?.targets.some(
@@ -503,12 +518,13 @@ export function App() {
 						</p>
 					)}
 				</header>
-				<div className="flex-1 overflow-auto p-5 space-y-5">
+				<div className="flex-1 overflow-auto px-5 py-8 space-y-8">
 					{orderedTasks.map((task) => {
-						const input = decode<{ text: string; bindings: TargetBinding[] }>(
-							task.payload,
-							{ text: "", bindings: [] },
-						);
+						const input = decode<{
+							text: string;
+							bindings: TargetBinding[];
+							attachments?: unknown;
+						}>(task.payload, { text: "", bindings: [] });
 						const events = snapshot!.events.filter(
 							(event) => event.task_id === task.id && event.kind === "progress",
 						);
@@ -537,25 +553,57 @@ export function App() {
 						const questions = snapshot!.questions.filter(
 							(q) => q.task_id === task.id,
 						);
-						const usage = snapshot!.turns
-							.filter((turn) => turn.task_id === task.id)
-							.reduce((total, turn) => total + Number(turn.usage ?? 0), 0);
-						const artifacts = (snapshot!.records ?? []).filter(
-							(record) =>
-								record.task_id === task.id &&
-								(record.kind === "artifact" || record.kind === "transfer"),
-						);
 						const content = (
 							<article
 								key={String(task.id)}
-								className={`border rounded-lg p-4 ${task.parent_task_id ? "mt-3" : ""}`}
+								className={`mx-auto max-w-3xl space-y-4 ${task.parent_task_id ? "mt-3" : ""}`}
 							>
-								<div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:gap-4">
-									<p className="whitespace-pre-wrap">{input.text}</p>
-									<span className="text-xs shrink-0">
-										{String(task.state)} · {usage.toLocaleString()} tokens
-									</span>
-								</div>
+								<UserMessage
+									text={input.text}
+									attachments={input.attachments}
+								/>
+								{snapshot?.inputs
+									?.filter((entry) => entry.task_id === task.id)
+									.map((entry) => {
+										const payload = decode<{
+											text: string;
+											attachments?: unknown;
+										}>(entry.payload, { text: "" });
+										return (
+											<UserMessage
+												key={String(entry.id)}
+												text={payload.text}
+												attachments={payload.attachments}
+												status={
+													entry.state === "not_applied"
+														? "Not delivered"
+														: entry.state === "unknown"
+															? "Delivery unconfirmed"
+															: undefined
+												}
+											/>
+										);
+									})}
+								{[
+									"queued",
+									"running",
+									"suspending",
+									"failed",
+									"interrupted",
+									"cancelled",
+								].includes(String(task.state)) && (
+									<p role="status" className="text-xs text-muted">
+										{task.state === "failed"
+											? "Something went wrong. Please try again."
+											: task.state === "interrupted"
+												? "Connection interrupted."
+												: task.state === "cancelled"
+													? "Stopped"
+													: task.state === "queued"
+														? "Waiting…"
+														: "Working…"}
+									</p>
+								)}
 								{progressLabel &&
 									["running", "suspending"].includes(String(task.state)) && (
 										<p role="status" className="text-xs mt-2">
@@ -605,8 +653,7 @@ export function App() {
 															alt={`Capture from ${message.toolName ?? "Rhino"}`}
 														/>
 														<figcaption className="text-xs mt-1">
-															{message.toolName ?? "Rhino"} ·{" "}
-															{message.toolCallId ?? "capture"}
+															{message.toolName ?? "Rhino"}
 														</figcaption>
 													</figure>
 												) : null;
@@ -649,7 +696,7 @@ export function App() {
 											})
 										}
 									>
-										Cancel task
+										Stop
 									</button>
 								)}
 								{(snapshot!.records ?? [])
@@ -689,10 +736,7 @@ export function App() {
 													{String(decode<any>(record.payload, {}).detail ?? "")}
 												</p>
 												{recovered ? (
-													<p>
-														Launch recovery confirmed. A fresh launch requires a
-														new grant; the original outcome is unchanged.
-													</p>
+													<p>Ready to launch Rhino again.</p>
 												) : supported ? (
 													<Recovery
 														launch
@@ -747,73 +791,6 @@ export function App() {
 										the inspected state.
 									</p>
 								)}
-								{artifacts.length > 0 && (
-									<section
-										aria-label="Geometry artifacts and imports"
-										className="mt-3 space-y-2"
-									>
-										{artifacts.map((record) => {
-											const payload = decode<any>(record.payload, {}),
-												artifact =
-													record.kind === "artifact"
-														? payload
-														: payload.artifact;
-											return (
-												<details
-													key={`${record.kind}:${record.id}`}
-													className="border rounded p-2 text-xs"
-												>
-													<summary>
-														{record.kind === "artifact"
-															? "Geometry artifact"
-															: "Geometry import"}{" "}
-														· {String(record.state)}
-														{artifact?.format ? ` · .${artifact.format}` : ""}
-													</summary>
-													{artifact?.units && (
-														<p className="mt-2">
-															{artifact.units} ·{" "}
-															{artifact.objectIds?.length ?? 0} source objects
-														</p>
-													)}
-													{record.kind === "transfer" && payload.objectIds && (
-														<p className="mt-2">
-															{payload.objectIds.length} new destination objects
-														</p>
-													)}
-													{artifact?.path && (
-														<p className="mt-2 break-all">
-															Retained file: <code>{artifact.path}</code>
-														</p>
-													)}
-													{artifact?.checksum && (
-														<p className="mt-2 break-all">
-															SHA-256: <code>{artifact.checksum}</code>
-														</p>
-													)}
-													<pre className="mt-2 whitespace-pre-wrap overflow-auto">
-														{JSON.stringify(payload, null, 2)}
-													</pre>
-												</details>
-											);
-										})}
-									</section>
-								)}
-								<details className="mt-3 text-xs">
-									<summary>Task history</summary>
-									<pre className="overflow-auto whitespace-pre-wrap">
-										{JSON.stringify(
-											snapshot!.events
-												.filter((event) => event.task_id === task.id)
-												.map((event) => ({
-													...event,
-													payload: decode(event.payload, event.payload),
-												})),
-											null,
-											2,
-										)}
-									</pre>
-								</details>
 							</article>
 						);
 						return task.parent_task_id ? (
@@ -822,26 +799,12 @@ export function App() {
 								className="ml-6 border rounded-lg p-3"
 							>
 								<summary className="cursor-pointer text-sm">
-									Child task ·{" "}
-									{input.bindings
-										.map((binding) =>
-											targetName(
-												binding,
-												snapshot?.targets.find(
-													(target) =>
-														target.lifecycleInstanceId ===
-														binding.lifecycleInstanceId,
-												)?.documentLabels,
-											),
-										)
-										.join(", ")}{" "}
-									· {String(task.state)} · {usage.toLocaleString()} tokens
-									{artifacts.length
-										? ` · ${artifacts.length} artifact/import records`
-										: ""}
-									{progressLabel && task.state === "running"
-										? ` · ${progressLabel}`
-										: ""}
+									{input.bindings.map(bindingLabel).join(", ") || "Rhino work"}
+									{task.state === "running"
+										? " · Working…"
+										: task.state === "failed"
+											? " · Failed"
+											: ""}
 								</summary>
 								{content}
 							</details>
@@ -851,182 +814,174 @@ export function App() {
 					})}
 				</div>
 				<div className="max-h-[70dvh] overflow-y-auto border-t px-4 pt-3 pb-2 space-y-3 sm:px-6">
-					<section
+					<details
 						aria-label="Rhino targets"
-						className="rounded-md border bg-panel p-3"
+						className="mx-auto max-w-3xl text-xs"
 					>
-						<div className="flex flex-wrap items-center justify-between gap-2">
-							<h3 className="text-xs font-medium">Rhino documents</h3>
-							<span className="text-xs text-muted">
-								{availableCount} available{" "}
-								{availableCount === 1 ? "instance" : "instances"} ·{" "}
-								{documentCount} {documentCount === 1 ? "document" : "documents"}
+						<summary className="cursor-pointer py-1 text-ink-soft">
+							<span aria-label="Message destination" role="status">
+								{sendMode === "steer"
+									? `Steering: ${steeringDestination}`
+									: documentAction
+										? `${documentAction.action === "new" ? "New" : "Open"} ${documentAction.kind === "rhino" ? "Rhino" : "Grasshopper"} document${availableTargets.length > 1 ? ` · Rhino ${availableTargets.findIndex((target) => target.lifecycleInstanceId === documentAction.lifecycleInstanceId) + 1 || "offline"}` : ""}`
+										: launch
+											? "Launch Rhino"
+											: selected.length
+												? selected.map(bindingLabel).join(", ")
+												: "Chat only"}
 							</span>
-						</div>
-						<p
-							role="status"
-							aria-label="Message destination"
-							className="mt-2 max-h-16 overflow-y-auto text-xs text-ink-soft"
-						>
-							{sendMode === "steer"
-								? `Steering: ${steeringDestination}. The active task keeps its targets.`
-								: documentAction
-									? `${documentAction.action === "new" ? "New" : "Open"} ${documentAction.kind} document in ${snapshot?.targets.find((t) => t.lifecycleInstanceId === documentAction.lifecycleInstanceId)?.label ?? "selected Rhino"} for the next task`
-									: launch
-										? "Next task: launch Rhino"
-										: selected.length
-											? `Sending to: ${selected.map((binding) => bindingLabel(binding)).join(", ")}`
-											: "Discussion only. Select a document to work in Rhino."}
-						</p>
-						{unavailableSelected && (
-							<p role="alert" className="mt-2 text-xs text-danger">
-								A selected document is unavailable. Your target has not changed.
-								Clear the selection or choose an available document.
-							</p>
-						)}
-						{selected.length > 0 && (
-							<button
-								className="text-xs underline my-2"
-								onClick={() => setSelected([])}
-							>
-								Clear selected targets
-							</button>
-						)}
-						{!snapshot?.targets.length && (
-							<p className="text-sm my-2">
-								No Rhino is attached. Discussion is available.
-							</p>
-						)}
-						<div className="max-h-[22dvh] overflow-y-auto">
-							{snapshot?.targets.map((target) => (
-								<fieldset
-									key={target.lifecycleInstanceId}
-									className="mt-2 min-w-0"
+						</summary>
+						<div className="mt-2 max-h-[32dvh] overflow-y-auto rounded-lg border bg-panel p-3 space-y-2">
+							{unavailableSelected && (
+								<p role="alert" className="mt-2 text-xs text-danger">
+									Selected document disconnected. Choose another document or
+									clear the selection.
+								</p>
+							)}
+							{selected.length > 0 && (
+								<button
+									className="text-xs underline my-2"
+									onClick={() => setSelected([])}
 								>
-									<legend className="text-sm">
-										{target.label.includes(String(target.processId))
-											? target.label
-											: `${target.label} · PID ${target.processId}`}{" "}
-										· {target.admission}
-									</legend>
-									<button
-										disabled={
-											target.admission !== "ready" || sendMode === "steer"
-										}
-										className="text-xs underline my-1"
-										onClick={() => {
-											setDocumentAction({
-												lifecycleInstanceId: target.lifecycleInstanceId,
-												kind: "rhino",
-												action: "new",
-												modifiedPolicy: "refuse",
-											});
-											setLaunch(undefined);
-										}}
+									Clear selected targets
+								</button>
+							)}
+							{!availableTargets.length && (
+								<p className="text-sm my-2">No Rhino documents available.</p>
+							)}
+							<div className="max-h-[22dvh] overflow-y-auto">
+								{availableTargets.map((target, targetIndex) => (
+									<fieldset
+										key={target.lifecycleInstanceId}
+										className="mt-2 min-w-0"
 									>
-										New Rhino document
-									</button>
-									<button
-										disabled={
-											target.admission !== "ready" || sendMode === "steer"
-										}
-										className="text-xs underline ml-3 my-1"
-										onClick={() => {
-											setDocumentAction({
-												lifecycleInstanceId: target.lifecycleInstanceId,
-												kind: "rhino",
-												action: "open",
-												modifiedPolicy: "refuse",
-											});
-											setLaunch(undefined);
-										}}
-									>
-										Open Rhino document
-									</button>
-									{target.documents.map((binding) => (
-										<label
-											key={JSON.stringify(binding)}
-											className="flex gap-2 text-sm my-1 break-words"
+										{availableCount > 1 && (
+											<legend className="text-xs text-muted">
+												Rhino {targetIndex + 1}
+											</legend>
+										)}
+										<button
+											disabled={
+												target.admission !== "ready" || sendMode === "steer"
+											}
+											className="text-xs underline my-1"
+											onClick={() => {
+												setDocumentAction({
+													lifecycleInstanceId: target.lifecycleInstanceId,
+													kind: "rhino",
+													action: "new",
+													modifiedPolicy: "refuse",
+												});
+												setLaunch(undefined);
+											}}
 										>
-											<input
-												type="checkbox"
-												disabled={
-													target.admission !== "ready" || sendMode === "steer"
-												}
-												checked={selected.some(
-													(item) =>
-														JSON.stringify(item) === JSON.stringify(binding),
-												)}
-												onChange={(event) =>
-													setSelected((old) =>
-														event.target.checked
-															? [...old, binding]
-															: old.filter(
-																	(item) =>
-																		JSON.stringify(item) !==
-																		JSON.stringify(binding),
-																),
-													)
-												}
-											/>
-											{targetName(binding, target.documentLabels)}
-										</label>
-									))}
-									{target.documents.length > 1 && (
-										<p className="text-xs text-muted">
-											Edits run sequentially in this Rhino process.
-										</p>
-									)}
-								</fieldset>
-							))}
-						</div>
-					</section>
-					{snapshot?.installations
-						?.filter(
-							(installation) =>
-								installation.platform !== "darwin" ||
-								!snapshot.targets.some(
-									(target) => target.admission !== "detached",
-								),
-						)
-						.map((installation) => (
-							<button
-								key={installation.id}
-								disabled={!installation.bootstrapVerified}
-								title={installation.unavailableReason}
-								className="text-xs underline mr-3 disabled:opacity-40"
-								onClick={() => {
-									setLaunch({
-										installationId: installation.id,
-										independentProcess: snapshot.targets.some(
+											New Rhino document
+										</button>
+										<button
+											disabled={
+												target.admission !== "ready" || sendMode === "steer"
+											}
+											className="text-xs underline ml-3 my-1"
+											onClick={() => {
+												setDocumentAction({
+													lifecycleInstanceId: target.lifecycleInstanceId,
+													kind: "rhino",
+													action: "open",
+													modifiedPolicy: "refuse",
+												});
+												setLaunch(undefined);
+											}}
+										>
+											Open Rhino document
+										</button>
+										{target.documents.map((binding) => (
+											<label
+												key={JSON.stringify(binding)}
+												className="flex gap-2 text-sm my-1 break-words"
+											>
+												<input
+													type="checkbox"
+													disabled={
+														target.admission !== "ready" || sendMode === "steer"
+													}
+													checked={selected.some(
+														(item) =>
+															JSON.stringify(item) === JSON.stringify(binding),
+													)}
+													onChange={(event) =>
+														setSelected((old) =>
+															event.target.checked
+																? [...old, binding]
+																: old.filter(
+																		(item) =>
+																			JSON.stringify(item) !==
+																			JSON.stringify(binding),
+																	),
+														)
+													}
+												/>
+												{bindingLabel(binding)}
+											</label>
+										))}
+									</fieldset>
+								))}
+							</div>
+							{snapshot?.installations
+								?.filter(
+									(installation) =>
+										installation.platform !== "darwin" ||
+										!snapshot.targets.some(
 											(target) => target.admission !== "detached",
 										),
-									});
-									setDocumentAction(undefined);
-									setSelected([]);
-								}}
-							>
-								Authorize one Rhino launch · {installation.id}
-							</button>
-						))}
-					{documentAction && (
-						<DocumentActionControls
-							action={documentAction}
-							update={setDocumentAction}
-							remove={() => setDocumentAction(undefined)}
-						/>
-					)}
-					{launch && (
-						<p className="text-xs">
-							Next task may launch one Rhino process.{" "}
-							<button
-								className="underline"
-								onClick={() => setLaunch(undefined)}
-							>
-								Remove
-							</button>
-						</p>
-					)}
+								)
+								.map((installation) => (
+									<button
+										key={installation.id}
+										disabled={!installation.bootstrapVerified}
+										title={installation.unavailableReason}
+										className="text-xs underline mr-3 disabled:opacity-40"
+										onClick={() => {
+											setLaunch({
+												installationId: installation.id,
+												independentProcess: snapshot.targets.some(
+													(target) => target.admission !== "detached",
+												),
+											});
+											setDocumentAction(undefined);
+											setSelected([]);
+										}}
+									>
+										Launch Rhino {installation.build}
+									</button>
+								))}
+							{documentAction && (
+								<DocumentActionControls
+									action={documentAction}
+									update={setDocumentAction}
+									remove={() => setDocumentAction(undefined)}
+								/>
+							)}
+							{launch && (
+								<p className="text-xs">
+									Launch Rhino with your next message.{" "}
+									<button
+										className="underline"
+										onClick={() => setLaunch(undefined)}
+									>
+										Remove
+									</button>
+								</p>
+							)}
+						</div>
+					</details>
+					{unavailableSelected &&
+						sendMode !== "steer" &&
+						!documentAction &&
+						!launch && (
+							<p role="alert" className="mx-auto max-w-3xl text-xs text-danger">
+								Selected document disconnected. Choose another document.
+							</p>
+						)}
 					<Composer
 						key={conversationId}
 						draft={text}
@@ -1120,6 +1075,39 @@ export function App() {
 		</div>
 	);
 }
+function UserMessage({
+	text,
+	attachments,
+	status,
+}: {
+	text: string;
+	attachments?: unknown;
+	status?: string;
+}) {
+	let images: ReturnType<typeof parseImages>;
+	try {
+		images = parseImages(attachments);
+	} catch {
+		images = [];
+	}
+	return (
+		<div className="flex justify-end">
+			<div className="max-w-[85%] rounded-2xl bg-panel px-4 py-3 space-y-2">
+				{text && <p className="whitespace-pre-wrap">{text}</p>}
+				{images?.map((image, index) => (
+					<img
+						key={index}
+						src={imageUrl(image)}
+						alt="Attached image"
+						className="max-h-72 max-w-full rounded-lg"
+					/>
+				))}
+				{status && <p className="text-xs text-muted">{status}</p>}
+			</div>
+		</div>
+	);
+}
+
 function Question({
 	question,
 	enabled,
@@ -1161,7 +1149,7 @@ function Question({
 				<p className="text-xs">
 					{inactive
 						? "This question is no longer active."
-						: "Waiting for operations and scope cleanup."}
+						: "Finishing the current operation."}
 				</p>
 			)}
 			<input
@@ -1243,8 +1231,7 @@ function DocumentActionControls({
 	return (
 		<fieldset className="border rounded p-3 space-y-2 text-sm">
 			<legend className="px-1">
-				One {action.action === "new" ? "new" : "open"} document action for the
-				next task
+				{action.action === "new" ? "New document" : "Open document"}
 			</legend>
 			<label className="block">
 				Document kind
@@ -1346,8 +1333,7 @@ function DocumentActionControls({
 			)}
 			{action.modifiedPolicy === "discard" && (
 				<p className="text-xs">
-					This explicitly authorizes losing unsaved changes in the document this
-					action replaces.
+					Unsaved changes in the replaced document will be lost.
 				</p>
 			)}
 			<button className="text-xs underline" onClick={remove}>

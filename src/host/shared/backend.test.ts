@@ -60,6 +60,28 @@ function setup(authorizeDocument = vi.fn(async () => {})) {
 		recoverLaunch,
 	};
 }
+it("omits fixture-only conversations from the browser while preserving export and event cursor", () => {
+	const s = setup();
+	try {
+		const fixture = s.journal.createConversation("fixture-conversation", "Fixture");
+		const accepted = s.journal.accept({
+			...fixture,
+			requestId: "fixture-task",
+			kind: "prompt",
+			text: "Internal fixture",
+			bindings: [],
+			attachments: [],
+			diagnosticFixture: "shared-host-native-smoke",
+		});
+		const snapshot = s.backend.snapshot();
+		expect(snapshot.conversations.some((row) => row.id === fixture.conversationId)).toBe(false);
+		expect(snapshot.tasks).toHaveLength(0);
+		expect(snapshot.eventCursor).toBe(accepted.eventId);
+		expect(s.backend.exportConversation(fixture.conversationId).tasks.map((row) => row.id)).toEqual([accepted.taskId]);
+	} finally {
+		s.journal.close();
+	}
+});
 it("holds model admission until the exact document grant commits and deduplicates retries", async () => {
 	let finish!: () => void;
 	const s = setup(

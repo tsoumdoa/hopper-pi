@@ -190,7 +190,7 @@ it("launch starts a coordinator without inheriting selected document bindings", 
 			.querySelector<HTMLInputElement>('input[type="checkbox"]')!
 			.click(),
 	);
-	await act(async () => byText("Authorize one Rhino launch · rhino").click());
+	await act(async () => byText("Launch Rhino 8").click());
 	await value("#composer-input", "Launch Rhino");
 	await act(async () => sendButton().click());
 	const command = socket.sent.find((command) => command.type === "submit");
@@ -238,7 +238,7 @@ it("late acceptance in another conversation cannot erase the new draft or author
 		container.querySelector('select[aria-label="Modified document policy"]'),
 	).not.toBeNull();
 });
-it("groups compact child entries under their root with usage, artifact metadata and tool progress", async () => {
+it("groups child work under its document without diagnostic history", async () => {
 	const rootTask = {
 		id: "root",
 		conversation_id: "conversation",
@@ -301,15 +301,13 @@ it("groups compact child entries under their root with usage, artifact metadata 
 		details = article.nextElementSibling as HTMLDetailsElement;
 	expect(details.tagName).toBe("DETAILS");
 	expect(details.open).toBe(false);
-	expect(details.querySelector("summary")!.textContent).toContain("123 tokens");
 	expect(details.querySelector("summary")!.textContent).toContain("Facade.3dm");
-	expect(details.querySelector("summary")!.textContent).toContain(
-		"query Rhino Objects is running",
-	);
-	expect(
-		details.querySelector('[aria-label="Geometry artifacts and imports"]')!
-			.textContent,
-	).toContain("/retained/geometry.3dm");
+	expect(details.querySelector("summary")!.textContent).toContain("Working");
+	expect(details.textContent).toContain("query Rhino Objects is running");
+	expect(container.textContent).not.toContain("tokens");
+	expect(container.textContent).not.toContain("Task history");
+	expect(container.textContent).not.toContain("/retained/geometry.3dm");
+	expect(container.textContent).not.toContain("SHA-256");
 	expect(details.nextElementSibling!.textContent).toContain("Next task");
 });
 it("keeps assistant output from each turn and the answered question after continuation", async () => {
@@ -499,7 +497,7 @@ it("requires inspection for launch recovery and preserves the original outcome a
 		}),
 	);
 	expect(container.textContent).toContain("Original launch outcome: cancelled");
-	expect(container.textContent).toContain("Launch recovery confirmed");
+	expect(container.textContent).toContain("Ready to launch Rhino again");
 	expect(
 		container.querySelector(
 			'textarea[aria-label="Launch recovery inspection"]',
@@ -584,20 +582,20 @@ it("offers conservative inspected recovery for Windows independent launches", as
 });
 it("shows available documents and the explicit destination in the normal UI", async () => {
 	const targets = container.querySelector(
-		'section[aria-label="Rhino targets"]',
+		'details[aria-label="Rhino targets"]',
 	)!;
-	expect(targets.closest("details")).toBeNull();
-	expect(targets.textContent).toContain("1 available instance · 1 document");
-	expect(targets.textContent).toContain("PID 42 · ready");
+	expect((targets as HTMLDetailsElement).open).toBe(false);
+	expect(targets.textContent).not.toContain("PID 42");
+	expect(targets.textContent).not.toContain("ready");
 	expect(
 		container.querySelector('[aria-label="Message destination"]')!.textContent,
-	).toContain("Discussion only");
+	).toContain("Chat only");
 	await act(async () =>
 		targets.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click(),
 	);
 	expect(
 		container.querySelector('[aria-label="Message destination"]')!.textContent,
-	).toContain("Sending to: Facade.3dm · Rhino 42");
+	).toContain("Facade.3dm");
 	await value("#composer-input", "Edit the selected document");
 	await act(async () => sendButton().click());
 	expect(
@@ -625,7 +623,7 @@ it("does not silently switch a selected destination when its Rhino disconnects",
 		}),
 	);
 	expect(sendButton().disabled).toBe(true);
-	expect(container.textContent).toContain("Your target has not changed");
+	expect(container.textContent).toContain("Selected document disconnected");
 	expect(
 		container.querySelector('[aria-label="Message destination"]')!.textContent,
 	).toContain("Facade.3dm");
@@ -670,15 +668,22 @@ it("keeps a task target distinct from the next message selection", async () => {
 		}),
 	);
 	const choices = container.querySelectorAll<HTMLInputElement>(
-		'section[aria-label="Rhino targets"] input[type="checkbox"]',
+		'details[aria-label="Rhino targets"] input[type="checkbox"]',
 	);
 	await act(async () => choices[1]!.click());
 	expect(
 		container.querySelector('[aria-label="Message destination"]')!.textContent,
-	).toContain("Roof.3dm · Rhino 43");
+	).toContain("Roof.3dm · Rhino 2");
 	expect(container.querySelector("article")!.textContent).toContain(
-		"Target: Facade.3dm · Rhino 42",
+		"Target: Facade.3dm · Rhino 1",
 	);
+	const newButtons = [...container.querySelectorAll("button")].filter(
+		(button) => button.textContent === "New Rhino document",
+	);
+	await act(async () => newButtons[1]!.click());
+	expect(
+		container.querySelector('[aria-label="Message destination"]')!.textContent,
+	).toContain("New Rhino document · Rhino 2");
 });
 it("preserves normal sidebar controls and exports the selected durable conversation", async () => {
 	expect(
@@ -797,11 +802,122 @@ it("shows the active turn target when steering instead of the next selected dest
 	const destination = container.querySelector(
 		'[aria-label="Message destination"]',
 	)!.textContent;
-	expect(destination).toContain("Steering: Facade.3dm · Rhino 42");
+	expect(destination).toContain("Steering: Facade.3dm");
 	expect(destination).not.toContain("Old.3dm");
 	await value("#composer-input", "Make it larger");
 	await act(async () => sendButton().click());
 	expect(socket.sent.find((command) => command.type === "steer")).toMatchObject(
 		{ taskId: "root", turnId: "turn" },
 	);
+});
+
+it("hides stale instances and gives unnamed available documents readable choices", async () => {
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				targets: [
+					{
+						...snapshot.targets[0],
+						lifecycleInstanceId: "stale-life",
+						admission: "detached",
+						documents: [
+							{
+								...binding,
+								lifecycleInstanceId: "stale-life",
+								rhinoDocumentId: "stale-secret-id",
+							},
+						],
+						documentLabels: {},
+					},
+					{
+						...snapshot.targets[0],
+						documents: [
+							binding,
+							{ ...binding, rhinoDocumentId: "second-secret-id" },
+						],
+						documentLabels: {},
+					},
+				],
+			},
+		}),
+	);
+	const targets = container.querySelector(
+		'details[aria-label="Rhino targets"]',
+	)!;
+	expect(targets.querySelectorAll('input[type="checkbox"]')).toHaveLength(2);
+	expect(targets.textContent).toContain("Untitled Rhino document 1");
+	expect(targets.textContent).toContain("Untitled Rhino document 2");
+	expect(targets.textContent).not.toContain("secret-id");
+	expect(targets.textContent).not.toContain("detached");
+});
+
+it("keeps submitted images and steering messages visible without diagnostic history", async () => {
+	const attachment = { type: "image", mimeType: "image/png", data: "aGVsbG8=" };
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				tasks: [
+					{
+						id: "root",
+						conversation_id: "conversation",
+						parent_task_id: null,
+						state: "completed",
+						payload: JSON.stringify({
+							text: "Use this sketch",
+							bindings: [],
+							attachments: [attachment],
+						}),
+					},
+				],
+				inputs: [
+					{
+						id: 1,
+						task_id: "root",
+						state: "applied",
+						payload: JSON.stringify({
+							text: "Make it blue",
+							attachments: [attachment],
+						}),
+					},
+					{
+						id: 2,
+						task_id: "root",
+						state: "not_applied",
+						payload: JSON.stringify({ text: "Make it taller" }),
+					},
+				],
+			},
+		}),
+	);
+	expect(container.querySelector("article")!.textContent).toContain(
+		"Make it blue",
+	);
+	expect(container.querySelector("article")!.textContent).toContain(
+		"Make it taller",
+	);
+	expect(container.querySelector("article")!.textContent).toContain(
+		"Not delivered",
+	);
+	expect(container.querySelectorAll('img[alt="Attached image"]')).toHaveLength(
+		2,
+	);
+	expect(container.textContent).not.toContain("Task history");
+});
+
+it("selects a visible conversation when a diagnostic-only conversation disappears", async () => {
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: { ...snapshot, conversations: [snapshot.conversations[1]] },
+		}),
+	);
+	await value("#composer-input", "Continue here");
+	await act(async () => sendButton().click());
+	expect(
+		socket.sent.find((command) => command.type === "submit").conversationId,
+	).toBe("other");
 });

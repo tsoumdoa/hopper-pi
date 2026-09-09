@@ -128,9 +128,9 @@ Restart Rhino after installation, then run:
 HopperCode
 ```
 
-Rhino attaches to one private loopback host for your OS user, starting it if needed, and opens the authenticated browser UI. This is the default behavior when you launch Rhino normally. Provider login, model choice, conversations, task history, and tool progress stay in that browser tab.
+Rhino attaches to one private loopback host for your OS user, starting it if needed, and opens the authenticated browser UI. This is the default behavior when you launch Rhino normally. Provider login, model choice, conversations, and work in progress stay in that browser tab.
 
-The target controls show available Rhino processes, their connection state, and their documents. Select the documents for your next submission; existing tasks keep their recorded targets. Each task shows its target documents, status, and usage. On Mac, create additional document windows with Rhino `New` inside the same Rhino process. Edits to documents in that process run sequentially.
+The compact document picker beside the composer shows where your next message will go. Open it to select available documents or create/open a model. Closed instances and internal document IDs stay out of the picker. Existing work keeps its selected documents; a closed selection shows an unavailable notice instead of silently switching targets. On Mac, create additional document windows with Rhino `New` inside the same Rhino process. Edits to documents in that process run sequentially.
 
 The host remains running when you close Rhino. Closing a document or stopping its plugin removes that target without switching its tasks to another document. Use the browser's **Stop host** action to stop the background host; run `HopperCode` explicitly to start it again.
 

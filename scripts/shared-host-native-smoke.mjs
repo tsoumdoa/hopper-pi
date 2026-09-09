@@ -511,6 +511,7 @@ try {
 		requestId: "transfer-fixture-root-" + Date.now(),
 		kind: "prompt",
 		text: "Explicit deterministic native launch, New and geometry transfer fixture. No model API is called.",
+		diagnosticFixture: "shared-host-native-smoke",
 		bindings: [],
 		attachments: [],
 	});

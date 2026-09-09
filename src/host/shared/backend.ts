@@ -6,6 +6,7 @@ import {
 } from "./browser-protocol.js";
 import { SharedTaskService } from "./task-service.js";
 import { SharedRegistry, TargetUnavailableError } from "./registry.js";
+import { conversationSnapshot } from "./conversation-snapshot.js";
 
 /** Authenticated browser commands enter here; no model or native work starts before journal commit. */
 export class SharedBackend implements SharedBrowserBackend {
@@ -64,7 +65,7 @@ export class SharedBackend implements SharedBrowserBackend {
 	snapshot() {
 		const journal = this.tasks.snapshot();
 		return {
-			...journal,
+			...conversationSnapshot(journal),
 			hostEpoch: this.hostEpoch,
 			targets: this.registry.list(),
 			installations: this.actions?.installations() ?? [],
