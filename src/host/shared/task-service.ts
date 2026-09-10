@@ -350,8 +350,18 @@ export class SharedTaskService {
 				if (target.processKey !== processKey || target.attachmentGeneration !== original.attachmentGeneration)
 					throw new Error("Native target attachment changed while waiting");
 				const heldBy = this.held.get(processKey);
-				if (this.unresolvedProcess(processKey) || (heldBy && (!this.active.has(heldBy) || this.active.get(heldBy)!.nativeRecoveryRequired)))
-					throw new Error("Rhino requires recovery before another native action can run");
+				const snapshot = this.schedulingSnapshot();
+				const blockingTaskId = this.unresolvedProcess(processKey, snapshot);
+				if (blockingTaskId) {
+					const task = snapshot.tasks.find((task) => task.id === blockingTaskId);
+					const conversation = snapshot.conversations.find((conversation) => conversation.id === task?.conversation_id);
+					throw new Error(
+						`Rhino requires recovery because Hopper could not confirm native cleanup for task ${blockingTaskId}` +
+						(conversation ? ` in conversation ${JSON.stringify(conversation.title)} (${conversation.id})` : "") +
+						`. This is Hopper task recovery; it does not indicate a Rhino crash or autosave dialog. ` +
+						`Stop native tool calls. Open the affected conversation and stop or wait for that task. Then inspect the model and saved files and use "I've checked, continue".`,
+					);
+				}
 				if (queue[0] === ticket && !heldBy) {
 					this.held.set(processKey, taskId);
 					active.processKey = processKey;
@@ -453,6 +463,11 @@ export class SharedTaskService {
 		}
 	}
 	private unresolvedProcess(processKey: string, snapshot = this.schedulingSnapshot()): string | undefined {
+		// A failed native tool fences the process immediately, even while its model
+		// is still responding and the task has not settled as uncertain yet.
+		const heldBy = this.held.get(processKey);
+		if (heldBy && (!this.active.has(heldBy) || this.active.get(heldBy)!.nativeRecoveryRequired))
+			return heldBy;
 		const unresolved = new Set(
 				snapshot.tasks
 					.filter(
@@ -469,6 +484,12 @@ export class SharedTaskService {
 				this.processOfOwner(JSON.parse(String(record.owner)), snapshot) === processKey,
 		);
 		return record ? String(record.task_id) : undefined;
+	}
+	private recoveryWaitReason(taskId: string, snapshot: ReturnType<TaskJournal["snapshot"]>): string {
+		const task = snapshot.tasks.find((task) => task.id === taskId);
+		const conversation = snapshot.conversations.find((conversation) => conversation.id === task?.conversation_id);
+		return "Waiting for recovery of an earlier task in this Rhino instance." +
+			(conversation ? ` Open conversation ${JSON.stringify(conversation.title)}. Stop or wait for the affected task, then check your model and saved files and select "I've checked, continue".` : "");
 	}
 
 	private usage(taskId: string, snapshot = this.schedulingSnapshot()): number {
@@ -562,7 +583,7 @@ export class SharedTaskService {
 						const target = this.options.resolveBinding(binding);
 						const blockingTaskId = this.unresolvedProcess(target.processKey, snapshot);
 						if (blockingTaskId) {
-							this.journal.setSchedulingBlock(String(task.id), "Waiting for recovery of an earlier task in this Rhino instance.", blockingTaskId);
+							this.journal.setSchedulingBlock(String(task.id), this.recoveryWaitReason(blockingTaskId, snapshot), blockingTaskId);
 							this.changed();
 							continue;
 						}

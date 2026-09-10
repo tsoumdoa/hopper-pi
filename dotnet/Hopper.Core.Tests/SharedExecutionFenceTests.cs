@@ -18,6 +18,55 @@ public class SharedExecutionFenceTests
     private static OperationResultV2 Completed() => new() { Class = RpcResultClass.completed, ReasonCode = RpcReasonCode.OK };
     private static SharedExecutionFence Fence() => new("life", (_, _) => null);
 
+    [Theory]
+    [InlineData("rhino")]
+    [InlineData("grasshopper")]
+    public void ClosedDocumentAllowsOwnedScopeInspectionButStillRejectsGeometryAndStaleOwners(string kind)
+    {
+        var previousRhino = DocumentSession.ActiveRhinoDocumentId;
+        var previousGrasshopper = DocumentSession.ActiveGrasshopperDocumentId;
+        var previousAssociation = DocumentSession.AssociatedRhinoDocumentId;
+        try
+        {
+            var lifecycle = DocumentSession.LifecycleInstanceId;
+            DocumentSession.ActiveRhinoDocumentId = () => "remaining-rhino";
+            DocumentSession.ActiveGrasshopperDocumentId = () => "remaining-gh";
+            DocumentSession.AssociatedRhinoDocumentId = () => "remaining-rhino";
+            var fence = new SharedExecutionFence(lifecycle, DocumentSession.ValidateSharedBinding);
+            var generation = fence.Attach("epoch", "client");
+            fence.Recover(generation, () => true);
+            object binding = kind == "rhino" ? new { kind, lifecycleInstanceId = lifecycle, rhinoDocumentId = "closed-rhino" }
+                : new { kind, lifecycleInstanceId = lifecycle, grasshopperDocumentId = "closed-gh", associatedRhinoDocumentId = "closed-rhino" };
+            JsonElement Owner(string attachmentGeneration) => JsonSerializer.SerializeToElement(new {
+                taskId = "task", turnId = "turn", binding, attachmentGeneration
+            });
+            var request = new RpcRequestV2 {
+                Operation = RpcOperation.getDocumentTransactionState,
+                Args = JsonSerializer.SerializeToElement(new { owner = kind }),
+                ExecutionOwner = Owner(generation)
+            };
+            var inspected = fence.Execute(request, "client", Completed);
+            Assert.True(inspected.Class == RpcResultClass.completed, inspected.Message);
+            Assert.Contains("TARGET_CHANGED", fence.Execute(request with {
+                Operation = kind == "rhino" ? RpcOperation.queryRhinoObjects : RpcOperation.setSliderValue,
+                Args = JsonSerializer.SerializeToElement(new { })
+            }, "client", Completed).Message);
+            Assert.Contains("EXECUTION_OWNER_STALE", fence.Execute(request with {
+                ExecutionOwner = Owner("stale")
+            }, "client", Completed).Message);
+            if (kind == "rhino")
+                Assert.Contains("TARGET_OVERRIDE", fence.Execute(request with {
+                    Args = JsonSerializer.SerializeToElement(new { owner = "grasshopper" })
+                }, "client", Completed).Message);
+        }
+        finally
+        {
+            DocumentSession.ActiveRhinoDocumentId = previousRhino;
+            DocumentSession.ActiveGrasshopperDocumentId = previousGrasshopper;
+            DocumentSession.AssociatedRhinoDocumentId = previousAssociation;
+        }
+    }
+
     [Fact]
     public void NativeContextValidationRejectsFocusAssociationAndArgumentDriftButPermitsOwnedCleanup()
     {

@@ -202,6 +202,29 @@ it("retains the process fence after uncertain cleanup and prevents the sibling f
 	expect(f.journal.snapshot().tasks.find((task) => task.id === a!.taskId)?.state).toBe("uncertain");
 });
 
+it("identifies the task blocking an active sibling and queues new prompts before model startup", async () => {
+	const f = await fixture(); const [a, b] = f.children;
+	failCommit = true;
+	await expect(f.script(a!.taskId)).rejects.toThrow("cleanup acknowledgement");
+	// The model can still be responding after its native cleanup has failed.
+	expect(f.journal.snapshot().tasks.find((task) => task.id === a!.taskId)?.state).toBe("running");
+	await expect(f.script(b!.taskId)).rejects.toThrow(a!.taskId);
+	await expect(f.script(b!.taskId)).rejects.toThrow("Hopper task recovery");
+	f.journal.registerSession("new-chat", "new-session");
+	const next = f.service.submit({ requestId: "next", conversationId: "new-chat", sessionId: "new-session",
+		kind: "prompt", text: "Create another document", bindings: [binding("a")], attachments: [] });
+	await tick();
+	expect(f.contexts.has(next.taskId)).toBe(false);
+	expect(f.journal.snapshot().tasks.find((task) => task.id === next.taskId)?.state).toBe("queued");
+	const block = f.journal.snapshot().records.find((record) => record.task_id === next.taskId && record.kind === "scheduling")!;
+	expect(JSON.parse(String(block.payload))).toMatchObject({
+		blockingTaskId: a!.taskId,
+		reason: expect.stringContaining('select "I\'ve checked, continue"'),
+	});
+	await f.service.cancel(next.taskId);
+	await f.finish(a!.taskId); await f.finish(b!.taskId); await f.finish(f.root.taskId);
+});
+
 it("releases a waiting parent's model slot so a single-slot host can finish all delegates", async () => {
 	const f = await fixture(1); const [a, b] = f.children;
 	expect(f.contexts.size).toBe(1);

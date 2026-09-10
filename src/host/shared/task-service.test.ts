@@ -100,7 +100,7 @@ describe("shared scheduling", () => {
 		if (!confirmed) {
 			const record = s.journal.snapshot().records.find((record) => record.kind === "scheduling" && record.task_id === second.taskId)!;
 			expect(JSON.parse(String(record.payload))).toEqual({
-				reason: "Waiting for recovery of an earlier task in this Rhino instance.",
+				reason: expect.stringContaining("Waiting for recovery of an earlier task in this Rhino instance."),
 				blockingTaskId: first.taskId,
 			});
 			const events = s.journal.snapshot().events.filter((event) => event.task_id === second.taskId && event.kind === "task_waiting_for_target");

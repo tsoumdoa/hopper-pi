@@ -41,14 +41,18 @@ public static class DocumentSession
             (GrasshopperAssociationForDocument is null || GrasshopperAssociationForDocument(captured.GrasshopperDocumentId) != captured.AssociatedRhinoDocumentId))
             return "ASSOCIATION_CHANGED: The captured Grasshopper document association changed before activation.";
         var finishingScope = request.Operation is RpcOperation.commitRhinoAgentTransaction or RpcOperation.cancelRhinoAgentTransaction or RpcOperation.commitAgentTransaction or RpcOperation.cancelAgentTransaction;
-        if (!finishingScope && !activating && owner.Binding is GrasshopperTargetBinding gh)
+        // Closing a document changes focus before RuntimeRpc verifies the idle scope.
+        // Scope inspection retains generation, scope-owner and target-kind validation
+        // in the execution fence, but cannot require the closed document to be active.
+        var inspectingScope = request.Operation == RpcOperation.getDocumentTransactionState;
+        if (!finishingScope && !inspectingScope && !activating && owner.Binding is GrasshopperTargetBinding gh)
         {
             if (ActiveGrasshopperDocumentId?.Invoke() != gh.GrasshopperDocumentId) return "TARGET_CHANGED: The captured Grasshopper canvas is no longer active.";
             if (AssociatedRhinoDocumentId?.Invoke() != gh.AssociatedRhinoDocumentId) return "ASSOCIATION_CHANGED: Grasshopper Rhino context changed.";
             if (gh.AssociatedRhinoDocumentId is null && RpcV2Operations.Classify(request.Operation) == RpcOperationClass.Mutation)
                 return "CAPABILITY_UNAVAILABLE: Grasshopper evaluation without a captured Rhino context has not been validated.";
         }
-        if (!finishingScope && !activating && rhinoId is not null && ActiveRhinoDocumentId?.Invoke() != rhinoId) return "TARGET_CHANGED: The captured Rhino document is no longer active.";
+        if (!finishingScope && !inspectingScope && !activating && rhinoId is not null && ActiveRhinoDocumentId?.Invoke() != rhinoId) return "TARGET_CHANGED: The captured Rhino document is no longer active.";
         var args = request.Args;
         if (args.TryGetProperty("documentId", out var supplied) && supplied.GetString() != documentId) return "TARGET_OVERRIDE: documentId conflicts with the captured binding.";
         if (args.TryGetProperty("expectedDocument", out var expected) && expected.ValueKind == JsonValueKind.Object)
