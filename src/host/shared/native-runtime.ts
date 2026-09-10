@@ -63,10 +63,11 @@ interface Instance {
 }
 export class SharedNativeRuntime {
 	// Allow the first Rhino to finish starting and authenticate after host discovery.
-	private idleDeadline = Date.now() + 60_000;
+	private readonly startupDeadline = Date.now() + 60_000;
+	private hasSeenRhino = false;
 	private readonly registrations = new Map<
 		string,
-		Promise<{ lifecycleInstanceId: string; attachmentGeneration: string }>
+		{ work: Promise<{ lifecycleInstanceId: string; attachmentGeneration: string }>; processId?: number }
 	>();
 	private readonly instances = new Map<string, Instance>();
 	constructor(
@@ -78,12 +79,14 @@ export class SharedNativeRuntime {
 	shouldStopAfterRhinoExit(now = Date.now()): boolean {
 		// Connection loss and document closure are not process exits. Persisted
 		// attachments also keep a restarted host alive while Rhino reconnects.
-		if (this.registrations.size || this.registry.list().some((attachment) =>
-			this.isProcessAlive(attachment.processId))) {
-			this.idleDeadline = now + 5_000;
+		const attachments = this.registry.list();
+		if (attachments.some((attachment) => this.isProcessAlive(attachment.processId)) ||
+			[...this.registrations.values()].some(({ processId }) =>
+				processId !== undefined && this.isProcessAlive(processId))) {
+			this.hasSeenRhino = true;
 			return false;
 		}
-		return now >= this.idleDeadline;
+		return this.hasSeenRhino || now >= this.startupDeadline;
 	}
 	async register(
 		input: unknown,
@@ -92,6 +95,7 @@ export class SharedNativeRuntime {
 			action?: string;
 			lifecycleInstanceId?: string;
 			profilePath?: string;
+			process?: { pid?: number };
 		};
 		const key =
 			request?.action === "detach"
@@ -102,14 +106,16 @@ export class SharedNativeRuntime {
 						}).run(() => resolveConnection()).lifecycleInstanceId
 					: "invalid";
 		const prior = this.registrations.get(key);
-		const pending = (prior ?? Promise.resolve())
+		const pending = (prior?.work ?? Promise.resolve())
 			.catch(() => {})
 			.then(() => this.registerOne(input));
-		this.registrations.set(key, pending);
+		const pid = request?.process?.pid;
+		this.registrations.set(key, { work: pending,
+			processId: typeof pid === "number" && Number.isSafeInteger(pid) && pid > 0 ? pid : undefined });
 		try {
 			return await pending;
 		} finally {
-			if (this.registrations.get(key) === pending)
+			if (this.registrations.get(key)?.work === pending)
 				this.registrations.delete(key);
 		}
 	}
@@ -198,7 +204,7 @@ export class SharedNativeRuntime {
 				generation: handshake.attachmentGeneration,
 			};
 			this.instances.set(connection.lifecycleInstanceId, instance);
-			this.idleDeadline = Date.now() + 5_000;
+			this.hasSeenRhino = true;
 			// A transport/lifecycle replacement does not end a session while its Rhino process lives.
 			// Check exited processes here as well as during polling, including a quick quit/relaunch.
 			const previous = this.registry.list();

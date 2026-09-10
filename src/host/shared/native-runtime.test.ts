@@ -743,18 +743,11 @@ it("keeps the original host while any Rhino process survives and stops only afte
 	await runtime.register({ action: "detach", lifecycleInstanceId: "456", hostEpoch: "epoch" });
 	expect(runtime.shouldStopAfterRhinoExit(now + 80_000)).toBe(false);
 	alive.clear();
-	expect(runtime.shouldStopAfterRhinoExit(now + 84_000)).toBe(false);
-	alive.add(789); // Another Rhino registers during the grace period.
-	wire.life = "789";
-	await runtime.register({ profilePath: "/789.json", hostEpoch: "epoch", process: { pid: 789, startIdentity: "start-789" } });
-	expect(runtime.shouldStopAfterRhinoExit(now + 84_000)).toBe(false);
-	alive.clear();
-	expect(runtime.shouldStopAfterRhinoExit(now + 88_000)).toBe(false);
-	expect(runtime.shouldStopAfterRhinoExit(now + 89_000)).toBe(true);
+	expect(runtime.shouldStopAfterRhinoExit(now + 80_001)).toBe(true);
 	await runtime.close();
 });
 
-it("keeps one conversation session across overlapping Rhino lifetimes and resets after every process exits", async () => {
+it("keeps chat within a host and resets after host restart or every Rhino process exits", async () => {
 	const journal = new TaskJournal(":memory:"); journals.push(journal);
 	let registry = new SharedRegistry(journal);
 	const alive = new Set<number>([123]);
@@ -769,24 +762,28 @@ it("keeps one conversation session across overlapping Rhino lifetimes and resets
 	const conversation = journal.createConversation("old", "Existing work");
 	await attach("second", 456, "second-start");
 	expect(registry.conversationSession).toEqual(session);
-	// A missed detach or a host restart is not proof that Rhino exited.
+	// Restarting the host resets chat even while the same Rhino processes live.
 	await runtime.close();
 	registry = new SharedRegistry(journal);
+	const restartedSession = registry.conversationSession;
+	expect(restartedSession.id).not.toBe(session.id);
+	expect(restartedSession.afterConversationSequence).toBe(journal.lastConversationSequence);
 	runtime = new SharedNativeRuntime("epoch", registry, journal, (pid) => alive.has(pid));
 	await attach("first-reconnected", 123, "first-start");
-	expect(registry.conversationSession).toEqual(session);
+	expect(registry.conversationSession).toEqual(restartedSession);
 	alive.delete(123);
 	await runtime.refresh();
 	await attach("third", 789, "third-start");
-	expect(registry.conversationSession).toEqual(session);
+	expect(registry.conversationSession).toEqual(restartedSession);
 	// Quit and relaunch before the next poll. Even a reused PID starts a new session.
 	alive.clear();
 	await attach("new-session", 789, "new-start");
 	const next = registry.conversationSession;
-	expect(next.id).not.toBe(session.id);
+	expect(next.id).not.toBe(restartedSession.id);
 	expect(next.afterConversationSequence).toBe(journal.lastConversationSequence);
 	const stored = new SharedRegistry(journal);
-	expect(stored.conversationSession).toEqual(next);
+	expect(stored.conversationSession.id).not.toBe(next.id);
+	expect(stored.conversationSession.afterConversationSequence).toBe(next.afterConversationSequence);
 	expect(journal.snapshot().conversations[0]!.id).toBe(conversation.conversationId);
 	await runtime.close();
 });

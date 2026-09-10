@@ -212,7 +212,7 @@ export function App() {
 					}
 					if (!ready.current || sessionChanged) {
 						ready.current = true;
-						// Restore within this Rhino session; a new session starts after all prior Rhino processes exit.
+						// Restore within this host session. Host restart or all Rhino processes exiting starts fresh.
 						if (!startupRequested.current || sessionChanged) {
 							startupRequested.current = true;
 							let saved: string | null = null;

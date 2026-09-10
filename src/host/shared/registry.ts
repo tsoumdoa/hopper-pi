@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
 	ExecutionOwner,
 	TargetBinding,
@@ -42,17 +43,22 @@ export class TargetUnavailableError extends Error {
 /** Authentication and native idle/scope reconciliation precede markReady. */
 export class SharedRegistry {
 	private readonly attachments = new Map<string, SharedAttachment>();
+	private readonly hostSession: ConversationSession;
 	constructor(private readonly journal: TaskJournal) {
+		// Durable tasks survive a restart for recovery and export. Chat selection
+		// starts after those conversations, even when the same Rhino reconnects.
+		this.hostSession = { id: randomUUID(), afterConversationSequence: journal.lastConversationSequence };
 		for (const row of journal.snapshot({ includeEvents: false }).attachments) {
 			const attachment = JSON.parse(String(row.payload)) as SharedAttachment;
 			this.attachments.set(attachment.lifecycleInstanceId, {
 				...attachment,
+				conversationSession: this.hostSession,
 				admission: "recovering",
 			});
 		}
 	}
 	get conversationSession(): ConversationSession {
-		let current = { id: this.journal.identity, afterConversationSequence: 0 };
+		let current = this.hostSession;
 		for (const attachment of this.attachments.values()) {
 			const session = attachment.conversationSession;
 			if (session && session.afterConversationSequence >= current.afterConversationSequence) current = session;

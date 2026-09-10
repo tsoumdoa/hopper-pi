@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { HostConfig } from "../config.js";
 import type { EmbeddedPiHost } from "../pi-runtime.js";
+import { monitorHostLifetime } from "./lifetime.js";
 import { SharedHostControl } from "./control.js";
 import { ensureSharedHost } from "./ensure-host.js";
 import { TaskJournal } from "./journal.js";
@@ -80,6 +81,7 @@ export async function startSharedHost(
 	let transfers: GeometryTransferService | undefined;
 	let launches: Awaited<ReturnType<typeof createLaunchCoordinator>> | undefined;
 	let refresh: ReturnType<typeof setInterval> | undefined;
+	let stopLifetimeMonitor: (() => void) | undefined;
 	let refreshWork: Promise<void> | undefined;
 	let closing: Promise<void> | undefined;
 	const discovery = {
@@ -146,6 +148,7 @@ export async function startSharedHost(
 	const close = () =>
 		(closing ??= (async () => {
 			backend?.stopAdmission();
+			stopLifetimeMonitor?.();
 			if (refresh) clearInterval(refresh);
 			await tasks?.stop();
 			await backend?.drainAdmissions();
@@ -417,13 +420,14 @@ export async function startSharedHost(
 			epoch,
 		);
 		let refreshing = false;
+		stopLifetimeMonitor = monitorHostLifetime({
+			shouldStop: () => !closing && native!.shouldStopAfterRhinoExit() && !launches!.hasPendingLaunch,
+			close,
+			exit: code => process.exit(code),
+			log: message => process.stdout.write(`[shared-host] ${message}\n`),
+		});
 		refresh = setInterval(() => {
 			if (refreshing || closing) return;
-			if (native!.shouldStopAfterRhinoExit() && !launches!.hasPendingLaunch) {
-				process.stdout.write("[shared-host] No Hopper Rhino processes remain; shutting down\n");
-				void close();
-				return;
-			}
 			refreshing = true;
 			refreshWork = Promise.all([native!.refresh(), admin!.refreshAuth()])
 				.then(async () => {

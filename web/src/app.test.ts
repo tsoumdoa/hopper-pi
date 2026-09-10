@@ -1007,15 +1007,15 @@ it("creates a chat only when the journal has none and retries startup once on re
  expect(reconnected.sent.find((command) => command.type === "submit")).toMatchObject({ conversationId: "fresh", sessionId: "fresh-session", text: "Hello" });
 });
 
-it.each(["reload", "relaunch", "missing browser storage", "host restart", "completed task", "pending question", "another Rhino"])("restores the existing thread after %s without submitting or creating a task", async (scenario) => {
+it.each(["reload", "relaunch", "missing browser storage", "completed task", "pending question", "another Rhino"])("restores the existing thread after %s without submitting or creating a task", async (scenario) => {
 	const task = { id: "persisted-task", session_id: "session", conversation_id: "conversation", parent_task_id: null,
-		state: scenario === "host restart" ? "interrupted" : scenario === "completed task" ? "completed" : scenario === "pending question" ? "awaiting_user" : "running",
+		state: scenario === "completed task" ? "completed" : scenario === "pending question" ? "awaiting_user" : "running",
 		payload: JSON.stringify({ text: "Build the persistent courtyard", messageTarget: binding, bindings: [binding] }) };
 	const persisted = { ...snapshot,
 		targets: scenario === "another Rhino" ? [...snapshot.targets, { ...snapshot.targets[0], lifecycleInstanceId: "other-life", processId: 43,
 			documents: [{ ...binding, lifecycleInstanceId: "other-life", rhinoDocumentId: "other-model" }], documentLabels: { model: "", "other-model": "Other.3dm" } }] : snapshot.targets,
 		questions: scenario === "pending question" ? [{ id: "question", task_id: task.id, answer: null, payload: JSON.stringify({ kind: "ask_user", question: "Which courtyard?", options: ["North", "South"] }) }] : [],
-		hostEpoch: scenario === "host restart" ? "new-epoch" : "epoch", tasks: [task],
+		hostEpoch: "epoch", tasks: [task],
 		events: [{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "messages", turnId: "turn", messages: [
 			{ role: "assistant", content: [{ type: "text", text: "The first stage is complete." }] },
 		] }) }] };
@@ -1031,7 +1031,7 @@ it.each(["reload", "relaunch", "missing browser storage", "host restart", "compl
 	expect(container.textContent).toContain("The first stage is complete.");
 	expect(container.querySelector("h1")!.textContent).toBe("First");
 	expect(socket.sent.some((command) => ["create_conversation", "submit", "steer"].includes(command.type))).toBe(false);
-	if (!["host restart", "completed task"].includes(scenario)) expect(container.querySelector('button[aria-label="Stop"]')).not.toBeNull();
+	if (scenario !== "completed task") expect(container.querySelector('button[aria-label="Stop"]')).not.toBeNull();
 	if (scenario === "pending question") expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Which courtyard?");
 	if (scenario === "another Rhino") expect(container.querySelector('[aria-label="Message destination"]')?.textContent).toContain("Other.3dm");
 });
