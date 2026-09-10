@@ -427,7 +427,7 @@ it("applies normal UI skill preferences and thinking to new tasks while retainin
 });
 
 
-it.each([null, "parent"])("keeps native tools with selected ownership and exposes delegation only to roots: %s", async (parentTaskId) => {
+it.each([null, "parent"])("keeps native tools with selected ownership and exposes delegation and launch tools only to roots: %s", async (parentTaskId) => {
 	const root = await mkdtemp(join(tmpdir(), "shared-owned-delegation-"));
 	const { RuntimeSessionContext } = await import("../../infra/runtime-session-context.js");
 	const { Type } = await import("@earendil-works/pi-ai");
@@ -441,12 +441,13 @@ it.each([null, "parent"])("keeps native tools with selected ownership and expose
 		dataDirectory: root, toolConfigDir: join(root, "tool-settings"), authPath: join(root, "auth.json"),
 		geometry: async () => ({ runtimeSession, cleanup: async () => ({ confirmed: true }) }),
 		delegationTools: () => ["listRhinoTargets", "delegate", "waitForDelegates"].map((name) => ({ name, label: name, description: name, parameters: Type.Object({}), execute: async () => ({ content: [{ type: "text", text: "done" }], details: {} }) })),
+		launchTools: () => ["listRhinoLaunches", "launchRhino"].map((name) => ({ name, label: name, description: name, parameters: Type.Object({}), execute: async () => ({ content: [{ type: "text", text: "done" }], details: {} }) })),
 		configureSession: (created) => { session = created; },
 	});
 	try {
 		const names = session!.agent.state.tools.map((tool) => tool.name);
 		expect(names).toContain("rh_run_script");
-		for (const name of ["listRhinoTargets", "delegate", "waitForDelegates"])
+		for (const name of ["listRhinoTargets", "delegate", "waitForDelegates", "listRhinoLaunches", "launchRhino"])
 			expect(names.includes(name)).toBe(parentTaskId === null);
 		expect(session!.systemPrompt).toContain("Use your native geometry tools directly for this document");
 	} finally {

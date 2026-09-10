@@ -292,8 +292,8 @@ export async function startSharedHost(
 							},
 						},
 					] : [],
+					launchTools: (context) => launches?.tools(context) ?? [],
 					coordinatorTools: (context) => [
-						...(launches?.tools(context) ?? []),
 						{
 							name: "exportRhinoGeometry",
 							label: "Export geometry artifact",

@@ -40,6 +40,7 @@ export interface PiDriverOptions {
 		runTool?: ToolExecutionScope;
 	}>;
 	delegationTools?: (context: DriverContext) => ToolDefinition[];
+	launchTools?: (context: DriverContext) => ToolDefinition[];
 	coordinatorTools?: (context: DriverContext) => ToolDefinition[];
 	documentActions?: {
 		list(): unknown[];
@@ -87,6 +88,7 @@ export async function createPiTaskDriver(
 		};
 		const tools: ToolDefinition[] = [
 			...(context.parentTaskId === null ? (options.delegationTools?.(context) ?? []) : []),
+			...(context.parentTaskId === null ? (options.launchTools?.(context) ?? []) : []),
 			...(!context.binding ? (options.coordinatorTools?.(context) ?? []) : []),
 			...(options.documentActions
 				? [
