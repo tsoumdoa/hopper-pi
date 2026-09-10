@@ -21,6 +21,7 @@ export const QUERY_OPERATIONS = [
 	"queryRhinoObjects",
 	"captureRhinoView",
 	"getParamRhinoGeometry",
+	"getData",
 ] as const;
 
 export const CONTROL_OPERATIONS = [

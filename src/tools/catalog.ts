@@ -7,6 +7,7 @@ import { rhRunScriptTool } from "./rh-run-script.js";
 import { rhQueryObjectsTool } from "./rh-query-objects.js";
 import { rhViewControlTool } from "./rh-view-control.js";
 import { rhCaptureViewTool } from "./rh-capture-view.js";
+import { ghInspectDataTool } from "./gh-inspect-data.js";
 import { ghParamRhinoTool } from "./gh-param-rhino.js";
 import {
 	ghGetCanvasTool,
@@ -60,6 +61,7 @@ type PromptTool = ToolDefinition & {
  * `hopper_search_tools` (factory that needs ExtensionAPI).
  */
 export const HOPPER_REGISTERED_CATALOG: readonly HopperToolCatalogEntry[] = [
+	{ tool: ghInspectDataTool, group: "gh-read", keywords: ["inspect data", "input values", "output values", "data tree", "branches", "pagination"], requires: "backend" },
 	{ tool: rhDocumentTool, group: "rhino", keywords: ["file", "open", "close", "save", "save as", "units", "tolerance", "3dm", "document settings"], requires: "backend" },
 	{ tool: ghDocumentTool, group: "gh-read", keywords: ["file", "open", "close", "save", "save as", "units", "tolerance", "ghx", "document settings"], requires: "backend" },
     {

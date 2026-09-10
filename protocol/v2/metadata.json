@@ -40,7 +40,8 @@
       "getScriptCode",
       "queryRhinoObjects",
       "captureRhinoView",
-      "getParamRhinoGeometry"
+      "getParamRhinoGeometry",
+      "getData"
     ],
     "control": [
       "lifecycleHandshake",

@@ -330,6 +330,11 @@ Tool switches control named Hopper calls. An enabled general-purpose script tool
 | `gh_get_canvas` | Canvas layout and component snapshot |
 | `gh_list_components` | Search component library by keyword |
 | `gh_get_canvas_errors` | Runtime messages plus component-overlap checks |
+| `gh_inspect_data` | Bounded runtime input/output summaries, branch pages, and item pages |
+
+`gh_inspect_data` starts with `{"targetId":"component-id"}` to return port types and counts without values. Use a returned port ID with `mode: "branches"`, then `mode: "items"` and an exact `path` such as `"{0;2}"` or a zero-based `branchIndex`. It reads cached solution data without recomputing; check phase, locked, and solver state before interpreting empty results. Runtime warnings remain in `gh_get_canvas_errors`.
+
+All modes default to 20 rows, accept up to 100, and cap the inspection JSON at 8 KiB including the cursor. Strings are capped at 256 characters with truncation flags; geometry returns bounding-box summaries and custom types return bounded descriptions. `offset` jumps directly to a row. Continue with `{"cursor":"nextCursor-value"}` and optional `limit`; pages are never fetched automatically. Cursors expire when the document recomputes, objects are added/deleted, or the inspected component changes or expires. Refresh instead of mixing pages from different solutions. No data-tree snapshots are retained.
 
 **User clarification**
 

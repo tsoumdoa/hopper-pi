@@ -502,6 +502,7 @@ export const RPC_OPERATION_OWNERS = Object.freeze({
 	listScriptParams: "grasshopper",
 	getScriptCode: "grasshopper",
 	getParamRhinoGeometry: "grasshopper",
+	getData: "grasshopper",
 	applyGraph: "grasshopper",
 	addComponent: "grasshopper",
 	deleteComponent: "grasshopper",
