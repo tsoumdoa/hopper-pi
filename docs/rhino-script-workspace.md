@@ -1,6 +1,6 @@
 # Editable Rhino script workspace
 
-Implemented on `plan/rhino-virtual-scripts` and combined with document management on `feat/document-script-integration`. The original 2026-09-06 plan remains in Git history. Current test results and remaining native checks are in [integration verification](document-script-integration-verification.md).
+This document describes the implemented Rhino script workspace. Test results and remaining native checks are in [integration verification](document-script-integration-verification.md).
 
 ## Agent workflow
 

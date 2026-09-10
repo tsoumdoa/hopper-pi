@@ -358,7 +358,7 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 | `dotnet/Hopper.Grasshopper/` | Lazy Grasshopper operation adapter and passive GHZMQ compatibility component |
 | `dotnet/Hopper.Core/` | Rhino/Grasshopper-free protocol, lifecycle, dispatch, and transport policies |
 | `scripts/package-rhino.mjs` | Stage and verify a `mac-arm64` or `win-x64` package |
-| `docs/hopper-local-architecture.html` | Interactive architecture and implementation plan |
+| `docs/` | Implementation references, native verification, cookbook benchmarks, and package baselines |
 | `mds/` | Skills and progressive reference docs for the agent |
 
 ## Environment variables

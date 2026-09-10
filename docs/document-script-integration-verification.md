@@ -1,6 +1,6 @@
 # Document and script integration verification
 
-Both implementations are combined on `feat/document-script-integration`. The separate feature branches are `plan/document-file-management` and `plan/rhino-virtual-scripts`.
+Document management and editable script assets shipped together in PR #89. Their current contracts are documented in [document management implementation](document-management-implementation.md) and [Rhino script workspace](rhino-script-workspace.md).
 
 The agent can manage `.3dm`, `.gh`, and `.ghx` documents with `rh_document` and `gh_document`, including inspecting units and tolerances with `getSettings`. It can keep Python/C# source in `rh_script`, edit selected lines against a revision, and execute a pinned revision through `rh_run_script`. Existing inline scripts and command macros remain supported. Editing saved source does not replace geometry produced by earlier runs.
 
@@ -56,6 +56,18 @@ Use `grasshopper_plugin.Tests.DocumentManagementNativeTests` for document checks
 The helper copies assemblies to a unique temporary directory and loads them in an isolated context. A one-shot Rhino Idle callback runs the tests after RhinoCode releases its own script context. A CLI acknowledgement alone is not a pass. The helper waits for the native result file and retains diagnostic artifacts. A timeout must not trigger an automatic retry because execution may still be running.
 
 The macOS verification above did not install a built plugin or validate Windows. Its restart, host-crash durability, and broader native cases listed in [document management implementation](document-management-implementation.md) were left as release checks; the focused Windows results below are not full release certification.
+
+## Host lifecycle and package release checklist
+
+Use a controlled Rhino profile with Grasshopper configured to load on demand. Record the Rhino version, operating system, package revision, and results for each native target. These are release checks, not claims of completed verification; the focused results elsewhere in this document do not establish a full pass.
+
+- Install the Yak on macOS arm64 and Windows x64, resolve external stable Node 22.19.0 or newer, and verify native ZeroMQ imports. The package must contain no bundled Node executable or native binaries for another target.
+- Confirm `HopperCode` starts without loading Grasshopper or `Hopper.Grasshopper`; the first Grasshopper tool starts it once, waits for readiness, and requires an active definition.
+- Confirm `running` requires an authenticated Node-to-Rhino handshake. Repeated start, stop, and restart commands must leave only one transport and one child. Running `HopperCode` while already running must reopen the current conversation.
+- Run one Rhino and one Grasshopper operation from each installed package. A query after a mutation must observe the completed mutation, and a lost reply must be recovered without resubmitting it.
+- Confirm stop, restart, and host loss clean queued work and open transactions without blocking Rhino's UI. Restart must wait until the old child and transport have stopped.
+- Confirm abrupt Rhino exit leaves no child after three seconds, and Node exit or three consecutive failed health checks produces a visible `faulted` state in `HopperCodeStatus`.
+- Confirm Rhino and Grasshopper document events update runtime status, including active-document and canvas changes.
 
 ## Windows loading regression fixes
 
