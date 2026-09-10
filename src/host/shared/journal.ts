@@ -223,6 +223,9 @@ PRAGMA user_version=5;`);
 	get identity(): string {
 		return String(this.db.prepare("SELECT id FROM identity").get()!.id);
 	}
+	get lastConversationSequence(): number {
+		return Number(this.db.prepare("SELECT COALESCE(MAX(rowid), 0) AS sequence FROM conversations").get()!.sequence);
+	}
 	private transaction<T>(work: () => T): T {
 		this.db.exec("BEGIN IMMEDIATE");
 		try {
@@ -1800,7 +1803,7 @@ PRAGMA user_version=5;`);
 	snapshot(options: { includeEvents?: boolean } = {}) {
 		return this.transaction(() => ({
 			conversations: this.db
-				.prepare("SELECT * FROM conversations ORDER BY rowid")
+				.prepare("SELECT rowid AS sequence, * FROM conversations ORDER BY rowid")
 				.all(),
 			sessions: this.db.prepare("SELECT * FROM sessions ORDER BY rowid").all(),
 			operations: this.db

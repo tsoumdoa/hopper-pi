@@ -65,6 +65,7 @@ export class SharedBackend implements SharedBrowserBackend {
 		return {
 			...conversationSnapshot(journal),
 			hostEpoch: this.hostEpoch,
+			conversationSession: this.registry.conversationSession,
 			targets: this.registry.list(),
 			installations: this.actions?.installations() ?? [],
 			runtime: this.admin.snapshot(),

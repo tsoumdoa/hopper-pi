@@ -108,6 +108,7 @@ export function App() {
 	const credential = useRef<string>(undefined);
 	const ready = useRef(false);
 	const startupRequested = useRef(false);
+	const conversationSession = useRef<string | undefined>(undefined);
 	const pending = useRef(new Map<string, SharedBrowserCommand>());
 	const [, refreshPending] = useState(0);
 	const blocked = useRef(false);
@@ -180,14 +181,30 @@ export function App() {
 					const available = readyTargets(next).length;
 					actions.setBackendDetail(`${available} Rhino ${available === 1 ? "instance" : "instances"} connected`);
 					actions.setConnection("connected", CONNECTED_DETAIL, 0);
-					if (!ready.current) {
+					const sessionId = next.conversationSession?.id;
+					const sessionChanged = conversationSession.current !== undefined && sessionId !== undefined && conversationSession.current !== sessionId;
+					conversationSession.current = sessionId ?? conversationSession.current;
+					if (sessionChanged) {
+						pending.current.clear();
+						setConversationId("");
+						currentConversation.current = "";
+						setDraft("");
+						setImages([]);
+						setSelected([]);
+						selectionExplicit.current = false;
+						initialInstance.current = null;
+						initialDocument.current = null;
+					}
+					if (!ready.current || sessionChanged) {
 						ready.current = true;
-						// Restore once per page; reconnects keep the selection and pending request IDs.
-						if (!startupRequested.current) {
+						// Restore within this Rhino session; a new session starts after all prior Rhino processes exit.
+						if (!startupRequested.current || sessionChanged) {
 							startupRequested.current = true;
 							let saved: string | null = null;
 							try { saved = window.localStorage.getItem(CONVERSATION_KEY); } catch { /* Use the journal fallback below. */ }
-							const conversations = next.conversations.filter((conversation) => next.sessions.some((session) => session.conversation_id === conversation.id));
+							const afterSequence = next.conversationSession?.afterConversationSequence ?? 0;
+							const conversations = next.conversations.filter((conversation) =>
+								Number(conversation.sequence ?? 1) > afterSequence && next.sessions.some((session) => session.conversation_id === conversation.id));
 							const roots = next.tasks.filter((task) => task.parent_task_id === null && conversations.some((conversation) => conversation.id === task.conversation_id)).reverse();
 							const recentTask = roots.find((task) => [...ACTIVE_ROOT_STATES, "queued"].includes(String(task.state))) ?? roots[0];
 							const previous = conversations.find((conversation) => conversation.id === saved)

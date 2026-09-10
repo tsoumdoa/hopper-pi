@@ -5,6 +5,8 @@ import type {
 import { validateTargetBinding } from "../../protocol/shared-execution.js";
 import { TaskJournal } from "./journal.js";
 
+export type ConversationSession = { id: string; afterConversationSequence: number };
+
 export interface SharedAttachment {
 	lifecycleInstanceId: string;
 	processId: number;
@@ -16,6 +18,7 @@ export interface SharedAttachment {
 	documentLabels?: Record<string, string>;
 	admission: "recovering" | "ready" | "detached";
 	label: string;
+	conversationSession?: ConversationSession;
 }
 const key = (attachment: SharedAttachment) =>
 	`${attachment.processId}:${attachment.processStartTime}`;
@@ -40,13 +43,21 @@ export class TargetUnavailableError extends Error {
 export class SharedRegistry {
 	private readonly attachments = new Map<string, SharedAttachment>();
 	constructor(private readonly journal: TaskJournal) {
-		for (const row of journal.snapshot().attachments) {
+		for (const row of journal.snapshot({ includeEvents: false }).attachments) {
 			const attachment = JSON.parse(String(row.payload)) as SharedAttachment;
 			this.attachments.set(attachment.lifecycleInstanceId, {
 				...attachment,
 				admission: "recovering",
 			});
 		}
+	}
+	get conversationSession(): ConversationSession {
+		let current = { id: this.journal.identity, afterConversationSequence: 0 };
+		for (const attachment of this.attachments.values()) {
+			const session = attachment.conversationSession;
+			if (session && session.afterConversationSequence >= current.afterConversationSequence) current = session;
+		}
+		return { ...current };
 	}
 	register(attachment: SharedAttachment): void {
 		if (
@@ -73,7 +84,7 @@ export class SharedRegistry {
 				other.admission !== "detached"
 			)
 				throw new Error("Process already has an attached lifecycle");
-		this.save({ ...structuredClone(attachment), admission: "recovering" });
+		this.save({ ...structuredClone(attachment), conversationSession: attachment.conversationSession ?? this.conversationSession, admission: "recovering" });
 	}
 	markReady(
 		lifecycleId: string,

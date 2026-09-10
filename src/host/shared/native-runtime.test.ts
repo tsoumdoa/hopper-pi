@@ -723,3 +723,40 @@ it("does not retire a current attachment when its proposed replacement fails aut
 	await expect(runtime.register({ profilePath: "/replacement.json", hostEpoch: "epoch", process: { pid: 123, startIdentity: "start" } })).rejects.toThrow("Handshake rejected");
 	expect(registry.list().map((target) => [target.lifecycleInstanceId, target.admission])).toEqual([["life", "ready"]]);
 });
+
+it("keeps one conversation session across overlapping Rhino lifetimes and resets after every process exits", async () => {
+	const journal = new TaskJournal(":memory:"); journals.push(journal);
+	let registry = new SharedRegistry(journal);
+	const alive = new Set<number>([123]);
+	let runtime = new SharedNativeRuntime("epoch", registry, journal, (pid) => alive.has(pid));
+	const attach = async (life: string, pid: number, startIdentity: string) => {
+		wire.life = life;
+		alive.add(pid);
+		await runtime.register({ profilePath: `/${life}.json`, hostEpoch: "epoch", process: { pid, startIdentity } });
+	};
+	await attach("first", 123, "first-start");
+	const session = registry.conversationSession;
+	const conversation = journal.createConversation("old", "Existing work");
+	await attach("second", 456, "second-start");
+	expect(registry.conversationSession).toEqual(session);
+	// A missed detach or a host restart is not proof that Rhino exited.
+	await runtime.close();
+	registry = new SharedRegistry(journal);
+	runtime = new SharedNativeRuntime("epoch", registry, journal, (pid) => alive.has(pid));
+	await attach("first-reconnected", 123, "first-start");
+	expect(registry.conversationSession).toEqual(session);
+	alive.delete(123);
+	await runtime.refresh();
+	await attach("third", 789, "third-start");
+	expect(registry.conversationSession).toEqual(session);
+	// Quit and relaunch before the next poll. Even a reused PID starts a new session.
+	alive.clear();
+	await attach("new-session", 789, "new-start");
+	const next = registry.conversationSession;
+	expect(next.id).not.toBe(session.id);
+	expect(next.afterConversationSequence).toBe(journal.lastConversationSequence);
+	const stored = new SharedRegistry(journal);
+	expect(stored.conversationSession).toEqual(next);
+	expect(journal.snapshot().conversations[0]!.id).toBe(conversation.conversationId);
+	await runtime.close();
+});

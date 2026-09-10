@@ -49,9 +49,10 @@ const binding = {
 };
 const snapshot = {
 	hostEpoch: "epoch",
+	conversationSession: { id: "rhino-session", afterConversationSequence: 0 },
 	conversations: [
-		{ id: "conversation", title: "First" },
-		{ id: "other", title: "Second" },
+		{ id: "conversation", title: "First", sequence: 1 },
+		{ id: "other", title: "Second", sequence: 2 },
 	],
 	sessions: [
 		{ id: "session", conversation_id: "conversation" },
@@ -1006,11 +1007,13 @@ it("creates a chat only when the journal has none and retries startup once on re
  expect(reconnected.sent.find((command) => command.type === "submit")).toMatchObject({ conversationId: "fresh", sessionId: "fresh-session", text: "Hello" });
 });
 
-it.each(["reload", "relaunch", "missing browser storage", "host restart", "completed task", "pending question"])("restores the existing thread after %s without submitting or creating a task", async (scenario) => {
+it.each(["reload", "relaunch", "missing browser storage", "host restart", "completed task", "pending question", "another Rhino"])("restores the existing thread after %s without submitting or creating a task", async (scenario) => {
 	const task = { id: "persisted-task", session_id: "session", conversation_id: "conversation", parent_task_id: null,
 		state: scenario === "host restart" ? "interrupted" : scenario === "completed task" ? "completed" : scenario === "pending question" ? "awaiting_user" : "running",
 		payload: JSON.stringify({ text: "Build the persistent courtyard", messageTarget: binding, bindings: [binding] }) };
 	const persisted = { ...snapshot,
+		targets: scenario === "another Rhino" ? [...snapshot.targets, { ...snapshot.targets[0], lifecycleInstanceId: "other-life", processId: 43,
+			documents: [{ ...binding, lifecycleInstanceId: "other-life", rhinoDocumentId: "other-model" }], documentLabels: { model: "", "other-model": "Other.3dm" } }] : snapshot.targets,
 		questions: scenario === "pending question" ? [{ id: "question", task_id: task.id, answer: null, payload: JSON.stringify({ kind: "ask_user", question: "Which courtyard?", options: ["North", "South"] }) }] : [],
 		hostEpoch: scenario === "host restart" ? "new-epoch" : "epoch", tasks: [task],
 		events: [{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "messages", turnId: "turn", messages: [
@@ -1018,7 +1021,7 @@ it.each(["reload", "relaunch", "missing browser storage", "host restart", "compl
 		] }) }] };
 	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: persisted }));
 	await act(async () => root.unmount());
-	if (scenario !== "reload") { sessionStorage.clear(); history.replaceState(null, "", "/#credential"); }
+	if (scenario !== "reload") { sessionStorage.clear(); history.replaceState(null, "", scenario === "another Rhino" ? "/?instance=other-life&document=other-model#credential" : "/#credential"); }
 	if (scenario === "missing browser storage") window.localStorage.clear();
 	root = createRoot(container);
 	await act(async () => root.render(createElement(HopperStoreProvider, { children: createElement(App) })));
@@ -1030,6 +1033,39 @@ it.each(["reload", "relaunch", "missing browser storage", "host restart", "compl
 	expect(socket.sent.some((command) => ["create_conversation", "submit", "steer"].includes(command.type))).toBe(false);
 	if (!["host restart", "completed task"].includes(scenario)) expect(container.querySelector('button[aria-label="Stop"]')).not.toBeNull();
 	if (scenario === "pending question") expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Which courtyard?");
+	if (scenario === "another Rhino") expect(container.querySelector('[aria-label="Message destination"]')?.textContent).toContain("Other.3dm");
+});
+
+it.each([false, true])("starts a fresh thread after all Rhino processes exit and a new one connects, reopened browser: %s", async (reopen) => {
+	const oldTask = { id: "old-task", session_id: "session", conversation_id: "conversation", parent_task_id: null, state: "completed",
+		payload: JSON.stringify({ text: "Previous Rhino session", bindings: [binding] }) };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [oldTask] } }));
+	if (reopen) {
+		await act(async () => root.unmount());
+		sessionStorage.clear(); history.replaceState(null, "", "/#credential");
+		root = createRoot(container);
+		await act(async () => root.render(createElement(HopperStoreProvider, { children: createElement(App) })));
+		socket = Socket.sockets.at(-1)!;
+	}
+	const next = { ...snapshot, tasks: [oldTask], conversationSession: { id: "new-rhino-session", afterConversationSequence: 2 } };
+	await act(async () => {
+		if (reopen) socket.onopen?.();
+		socket.receive({ type: "shared_snapshot", snapshot: next });
+		socket.receive({ type: "shared_snapshot", snapshot: next });
+	});
+	expect(container.textContent).not.toContain("Previous Rhino session");
+	const creates = socket.sent.filter((command) => command.type === "create_conversation");
+	expect(creates).toHaveLength(1);
+	await act(async () => {
+		socket.receive({ type: "command_accepted", requestId: creates[0].requestId, result: { conversationId: "fresh" } });
+		socket.receive({ type: "shared_snapshot", snapshot: { ...next,
+			conversations: [...next.conversations, { id: "fresh", title: "New chat", sequence: 3 }],
+			sessions: [...next.sessions, { id: "fresh-session", conversation_id: "fresh" }],
+		} });
+	});
+	await value("#composer-input", "Start the new model");
+	await act(async () => sendButton().click());
+	expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({ conversationId: "fresh", sessionId: "fresh-session" });
 });
 
 it("counts working time from the saved start and freezes the completed duration", async () => {

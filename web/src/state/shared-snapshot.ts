@@ -15,6 +15,7 @@ export type SharedTarget = {
 
 export type SharedSnapshot = {
 	hostEpoch: string;
+	conversationSession?: { id: string; afterConversationSequence: number };
 	conversations: Row[];
 	sessions: Row[];
 	tasks: Row[];

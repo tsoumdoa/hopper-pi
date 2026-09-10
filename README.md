@@ -140,7 +140,7 @@ The compact document picker beside the composer shows where your next message wi
 
 The host remains running when you close Rhino. Closing a document or stopping its plugin removes that target without switching its tasks to another document. Use the browser's **Stop host** action to stop the background host; run `HopperCode` explicitly to start it again.
 
-If you close the browser tab, run `HopperCode` again in the same Rhino instance to reopen it with the current conversation. Closing the tab leaves the host and any active response running. The reopened UI restores the conversation and current progress. If another Hopper tab is still open, the new tab takes over the connection.
+Reloading the browser or opening `HopperCode` in another document or Rhino instance keeps the current conversation while at least one connected Rhino process remains running. After you quit all connected Rhino processes, the next `HopperCode` launch starts a fresh chat. Older conversations remain stored. If you close only the browser tab, run `HopperCode` again to reopen the current thread. Closing the tab leaves the host and any active response running. The reopened UI restores the conversation and current progress. If another Hopper tab is still open, the new tab takes over the connection.
 
 Open **Skills & Markdown** in the sidebar to inspect the bundled skills, preview their Markdown and reference files, or turn individual skills off. Enabled skills appear in the agent's skill catalog; the agent can load relevant files with a restricted `read` tool. This tool only reads enabled Markdown in this library. Pi's general shell, edit, and write tools remain disabled.
 

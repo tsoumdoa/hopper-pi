@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { isAbsolute } from "node:path";
 import {
 	resolveConnection,
@@ -185,6 +186,16 @@ export class SharedNativeRuntime {
 				generation: handshake.attachmentGeneration,
 			};
 			this.instances.set(connection.lifecycleInstanceId, instance);
+			// A transport/lifecycle replacement does not end a session while its Rhino process lives.
+			// Check exited processes here as well as during polling, including a quick quit/relaunch.
+			const previous = this.registry.list();
+			const surviving = previous.find((attachment) => attachment.processId === v.process!.pid
+				? attachment.processStartTime === v.process!.startIdentity
+				: this.isProcessAlive(attachment.processId));
+			const conversationSession = surviving
+				? surviving.conversationSession ?? this.registry.conversationSession
+				: previous.length ? { id: randomUUID(), afterConversationSequence: this.journal.lastConversationSequence }
+					: this.registry.conversationSession;
 			const attachment = {
 				lifecycleInstanceId: connection.lifecycleInstanceId,
 				processId: v.process.pid,
@@ -195,6 +206,7 @@ export class SharedNativeRuntime {
 				documents: [] as TargetBinding[],
 				admission: "recovering" as const,
 				label: `Rhino ${v.process.pid}`,
+				conversationSession,
 			};
 			this.registry.register(attachment);
 			// The plugin cannot finish its lifecycle start until this registration returns.
