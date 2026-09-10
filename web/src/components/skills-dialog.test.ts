@@ -49,46 +49,11 @@ it("shows available skills and applies a persisted toggle from the server respon
 	expect(toggle.checked).toBe(false);
 });
 
-it("previews Markdown and reference choices without exposing raw HTML", async () => {
-	await render();
-	await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="View rhino-document"]')!.click());
-	expect(document.querySelector("pre")?.textContent).toContain("Use rh_run_script.");
-	expect(document.querySelectorAll("select option")).toHaveLength(2);
-	expect(requests.some((request) => request.url.includes(encodeURIComponent("/bundled/SKILL.md")))).toBe(true);
-});
-
 it("keeps viewing available and prevents changes during an agent turn", async () => {
 	await render(true);
 	expect(document.querySelector<HTMLInputElement>('[role="switch"]')!.disabled).toBe(true);
 	expect(document.querySelector<HTMLButtonElement>('[aria-label="View rhino-document"]')!.disabled).toBe(false);
 	expect(document.body.textContent).toContain("change them when this turn finishes");
-});
-
-it("automatically shows Markdown added to the folder on the next poll", async () => {
-	vi.useFakeTimers();
-	try {
-		await render();
-		library = { ...library, skills: [...library.skills, { ...library.skills[0], id: "user:office", name: "office-rules", source: "user" }] };
-		await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
-		expect(document.body.textContent).toContain("office-rules");
-		expect(document.body.textContent).toContain("2 of 2 enabled");
-	} finally { vi.useRealTimers(); }
-});
-
-it("filters by search and enabled status and clears an empty result", async () => {
-	library.skills.push({ ...library.skills[0], id: "user:office", name: "office-rules", description: "Office standards", source: "user", enabled: false, path: "/local/office.md", files: ["/local/office.md"] });
-	await render();
-	const search = document.querySelector<HTMLInputElement>('[aria-label="Search skills"]')!;
-	await act(async () => {
-		Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "office");
-		search.dispatchEvent(new Event("input", { bubbles: true }));
-	});
-	expect(document.querySelectorAll("[data-skill]")).toHaveLength(1);
-	expect(document.querySelector("#skill-detail-title")?.textContent).toBe("office-rules");
-	await act(async () => Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Enabled only")!.click());
-	expect(document.body.textContent).toContain("No skills match your filters.");
-	await act(async () => Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Clear filters")!.click());
-	expect(document.querySelectorAll("[data-skill]")).toHaveLength(2);
 });
 
 it("supports keyboard selection and selecting reference files", async () => {

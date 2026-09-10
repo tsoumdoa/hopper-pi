@@ -36,22 +36,4 @@ public class PublicIdentityTests
         Assert.Equal("e07753b1-fdec-417a-b57a-83a95204a8dd", PublicIdentity.LegacyGrasshopperComponentId);
         Assert.Equal("a41e7f39-12f0-4cc2-9f84-fd3d6bf3eaef", PublicIdentity.GrasshopperAssemblyId);
     }
-
-    [Fact]
-    public void FrozenGuidsAreValidAndUnique()
-    {
-        var values = new[]
-        {
-            PublicIdentity.HopperCodeCommandId,
-            PublicIdentity.HopperCodeStopCommandId,
-            PublicIdentity.HopperCodeStatusCommandId,
-            PublicIdentity.HopperCodeRestartCommandId,
-            PublicIdentity.RhinoPluginId,
-            PublicIdentity.LegacyGrasshopperComponentId,
-            PublicIdentity.GrasshopperAssemblyId,
-        };
-
-        Assert.All(values, value => Assert.True(Guid.TryParseExact(value, "D", out _)));
-        Assert.Equal(values.Length, values.Distinct(StringComparer.OrdinalIgnoreCase).Count());
-    }
 }

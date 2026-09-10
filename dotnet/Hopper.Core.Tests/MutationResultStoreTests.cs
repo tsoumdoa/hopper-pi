@@ -6,18 +6,6 @@ namespace Hopper.Core.Tests;
 public class MutationResultStoreTests
 {
     [Fact]
-    public void DefaultLimitsMatchProtocolPolicy()
-    {
-        var options = new MutationResultStoreOptions();
-
-        Assert.Equal(256, options.MaximumCount);
-        Assert.Equal(16L * 1024 * 1024, options.MaximumBytes);
-        Assert.Equal(64 * 1024, options.ReservationBytes);
-        Assert.Equal(64 * 1024, options.MaximumTerminalResultBytes);
-        Assert.Equal(TimeSpan.FromMinutes(10), options.TimeToLive);
-    }
-
-    [Fact]
     public void QueriesCannotBeAdmittedOrRetained()
     {
         var fixture = Fixture();

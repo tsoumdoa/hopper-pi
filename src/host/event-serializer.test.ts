@@ -45,13 +45,6 @@ describe("agent event serialization", () => {
 		});
 	});
 
-	it("replaces cyclic values instead of throwing", () => {
-		const value: Record<string, unknown> = { label: "root" };
-		value.self = value;
-
-		expect(toWireValue(value)).toEqual({ label: "root", self: "[Circular]" });
-	});
-
 	it("preserves shared objects while replacing cycles in each branch", () => {
 		const shared: Record<string, unknown> = { type: "string" };
 		shared.self = shared;

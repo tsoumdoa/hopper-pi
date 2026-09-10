@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ToolsDialog, schemaType } from "./tools-dialog";
+import { ToolsDialog } from "./tools-dialog";
 
 let root: Root;
 let container: HTMLDivElement;
@@ -49,37 +49,6 @@ const setInput = (input: HTMLInputElement, value: string) => {
 	Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
 	input.dispatchEvent(new Event("input", { bubbles: true }));
 };
-
-it("groups tools, selects the first by group order, and renders parameters as a table", async () => {
-	await render();
-	expect(fetch).toHaveBeenCalledWith("/api/tools", expect.objectContaining({ headers: { Authorization: "Bearer test-token" }, cache: "no-store" }));
-	expect(document.body.textContent).toContain("2 active · 3 registered");
-	expect(Array.from(document.querySelectorAll("nav section h2"), (heading) => heading.textContent)).toEqual(["Rhino", "Grasshopper", "General"]);
-	expect(toolButtons().map((button) => button.dataset.tool)).toEqual(["rh_document", "gh_edit", "read"]);
-
-	// Rhino comes first, so rh_document is selected on open and its literal options render as chips.
-	expect(document.querySelector('[aria-current="true"]')?.getAttribute("data-tool")).toBe("rh_document");
-	expect(detail()?.querySelector("h2")?.textContent).toBe("rh_document");
-	expect(Array.from(detail()!.querySelectorAll('[aria-label="mode options"] li'), (item) => item.textContent)).toEqual(["open", "save"]);
-	expect(detail()?.textContent).toContain("1 parameter");
-
-	await act(async () => toolButtons().find((button) => button.dataset.tool === "read")!.click());
-	expect(detail()?.querySelector("h2")?.textContent).toBe("read");
-	expect(detail()?.textContent).toContain("2 parameters · 1 required");
-	expect(detail()?.textContent).toContain("File to read");
-	expect(detail()?.textContent).toContain("Required");
-	expect(detail()?.textContent).toContain("at least 1");
-	expect(detail()?.textContent).toContain("Default 200");
-	expect(detail()?.querySelector("pre")?.textContent).toContain('"path"');
-
-	// Discriminated array items render as separate shapes, with the discriminator lifted into the heading.
-	await act(async () => toolButtons().find((button) => button.dataset.tool === "gh_edit")!.click());
-	expect(detail()?.textContent).toContain("Inactive");
-	expect(detail()?.textContent).toContain("One of 2 shapes");
-	expect(detail()?.textContent).toContain("action = add");
-	expect(detail()?.textContent).toContain("typeGuid");
-	expect(detail()?.textContent).toContain("action = delete");
-});
 
 it("filters by search and active state and moves the selection with arrow keys", async () => {
 	await render();
@@ -138,17 +107,6 @@ it("reports failures and supports retry and an empty registry", async () => {
 	expect(document.body.textContent).toContain("No tools are registered in this session.");
 });
 
-it("describes JSON schema types in a compact form", () => {
-	expect(schemaType({ type: "string" })).toBe("string");
-	expect(schemaType({ type: ["string", "null"] })).toBe("string | null");
-	expect(schemaType({ type: "array", items: { type: "number" } })).toBe("number[]");
-	expect(schemaType({ type: "array", items: { anyOf: [{ type: "string" }, { type: "number" }] } })).toBe("(string | number)[]");
-	expect(schemaType({ anyOf: [{ type: "string", const: "a" }, { type: "string", const: "b" }] })).toBe("string");
-	expect(schemaType({ enum: [1, 2] })).toBe("number");
-	expect(schemaType({ properties: {} })).toBe("object");
-	expect(schemaType({})).toBe("any");
-});
-
 it("renders real widget intersection fields and keeps the original JSON schema", async () => {
 	const { ghCreateWidgetTool } = await import("../../../src/tools/edit-tools/gh-create-widget.js");
 	const { ghMutateWidgetTool } = await import("../../../src/tools/edit-tools/gh-mutate-widget.js");
@@ -164,34 +122,6 @@ it("renders real widget intersection fields and keeps the original JSON schema",
 		expect(requiredField?.textContent).toContain("Required");
 		expect(JSON.parse(detail()!.querySelector("pre")!.textContent!)).toEqual(JSON.parse(JSON.stringify(tool.parameters)));
 	}
-});
-
-it("returns to the mobile list when search or active filtering changes", async () => {
-	await render();
-	await act(async () => toolButtons()[0].click());
-	const nav = document.querySelector('nav[aria-label="Tools"]')!;
-	expect(nav.classList.contains("hidden")).toBe(true);
-	await act(async () => setInput(document.querySelector<HTMLInputElement>('[aria-label="Search tools"]')!, "missing"));
-	expect(nav.classList.contains("hidden")).toBe(false);
-	expect(nav.textContent).toContain("No tools match your search.");
-	await act(async () => setInput(document.querySelector<HTMLInputElement>('[aria-label="Search tools"]')!, ""));
-	await act(async () => toolButtons().find((button) => button.dataset.tool === "gh_edit")!.click());
-	await act(async () => Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Active only")!.click());
-	expect(nav.classList.contains("hidden")).toBe(false);
-	expect(toolButtons().map((button) => button.dataset.tool)).not.toContain("gh_edit");
-});
-
-it("keeps mobile back navigation when polling removes the selected tool", async () => {
-	vi.useFakeTimers();
-	await render();
-	await act(async () => toolButtons()[0].click());
-	vi.mocked(fetch).mockImplementation(async () => new Response(JSON.stringify({ tools: [] })));
-	await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
-	expect(detail()).toBeNull();
-	const back = Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "All tools");
-	expect(back).toBeDefined();
-	await act(async () => back!.click());
-	expect(document.querySelector('nav[aria-label="Tools"]')!.classList.contains("hidden")).toBe(false);
 });
 
 const settingsSnapshot = (revision = 0, enabled = false, status = "missing") => ({

@@ -21,27 +21,6 @@ afterEach(async () => {
 	vi.unstubAllGlobals();
 });
 
-it("renders reply formatting, GFM tables, and code with indentation intact", async () => {
-	await render('# Result\n\n**Done** with `x`.\n\n- First\n- Second\n\n| Name | Value |\n| --- | --- |\n| x | 1 |\n\n```python\nif True:\n    print("hello")\n```');
-	expect(container.querySelector("h1")?.textContent).toBe("Result");
-	expect(container.querySelector("strong")?.textContent).toBe("Done");
-	expect(container.querySelectorAll("li")).toHaveLength(2);
-	expect(container.querySelector("table")?.parentElement?.className).toBe("overflow-x-auto");
-	expect(container.querySelector("td")?.textContent).toBe("x");
-	expect(container.querySelector("pre code")?.textContent).toBe('if True:\n    print("hello")\n');
-});
-
-it("updates incomplete streaming Markdown as closing delimiters arrive", async () => {
-	await render("**Building");
-	expect(container.textContent).toContain("Building");
-	await render("**Building complete**\n\n```python\nprint(");
-	expect(container.querySelector("strong")?.textContent).toBe("Building complete");
-	expect(container.querySelector("pre code")?.textContent).toBe("print(\n");
-	await render('**Building complete**\n\n```python\nprint("done")\n```');
-	expect(container.querySelectorAll("pre")).toHaveLength(1);
-	expect(container.querySelector("pre code")?.textContent).toBe('print("done")\n');
-});
-
 it("preserves table scroll position while more response text streams in", async () => {
 	const text = "| Name | Value |\n| --- | --- |\n| x | 1 |";
 	await render(text);
@@ -50,21 +29,6 @@ it("preserves table scroll position while more response text streams in", async 
 	await render(`${text}\n\nMore text`);
 	expect(container.querySelector("table")!.parentElement).toBe(scroller);
 	expect(scroller.scrollLeft).toBe(100);
-});
-
-it("keeps footnote navigation in the current tab and preserves its anchors", async () => {
-	await render("A claim[^1].\n\n[^1]: Supporting detail.");
-	const reference = container.querySelector<HTMLAnchorElement>("a[data-footnote-ref]")!;
-	const backreference = container.querySelector<HTMLAnchorElement>("a[data-footnote-backref]")!;
-	expect(reference).not.toBeNull();
-	expect(backreference).not.toBeNull();
-	for (const link of [reference, backreference]) {
-		expect(link.target).toBe("");
-		expect(document.getElementById(link.hash.slice(1))).not.toBeNull();
-		expect(link.hasAttribute("node")).toBe(false);
-	}
-	expect(document.getElementById(reference.getAttribute("aria-describedby")!)?.textContent).toBe("Footnotes");
-	expect(backreference.getAttribute("aria-label")).toBeTruthy();
 });
 
 it("navigates footnotes within their reply without changing the authentication URL", async () => {

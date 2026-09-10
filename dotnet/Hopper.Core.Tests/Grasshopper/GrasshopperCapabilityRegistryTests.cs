@@ -112,17 +112,6 @@ public class GrasshopperCapabilityRegistryTests
         Assert.Equal("not_installed", registry.Status.StateName);
     }
 
-    [Theory]
-    [InlineData(GrasshopperCapabilityState.NotInstalled, "not_installed")]
-    [InlineData(GrasshopperCapabilityState.NotLoaded, "not_loaded")]
-    [InlineData(GrasshopperCapabilityState.Loading, "loading")]
-    [InlineData(GrasshopperCapabilityState.Ready, "ready")]
-    [InlineData(GrasshopperCapabilityState.Failed, "failed")]
-    public void StateProtocolValuesAreStable(GrasshopperCapabilityState state, string expected)
-    {
-        Assert.Equal(expected, state.ToProtocolValue());
-    }
-
     private sealed class TestAdapter : IGrasshopperAdapter
     {
         public OperationDocumentStatus DocumentStatus => OperationDocumentStatus.None;

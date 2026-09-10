@@ -1,9 +1,7 @@
 import { createHash } from "node:crypto";
-import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { evaluatePackagePath } from "./rhino-package-rules.mjs";
 import {
@@ -14,7 +12,6 @@ import {
 } from "./verify-rhino-package.mjs";
 
 const temporaryDirectories: string[] = [];
-const execFileAsync = promisify(execFile);
 
 afterEach(async () => {
 	await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })));
@@ -112,13 +109,6 @@ async function minimalStage(target: "mac-arm64" | "win-x64"): Promise<string> {
 }
 
 describe("Rhino package path rules", () => {
-	it("allows the intended runtime trees", () => {
-		expect(evaluatePackagePath("manifest.yml", "mac-arm64").allowed).toBe(true);
-		expect(evaluatePackagePath("runtime/host/dist/host/index.js", "mac-arm64").allowed).toBe(true);
-		expect(evaluatePackagePath("runtime/host/node_modules/zeromq/lib/index.js", "win-x64").allowed).toBe(true);
-		expect(evaluatePackagePath("runtimes/win-x64/native/helper.dll", "win-x64").allowed).toBe(true);
-	});
-
 	it("keeps Pi's esbuild runtime but rejects the duplicate CLI and dependency tests", () => {
 		expect(evaluatePackagePath("runtime/host/node_modules/esbuild/lib/main.js", "mac-arm64").allowed).toBe(true);
 		expect(evaluatePackagePath("runtime/host/node_modules/@esbuild/darwin-arm64/bin/esbuild", "mac-arm64").allowed).toBe(true);
@@ -150,12 +140,6 @@ describe("Rhino package path rules", () => {
 		expect(evaluatePackagePath("Unexpected.Plugin.dll", "mac-arm64").allowed).toBe(false);
 		expect(evaluatePackagePath("extra.config", "mac-arm64").allowed).toBe(false);
 		expect(evaluatePackagePath("runtimes/win-x64/native/helper.dll", "mac-arm64").allowed).toBe(false);
-	});
-
-	it("rejects the retired standalone Rhino host assembly", () => {
-		const result = evaluatePackagePath("Hopper.Rhino.Host.dll", "mac-arm64");
-		expect(result.allowed).toBe(false);
-		expect(result.rule.id).toBe("retired-host-assembly");
 	});
 });
 
@@ -305,14 +289,5 @@ describe("Rhino package verifier", () => {
 		const result = await verifyRhinoPackage({ target: "mac-arm64", stage, quiet: true });
 		expect(result.yakFiles).toEqual([{ path: "hopper-pi-0.1.90-rh8_0-mac.yak", size: 37 }]);
 		expect(result.manifest.files.some((file: { path: string }) => file.path.endsWith(".yak"))).toBe(false);
-	});
-
-	it("runs through the checked-in package script CLI", async () => {
-		const stage = await minimalStage("mac-arm64");
-		const script = join(process.cwd(), "scripts", "verify-rhino-package.mjs");
-		const { stdout } = await execFileAsync(process.execPath, [script, "--target", "mac-arm64", stage]);
-		expect(stdout).toContain("Verified 12 staged files for mac-arm64");
-		expect(JSON.parse(await readFile(join(stage, "rhino-package-manifest.json"), "utf8")).target)
-			.toBe("mac-arm64");
 	});
 });

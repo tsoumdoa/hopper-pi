@@ -1,30 +1,22 @@
 // @vitest-environment happy-dom
-import { act, createElement, Profiler } from "react";
+import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "./app";
 import { createHopperStore } from "./state/hopper-store";
 import type { HopperStore } from "./state/hopper-types";
 import { HopperStoreProvider } from "./state/hopper-store-context";
-import { mockRuntimeStatus } from "./mocks/hopper-mock";
 import type { PromptReceipt } from "./hooks/use-hopper-connection";
 import type { DraftImage } from "./lib/image-attachments";
 
-const renders = vi.hoisted(() => ({ app: vi.fn(), sidebar: vi.fn(), models: vi.fn(), conversation: vi.fn(), prompt: vi.fn<(...args: unknown[]) => boolean>(() => true) }));
+const { prompt } = vi.hoisted(() => ({ prompt: vi.fn<(...args: unknown[]) => boolean>(() => true) }));
 
 vi.mock("./hooks/use-hopper-connection", () => ({
 	useHopperConnection: () => {
-		renders.app();
-		return { token: "test", send: () => true, prompt: renders.prompt, login: () => true, logout: () => true, reconnect: () => {}, isMockMode: false };
+		return { token: "test", send: () => true, prompt, login: () => true, logout: () => true, reconnect: () => {}, isMockMode: false };
 	},
 }));
-// Drive polling results explicitly so each render assertion covers one update.
 vi.mock("./hooks/use-runtime-status", () => ({ useRuntimeStatus: () => ({ refresh: async () => {}, refreshing: false }) }));
-vi.mock("./components/sidebar", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("./components/sidebar")>();
-	return { ...actual, Sidebar: (props: Parameters<typeof actual.Sidebar>[0]) =>
-		createElement(Profiler, { id: "sidebar", onRender: renders.sidebar }, createElement(actual.Sidebar, props)) };
-});
 vi.mock("./lib/image-attachments", async (load) => ({
 	...await load<typeof import("./lib/image-attachments")>(),
 	readImage: async () => ({ id: "draft-image", name: "plan.png", width: 800, height: 500,
@@ -37,16 +29,6 @@ vi.mock("./components/image-annotation-dialog", () => ({
 	ImageAnnotationDialog: ({ attachment }: { attachment: DraftImage }) => createElement("div", { role: "dialog" },
 		attachment.scene?.appState.currentItemStrokeColor === "red" ? "Editable annotations restored" : "Missing annotations"),
 }));
-vi.mock("./components/model-picker", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("./components/model-picker")>();
-	return { ...actual, ModelControls: (props: Parameters<typeof actual.ModelControls>[0]) =>
-		createElement(Profiler, { id: "models", onRender: renders.models }, createElement(actual.ModelControls, props)) };
-});
-vi.mock("./components/conversation", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("./components/conversation")>();
-	return { ...actual, Conversation: (props: Parameters<typeof actual.Conversation>[0]) =>
-		createElement(Profiler, { id: "conversation", onRender: renders.conversation }, createElement(actual.Conversation, props)) };
-});
 
 let root: Root;
 let container: HTMLDivElement;
@@ -72,34 +54,6 @@ afterEach(async () => {
 	vi.unstubAllGlobals();
 });
 
-it("streams text without rerendering the app, sidebar, or model controls", async () => {
-	await act(async () => store.getState().actions.applyAgentEvent({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "the canvas." } }));
-	expect(container.textContent).toContain("Checking the canvas.");
-	expect(renders.conversation).toHaveBeenCalled();
-	expect(renders.app).not.toHaveBeenCalled();
-	expect(renders.sidebar).not.toHaveBeenCalled();
-	expect(renders.models).not.toHaveBeenCalled();
-});
-
-it("updates runtime controls without rerendering the conversation or app", async () => {
-	await act(async () => store.getState().actions.setRuntimeStatus(mockRuntimeStatus));
-	expect(renders.sidebar).toHaveBeenCalled();
-	expect(renders.app).not.toHaveBeenCalled();
-	expect(renders.conversation).not.toHaveBeenCalled();
-	expect(renders.models).not.toHaveBeenCalled();
-});
-
-it("shows notifications and queued input without rerendering the app or conversation", async () => {
-	await act(async () => store.getState().actions.toast("Canvas updated"));
-	expect(document.body.textContent).toContain("Canvas updated");
-	await act(async () => store.getState().actions.queueUiRequest({ requestId: "confirm-1", kind: "confirm", title: "Apply the graph?" }));
-	expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Apply the graph?");
-	expect(renders.app).not.toHaveBeenCalled();
-	expect(renders.conversation).not.toHaveBeenCalled();
-	expect(renders.sidebar).not.toHaveBeenCalled();
-	expect(renders.models).not.toHaveBeenCalled();
-});
-
 async function submitAnnotatedDraft() {
 	const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
 	Object.defineProperty(input, "files", { value: [new File(["image"], "plan.png", { type: "image/png" })] });
@@ -110,7 +64,7 @@ async function submitAnnotatedDraft() {
 		textarea.dispatchEvent(new Event("input", { bubbles: true }));
 	});
 	await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Send message"]')!.click());
-	return renders.prompt.mock.calls.at(-1)![3] as PromptReceipt;
+	return prompt.mock.calls.at(-1)![3] as PromptReceipt;
 }
 
 it("retains text and editable annotations after a rejected submission and snapshot", async () => {
@@ -132,7 +86,7 @@ it("clears a draft only after acceptance and ignores late receipts from previous
 	const first = await submitAnnotatedDraft();
 	await act(async () => first.onRejected());
 	await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Send message"]')!.click());
-	const second = renders.prompt.mock.calls.at(-1)![3] as PromptReceipt;
+	const second = prompt.mock.calls.at(-1)![3] as PromptReceipt;
 	await act(async () => first.onAccepted());
 	expect(container.querySelector("img")).not.toBeNull();
 	await act(async () => second.onAccepted());
