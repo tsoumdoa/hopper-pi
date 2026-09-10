@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "@earendil-works/pi-ai";
-import { ToolPolicyRuntime } from "./tool-policy-runtime.js";
+import { CREDENTIAL_STATUS_TIMEOUT_MS, ToolPolicyRuntime } from "./tool-policy-runtime.js";
 import { ToolPolicyStore } from "./tool-policy-store.js";
 import { ToolCredentials } from "./tool-credentials.js";
 import { HOPPER_POLICY_INVENTORY } from "../tools/policy-inventory.js";
@@ -73,7 +73,115 @@ async function fixture(progressive = false) {
 
 const completed = () => ({ content: [{ type: "text" as const, text: "done" }], details: {} });
 
+async function withoutCredentialTimeout<T>(pending: Promise<T>): Promise<T> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	try {
+		return await Promise.race([pending, new Promise<never>((_, reject) => {
+			timer = setTimeout(() => reject(new Error("Still waiting on obsolete credentials")), 500);
+		})]);
+	} finally { clearTimeout(timer); }
+}
+
 describe("shared runtime policy admissions", () => {
+	it.each(["local-save", "watcher", "missed-watcher"])("releases a credential read started before Firecrawl was disabled via %s", async source => {
+		const f = await fixture();
+		f.tool("rh_run_script", async () => completed());
+		f.tool("web_search", async () => completed());
+		await f.enableFirecrawl();
+		await f.runtime.reconcile();
+		const started = deferred(), resume = deferred<string | null>();
+		vi.spyOn(f.credentials, "read").mockImplementationOnce(() => { started.resolve(); return resume.promise; });
+		const publish = vi.fn();
+		f.runtime.onChange = publish;
+		const obsolete = f.runtime.reconcile();
+		await started.promise;
+		try {
+			if (source === "local-save") {
+				const result = await withoutCredentialTimeout(f.runtime.updateToolSettings({
+					type: "patch", expected: await f.store.read(), patch: { target: "parents", id: "firecrawl", enabled: false },
+				}));
+				expect(result.ok).toBe(true);
+			} else {
+				await f.patch("firecrawl", false, "parents");
+				if (source === "watcher") {
+					vi.mocked(f.store.subscribe).mock.calls[0][0](await f.store.read());
+					await withoutCredentialTimeout(obsolete);
+				}
+			}
+			await withoutCredentialTimeout(f.runtime.reconcile(true));
+			await obsolete;
+			expect(f.pi.getActiveTools()).toContain("rh_run_script");
+			expect(f.pi.getActiveTools()).not.toContain("web_search");
+			const notifications = publish.mock.calls.length;
+			resume.resolve("late-secret");
+			await new Promise(resolve => setImmediate(resolve));
+			expect(publish).toHaveBeenCalledTimes(notifications);
+			expect(f.pi.getActiveTools()).not.toContain("web_search");
+		} finally { resume.resolve(null); await obsolete; }
+	});
+
+	it("session replacement releases an old credential wait and ignores its late completion", async () => {
+		const f = await fixture();
+		f.tool("rh_run_script", async () => completed());
+		f.tool("web_search", async () => completed());
+		await f.enableFirecrawl();
+		await f.runtime.reconcile();
+		const started = deferred(), resume = deferred<string | null>();
+		vi.spyOn(f.credentials, "read").mockImplementationOnce(() => { started.resolve(); return resume.promise; });
+		const obsolete = f.runtime.reconcile().catch(error => error);
+		await started.promise;
+		try {
+			f.replaceSession();
+			await withoutCredentialTimeout(f.runtime.reconcile(true));
+			expect(await obsolete).toMatchObject({ code: "cancelled" });
+			expect(f.pi.getActiveTools()).toEqual(expect.arrayContaining(["rh_run_script", "web_search"]));
+			const publish = vi.fn();
+			f.runtime.onChange = publish;
+			resume.resolve(null);
+			await new Promise(resolve => setImmediate(resolve));
+			expect(publish).not.toHaveBeenCalled();
+			expect(f.pi.getActiveTools()).toContain("web_search");
+		} finally { resume.resolve(null); await obsolete; }
+	});
+
+	it("shutdown drains reconciliation without waiting for native credentials", async () => {
+		const f = await fixture();
+		await f.enableFirecrawl();
+		const started = deferred(), resume = deferred<string | null>();
+		vi.spyOn(f.credentials, "read").mockImplementationOnce(() => { started.resolve(); return resume.promise; });
+		const obsolete = f.runtime.reconcile().catch(error => error);
+		await started.promise;
+		try { await withoutCredentialTimeout(f.runtime.close()); }
+		finally { resume.resolve(null); await obsolete; }
+	});
+
+	it("times out credential status and keeps Rhino available without adopting a late result", async () => {
+		const f = await fixture();
+		f.tool("rh_run_script", async () => completed());
+		f.tool("web_search", async () => completed());
+		await f.enableFirecrawl();
+		await f.runtime.reconcile();
+		const started = deferred(), resume = deferred<string | null>();
+		vi.spyOn(f.credentials, "read").mockImplementationOnce(() => { started.resolve(); return resume.promise; });
+		const publish = vi.fn();
+		f.runtime.onChange = publish;
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+		const pending = f.runtime.reconcile(true);
+		try {
+			await started.promise;
+			await vi.advanceTimersByTimeAsync(CREDENTIAL_STATUS_TIMEOUT_MS);
+			await pending;
+			expect(f.pi.getActiveTools()).toContain("rh_run_script");
+			expect(f.pi.getActiveTools()).not.toContain("web_search");
+			expect(publish.mock.calls.at(-1)?.[0].settings.credential).toBe("unavailable");
+			resume.resolve("late-secret");
+			await new Promise(resolve => setImmediate(resolve));
+			expect(publish).toHaveBeenCalledOnce();
+			await f.runtime.reconcile(true);
+			expect(f.pi.getActiveTools()).toContain("web_search");
+		} finally { resume.resolve(null); vi.useRealTimers(); await pending; }
+	});
+
 	it.each(["parent", "children"])("does not wait for protected storage when Firecrawl's %s is disabled", async disabled => {
 		const f = await fixture();
 		f.tool("rh_run_script", async () => completed());

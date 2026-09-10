@@ -4,7 +4,7 @@ import { getCachedBackendStatus, probeBackend } from "../infra/backend-status.js
 import { modelSupportsImages } from "./model-capabilities.js";
 import { HOPPER_POLICY_INVENTORY } from "../tools/policy-inventory.js";
 import { ToolPolicyStore } from "./tool-policy-store.js";
-import { ToolCredentials } from "./tool-credentials.js";
+import { ToolCredentials, type CredentialStatus } from "./tool-credentials.js";
 import {
 	PARENT_DEFAULTS, reconcilePolicySession, resolveToolPolicy,
 	type PolicyRuntime, type PolicySession, type PolicySnapshot, type PolicyUpdate,
@@ -21,6 +21,8 @@ const parentNames: Record<string, string> = {
 	"hopper.rhino": "Rhino", "hopper.grasshopper": "Grasshopper",
 	"hopper.interaction": "Interaction", "hopper.skills": "Skills", firecrawl: "Firecrawl",
 };
+
+export const CREDENTIAL_STATUS_TIMEOUT_MS = 2_000;
 
 export class ToolPolicyRuntime {
 	private policyStore: ToolPolicyStore;
@@ -42,6 +44,7 @@ export class ToolPolicyRuntime {
 	private closed = false;
 	private unsubscribe?: () => void;
 	private reconcileQueue: Promise<unknown> = Promise.resolve();
+	private credentialWaits = new Set<{ policy: PolicySnapshot; cancel(): void }>();
 	onChange?: (snapshot: AgentToolsSnapshot) => void;
 	abortProvider?: (name?: string) => void;
 
@@ -69,6 +72,7 @@ export class ToolPolicyRuntime {
 		if (id !== this.sessionId) {
 			if (runtimes.get(this.sessionId) === this) runtimes.delete(this.sessionId);
 			this.generation++;
+			this.cancelCredentialWaits();
 			this.manual.clear();
 			this.abortProvider?.();
 			this.session = { epoch: "", appliedRevision: -1, activeIds: new Set() };
@@ -205,6 +209,10 @@ export class ToolPolicyRuntime {
 	}
 
 	private observe(policy: PolicySnapshot | null): void {
+		for (const wait of this.credentialWaits) {
+			if (!policy || policy.epoch !== wait.policy.epoch || policy.revision > wait.policy.revision
+				|| !this.needsCredentialStatus(policy)) wait.cancel();
+		}
 		for (const [id, activation] of this.manual) {
 			const entry = this.inventory.find(tool => tool.id === id)!;
 			if (!policy || activation.epoch !== policy.epoch || activation.generation !== this.generation
@@ -226,17 +234,37 @@ export class ToolPolicyRuntime {
 		return policy.parents.firecrawl.enabled && this.inventory.some(tool => tool.owner === "firecrawl" && policy.tools[tool.id]?.enabled);
 	}
 
-	private credentialStatus(policy: PolicySnapshot) {
+	private cancelCredentialWaits(): void {
+		for (const wait of this.credentialWaits) wait.cancel();
+	}
+
+	private credentialStatus(policy: PolicySnapshot): Promise<CredentialStatus> {
 		// A saved reference is enough to display disabled Firecrawl's setup state.
 		// Only enabled tools need protected-store availability checked at a boundary.
 		if (!policy.credentials.firecrawl.reference) return Promise.resolve("missing" as const);
 		if (!this.needsCredentialStatus(policy)) {
 			return Promise.resolve("configured" as const);
 		}
-		return this.credentials.status(policy);
+		if (this.closed) return Promise.resolve("unavailable");
+		return new Promise(resolve => {
+			const finish = (status: CredentialStatus) => {
+				clearTimeout(timer);
+				this.credentialWaits.delete(wait);
+				resolve(status);
+			};
+			const wait = { policy, cancel: () => finish("unavailable") };
+			const timer = setTimeout(wait.cancel, CREDENTIAL_STATUS_TIMEOUT_MS);
+			this.credentialWaits.add(wait);
+			// Native reads may not be cancellable. Release the caller and ignore late
+			// completion; a subsequent reconciliation samples credentials afresh.
+			void Promise.resolve().then(() => this.credentials.status(policy)).then(finish, wait.cancel);
+		});
 	}
 
-	private reconcileSnapshot(boundary = false): Promise<AgentToolsSnapshot> {
+	private async reconcileSnapshot(boundary = false): Promise<AgentToolsSnapshot> {
+		// Read outside the queue so a missed watcher event cannot leave a new
+		// boundary behind an obsolete protected-store wait.
+		if (this.credentialWaits.size) this.observe(await this.store.read().catch(() => null));
 		const pending = this.reconcileQueue.catch(() => {}).then(async () => {
 			if (!this.pi || !this.ctx || this.closed) return this.getToolSettings();
 			const generation = this.generation;
@@ -286,7 +314,7 @@ export class ToolPolicyRuntime {
 		const generation = this.generation;
 		const prepared = await this.store.read();
 		const credential = this.inventory.find(tool => tool.id === id)?.owner === "firecrawl"
-			? await this.credentials.status(prepared) : "missing";
+			? await this.credentialStatus(prepared) : "missing";
 		await this.locked(policy => {
 			assertCurrentToolDispatchValid();
 			this.assertSession(generation);
@@ -357,7 +385,7 @@ export class ToolPolicyRuntime {
 			switch (action.type) {
 				case "patch": result = await this.store.update(action.expected, action.patch); break;
 				case "reset": result = await this.store.reset(action.expected); break;
-				case "repair": await this.store.repair(); break;
+				case "repair": this.observe(await this.store.repair()); break;
 				case "activate": await this.activate(action.id); break;
 				case "check-connection": await probeBackend(); break;
 				case "credential":
@@ -372,6 +400,7 @@ export class ToolPolicyRuntime {
 			}
 			if (result && !result.ok) return { ok: false, code: result.code === "conflict" ? "conflict" : "error", error: result.code === "conflict"
 				? "Settings changed in another window; review and try again." : "Setting could not be saved.", snapshot: await this.getToolSettings() };
+			if (result) this.observe(result.snapshot);
 			const snapshot = this.busy ? await this.publish() : await this.reconcileSnapshot();
 			return { ok: true, snapshot };
 		} catch {
@@ -389,6 +418,7 @@ export class ToolPolicyRuntime {
 	}
 	async close(): Promise<void> {
 		this.closed = true; this.generation++; this.abortProvider?.(); this.unsubscribe?.();
+		this.cancelCredentialWaits();
 		if (runtimes.get(this.sessionId) === this) runtimes.delete(this.sessionId);
 		await this.store.close();
 		await this.reconcileQueue.catch(() => {});
