@@ -4,6 +4,7 @@ import { isAbsolute, join, resolve } from "node:path";
 export const LOOPBACK_HOST = "127.0.0.1";
 
 export type HostPaths = {
+	toolConfigDir?: string;
 	dataDir: string;
 	agentDir: string;
 	authPath: string;
@@ -104,6 +105,8 @@ export function resolveHostConfig(
 	);
 	if (scriptWorkspaceQuotaBytes !== undefined && scriptWorkspaceQuotaBytes < 1)
 		throw new Error("Script workspace quota must be positive");
+	const toolConfigDir = readOption(args, "--tool-config-dir");
+	if (toolConfigDir && !isAbsolute(toolConfigDir)) throw new Error("--tool-config-dir must be absolute");
 	const staticDirArg = readOption(args, "--static-dir");
 	const profileArg = readOption(args, "--connection-profile");
 	const uiDevOriginArg = readOption(args, "--ui-dev-origin") ?? env.HOPPER_UI_DEV_ORIGIN;
@@ -147,6 +150,7 @@ export function resolveHostConfig(
 		uiDevOrigin,
 		paths: {
 			dataDir,
+			...(toolConfigDir ? { toolConfigDir } : {}),
 			agentDir: join(dataDir, "agent"),
 			authPath,
 			sessionsDir: join(instanceDir, "sessions"),

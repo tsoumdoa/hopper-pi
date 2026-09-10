@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { test, vi } from "vitest";
 import {
 	createRhinoCaptureModelController,
 	promptWantsVisualCapture,
 } from "./rhino-capture-model.js";
-import { RH_CAPTURE_VIEW_TOOL } from "./model-capabilities.js";
 
 test("promptWantsVisualCapture detects visual Rhino requests", () => {
 	assert.equal(promptWantsVisualCapture("take a screenshot of the Rhino view"), true);
@@ -13,53 +12,29 @@ test("promptWantsVisualCapture detects visual Rhino requests", () => {
 	assert.equal(promptWantsVisualCapture("list Rhino layers"), false);
 });
 
-function fakePi() {
-	const tools: Array<{ name: string }> = [];
-	let activeTools: string[] = ["rh_run_script", "rh_view_control"];
-	return {
-		registerTool(tool: { name: string }) {
-			tools.push(tool);
-		},
-		getAllTools() {
-			return tools;
-		},
-		getActiveTools() {
-			return activeTools;
-		},
-		setActiveTools(names: string[]) {
-			activeTools = names;
-		},
-		_tools: tools,
-		_activeTools: () => activeTools,
-	};
-}
-
-test("capture tool is restored after an external deactivation (progressive reset)", () => {
-	const pi = fakePi();
-	const controller = createRhinoCaptureModelController(pi as never);
+test("fallback switches to the selected vision model without managing tools", async () => {
 	const vision = { provider: "test", id: "vision", input: ["text", "image"] };
-
-	controller.syncCaptureToolForModel(vision);
-	assert.equal(pi._activeTools().includes(RH_CAPTURE_VIEW_TOOL), true);
-
-	pi.setActiveTools(pi._activeTools().filter((name) => name !== RH_CAPTURE_VIEW_TOOL));
-	controller.syncCaptureToolForModel(vision);
-	assert.equal(pi._activeTools().includes(RH_CAPTURE_VIEW_TOOL), true);
+	const pi = { setModel: vi.fn(async () => true) };
+	const controller = createRhinoCaptureModelController(pi as never, "test/vision");
+	const notify = vi.fn();
+	await controller.maybeSwitchToMultimodalFallback({
+		model: { input: ["text"] },
+		hasUI: true,
+		modelRegistry: { find: () => vision },
+		ui: { select: async () => "Switch to test/vision", notify },
+	} as never);
+	assert.deepEqual(pi.setModel.mock.calls, [[vision]]);
+	assert.equal(notify.mock.calls.length, 0);
 });
 
-test("capture tool registers for vision models and follows model changes", () => {
-	const pi = fakePi();
-	const controller = createRhinoCaptureModelController(pi as any);
-
-	controller.syncCaptureToolForModel({ provider: "test", id: "text", input: ["text"] });
-	assert.equal(pi._tools.some((tool) => tool.name === RH_CAPTURE_VIEW_TOOL), false);
-
-	controller.syncCaptureToolForModel({ provider: "test", id: "vision", input: ["text", "image"] });
-	assert.equal(pi._activeTools().includes(RH_CAPTURE_VIEW_TOOL), true);
-
-	controller.syncCaptureToolForModel({ provider: "test", id: "text", input: ["text"] });
-	assert.equal(pi._activeTools().includes(RH_CAPTURE_VIEW_TOOL), false);
-
-	controller.syncCaptureToolForModel({ provider: "test", id: "vision", input: ["text", "image"] });
-	assert.equal(pi._activeTools().includes(RH_CAPTURE_VIEW_TOOL), true);
+test("fallback leaves the model unchanged when the user declines", async () => {
+	const pi = { setModel: vi.fn() };
+	const controller = createRhinoCaptureModelController(pi as never, "test/vision");
+	await controller.maybeSwitchToMultimodalFallback({
+		model: { input: ["text"] },
+		hasUI: true,
+		modelRegistry: { find: () => ({ input: ["text", "image"] }) },
+		ui: { select: async () => "Continue without screenshots", notify: vi.fn() },
+	} as never);
+	assert.equal(pi.setModel.mock.calls.length, 0);
 });

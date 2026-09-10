@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_IMAGE_BYTES, parseClientMessage } from "./protocol.js";
+import { MAX_IMAGE_BYTES, parseClientMessage, parseToolSettingsAction } from "./protocol.js";
 
 describe("browser protocol", () => {
 	it("parses supported messages", () => {
@@ -33,4 +33,13 @@ it.each([
 	["invalid shape", "images"],
 ])("rejects %s", (_label, images) => {
 	expect(() => parseClientMessage(JSON.stringify({ type: "prompt", text: "Inspect", images }))).toThrow();
+});
+
+// A missing provider must never silently select another plugin's credential store.
+it("requires an explicit plugin ID for every credential operation", () => {
+	const action = { type: "credential", expected: { epoch: "profile", revision: 0 }, action: "save", key: "test-secret" };
+	expect(() => parseToolSettingsAction(action)).toThrow();
+	expect(parseToolSettingsAction({ ...action, pluginId: "example" })).toEqual({ ...action, pluginId: "example" });
+	expect(parseToolSettingsAction({ ...action, pluginId: "example", action: "remove" })).toEqual({ type: "credential", pluginId: "example", expected: action.expected, action: "remove" });
+	for (const pluginId of ["", "../example", "__proto__", 42]) expect(() => parseToolSettingsAction({ ...action, pluginId })).toThrow();
 });

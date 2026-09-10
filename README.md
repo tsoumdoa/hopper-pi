@@ -289,6 +289,16 @@ Rhino binds free loopback endpoints and writes them with a local connection toke
 Each Rhino-owned host also writes an authoritative instance profile under `hopper-pi/runtime/profiles/<lifecycle-instance-id>.json` and passes that exact path to its Node child, so concurrent Rhino processes do not depend on the last-writer-wins compatibility pointer. On later launches, Hopper deletes profiles only after verifying that the recorded PID and process start time no longer identify a live owner; malformed or uninspectable profiles are retained. Ephemeral logs use the sibling `<lifecycle-instance-id>.logs/` directory and are eligible for deletion seven days after death is verified.
 Override profile discovery with `HOPPER_CONNECTION_PROFILE` for development.
 
+## Tool controls and Firecrawl
+
+Open **Agent tools** to enable or disable a group or an individual Hopper tool. Choices persist across conversations, restarts, and Rhino windows using the same profile. Group switches preserve child choices. In progressive mode, **Activate for this session** works even when tool discovery is disabled. **Check connection** refreshes a disconnected backend.
+
+Firecrawl is bundled and disabled by default. Turn it on, enter your own key, and choose **Save key and enable** to add `web_search` and `web_fetch`. Requests send queries or URLs to Firecrawl and may consume your credits. Keys live in macOS Keychain, Windows Credential Manager, or Linux Secret Service, separate from settings and conversations. See [Firecrawl setup and limits](docs/firecrawl.md) and [storage and external Pi controls](docs/tool-policy-storage.md).
+
+External Pi users can run `/hopper-tools`. Use `--hopper-config-dir /absolute/path` in external Pi or `--tool-config-dir /absolute/path` in the embedded host to select a separate profile. Firecrawl does not read API keys from environment variables.
+
+Tool switches control named Hopper calls. An enabled general-purpose script tool can still perform equivalent operations, including network access; these switches are not a read-only or network sandbox.
+
 ## Agent tools (overview)
 
 **Rhino document**

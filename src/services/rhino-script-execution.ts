@@ -1,3 +1,4 @@
+import { admitCurrentToolDispatch, ToolPolicyDenied } from "./tool-policy-context.js";
 import { randomUUID } from "node:crypto";
 import { getRuntimeRpc, RpcOperationError } from "../infra/runtime-rpc.js";
 import type {
@@ -460,6 +461,7 @@ export class RhinoScriptExecution {
 				}
 				let change: Partial<RunRecord>;
 				try {
+					await admitCurrentToolDispatch();
 					change = this.resultChange(
 						await backend.run(
 							{ mode: run.mode, source: run.source, ...(run.echo === undefined ? {} : { echo: run.echo }) },
@@ -469,8 +471,9 @@ export class RhinoScriptExecution {
 						),
 					);
 				} catch (error) {
-					change =
-						error instanceof RpcOperationError
+					change = error instanceof ToolPolicyDenied
+						? { state: "notStarted", error: error.message }
+						: error instanceof RpcOperationError
 							? this.resultChange(error.result)
 							: {
 									state: "outcome_unknown",

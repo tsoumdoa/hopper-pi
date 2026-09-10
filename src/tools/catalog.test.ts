@@ -5,17 +5,13 @@ import {
 	HOPPER_REGISTERED_CATALOG,
 	RH_CAPTURE_VIEW_CATALOG_ENTRY,
 	buildCatalogSizeReport,
-	getAlwaysActiveToolNames,
 	type HopperToolCatalogEntry,
 } from "./catalog.js";
 import {
 	activateSearchMatches,
 	type ActivateSearchMatchesResult,
 	createHopperSearchToolsTool,
-	parseProgressiveResetReason,
 	rankHopperTools,
-	resetProgressiveActiveTools,
-	shouldResetProgressiveTools,
 } from "./hopper-search-tools.js";
 
 function withSearchCatalog(): HopperToolCatalogEntry[] {
@@ -26,6 +22,7 @@ function withSearchCatalog(): HopperToolCatalogEntry[] {
 			setActiveTools: () => {},
 		} as never,
 		() => HOPPER_REGISTERED_CATALOG,
+		{ allowedToolNames: async () => new Set(), activateByName: async () => {} },
 	);
 	return [
 		...HOPPER_REGISTERED_CATALOG,
@@ -41,7 +38,7 @@ function withSearchCatalog(): HopperToolCatalogEntry[] {
 
 test("always-active core matches issue policy plus canvas errors", () => {
 	const catalog = withSearchCatalog();
-	const core = getAlwaysActiveToolNames(catalog).sort();
+	const core = catalog.filter(entry => entry.alwaysActive).map(entry => entry.tool.name).sort();
 	assert.deepEqual(core, [
 		"gh_get_canvas",
 		"gh_get_canvas_errors",
@@ -111,7 +108,26 @@ test("rankHopperTools returns actionable no-match hints", () => {
 	assert.ok(result.noMatch.suggestions.length > 0);
 });
 
-test("activateSearchMatches is additive and respects limit", () => {
+test("discovery reaches inactive tools after ten active or unavailable matches", async () => {
+	const catalog = Array.from({ length: 12 }, (_, index) => ({
+		...HOPPER_REGISTERED_CATALOG[0],
+		tool: { ...HOPPER_REGISTERED_CATALOG[0].tool, name: `tool_${String(index).padStart(2, "0")}` },
+		keywords: ["review"],
+	}));
+	for (const active of [[], catalog.slice(0, 10).map(entry => entry.tool.name)]) {
+		const activated: string[] = [];
+		const result = await activateSearchMatches({ getActiveTools: () => active }, catalog, "review", {
+			registeredNames: new Set(catalog.slice(10).map(entry => entry.tool.name)),
+			limit: 1,
+			activate: async name => { activated.push(name); },
+		});
+		assert.deepEqual(activated, ["tool_10"]);
+		assert.deepEqual(result.added, ["tool_10"]);
+		assert.equal(result.truncated, true);
+	}
+});
+
+test("activateSearchMatches is additive and respects limit", async () => {
 	const catalog = withSearchCatalog();
 	let active = ["read", "rh_run_script", "hopper_search_tools", "gh_get_canvas"];
 	const pi = {
@@ -122,8 +138,9 @@ test("activateSearchMatches is additive and respects limit", () => {
 	};
 	const registered = new Set(catalog.map((entry) => entry.tool.name));
 
-	const first = activateSearchMatches(pi, catalog, "viewport camera", {
+	const first = await activateSearchMatches(pi, catalog, "viewport camera", {
 		registeredNames: registered,
+		activate: async name => { active.push(name); },
 		limit: 2,
 	});
 	assert.ok(first.added.includes("rh_view_control"));
@@ -132,8 +149,9 @@ test("activateSearchMatches is additive and respects limit", () => {
 	assert.ok(active.includes("rh_view_control"));
 
 	const beforeSecond = [...active];
-	const second = activateSearchMatches(pi, catalog, "viewport camera", {
+	const second = await activateSearchMatches(pi, catalog, "viewport camera", {
 		registeredNames: registered,
+		activate: async name => { active.push(name); },
 		limit: 2,
 	});
 	assert.deepEqual(second.added, []);
@@ -141,7 +159,7 @@ test("activateSearchMatches is additive and respects limit", () => {
 	assert.deepEqual(active, beforeSecond);
 });
 
-test("activateSearchMatches skips unregistered image-gated tools", () => {
+test("activateSearchMatches skips unregistered image-gated tools", async () => {
 	const catalog = withSearchCatalog();
 	let active = ["hopper_search_tools"];
 	const pi = {
@@ -154,11 +172,12 @@ test("activateSearchMatches skips unregistered image-gated tools", () => {
 		catalog.map((entry) => entry.tool.name).filter((name) => name !== "rh_capture_view"),
 	);
 
-	const result = activateSearchMatches(pi, catalog, "screenshot viewport capture", {
+	const result = await activateSearchMatches(pi, catalog, "screenshot viewport capture", {
 		registeredNames: registered,
+		activate: async name => { active.push(name); },
 		limit: 5,
 	});
-	assert.ok(result.skippedUnregistered.includes("rh_capture_view"));
+	assert.ok(result.skippedUnavailable.includes("rh_capture_view"));
 	assert.ok(!active.includes("rh_capture_view"));
 });
 
@@ -172,7 +191,10 @@ test("hopper_search_tools does not reactivate image-gated tools for text-only mo
 			active = names;
 		},
 	};
-	const searchTool = createHopperSearchToolsTool(pi as never, () => catalog);
+	const searchTool = createHopperSearchToolsTool(pi as never, () => catalog, {
+		allowedToolNames: async () => new Set(catalog.map(entry => entry.tool.name)),
+		activateByName: async name => { active.push(name); },
+	});
 
 	const result = await searchTool.execute(
 		"tool-call",
@@ -183,51 +205,8 @@ test("hopper_search_tools does not reactivate image-gated tools for text-only mo
 	);
 
 	const details = result.details as ActivateSearchMatchesResult;
-	assert.ok(details.skippedUnregistered.includes("rh_capture_view"));
+	assert.ok(details.skippedUnavailable.includes("rh_capture_view"));
 	assert.ok(!active.includes("rh_capture_view"));
-});
-
-test("resetProgressiveActiveTools preserves non-Hopper tools and restores core", () => {
-	const catalog = withSearchCatalog();
-	let active = [
-		"read",
-		"bash",
-		"ask_user",
-		"rh_run_script",
-		"rh_view_control",
-		"gh_edit_script",
-		"hopper_search_tools",
-	];
-	const pi = {
-		getAllTools: () => catalog.map((entry) => ({ name: entry.tool.name })),
-		getActiveTools: () => active,
-		setActiveTools(names: string[]) {
-			active = names;
-		},
-	};
-
-	const next = resetProgressiveActiveTools(pi as never, catalog);
-	assert.ok(next.includes("read"));
-	assert.ok(next.includes("bash"));
-	assert.ok(next.includes("ask_user"));
-	assert.ok(next.includes("rh_run_script"));
-	assert.ok(next.includes("rh_query_objects"));
-	assert.ok(next.includes("gh_get_canvas"));
-	assert.ok(next.includes("gh_get_canvas_errors"));
-	assert.ok(next.includes("hopper_search_tools"));
-	assert.ok(!next.includes("rh_view_control"));
-	assert.ok(!next.includes("gh_edit_script"));
-});
-
-test("shouldResetProgressiveTools only on startup/reload/new", () => {
-	assert.equal(shouldResetProgressiveTools("startup"), true);
-	assert.equal(shouldResetProgressiveTools("reload"), true);
-	assert.equal(shouldResetProgressiveTools("new"), true);
-	assert.equal(shouldResetProgressiveTools("resume"), false);
-	assert.equal(shouldResetProgressiveTools("fork"), false);
-	assert.equal(parseProgressiveResetReason(undefined), "startup");
-	assert.equal(parseProgressiveResetReason("new"), "new");
-	assert.equal(parseProgressiveResetReason("unknown"), "startup");
 });
 
 test("catalog size report includes groups and bytes", () => {
@@ -246,4 +225,43 @@ test("catalog entries have unique registration names and search keywords", () =>
 	for (const entry of catalog) {
 		assert.ok(entry.keywords.length > 0, `${entry.tool.name} should have search keywords`);
 	}
+});
+
+
+test("discovery reports successful activations when another tool becomes unavailable", async () => {
+	const catalog = withSearchCatalog();
+	const active = ["read"];
+	const attempted: string[] = [];
+	const tool = createHopperSearchToolsTool({
+		getAllTools: () => catalog.map(entry => entry.tool),
+		getActiveTools: () => active,
+	} as never, () => catalog, {
+		allowedToolNames: async () => new Set(["rh_view_control", "rh_capture_view"]),
+		activateByName: async name => {
+			attempted.push(name);
+			if (name === "rh_capture_view") throw new Error("disabled during search");
+			active.push(name);
+		},
+	});
+	const result = await tool.execute("search", { query: "rh_capture_view viewport", limit: 1 },
+		undefined, undefined, { model: { input: ["text", "image"] } } as never);
+	const details = result.details as ActivateSearchMatchesResult;
+	assert.deepEqual(details.added, ["rh_view_control"]);
+	assert.deepEqual(details.skippedUnavailable, ["rh_capture_view"]);
+	assert.deepEqual(attempted, ["rh_capture_view", "rh_view_control"]);
+	assert.deepEqual(active, ["read", "rh_view_control"]);
+});
+
+test("discovery omits tools disabled by saved policy", async () => {
+	const catalog = withSearchCatalog();
+	const tool = createHopperSearchToolsTool({
+		getAllTools: () => catalog.map(entry => entry.tool),
+		getActiveTools: () => [],
+	} as never, () => catalog, {
+		allowedToolNames: async () => new Set(),
+		activateByName: async () => { assert.fail("disabled tools must not be activated"); },
+	});
+	const result = await tool.execute("search", { query: "viewport" },
+		undefined, undefined, { model: { input: ["text", "image"] } } as never);
+	assert.deepEqual((result.details as ActivateSearchMatchesResult).matches, []);
 });

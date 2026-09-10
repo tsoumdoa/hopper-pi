@@ -1,3 +1,4 @@
+import { TOOL_PLUGINS } from "../plugins/registry.js";
 import { rhDocumentTool } from "./rh-document.js";
 import { ghDocumentTool } from "./gh-document.js";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
@@ -27,6 +28,7 @@ export const HOPPER_TOOL_GROUPS = [
 	"gh-edit",
 	"gh-script",
 	"interaction",
+	...TOOL_PLUGINS.map(plugin => `plugin:${plugin.id}`),
 ] as const;
 
 export type HopperToolGroup = (typeof HOPPER_TOOL_GROUPS)[number];
@@ -172,18 +174,6 @@ export const RH_CAPTURE_VIEW_CATALOG_ENTRY: HopperToolCatalogEntry = {
 /** Tools registered eagerly (backend-guarded) in registration order. */
 export const ALL_TOOLS = HOPPER_REGISTERED_CATALOG.map((entry) => entry.tool);
 
-export function getAlwaysActiveToolNames(
-	catalog: readonly HopperToolCatalogEntry[],
-): string[] {
-	return catalog.filter((entry) => entry.alwaysActive).map((entry) => entry.tool.name);
-}
-
-export function getManagedHopperToolNames(
-	catalog: readonly HopperToolCatalogEntry[],
-): ReadonlySet<string> {
-	return new Set(catalog.map((entry) => entry.tool.name));
-}
-
 export type ToolSchemaSize = {
 	name: string;
 	group: HopperToolGroup;
@@ -210,13 +200,7 @@ function utf8Bytes(value: string): number {
 }
 
 function emptyGroupTotals(): Record<HopperToolGroup, { count: number; totalBytes: number }> {
-	return {
-		rhino: { count: 0, totalBytes: 0 },
-		"gh-read": { count: 0, totalBytes: 0 },
-		"gh-edit": { count: 0, totalBytes: 0 },
-		"gh-script": { count: 0, totalBytes: 0 },
-		interaction: { count: 0, totalBytes: 0 },
-	};
+	return Object.fromEntries(HOPPER_TOOL_GROUPS.map(id => [id, { count: 0, totalBytes: 0 }]));
 }
 
 export function measureToolSchemaSize(entry: HopperToolCatalogEntry): ToolSchemaSize {
@@ -249,7 +233,7 @@ export function buildCatalogSizeReport(
 	});
 	const byGroup = emptyGroupTotals();
 	for (const tool of tools) {
-		const row = byGroup[tool.group];
+		const row = byGroup[tool.group] ??= { count: 0, totalBytes: 0 };
 		row.count += 1;
 		row.totalBytes += tool.totalBytes;
 	}
@@ -270,7 +254,7 @@ export function formatCatalogSizeReport(report: CatalogSizeReport): string {
 		"",
 		"By group:",
 	];
-	for (const group of HOPPER_TOOL_GROUPS) {
+	for (const group of Object.keys(report.byGroup)) {
 		const row = report.byGroup[group];
 		lines.push(`  ${group}: ${row.count} tools, ${row.totalBytes} bytes`);
 	}

@@ -72,7 +72,9 @@ function fakeRuntime(): HostRuntime {
 		login: vi.fn(async () => {}),
 		logout: vi.fn(async () => {}),
 		listSkills: vi.fn(async () => ({ folder: "/skills", skills: [], diagnostics: [] })),
-		listTools: vi.fn(() => ({ tools: [{ name: "read", description: "Read skills", active: true, parameters: { type: "object" } }] })),
+		listTools: vi.fn(() => ({ tools: [] })),
+		updateToolSettings: vi.fn(async () => ({ ok: true, snapshot: { tools: [] } })),
+		getToolSettings: vi.fn(async () => ({ tools: [{ name: "read", description: "Read skills", active: true, parameters: { type: "object" } }] })),
 		readSkill: vi.fn(() => "# Test skill"),
 		updateSkills: vi.fn(async () => ({ folder: "/skills", skills: [], diagnostics: [] })),
 		dispose: vi.fn(async () => {}),
@@ -199,7 +201,7 @@ describe("Hopper loopback server", () => {
 		reopened.close();
 	});
 
-	it("authenticates tool listing and rejects mutations", async () => {
+	it("authenticates tool listing and validates mutations", async () => {
 		const runtime = fakeRuntime();
 		const server = await startHopperServer({ runtime, staticDir: await staticDirectory(), token: "tools-token", protocolHandshake, getRuntimeStatus });
 		servers.push(server);
@@ -207,15 +209,39 @@ describe("Hopper loopback server", () => {
 		const headers = { Authorization: "Bearer tools-token" };
 		await expect(fetch(endpoint)).resolves.toMatchObject({ status: 403 });
 		await expect(fetch(endpoint, { headers: { Authorization: "Bearer wrong" } })).resolves.toMatchObject({ status: 403 });
-		expect(runtime.listTools).not.toHaveBeenCalled();
+		expect(runtime.getToolSettings).not.toHaveBeenCalled();
 		const response = await fetch(endpoint, { headers });
 		expect(response.headers.get("cache-control")).toBe("no-store");
-		expect(await response.json()).toEqual(runtime.listTools());
-		await expect(fetch(endpoint, { method: "POST", headers })).resolves.toMatchObject({ status: 405 });
-		vi.mocked(runtime.listTools).mockImplementation(() => { throw new Error("Hopper host is stopped"); });
+		expect(await response.json()).toEqual(await runtime.getToolSettings());
+		await expect(fetch(endpoint, { method: "POST", headers })).resolves.toMatchObject({ status: 400 });
+		vi.mocked(runtime.getToolSettings).mockImplementation(() => { throw new Error("Hopper host is stopped"); });
 		const failed = await fetch(endpoint, { headers });
 		expect(failed.status).toBe(400);
-		expect(await failed.json()).toEqual({ error: "Hopper host is stopped" });
+		expect(await failed.json()).toEqual({ error: "Could not update tool settings. Reconnect and try again." });
+	});
+
+	it("returns settings conflicts and never reflects credential input or backend errors", async () => {
+		const runtime = fakeRuntime();
+		const server = await startHopperServer({ runtime, staticDir: await staticDirectory(), token: "tools-token", protocolHandshake, getRuntimeStatus });
+		servers.push(server);
+		const endpoint = `http://${server.host}:${server.port}/api/tools`;
+		const headers = { Authorization: "Bearer tools-token", "Content-Type": "application/json" };
+		const action = { type: "credential", pluginId: "firecrawl", expected: { epoch: "test", revision: 0 }, action: "save", key: "sentinel-secret" };
+		vi.mocked(runtime.updateToolSettings).mockResolvedValueOnce({ ok: false, code: "conflict", snapshot: { tools: [] } });
+		const conflict = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(action) });
+		expect(conflict.status).toBe(409);
+		expect(await conflict.json()).toEqual({ ok: false, code: "conflict", snapshot: { tools: [] } });
+		expect(runtime.updateToolSettings).toHaveBeenCalledWith(action);
+		vi.mocked(runtime.updateToolSettings).mockRejectedValueOnce(new Error("sentinel-secret"));
+		const failed = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(action) });
+		expect(failed.status).toBe(400);
+		expect(await failed.text()).not.toContain("sentinel-secret");
+		const malformed = await fetch(endpoint, { method: "POST", headers, body: '{"key":"sentinel-secret"' });
+		expect(malformed.status).toBe(400);
+		expect(await malformed.text()).not.toContain("sentinel-secret");
+		const oversized = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify({ ...action, key: "x".repeat(4097) }) });
+		expect(oversized.status).toBe(400);
+		expect(runtime.updateToolSettings).toHaveBeenCalledTimes(2);
 	});
 
 	it("authenticates skill listing, previews and settings, and validates mutations", async () => {
