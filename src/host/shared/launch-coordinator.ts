@@ -596,5 +596,9 @@ export async function createLaunchCoordinator(
 			return publicRecord(store.get(bootstrap.requestId)!);
 		},
 		refresh: refreshLaunches,
+		get hasPendingLaunch() {
+			return store.all().some((record) => record.expiresAt > Date.now() &&
+				["dispatching", "awaiting_registration", "awaiting_document"].includes(record.state));
+		},
 	};
 }

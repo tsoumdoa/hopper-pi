@@ -445,6 +445,7 @@ it("cannot recover an empty snapshot while original spawn dispatch is still pend
 	) => Promise<unknown>;
 	const pending = launch("call", { installationId: "rhino", requestId: "launch" });
 	await vi.waitFor(() => expect(f.spawns()).toBe(1));
+	expect(f.coordinator.hasPendingLaunch).toBe(true);
 	f.journal.requestCancellation(f.task.taskId);
 	await f.coordinator.refresh();
 	const input = {
@@ -461,6 +462,7 @@ it("cannot recover an empty snapshot while original spawn dispatch is still pend
 	).toBe(false);
 	release();
 	await pending;
+	expect(f.coordinator.hasPendingLaunch).toBe(false);
 	const persisted = f.journal
 		.snapshot()
 		.records.find((row) => row.kind === "launch" && row.id === "launch")!;

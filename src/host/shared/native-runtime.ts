@@ -62,6 +62,8 @@ interface Instance {
 	generation: string;
 }
 export class SharedNativeRuntime {
+	// Allow the first Rhino to finish starting and authenticate after host discovery.
+	private idleDeadline = Date.now() + 60_000;
 	private readonly registrations = new Map<
 		string,
 		Promise<{ lifecycleInstanceId: string; attachmentGeneration: string }>
@@ -73,6 +75,16 @@ export class SharedNativeRuntime {
 		private readonly journal: TaskJournal,
 		private readonly isProcessAlive: (pid: number) => boolean = processExists,
 	) {}
+	shouldStopAfterRhinoExit(now = Date.now()): boolean {
+		// Connection loss and document closure are not process exits. Persisted
+		// attachments also keep a restarted host alive while Rhino reconnects.
+		if (this.registrations.size || this.registry.list().some((attachment) =>
+			this.isProcessAlive(attachment.processId))) {
+			this.idleDeadline = now + 10_000;
+			return false;
+		}
+		return now >= this.idleDeadline;
+	}
 	async register(
 		input: unknown,
 	): Promise<{ lifecycleInstanceId: string; attachmentGeneration: string }> {
@@ -186,6 +198,7 @@ export class SharedNativeRuntime {
 				generation: handshake.attachmentGeneration,
 			};
 			this.instances.set(connection.lifecycleInstanceId, instance);
+			this.idleDeadline = Date.now() + 10_000;
 			// A transport/lifecycle replacement does not end a session while its Rhino process lives.
 			// Check exited processes here as well as during polling, including a quick quit/relaunch.
 			const previous = this.registry.list();

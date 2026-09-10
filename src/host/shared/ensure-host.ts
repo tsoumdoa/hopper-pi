@@ -44,7 +44,7 @@ export async function ensureSharedHost(
 		// Another Rhino may have started the winner, which binds the endpoint
 		// before loading its runtime and publishing discovery. Wait for verified
 		// readiness without spawning or replacing that owner.
-		while (!draining || await endpointOccupied(state.endpointPort)) {
+		while (await endpointOccupied(state.endpointPort)) {
 			const current = await options.control.snapshot();
 			if (
 				!current ||
@@ -139,8 +139,8 @@ async function healthyDiscovery(
 			{ signal: AbortSignal.timeout(750), redirect: "error" },
 		);
 		if (!response.ok) return null;
-		const health = (await response.json()) as Partial<HostDiscovery>;
-		return health.hostEpoch === discovery.hostEpoch &&
+		const health = (await response.json()) as Partial<HostDiscovery> & { ready?: boolean };
+		return health.ready === true && health.hostEpoch === discovery.hostEpoch &&
 			health.protocolVersion === discovery.protocolVersion &&
 			health.schemaVersion === discovery.schemaVersion &&
 			health.journalIdentity === state.journalIdentity &&

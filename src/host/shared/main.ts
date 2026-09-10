@@ -135,7 +135,7 @@ export async function startSharedHost(
 				`[shared-host] Registration failed: ${error instanceof Error ? error.message : "Unknown registration failure"}\n`,
 			),
 		health: () =>
-			backend
+			backend && !closing
 				? { ...discovery, registrationToken: undefined, ready: true }
 				: { ready: false },
 		register: async (request) => {
@@ -419,6 +419,11 @@ export async function startSharedHost(
 		let refreshing = false;
 		refresh = setInterval(() => {
 			if (refreshing || closing) return;
+			if (native!.shouldStopAfterRhinoExit() && !launches!.hasPendingLaunch) {
+				process.stdout.write("[shared-host] No Hopper Rhino processes remain; shutting down\n");
+				void close();
+				return;
+			}
 			refreshing = true;
 			refreshWork = Promise.all([native!.refresh(), admin!.refreshAuth()])
 				.then(async () => {

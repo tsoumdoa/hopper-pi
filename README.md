@@ -96,7 +96,7 @@ cd hoppercode
 ./scripts/install-rhino-mac.sh --open-rhino
 ```
 
-Quit Rhino before running the script. It builds and verifies the `mac-arm64` package, creates the Yak archive, and installs it with Rhino 8's Yak executable. If `hopper-pi` is installed, the script asks before replacing it.
+Quit Rhino before running the script. It builds and verifies the `mac-arm64` package, creates the Yak archive, stops Hopper's background host, and installs it with Rhino 8's Yak executable. If `hopper-pi` is installed, the script asks before replacing it. The next `HopperCode` command starts the newly installed host; saved history remains available.
 
 #### Windows x64
 

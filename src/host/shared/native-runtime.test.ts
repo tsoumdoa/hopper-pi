@@ -724,6 +724,36 @@ it("does not retire a current attachment when its proposed replacement fails aut
 	expect(registry.list().map((target) => [target.lifecycleInstanceId, target.admission])).toEqual([["life", "ready"]]);
 });
 
+it("keeps the original host while any Rhino process survives and stops only after the last exit", async () => {
+	const journal = new TaskJournal(":memory:"); journals.push(journal);
+	const registry = new SharedRegistry(journal);
+	const alive = new Set<number>([123, 456]);
+	const runtime = new SharedNativeRuntime("epoch", registry, journal, (pid) => alive.has(pid));
+	const now = Date.now();
+	expect(runtime.shouldStopAfterRhinoExit(now + 59_000)).toBe(false);
+	expect(runtime.shouldStopAfterRhinoExit(now + 61_000)).toBe(true);
+	for (const pid of alive) {
+		wire.life = String(pid);
+		await runtime.register({ profilePath: `/${pid}.json`, hostEpoch: "epoch", process: { pid, startIdentity: `start-${pid}` } });
+	}
+	alive.delete(123); // The Rhino that started Node exits first.
+	await runtime.refresh();
+	expect(runtime.shouldStopAfterRhinoExit(now + 70_000)).toBe(false);
+	// Even an explicit transport detach does not mean the second Rhino exited.
+	await runtime.register({ action: "detach", lifecycleInstanceId: "456", hostEpoch: "epoch" });
+	expect(runtime.shouldStopAfterRhinoExit(now + 80_000)).toBe(false);
+	alive.clear();
+	expect(runtime.shouldStopAfterRhinoExit(now + 89_000)).toBe(false);
+	alive.add(789); // Another Rhino registers during the grace period.
+	wire.life = "789";
+	await runtime.register({ profilePath: "/789.json", hostEpoch: "epoch", process: { pid: 789, startIdentity: "start-789" } });
+	expect(runtime.shouldStopAfterRhinoExit(now + 89_000)).toBe(false);
+	alive.clear();
+	expect(runtime.shouldStopAfterRhinoExit(now + 98_000)).toBe(false);
+	expect(runtime.shouldStopAfterRhinoExit(now + 99_000)).toBe(true);
+	await runtime.close();
+});
+
 it("keeps one conversation session across overlapping Rhino lifetimes and resets after every process exits", async () => {
 	const journal = new TaskJournal(":memory:"); journals.push(journal);
 	let registry = new SharedRegistry(journal);

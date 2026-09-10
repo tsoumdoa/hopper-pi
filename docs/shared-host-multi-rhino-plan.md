@@ -2,6 +2,8 @@
 
 The shared host runs outside Rhino and owns conversations, model sessions, task scheduling, and recovery records. Rhino and Grasshopper supply native operations through authenticated lifecycle attachments. See [operation and storage details](shared-host-implementation-status.md), [native operation policies](shared-host-native-operation-audit.md), and [platform acceptance evidence](shared-host-platform-probes.md).
 
+The first HopperCode launch starts a detached Node host. That Rhino process does not own the host: closing it leaves the same host and browser connection serving the remaining Rhino processes. There is no leader election. After the last registered Rhino process exits, the host waits about ten seconds, drains tasks, saves history, and exits. Browser closure, document closure, and transport loss do not trigger shutdown while a registered Rhino process remains alive. An initial launch has sixty seconds to register, and an unexpired managed Rhino launch also postpones shutdown. A subsequent HopperCode launch starts a new host; if the old host is still draining, it waits for the endpoint to close first.
+
 ## Ownership and scheduling
 
 Each message captures its selected document and accessible targets. Its root task can edit the selected document directly and delegate to other allowed documents. Child tasks use separate Pi sessions and inherit only their assignment and selected attachments. A child cannot expand document or launch authority.

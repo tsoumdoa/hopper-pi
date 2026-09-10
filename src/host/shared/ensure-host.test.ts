@@ -48,7 +48,7 @@ describe("detached shared host launcher", () => {
 					registrationToken: "private",
 				};
 				const server = createServer((_request, response) =>
-					response.end(JSON.stringify(discovery)),
+					response.end(JSON.stringify({ ...discovery, ready: true })),
 				);
 				servers.push(server);
 				await options.control.acquireOwnership(server, state.revision);
@@ -99,7 +99,7 @@ describe("detached shared host launcher", () => {
 		).rejects.toThrow("superseded");
 		expect((await options.control.snapshot())!.desiredState).toBe("stopped");
 	});
-	it("lets an explicit start wait for its known prior host to drain without stealing ownership", async () => {
+	it.each([true, false])("waits for the previous host to drain before replacing it, intentional stop: %s", async (intentional) => {
 		const options = setup();
 		const first = await options.control.initialize(options);
 		const discovery: HostDiscovery = {
@@ -115,12 +115,12 @@ describe("detached shared host launcher", () => {
 			registrationToken: "private",
 		};
 		const old = createServer((_request, response) =>
-			response.end(JSON.stringify(discovery)),
+			response.end(JSON.stringify({ ...discovery, ready: intentional })),
 		);
 		servers.push(old);
 		await options.control.acquireOwnership(old, first.revision);
 		await options.control.publish(discovery);
-		await options.control.setDesiredState("stopped", first.revision);
+		if (intentional) await options.control.setDesiredState("stopped", first.revision);
 		const timer = setTimeout(() => {
 			old.closeAllConnections();
 			old.close();
@@ -139,7 +139,7 @@ describe("detached shared host launcher", () => {
 						hostEpoch: "new",
 					};
 					const server = createServer((_request, response) =>
-						response.end(JSON.stringify(next)),
+						response.end(JSON.stringify({ ...next, ready: true })),
 					);
 					servers.push(server);
 					await options.control.acquireOwnership(server, state.revision);
@@ -147,7 +147,7 @@ describe("detached shared host launcher", () => {
 				},
 			});
 			expect(result.hostEpoch).toBe("new");
-			expect(result.revision).toBe(3);
+			expect(result.revision).toBe(intentional ? 3 : 1);
 			expect(spawns).toBe(1);
 		} finally {
 			clearTimeout(timer);
@@ -169,7 +169,7 @@ describe("detached shared host launcher", () => {
 			registrationToken: "private",
 		};
 		const old = createServer((_request, response) =>
-			response.end(JSON.stringify(discovery)),
+			response.end(JSON.stringify({ ...discovery, ready: true })),
 		);
 		servers.push(old);
 		await options.control.acquireOwnership(old, first.revision);
@@ -222,7 +222,7 @@ it("lets a second Rhino join the winner while it has bound HTTP but not publishe
 				protocolVersion: 2, schemaVersion: 2, registrationToken: "private",
 			};
 			let ready = false;
-			const server = createServer((_request, response) => response.end(JSON.stringify(ready ? discovery : { ready: false })));
+			const server = createServer((_request, response) => response.end(JSON.stringify(ready ? { ...discovery, ready: true } : { ready: false })));
 			servers.push(server);
 			await options.control.acquireOwnership(server, state.revision);
 			bound();
