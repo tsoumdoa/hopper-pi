@@ -1,10 +1,11 @@
+import type { ToolPlugin } from "../types.js";
 import { Type } from "@earendil-works/pi-ai";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { FirecrawlClient, FirecrawlError, type FirecrawlOptions, type FirecrawlToolName } from "./client.js";
 
 export const FIRECRAWL_TOOLS = [
-	{ id: "firecrawl.tool.search", name: "web_search", owner: "firecrawl", parent: "firecrawl", defaultActive: false, requirements: ["firecrawl-key"] },
-	{ id: "firecrawl.tool.fetch", name: "web_fetch", owner: "firecrawl", parent: "firecrawl", defaultActive: false, requirements: ["firecrawl-key"] },
+	{ id: "firecrawl.tool.search", name: "web_search", owner: "firecrawl", parent: "firecrawl", defaultActive: false, requirements: ["credential"] },
+	{ id: "firecrawl.tool.fetch", name: "web_fetch", owner: "firecrawl", parent: "firecrawl", defaultActive: false, requirements: ["credential"] },
 ] as const;
 
 export function createFirecrawlPlugin(options: FirecrawlOptions) {
@@ -34,3 +35,19 @@ export function createFirecrawlPlugin(options: FirecrawlOptions) {
 }
 
 export type { FirecrawlOptions, FirecrawlAdmission, FirecrawlToolName } from "./client.js";
+
+export const firecrawlPlugin: ToolPlugin = {
+	id: "firecrawl", name: "Firecrawl", description: "Web search and webpage reading",
+	defaultEnabled: false, keywords: ["web", "search", "website", "research", "fetch", "read page"],
+	credential: {
+		label: "Firecrawl API key",
+		notice: "Search queries and requested URLs are sent to Firecrawl and may consume credits on your account.",
+	},
+	inventory: FIRECRAWL_TOOLS,
+	create: context => {
+		const plugin = createFirecrawlPlugin(context);
+		return { ...plugin, abortTool: name => {
+			if (name === "web_search" || name === "web_fetch") plugin.abortTool(name);
+		} };
+	},
+};

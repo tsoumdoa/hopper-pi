@@ -1,6 +1,6 @@
 # Firecrawl
 
-Firecrawl is bundled and starts disabled. In Agent tools, turn on Firecrawl, enter your own API key, and choose **Save key and enable**. Search queries and requested URLs go to Firecrawl and may consume credits on your account. Saving a replacement key alone does not enable the plugin. No package installation or Rhino restart is needed.
+Firecrawl is bundled and starts disabled. In Agent tools, use **Manage API key** to enter and save your own key, then turn on Firecrawl. Search queries and requested URLs go to Firecrawl and may consume credits on your account. Saving a replacement key alone does not enable the plugin. No package installation or Rhino restart is needed.
 
 The parent switch preserves each child's preference. Disable Webpage reading to keep search available, or disable Firecrawl to block both tools. Once the settings save succeeds, subsequent admissions are blocked across hosts sharing the profile. Hopper attempts to cancel requests already admitted. The provider may still charge for requests it already received. Past results stay in the conversation.
 
@@ -39,3 +39,7 @@ Firecrawl's [security advisory for malicious scrape redirects](https://github.co
 ## Verification
 
 Automated adapter tests run offline with injected responses and admission callbacks. They cover payloads, URL normalization, secret-safe errors, bounded response reading, deadlines, cancellation, and no retries. Provider behavior, live billing, and packaged credential backends still require verification on the target platforms. No live Firecrawl request was made during implementation because no test key was provided.
+
+## Plugin integration
+
+Firecrawl is declared in `src/plugins/firecrawl/index.ts` and included through `src/plugins/registry.ts`. See [bundled plugins](plugins.md) for adding or removing providers and settings migration.

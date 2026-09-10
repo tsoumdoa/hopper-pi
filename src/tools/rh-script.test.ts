@@ -195,6 +195,7 @@ it("discovers saved source edits without confusing Grasshopper component editing
 it("offers the screenshot model fallback only while capture is allowed by policy", async () => {
 	const events = new Map<string, Function>();
 	const policy = {
+		pluginCatalog: [],
 		setBusy: vi.fn(), setContext: vi.fn(), reconcile: vi.fn(async () => {}),
 		allowedToolNames: vi.fn(async () => new Set<string>()),
 	};

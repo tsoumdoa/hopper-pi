@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ToolPolicyStore } from "./tool-policy-store.js";
 import { ToolCredentials, type ProtectedCredentialBackend } from "./tool-credentials.js";
-import { publishFirecrawlCredential, type ToolPolicyDescriptor } from "./tool-policy.js";
+import { publishPluginCredential, type ToolPolicyDescriptor } from "./tool-policy.js";
 
 const inventory: ToolPolicyDescriptor[] = [{ id: "test", name: "test", owner: "hopper", parent: "hopper.rhino", defaultActive: true, requirements: [] }];
 const directories: string[] = [];
@@ -25,7 +25,7 @@ describe("authoritative policy persistence", () => {
 		const original = await create();
 		await original.update(await original.read(), { target: "tools", id: "test", enabled: false });
 		await original.update(await original.read(), { target: "parents", id: "hopper.rhino", enabled: false });
-		await original.transition(current => publishFirecrawlCredential(current, { ...current, generation: 0 }, "00000000-0000-4000-8000-000000000001", false));
+		await original.transition(current => publishPluginCredential(current, { ...current, generation: 0 }, "00000000-0000-4000-8000-000000000001", false, "firecrawl"));
 		const before = await original.read();
 		const added = { ...inventory[0], id: "next", name: "next" };
 		const newer = new ToolPolicyStore([...inventory, added], { directory: original.directory });
@@ -152,7 +152,7 @@ describe("credential publication", () => {
 			write: async (reference, secret) => { entered(); await new Promise<void>(resolve => { finish = resolve; }); entries.set(reference, secret); },
 			remove: async reference => { entries.delete(reference); },
 		};
-		const credentials = new ToolCredentials(store, backend);
+		const credentials = new ToolCredentials(store, "firecrawl", backend);
 		const save = credentials.save(initial, "sentinel-secret", true);
 		await started;
 		await store.update(initial, { target: "parents", id: "firecrawl", enabled: false });
@@ -163,7 +163,7 @@ describe("credential publication", () => {
 	});
 	it("commits removal before failed deletion and sanitizes backend errors", async () => {
 		const store = await create();
-		const credentials = new ToolCredentials(store, {
+		const credentials = new ToolCredentials(store, "firecrawl", {
 			read: async () => { throw new Error("sentinel-secret"); },
 			write: async () => {}, remove: async () => { throw new Error("sentinel-secret"); },
 		});

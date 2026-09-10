@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	assertPolicyInventory, checkPolicyPreflight, createPolicyDefaults, patchPolicy,
-	publishFirecrawlCredential, reconcilePolicySession, removeFirecrawlCredential, resetToolPolicy, resolveToolPolicy,
+	publishPluginCredential, reconcilePolicySession, removePluginCredential, resetToolPolicy, resolveToolPolicy,
 	type PolicyRuntime, type PolicySnapshot, type PolicyUpdate,
 } from "./tool-policy.js";
 import { decodeToolPolicy } from "./tool-policy-schema.js";
@@ -9,7 +9,7 @@ import { HOPPER_POLICY_INVENTORY as inventory } from "../tools/policy-inventory.
 import { HOPPER_REGISTERED_CATALOG } from "../tools/catalog.js";
 import { toolPolicyProfileDirectory } from "./tool-policy-profile.js";
 
-const runtime: PolicyRuntime = { backend: true, images: true, ui: true, credentialStore: "available", credentialGeneration: 1 };
+const runtime: PolicyRuntime = { backend: true, images: true, ui: true, credentials: { firecrawl: { status: "configured", generation: 1 } } };
 const fresh = () => createPolicyDefaults("epoch-a", inventory);
 const tool = (name: string) => inventory.find(entry => entry.name === name)!;
 const unwrap = (result: PolicyUpdate): PolicySnapshot => {
@@ -19,7 +19,7 @@ const unwrap = (result: PolicyUpdate): PolicySnapshot => {
 const toggle = (policy: PolicySnapshot, target: "tools" | "parents", id: string, enabled: boolean) =>
 	unwrap(patchPolicy(policy, policy, { target, id, enabled }));
 const ref = "b0259729-a21f-4a31-872a-50f731ba48e5";
-const configured = () => unwrap(publishFirecrawlCredential(fresh(), { ...fresh(), generation: 0 }, ref, true));
+const configured = () => unwrap(publishPluginCredential(fresh(), { ...fresh(), generation: 0 }, ref, true, "firecrawl"));
 
 describe("policy inventory and defaults", () => {
 	it("covers the catalog and registrations outside it with unique identities", () => {
@@ -112,7 +112,7 @@ describe("conditional updates and credential publication", () => {
 		expect(result).toEqual({ ok: false, code: "conflict", snapshot: current });
 	});
 	it("does not enable the plugin when only saving a key", () => {
-		const policy = unwrap(publishFirecrawlCredential(fresh(), { ...fresh(), generation: 0 }, ref, false));
+		const policy = unwrap(publishPluginCredential(fresh(), { ...fresh(), generation: 0 }, ref, false, "firecrawl"));
 		expect(policy.parents.firecrawl.enabled).toBe(false);
 		expect(policy.credentials.firecrawl.reference).toBe(ref);
 	});
@@ -120,14 +120,14 @@ describe("conditional updates and credential publication", () => {
 		const initial = configured();
 		const expected = { ...initial, generation: initial.credentials.firecrawl.generation };
 		const replacement = "8ef44ee7-f701-4a53-b30f-0d6598eb7da5";
-		for (const current of [toggle(initial, "parents", "firecrawl", false), unwrap(removeFirecrawlCredential(initial, initial)), createPolicyDefaults("new-epoch", inventory)]) {
-			expect(publishFirecrawlCredential(current, expected, replacement, true)).toEqual({ ok: false, code: "conflict", snapshot: current });
+		for (const current of [toggle(initial, "parents", "firecrawl", false), unwrap(removePluginCredential(initial, initial, "firecrawl")), createPolicyDefaults("new-epoch", inventory)]) {
+			expect(publishPluginCredential(current, expected, replacement, true, "firecrawl")).toEqual({ ok: false, code: "conflict", snapshot: current });
 		}
 	});
 	it("tombstones block cached credentials without changing plugin or child preferences", () => {
 		const initial = configured();
 		const session = reconcilePolicySession(inventory, initial, runtime, false);
-		const removed = unwrap(removeFirecrawlCredential(initial, initial));
+		const removed = unwrap(removePluginCredential(initial, initial, "firecrawl"));
 		expect(removed.parents).toEqual(initial.parents);
 		expect(removed.tools).toEqual(initial.tools);
 		expect(removed.credentials.firecrawl).toEqual({ generation: 2, reference: null });
@@ -136,7 +136,7 @@ describe("conditional updates and credential publication", () => {
 	it("blocks inaccessible or outdated protected entries", () => {
 		const policy = configured();
 		const session = reconcilePolicySession(inventory, policy, runtime, false);
-		for (const changed of [{ credentialGeneration: 0 }, { credentialStore: "unavailable" as const }]) {
+		for (const changed of [{ credentials: { firecrawl: { status: "configured" as const, generation: 0 } } }, { credentials: { firecrawl: { status: "unavailable" as const } } }]) {
 			expect(resolveToolPolicy(tool("web_search"), policy, { ...runtime, ...changed }, session, true).status).toBe("credential-store-unavailable");
 		}
 	});
@@ -161,13 +161,13 @@ describe("settings decoding", () => {
 		for (const invalid of ["{sentinel-secret", "null", JSON.stringify({ ...policy, tools: null }), JSON.stringify({ ...policy, key: "sentinel-secret" }), JSON.stringify({ ...policy, revision: -1 })]) {
 			expect(decodeToolPolicy(invalid)).toEqual({ ok: false, code: "invalid-settings" });
 		}
-		expect(decodeToolPolicy(JSON.stringify({ ...policy, schemaVersion: 2 }))).toEqual({ ok: false, code: "unsupported-schema" });
+		expect(decodeToolPolicy(JSON.stringify({ ...policy, schemaVersion: 3 }))).toEqual({ ok: false, code: "unsupported-schema" });
 	});
 	it("rejects invalid revisions, credential references, and malformed gates without echoing values", () => {
 		const policy = fresh();
 		policy.tools[tool("rh_run_script").id].enabledAt = 1;
 		expect(decodeToolPolicy(JSON.stringify(policy)).ok).toBe(false);
-		const result = publishFirecrawlCredential(fresh(), { ...fresh(), generation: 0 }, "sentinel-secret", true);
+		const result = publishPluginCredential(fresh(), { ...fresh(), generation: 0 }, "sentinel-secret", true, "firecrawl");
 		expect(result.ok).toBe(false);
 		expect(JSON.stringify(result)).not.toContain("sentinel-secret");
 		expect(patchPolicy(fresh(), fresh(), { target: "tools", id: "__proto__", enabled: true }).ok).toBe(false);

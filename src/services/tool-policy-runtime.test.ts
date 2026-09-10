@@ -37,12 +37,12 @@ async function fixture(progressive = false) {
 	// Deliberately miss notifications: execution must still read the authoritative store.
 	vi.spyOn(store, "subscribe").mockImplementation(() => () => {});
 	const secrets = new Map<string, string>();
-	const credentials = new ToolCredentials(store, {
+	const credentials = new ToolCredentials(store, "firecrawl", {
 		read: async id => secrets.get(id) ?? null,
 		write: async (id, value) => { secrets.set(id, value); },
 		remove: async id => { secrets.delete(id); },
 	});
-	const runtime = new ToolPolicyRuntime({ store, credentials });
+	const runtime = new ToolPolicyRuntime({ store, credentials: new Map([["firecrawl", credentials]]) });
 	cleanups.push(async () => { await runtime.close(); await rm(directory, { recursive: true, force: true }); });
 	let active: string[] = [];
 	const registered = new Map<string, ToolDefinition>();
@@ -173,7 +173,7 @@ describe("shared runtime policy admissions", () => {
 			await pending;
 			expect(f.pi.getActiveTools()).toContain("rh_run_script");
 			expect(f.pi.getActiveTools()).not.toContain("web_search");
-			expect(publish.mock.calls.at(-1)?.[0].settings.credential).toBe("unavailable");
+			expect(publish.mock.calls.at(-1)?.[0].settings.parents.find((parent: { id: string }) => parent.id === "firecrawl")?.credential?.status).toBe("unavailable");
 			resume.resolve("late-secret");
 			await new Promise(resolve => setImmediate(resolve));
 			expect(publish).toHaveBeenCalledOnce();
@@ -201,7 +201,7 @@ describe("shared runtime policy admissions", () => {
 			expect(result).toBe("ready");
 			expect(f.pi.getActiveTools()).toContain("rh_run_script");
 			expect(f.pi.getActiveTools()).not.toContain("web_search");
-			expect((await f.runtime.getToolSettings()).settings?.credential).toBe("configured");
+			expect((await f.runtime.getToolSettings()).settings?.parents.find(parent => parent.id === "firecrawl")?.credential?.status).toBe("configured");
 			expect(read).not.toHaveBeenCalled();
 		} finally { clearTimeout(timer); resume.resolve(null); await pending; }
 	});
@@ -288,7 +288,7 @@ describe("shared runtime policy admissions", () => {
 		expect(read).toHaveBeenCalledOnce();
 		expect(publish).toHaveBeenCalledOnce();
 		expect(publish.mock.calls[0][0]).toBe(result.snapshot);
-		expect(result.snapshot.settings?.credential).toBe("configured");
+		expect(result.snapshot.settings?.parents.find(parent => parent.id === "firecrawl")?.credential?.status).toBe("configured");
 	});
 
 	it("activates Rhino tools without consulting protected credentials", async () => {
@@ -324,7 +324,7 @@ describe("shared runtime policy admissions", () => {
 		await pending;
 		expect(f.pi.getActiveTools()).not.toContain("web_search");
 		expect(publish).toHaveBeenCalledOnce();
-		expect(publish.mock.calls[0][0].settings.credential).toBe("unavailable");
+		expect(publish.mock.calls[0][0].settings.parents.find((parent: { id: string }) => parent.id === "firecrawl")?.credential?.status).toBe("unavailable");
 	});
 
 	it("revokes execution after a paused backend prerequisite despite missed notifications", async () => {
@@ -414,7 +414,7 @@ describe("shared runtime policy admissions", () => {
 		const tool = f.tool("web_search", async () => {
 			started.resolve();
 			await resume.promise;
-			await f.runtime.admitFirecrawl("web_search");
+			await f.runtime.admitPlugin("firecrawl", "web_search");
 			dispatch();
 			return completed();
 		});
@@ -476,7 +476,7 @@ describe("shared runtime policy admissions", () => {
 		const started = deferred(), resume = deferred();
 		const read = f.credentials.read.bind(f.credentials);
 		vi.spyOn(f.credentials, "read").mockImplementationOnce(async snapshot => { const key = await read(snapshot); started.resolve(); await resume.promise; return key; });
-		const pending = expect(f.runtime.admitFirecrawl("web_search")).rejects.toMatchObject({ code: "credential-changed" });
+		const pending = expect(f.runtime.admitPlugin("firecrawl", "web_search")).rejects.toMatchObject({ code: "credential-changed" });
 		await started.promise;
 		await f.credentials.remove(await f.store.read());
 		resume.resolve();

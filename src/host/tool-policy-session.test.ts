@@ -44,12 +44,12 @@ async function fixture(options: { progressive?: boolean; collision?: boolean } =
 		const store = new ToolPolicyStore(HOPPER_POLICY_INVENTORY, { directory: join(root, "profile") });
 		// Execution must remain authoritative even when notification delivery is paused.
 		vi.spyOn(store, "subscribe").mockImplementation(() => () => {});
-		const credentials = new ToolCredentials(store, {
+		const credentials = new ToolCredentials(store, "firecrawl", {
 			read: async id => secrets.get(id) ?? null,
 			write: async (id, value) => { secrets.set(id, value); },
 			remove: async id => { secrets.delete(id); },
 		});
-		policy = new ToolPolicyRuntime({ embedded: true, store, credentials });
+		policy = new ToolPolicyRuntime({ embedded: true, store, credentials: new Map([["firecrawl", credentials]]) });
 		const services = await createAgentSessionServices({
 			cwd: root, agentDir: join(root, "agent"),
 			// Pi's CLI flag map treats any present boolean flag as true, even a false value.
@@ -87,7 +87,7 @@ describe("real Pi SDK tool policy integration without network", () => {
 		expect(f.runtime.session.getActiveToolNames()).toContain("ask_user");
 		expect(f.runtime.session.getActiveToolNames()).toContain("pick_option");
 		expect(f.runtime.session.getActiveToolNames()).toContain("rh_capture_view");
-		await f.policy.credentials.save(await f.policy.store.read(), "memory-only-key", true);
+		await f.policy.credentialsFor("firecrawl").save(await f.policy.store.read(), "memory-only-key", true);
 		await f.policy.reconcile();
 		const exposed = f.runtime.session.agent.state.tools.slice();
 		expect(exposed.map(tool => tool.name).sort()).toEqual(HOPPER_POLICY_INVENTORY.map(tool => tool.name).sort());
@@ -116,7 +116,7 @@ describe("real Pi SDK tool policy integration without network", () => {
 
 	it("manual activation works with discovery disabled and resets in a real new session", async () => {
 		const f = await fixture({ progressive: true });
-		await f.policy.credentials.save(await f.policy.store.read(), "memory-only-key", true);
+		await f.policy.credentialsFor("firecrawl").save(await f.policy.store.read(), "memory-only-key", true);
 		await f.patch("hopper.tool.hopper_search_tools", false);
 		await f.policy.reconcile();
 		expect(f.runtime.session.getActiveToolNames()).not.toContain("hopper_search_tools");
@@ -142,7 +142,7 @@ describe("real Pi SDK tool policy integration without network", () => {
 
 	it("real progressive discovery omits a user-disabled specialist", async () => {
 		const f = await fixture({ progressive: true });
-		await f.policy.credentials.save(await f.policy.store.read(), "memory-only-key", true);
+		await f.policy.credentialsFor("firecrawl").save(await f.policy.store.read(), "memory-only-key", true);
 		await f.patch("firecrawl.tool.search", false);
 		await f.policy.reconcile();
 		const discovery = f.runtime.session.agent.state.tools.find(tool => tool.name === "hopper_search_tools")!;
@@ -186,7 +186,7 @@ describe("real Pi SDK tool policy integration without network", () => {
 		expect(f.policy.isBusy()).toBe(true);
 		const disable = await f.policy.updateToolSettings({ type: "patch", expected: await f.policy.store.read(), patch: { target: "tools", id: "hopper.tool.rh_run_script", enabled: false } });
 		expect(disable.ok).toBe(true);
-		const enable = await f.policy.updateToolSettings({ type: "credential", action: "save-and-enable", expected: await f.policy.store.read(), key: "memory-only-key" });
+		const enable = await f.policy.updateToolSettings({ type: "credential", pluginId: "firecrawl", action: "save-and-enable", expected: await f.policy.store.read(), key: "memory-only-key" });
 		expect(enable.ok).toBe(true);
 		expect(session.getActiveToolNames()).not.toContain("web_search");
 		completeFirst();

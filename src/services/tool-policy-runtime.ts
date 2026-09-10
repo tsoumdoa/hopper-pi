@@ -1,12 +1,14 @@
+import { TOOL_PLUGINS } from "../plugins/registry.js";
+import { BUILTIN_GROUPS, type ToolPlugin, type PluginInstance } from "../plugins/types.js";
 import { isDeepStrictEqual } from "node:util";
 import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { getCachedBackendStatus, probeBackend } from "../infra/backend-status.js";
 import { modelSupportsImages } from "./model-capabilities.js";
-import { HOPPER_POLICY_INVENTORY } from "../tools/policy-inventory.js";
+import { BUILTIN_POLICY_INVENTORY } from "../tools/policy-inventory.js";
 import { ToolPolicyStore } from "./tool-policy-store.js";
 import { ToolCredentials, type CredentialStatus } from "./tool-credentials.js";
 import {
-	PARENT_DEFAULTS, reconcilePolicySession, resolveToolPolicy,
+	reconcilePolicySession, resolveToolPolicy,
 	type PolicyRuntime, type PolicySession, type PolicySnapshot, type PolicyUpdate,
 } from "./tool-policy.js";
 import { assertCurrentToolDispatchValid, ToolPolicyDenied, withToolDispatchContext } from "./tool-policy-context.js";
@@ -17,18 +19,21 @@ const shared = globalThis as typeof globalThis & { [registryKey]?: Map<string, T
 const runtimes = shared[registryKey] ??= new Map<string, ToolPolicyRuntime>();
 export const toolPolicyForSession = (id: string) => runtimes.get(id);
 
-const parentNames: Record<string, string> = {
-	"hopper.rhino": "Rhino", "hopper.grasshopper": "Grasshopper",
-	"hopper.interaction": "Interaction", "hopper.skills": "Skills", firecrawl: "Firecrawl",
-};
+type CredentialStatuses = Record<string, CredentialStatus>;
 
 export const CREDENTIAL_STATUS_TIMEOUT_MS = 2_000;
 
 export class ToolPolicyRuntime {
 	private policyStore: ToolPolicyStore;
-	private credentialService: ToolCredentials;
+	private credentialServices = new Map<string, ToolCredentials>();
+	readonly plugins: readonly ToolPlugin[];
+	private pluginInstances = new Map<string, PluginInstance>();
 	get store(): ToolPolicyStore { return this.policyStore; }
-	get credentials(): ToolCredentials { return this.credentialService; }
+	credentialsFor(pluginId: string): ToolCredentials {
+		const service = this.credentialServices.get(pluginId);
+		if (!service) throw new ToolPolicyDenied("unknown-plugin-credential");
+		return service;
+	}
 	readonly inventory;
 	private pi?: ExtensionAPI;
 	private ctx?: ExtensionContext;
@@ -44,24 +49,58 @@ export class ToolPolicyRuntime {
 	private closed = false;
 	private unsubscribe?: () => void;
 	private reconcileQueue: Promise<unknown> = Promise.resolve();
-	private credentialWaits = new Set<{ policy: PolicySnapshot; cancel(): void }>();
+	private credentialWaits = new Set<{ policy: PolicySnapshot; pluginId: string; cancel(): void }>();
 	onChange?: (snapshot: AgentToolsSnapshot) => void;
-	abortProvider?: (name?: string) => void;
 
-	constructor(options: { directory?: string; embedded?: boolean; store?: ToolPolicyStore; credentials?: ToolCredentials } = {}) {
-		this.inventory = HOPPER_POLICY_INVENTORY.filter(tool => options.embedded || tool.id !== "hopper.tool.read_skill");
-		// Both modes persist the complete inventory, including embedded-only preferences.
-		this.policyStore = options.store ?? new ToolPolicyStore(HOPPER_POLICY_INVENTORY, { directory: options.directory });
-		this.credentialService = options.credentials ?? new ToolCredentials(this.store);
+	constructor(options: { directory?: string; embedded?: boolean; store?: ToolPolicyStore; credentials?: ReadonlyMap<string, ToolCredentials>; plugins?: readonly ToolPlugin[] } = {}) {
+		this.plugins = options.store?.plugins ?? options.plugins ?? TOOL_PLUGINS;
+		const inventory = [...BUILTIN_POLICY_INVENTORY, ...this.plugins.flatMap(plugin => plugin.inventory)];
+		this.policyStore = options.store ?? new ToolPolicyStore(inventory, { directory: options.directory, plugins: this.plugins });
+		this.inventory = this.store.inventory.filter(tool => options.embedded || tool.id !== "hopper.tool.read_skill");
+		this.initializeCredentials(options.credentials);
+		for (const plugin of this.plugins) {
+			const instance = plugin.create({ admit: (name, signal) => this.admitPlugin(plugin.id, name, signal) });
+			if (instance.tools.length !== plugin.inventory.length || new Set(instance.tools.map(tool => tool.name)).size !== instance.tools.length
+				|| instance.tools.some(tool => !plugin.inventory.some(entry => entry.name === tool.name))) throw new Error("Plugin tools do not match their declaration");
+			this.pluginInstances.set(plugin.id, instance);
+		}
 	}
+
+	private initializeCredentials(services?: ReadonlyMap<string, ToolCredentials>): void {
+		this.credentialServices.clear();
+		for (const plugin of this.plugins.filter(plugin => plugin.credential)) {
+			const service = services?.get(plugin.id) ?? new ToolCredentials(this.store, plugin.id);
+			if (service.pluginId !== plugin.id || service.store !== this.store) throw new Error("Plugin credential service mismatch");
+			this.credentialServices.set(plugin.id, service);
+		}
+	}
+
+	get pluginCatalog() {
+		return this.plugins.flatMap(plugin => this.pluginInstances.get(plugin.id)!.tools.map(tool => ({
+			tool, group: `plugin:${plugin.id}`, keywords: plugin.keywords,
+			alwaysActive: plugin.inventory.find(entry => entry.name === tool.name)!.defaultActive,
+		})));
+	}
+
+	registerPlugins(pi: ExtensionAPI): void {
+		for (const plugin of this.plugins) {
+			const tools = this.pluginInstances.get(plugin.id)!.tools;
+			const names = new Set(pi.getAllTools().map(tool => tool.name));
+			// Reject the whole plugin before registering any tool on a name collision.
+			if (tools.some(tool => names.has(tool.name) && !this.hasRegistration(tool.name))) this.markPluginConflict(plugin.id);
+			else for (const tool of tools) this.register(pi, tool);
+		}
+	}
+
+	private abortPlugins(): void { for (const instance of this.pluginInstances.values()) instance.abortAll(); }
 
 	/** CLI extension flags become available after factories load, before session_start. */
 	configureDirectory(directory: string): void {
 		if (this.pi || this.closed) throw new ToolPolicyDenied("profile-already-bound");
-		const store = new ToolPolicyStore(HOPPER_POLICY_INVENTORY, { directory });
+		const store = new ToolPolicyStore(this.store.inventory, { directory, plugins: this.plugins });
 		void this.policyStore.close();
 		this.policyStore = store;
-		this.credentialService = new ToolCredentials(store);
+		this.initializeCredentials();
 	}
 
 	bind(pi: ExtensionAPI, ctx: ExtensionContext, progressive: boolean): void {
@@ -74,7 +113,7 @@ export class ToolPolicyRuntime {
 			this.generation++;
 			this.cancelCredentialWaits();
 			this.manual.clear();
-			this.abortProvider?.();
+			this.abortPlugins();
 			this.session = { epoch: "", appliedRevision: -1, activeIds: new Set() };
 			this.sessionId = id;
 			this.published = undefined;
@@ -143,13 +182,14 @@ export class ToolPolicyRuntime {
 		if (!entry || this.conflicts.has(entry.id)) throw new ToolPolicyDenied("registration-conflict");
 		return entry;
 	}
-	private runtimeState(policy: PolicySnapshot | null, credential: "configured" | "missing" | "unavailable" = "missing"): PolicyRuntime {
+	private runtimeState(policy: PolicySnapshot | null, statuses: CredentialStatuses | "configured" | "unavailable" = {}): PolicyRuntime {
 		return {
 			backend: getCachedBackendStatus()?.online === true,
 			images: modelSupportsImages(this.ctx?.model), ui: this.ctx?.hasUI === true,
-			credentialStore: credential === "unavailable" ? "unavailable" : "available",
-			credentialMissing: credential === "missing",
-			...(credential === "configured" && policy ? { credentialGeneration: policy.credentials.firecrawl.generation } : {}),
+			credentials: Object.fromEntries(this.plugins.filter(plugin => plugin.credential).map(plugin => {
+				const status = typeof statuses === "string" ? statuses : statuses[plugin.id] ?? "missing";
+				return [plugin.id, { status, ...(status === "configured" && policy ? { generation: policy.credentials[plugin.id]?.generation } : {}) }];
+			})),
 		};
 	}
 
@@ -175,25 +215,27 @@ export class ToolPolicyRuntime {
 		const entry = this.entry(name);
 		await this.locked(policy => {
 			this.assertSession(generation, signal);
-			// Firecrawl performs its credential admission separately immediately before fetch.
-			const status = resolveToolPolicy(entry, policy, this.runtimeState(policy, entry.owner === "firecrawl" ? "configured" : "missing"), this.session, true);
+			// Provider adapters perform credential admission immediately before each request.
+			const status = resolveToolPolicy(entry, policy, this.runtimeState(policy, "configured"), this.session, true);
 			if (!status.callable) throw new ToolPolicyDenied(status.status);
 		});
 	}
 
-	async admitFirecrawl(name: "web_search" | "web_fetch", signal?: AbortSignal): Promise<{ apiKey: string }> {
+	async admitPlugin(pluginId: string, name: string, signal?: AbortSignal): Promise<{ apiKey: string }> {
 		assertCurrentToolDispatchValid();
 		const generation = this.generation;
+		if (this.entry(name).owner !== pluginId || !this.plugins.some(plugin => plugin.id === pluginId)) throw new ToolPolicyDenied("plugin-tool-mismatch");
 		const prepared = await this.preflight(name, generation, signal);
+		if (!this.entry(name).requirements.includes("credential")) { await this.admit(name, generation, signal); return { apiKey: "" }; }
 		let apiKey: string | null;
-		try { apiKey = await this.credentials.read(prepared); }
+		try { apiKey = await this.credentialsFor(pluginId).read(prepared); }
 		catch { throw new ToolPolicyDenied("credential-store-unavailable"); }
 		if (!apiKey) throw new ToolPolicyDenied("api-key-required");
 		await this.locked(policy => {
 			assertCurrentToolDispatchValid();
 			this.assertSession(generation, signal);
-			if (policy.epoch !== prepared.epoch || policy.credentials.firecrawl.generation !== prepared.credentials.firecrawl.generation
-				|| policy.credentials.firecrawl.reference !== prepared.credentials.firecrawl.reference) throw new ToolPolicyDenied("credential-changed");
+			if (policy.epoch !== prepared.epoch || policy.credentials[pluginId].generation !== prepared.credentials[pluginId].generation
+				|| policy.credentials[pluginId].reference !== prepared.credentials[pluginId].reference) throw new ToolPolicyDenied("credential-changed");
 			const state = resolveToolPolicy(this.entry(name), policy, this.runtimeState(policy, "configured"), this.session, true);
 			if (!state.callable) throw new ToolPolicyDenied(state.status);
 		});
@@ -211,7 +253,7 @@ export class ToolPolicyRuntime {
 	private observe(policy: PolicySnapshot | null): void {
 		for (const wait of this.credentialWaits) {
 			if (!policy || policy.epoch !== wait.policy.epoch || policy.revision > wait.policy.revision
-				|| !this.needsCredentialStatus(policy)) wait.cancel();
+				|| !this.needsCredentialStatus(policy, wait.pluginId)) wait.cancel();
 		}
 		for (const [id, activation] of this.manual) {
 			const entry = this.inventory.find(tool => tool.id === id)!;
@@ -219,9 +261,12 @@ export class ToolPolicyRuntime {
 				|| !policy.tools[id]?.enabled || !policy.parents[entry.parent]?.enabled
 				|| Math.max(policy.tools[id].enabledAt, policy.parents[entry.parent].enabledAt) > activation.revision) this.manual.delete(id);
 		}
-		if (!policy || !policy.parents.firecrawl.enabled || !policy.credentials.firecrawl.reference) this.abortProvider?.();
-		else for (const entry of this.inventory.filter(tool => tool.owner === "firecrawl")) {
-			if (!policy.tools[entry.id]?.enabled) this.abortProvider?.(entry.name);
+		for (const plugin of this.plugins) {
+			const instance = this.pluginInstances.get(plugin.id)!;
+			if (!policy || !policy.parents[plugin.id]?.enabled) instance.abortAll();
+			else for (const entry of plugin.inventory) {
+				if (!policy.tools[entry.id]?.enabled || (entry.requirements.includes("credential") && !policy.credentials[plugin.id]?.reference)) instance.abortTool(entry.name);
+			}
 		}
 	}
 
@@ -230,19 +275,19 @@ export class ToolPolicyRuntime {
 		await this.reconcileSnapshot(boundary);
 	}
 
-	private needsCredentialStatus(policy: PolicySnapshot): boolean {
-		return policy.parents.firecrawl.enabled && this.inventory.some(tool => tool.owner === "firecrawl" && policy.tools[tool.id]?.enabled);
+	private needsCredentialStatus(policy: PolicySnapshot, pluginId: string): boolean {
+		return !!policy.parents[pluginId]?.enabled && this.inventory.some(tool => tool.owner === pluginId && tool.requirements.includes("credential") && policy.tools[tool.id]?.enabled);
 	}
 
 	private cancelCredentialWaits(): void {
 		for (const wait of this.credentialWaits) wait.cancel();
 	}
 
-	private credentialStatus(policy: PolicySnapshot): Promise<CredentialStatus> {
-		// A saved reference is enough to display disabled Firecrawl's setup state.
+	private credentialStatus(policy: PolicySnapshot, pluginId: string): Promise<CredentialStatus> {
+		// A saved reference is enough to display a disabled plugin's setup state.
 		// Only enabled tools need protected-store availability checked at a boundary.
-		if (!policy.credentials.firecrawl.reference) return Promise.resolve("missing" as const);
-		if (!this.needsCredentialStatus(policy)) {
+		if (!policy.credentials[pluginId]?.reference) return Promise.resolve("missing" as const);
+		if (!this.needsCredentialStatus(policy, pluginId)) {
 			return Promise.resolve("configured" as const);
 		}
 		if (this.closed) return Promise.resolve("unavailable");
@@ -252,13 +297,26 @@ export class ToolPolicyRuntime {
 				this.credentialWaits.delete(wait);
 				resolve(status);
 			};
-			const wait = { policy, cancel: () => finish("unavailable") };
+			const wait = { policy, pluginId, cancel: () => finish("unavailable") };
 			const timer = setTimeout(wait.cancel, CREDENTIAL_STATUS_TIMEOUT_MS);
 			this.credentialWaits.add(wait);
 			// Native reads may not be cancellable. Release the caller and ignore late
 			// completion; a subsequent reconciliation samples credentials afresh.
-			void Promise.resolve().then(() => this.credentials.status(policy)).then(finish, wait.cancel);
+			void Promise.resolve().then(() => this.credentialsFor(pluginId).status(policy)).then(finish, wait.cancel);
 		});
+	}
+
+	private async credentialStatuses(policy: PolicySnapshot): Promise<CredentialStatuses> {
+		return Object.fromEntries(await Promise.all(this.plugins.filter(plugin => plugin.credential).map(async plugin =>
+			[plugin.id, await this.credentialStatus(policy, plugin.id)])));
+	}
+
+	private currentCredentials(prepared: PolicySnapshot, latest: PolicySnapshot, statuses: CredentialStatuses): CredentialStatuses {
+		return Object.fromEntries(Object.entries(statuses).map(([id, status]) => [id,
+			prepared.epoch === latest.epoch && prepared.credentials[id]?.generation === latest.credentials[id]?.generation
+				&& prepared.credentials[id]?.reference === latest.credentials[id]?.reference
+				&& (!this.needsCredentialStatus(latest, id) || this.needsCredentialStatus(prepared, id)) ? status : "unavailable",
+		]));
 	}
 
 	private async reconcileSnapshot(boundary = false): Promise<AgentToolsSnapshot> {
@@ -274,13 +332,11 @@ export class ToolPolicyRuntime {
 			this.observe(policy);
 			if (getCachedBackendStatus()?.online !== true && this.inventory.some(tool => tool.requirements.includes("backend")
 				&& policy.tools[tool.id]?.enabled && policy.parents[tool.parent]?.enabled)) await probeBackend();
-			const credential = await this.credentialStatus(policy);
+			const credential = await this.credentialStatuses(policy);
 			const snapshot = await this.locked(latest => {
 				this.assertSession(generation);
 				this.observe(latest);
-				const currentCredential = latest.credentials.firecrawl.generation === policy.credentials.firecrawl.generation
-					&& latest.credentials.firecrawl.reference === policy.credentials.firecrawl.reference && latest.epoch === policy.epoch
-					&& (!this.needsCredentialStatus(latest) || this.needsCredentialStatus(policy)) ? credential : "unavailable";
+				const currentCredential = this.currentCredentials(policy, latest, credential);
 				if (!boundary && this.busy) return this.formatToolSettings(latest, currentCredential);
 				const eligible = this.inventory.filter(tool => !this.conflicts.has(tool.id) && this.definitions.has(tool.name));
 				this.session = reconcilePolicySession(eligible, latest, this.runtimeState(latest, currentCredential), this.progressive, new Set(this.manual.keys()));
@@ -313,15 +369,16 @@ export class ToolPolicyRuntime {
 		assertCurrentToolDispatchValid();
 		const generation = this.generation;
 		const prepared = await this.store.read();
-		const credential = this.inventory.find(tool => tool.id === id)?.owner === "firecrawl"
-			? await this.credentialStatus(prepared) : "missing";
+		const tool = this.inventory.find(tool => tool.id === id);
+		const credential: CredentialStatuses = tool?.requirements.includes("credential")
+			? { [tool.owner]: await this.credentialStatus(prepared, tool.owner) } : {};
 		await this.locked(policy => {
 			assertCurrentToolDispatchValid();
 			this.assertSession(generation);
 			const entry = this.inventory.find(tool => tool.id === id);
 			if (!entry || this.conflicts.has(id) || !this.definitions.has(entry.name) || !policy.tools[id]?.enabled || !policy.parents[entry.parent]?.enabled) throw new ToolPolicyDenied("disabled-by-user");
 			if (prepared.epoch !== policy.epoch || Math.max(policy.tools[id].enabledAt, policy.parents[entry.parent].enabledAt) > prepared.revision) throw new ToolPolicyDenied("activation-superseded");
-			const currentCredential = prepared.epoch === policy.epoch && prepared.credentials.firecrawl.generation === policy.credentials.firecrawl.generation ? credential : "unavailable";
+			const currentCredential = this.currentCredentials(prepared, policy, credential);
 			const state = resolveToolPolicy(entry, policy, this.runtimeState(policy, currentCredential), this.session, true);
 			if (!state.available) throw new ToolPolicyDenied(state.status);
 			this.manual.set(id, { epoch: policy.epoch, revision: policy.revision, generation: this.generation });
@@ -337,7 +394,7 @@ export class ToolPolicyRuntime {
 		let policy: PolicySnapshot | null;
 		try { policy = await this.store.read(); } catch { policy = null; }
 		this.observe(policy);
-		const credential = policy ? await this.credentialStatus(policy) : "unavailable";
+		const credential = policy ? await this.credentialStatuses(policy) : "unavailable";
 		return this.formatToolSettings(policy, credential);
 	}
 
@@ -351,7 +408,7 @@ export class ToolPolicyRuntime {
 		return parameters;
 	}
 
-	private formatToolSettings(policy: PolicySnapshot | null, credential: "configured" | "missing" | "unavailable"): AgentToolsSnapshot {
+	private formatToolSettings(policy: PolicySnapshot | null, credential: CredentialStatuses | "unavailable"): AgentToolsSnapshot {
 		const state = this.runtimeState(policy, credential);
 		const discovery = !!policy?.tools["hopper.tool.hopper_search_tools"]?.enabled && !!policy?.parents["hopper.interaction"]?.enabled;
 		const tools: AgentToolSummary[] = this.inventory.map(entry => {
@@ -374,8 +431,12 @@ export class ToolPolicyRuntime {
 		}
 		return { tools, settings: {
 			version: policy ? { epoch: policy.epoch, revision: policy.revision } : null,
-			parents: Object.keys(PARENT_DEFAULTS).map(id => ({ id, name: parentNames[id], enabled: policy?.parents[id]?.enabled ?? false })),
-			credential, ...(!policy ? { error: "Settings unavailable. Repair settings to restore defaults." } : {}),
+			parents: [
+				...Object.entries(BUILTIN_GROUPS).map(([id, group]) => ({ id, name: group.name, enabled: policy?.parents[id]?.enabled ?? false })),
+				...this.plugins.map(plugin => ({ id: plugin.id, name: plugin.name, description: plugin.description, enabled: policy?.parents[plugin.id]?.enabled ?? false,
+					...(plugin.credential ? { credential: { ...plugin.credential, status: typeof credential === "string" ? credential : credential[plugin.id] ?? "missing" } } : {}),
+				})),
+			], ...(!policy ? { error: "Settings unavailable. Repair settings to restore defaults." } : {}),
 		} };
 	}
 
@@ -390,13 +451,13 @@ export class ToolPolicyRuntime {
 				case "check-connection": await probeBackend(); break;
 				case "credential":
 					if (action.action === "remove") {
-						const removed = await this.credentials.remove(action.expected);
+						const removed = await this.credentialsFor(action.pluginId).remove(action.expected);
 						result = removed;
 						if (removed.deletionFailed) {
 							this.observe(removed.snapshot);
 							return { ok: false, code: "error", error: "Key access removed; protected entry deletion failed. Retry removal.", snapshot: await this.getToolSettings() };
 						}
-					} else result = await this.credentials.save(action.expected, action.key, action.action === "save-and-enable");
+					} else result = await this.credentialsFor(action.pluginId).save(action.expected, action.key, action.action === "save-and-enable");
 			}
 			if (result && !result.ok) return { ok: false, code: result.code === "conflict" ? "conflict" : "error", error: result.code === "conflict"
 				? "Settings changed in another window; review and try again." : "Setting could not be saved.", snapshot: await this.getToolSettings() };
@@ -417,7 +478,7 @@ export class ToolPolicyRuntime {
 		return snapshot;
 	}
 	async close(): Promise<void> {
-		this.closed = true; this.generation++; this.abortProvider?.(); this.unsubscribe?.();
+		this.closed = true; this.generation++; this.abortPlugins(); this.unsubscribe?.();
 		this.cancelCredentialWaits();
 		if (runtimes.get(this.sessionId) === this) runtimes.delete(this.sessionId);
 		await this.store.close();

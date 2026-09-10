@@ -1,9 +1,11 @@
+import { TOOL_PLUGINS } from "../plugins/registry.js";
+import { validatePlugins, type ToolPlugin } from "../plugins/types.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { decodeToolPolicy } from "./tool-policy-schema.js";
 import { toolPolicyProfileDirectory } from "./tool-policy-profile.js";
-import { createPolicyDefaults, patchPolicy, resetToolPolicy, type PolicyPatch, type PolicySnapshot, type PolicyUpdate, type PolicyVersion, type ToolPolicyDescriptor } from "./tool-policy.js";
+import { assertPolicyInventory, parentDefaults, createPolicyDefaults, patchPolicy, resetToolPolicy, type PolicyPatch, type PolicySnapshot, type PolicyUpdate, type PolicyVersion, type ToolPolicyDescriptor } from "./tool-policy.js";
 
 export class ToolSettingsError extends Error {
 	readonly code = "settings-unavailable";
@@ -22,7 +24,11 @@ export class ToolPolicyStore {
 	private timer?: ReturnType<typeof setInterval>;
 	private polling = false;
 	private notified?: string;
-	constructor(readonly inventory: readonly ToolPolicyDescriptor[], options: { directory?: string } = {}) {
+	readonly plugins: readonly ToolPlugin[];
+	constructor(readonly inventory: readonly ToolPolicyDescriptor[], options: { directory?: string; plugins?: readonly ToolPlugin[] } = {}) {
+		this.plugins = options.plugins ?? TOOL_PLUGINS;
+		validatePlugins(this.plugins);
+		assertPolicyInventory(inventory, this.plugins);
 		this.directory = toolPolicyProfileDirectory({ configDirectory: options.directory });
 	}
 	private locked<T>(fn: () => Promise<T>): Promise<T> {
@@ -67,7 +73,7 @@ export class ToolPolicyStore {
 			catch (markerError) {
 				if ((markerError as NodeJS.ErrnoException).code !== "ENOENT") throw new ToolSettingsError();
 				await this.mark(); // Must survive an interrupted initial write.
-				const initial = createPolicyDefaults(randomUUID(), this.inventory);
+				const initial = createPolicyDefaults(randomUUID(), this.inventory, this.plugins);
 				await this.write(initial);
 				this.observed = true;
 				return initial;
@@ -80,10 +86,15 @@ export class ToolPolicyStore {
 		// Restore a deleted marker while the settings themselves remain readable.
 		await this.mark();
 		const missing = this.inventory.filter(tool => !Object.hasOwn(decoded.snapshot.tools, tool.id));
-		if (missing.length) {
+		const defaults = parentDefaults(this.plugins);
+		const missingParents = Object.keys(defaults).filter(id => !Object.hasOwn(decoded.snapshot.parents, id));
+		const missingCredentials = this.plugins.filter(plugin => plugin.credential && !Object.hasOwn(decoded.snapshot.credentials, plugin.id));
+		if (decoded.migrated || missing.length || missingParents.length || missingCredentials.length) {
 			if (decoded.snapshot.revision === Number.MAX_SAFE_INTEGER) throw new ToolSettingsError();
 			decoded.snapshot.revision++;
 			for (const tool of missing) decoded.snapshot.tools[tool.id] = { enabled: true, enabledAt: decoded.snapshot.revision };
+			for (const id of missingParents) decoded.snapshot.parents[id] = { enabled: defaults[id], enabledAt: decoded.snapshot.revision };
+			for (const plugin of missingCredentials) decoded.snapshot.credentials[plugin.id] = { generation: 0, reference: null };
 			await this.write(decoded.snapshot);
 		}
 		return decoded.snapshot;
@@ -101,10 +112,13 @@ export class ToolPolicyStore {
 		});
 	}
 	update(expected: PolicyVersion, patch: PolicyPatch): Promise<PolicyUpdate> {
-		return this.transition(snapshot => patchPolicy(snapshot, expected, patch));
+		return this.transition(snapshot => {
+			const installed = patch.target === "parents" ? Object.hasOwn(parentDefaults(this.plugins), patch.id) : this.inventory.some(tool => tool.id === patch.id);
+			return installed ? patchPolicy(snapshot, expected, patch) : { ok: false, code: "invalid-update", snapshot };
+		});
 	}
 	reset(expected: PolicyVersion): Promise<PolicyUpdate> {
-		return this.transition(snapshot => resetToolPolicy(snapshot, expected, this.inventory));
+		return this.transition(snapshot => resetToolPolicy(snapshot, expected, this.inventory, this.plugins));
 	}
 	repair(): Promise<PolicySnapshot> {
 		return this.locked(async () => {
@@ -117,7 +131,7 @@ export class ToolPolicyStore {
 				try { await backup.writeFile(damaged); await backup.sync(); } finally { await backup.close(); }
 			} catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new ToolSettingsError(); }
 			await this.mark();
-			const snapshot = createPolicyDefaults(randomUUID(), this.inventory);
+			const snapshot = createPolicyDefaults(randomUUID(), this.inventory, this.plugins);
 			await this.write(snapshot);
 			this.observed = true;
 			return snapshot;

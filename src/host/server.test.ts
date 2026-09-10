@@ -226,7 +226,7 @@ describe("Hopper loopback server", () => {
 		servers.push(server);
 		const endpoint = `http://${server.host}:${server.port}/api/tools`;
 		const headers = { Authorization: "Bearer tools-token", "Content-Type": "application/json" };
-		const action = { type: "credential", expected: { epoch: "test", revision: 0 }, action: "save", key: "sentinel-secret" };
+		const action = { type: "credential", pluginId: "firecrawl", expected: { epoch: "test", revision: 0 }, action: "save", key: "sentinel-secret" };
 		vi.mocked(runtime.updateToolSettings).mockResolvedValueOnce({ ok: false, code: "conflict", snapshot: { tools: [] } });
 		const conflict = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(action) });
 		expect(conflict.status).toBe(409);

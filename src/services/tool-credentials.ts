@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { publishFirecrawlCredential, removeFirecrawlCredential, type PolicySnapshot, type PolicyUpdate, type PolicyVersion } from "./tool-policy.js";
+import { publishPluginCredential, removePluginCredential, type PolicySnapshot, type PolicyUpdate, type PolicyVersion } from "./tool-policy.js";
 import { ToolPolicyStore } from "./tool-policy-store.js";
 
 export class ToolCredentialError extends Error {
@@ -39,12 +39,12 @@ function secretTool(args: string[], secret?: string, allowMissing = false): Prom
 	});
 }
 
-export function protectedCredentialBackend(directory: string): ProtectedCredentialBackend {
-	const service = `hopper-pi.firecrawl.${createHash("sha256").update(directory).digest("hex")}`;
+export function protectedCredentialBackend(directory: string, pluginId: string): ProtectedCredentialBackend {
+	const service = `hopper-pi.${pluginId}.${createHash("sha256").update(directory).digest("hex")}`;
 	if (process.platform === "linux") {
 		return {
 			read: async reference => (await secretTool(["lookup", "service", service, "account", reference], undefined, true)) || null,
-			write: async (reference, secret) => { await secretTool(["store", "--label=Hopper Firecrawl API key", "service", service, "account", reference], secret); },
+			write: async (reference, secret) => { await secretTool(["store", `--label=Hopper ${pluginId} API key`, "service", service, "account", reference], secret); },
 			remove: async reference => { await secretTool(["clear", "service", service, "account", reference]); },
 		};
 	}
@@ -64,12 +64,13 @@ export type CredentialStatus = "configured" | "missing" | "unavailable";
 export class ToolCredentials {
 	private readonly backend: ProtectedCredentialBackend;
 	private readonly pendingDeletion = new Set<string>();
-	constructor(readonly store: ToolPolicyStore, backend?: ProtectedCredentialBackend) {
-		this.backend = backend ?? protectedCredentialBackend(store.directory);
+	constructor(readonly store: ToolPolicyStore, readonly pluginId: string, backend?: ProtectedCredentialBackend) {
+		if (!store.plugins.some(plugin => plugin.id === pluginId && plugin.credential)) throw new ToolCredentialError("invalid-key");
+		this.backend = backend ?? protectedCredentialBackend(store.directory, pluginId);
 	}
 	/** Internal only. Callers must compare epoch, generation and reference again under admission lock. */
 	async read(snapshot: PolicySnapshot): Promise<string | null> {
-		const reference = snapshot.credentials.firecrawl.reference;
+		const reference = snapshot.credentials[this.pluginId].reference;
 		if (!reference) return null;
 		try { return await this.backend.read(reference); }
 		catch { throw new ToolCredentialError("credential-store-unavailable"); }
@@ -87,18 +88,18 @@ export class ToolCredentials {
 		catch { await this.cleanup(reference); throw new ToolCredentialError("credential-store-unavailable"); }
 		let result: PolicyUpdate;
 		try {
-			result = await this.store.transition(current => publishFirecrawlCredential(current,
-				{ ...expected, generation: starting.credentials.firecrawl.generation }, reference, enable));
+			result = await this.store.transition(current => publishPluginCredential(current,
+				{ ...expected, generation: starting.credentials[this.pluginId].generation }, reference, enable, this.pluginId));
 		} catch (error) { await this.cleanup(reference); throw error; }
 		if (!result.ok) await this.cleanup(reference);
-		else if (starting.credentials.firecrawl.reference) await this.cleanup(starting.credentials.firecrawl.reference);
+		else if (starting.credentials[this.pluginId].reference) await this.cleanup(starting.credentials[this.pluginId].reference!);
 		return result;
 	}
 	async remove(expected: PolicyVersion): Promise<PolicyUpdate & { deletionFailed?: boolean }> {
 		let reference: string | null = null;
 		const result = await this.store.transition(current => {
-			reference = current.credentials.firecrawl.reference;
-			return removeFirecrawlCredential(current, expected);
+			reference = current.credentials[this.pluginId].reference;
+			return removePluginCredential(current, expected, this.pluginId);
 		});
 		if (!result.ok) return result;
 		if (reference) this.pendingDeletion.add(reference);

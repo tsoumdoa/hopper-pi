@@ -15,12 +15,14 @@ export type AgentToolSummary = {
 	status?: PolicyStatus | "registration-conflict";
 };
 
+export type PluginCredentialSummary = { label: string; notice: string; status: "configured" | "missing" | "unavailable" };
+export type ToolGroupSummary = { id: string; name: string; enabled: boolean; description?: string; credential?: PluginCredentialSummary };
+
 export type AgentToolsSnapshot = {
 	tools: AgentToolSummary[];
 	settings?: {
 		version: PolicyVersion | null;
-		parents: Array<{ id: string; name: string; enabled: boolean }>;
-		credential: "configured" | "missing" | "unavailable";
+		parents: ToolGroupSummary[];
 		error?: string;
 	};
 };
@@ -29,8 +31,8 @@ export type ToolSettingsAction =
 	| { type: "patch"; expected: PolicyVersion; patch: PolicyPatch }
 	| { type: "activate"; id: string }
 	| { type: "check-connection" }
-	| { type: "credential"; expected: PolicyVersion; action: "save" | "save-and-enable"; key: string }
-	| { type: "credential"; expected: PolicyVersion; action: "remove" }
+	| { type: "credential"; pluginId: string; expected: PolicyVersion; action: "save" | "save-and-enable"; key: string }
+	| { type: "credential"; pluginId: string; expected: PolicyVersion; action: "remove" }
 	| { type: "reset"; expected: PolicyVersion }
 	| { type: "repair" };
 export type ToolSettingsResult = { ok: boolean; code?: "conflict" | "error"; error?: string; snapshot: AgentToolsSnapshot };
@@ -52,9 +54,11 @@ export function parseToolSettingsAction(value: unknown): ToolSettingsAction {
 		}
 	}
 	if (value.type === "credential") {
-		if (value.action === "remove") return { type: value.type, expected, action: value.action };
+		const pluginId = stringField(value, "pluginId");
+		if (!/^[a-z][a-z0-9-]*$/.test(pluginId)) throw new Error("Invalid plugin ID");
+		if (value.action === "remove") return { type: value.type, pluginId, expected, action: value.action };
 		if ((value.action === "save" || value.action === "save-and-enable") && typeof value.key === "string" && value.key.trim() && value.key.length <= 4096) {
-			return { type: value.type, expected, action: value.action, key: value.key.trim() };
+			return { type: value.type, pluginId, expected, action: value.action, key: value.key.trim() };
 		}
 	}
 	throw new Error("Invalid tool setting");

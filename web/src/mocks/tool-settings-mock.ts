@@ -8,8 +8,8 @@ const defaults = (): AgentToolsSnapshot => ({
 		{ id: "firecrawl.tool.fetch", name: "web_fetch", parent: "firecrawl", description: "Read one public webpage as Markdown with Firecrawl.", enabled: true, active: false, available: false, status: "parent-disabled", parameters: { type: "object", required: ["url"], properties: { url: { type: "string" } } } },
 	],
 	settings: { version: { epoch: "mock-profile", revision: 0 }, parents: [
-		{ id: "hopper.rhino", name: "Rhino", enabled: true }, { id: "hopper.grasshopper", name: "Grasshopper", enabled: true }, { id: "firecrawl", name: "Firecrawl", enabled: false },
-	], credential: "missing" },
+		{ id: "hopper.rhino", name: "Rhino", enabled: true }, { id: "hopper.grasshopper", name: "Grasshopper", enabled: true }, { id: "firecrawl", name: "Firecrawl", enabled: false, description: "Web search and webpage reading", credential: { label: "Firecrawl API key", notice: "Search queries and requested URLs are sent to Firecrawl and may consume credits on your account.", status: "missing" } },
+	] },
 });
 let snapshot = defaults();
 
@@ -29,14 +29,17 @@ export function mockToolSettings(action?: ToolSettingsAction): AgentToolsSnapsho
 			const gate = target.find(item => item.id === action.patch.id);
 			if (gate) gate.enabled = action.patch.enabled;
 		} else if (action.type === "credential") {
-			settings.credential = action.action === "remove" ? "missing" : "configured";
-			if (action.action === "save-and-enable") settings.parents.find(parent => parent.id === "firecrawl")!.enabled = true;
+			const parent = settings.parents.find(parent => parent.id === action.pluginId);
+			if (parent?.credential) {
+				parent.credential.status = action.action === "remove" ? "missing" : "configured";
+				if (action.action === "save-and-enable") parent.enabled = true;
+			}
 		}
 		settings.version!.revision++;
 	}
 	for (const tool of snapshot.tools) {
 		const parent = snapshot.settings!.parents.find(parent => parent.id === tool.parent)!;
-		tool.available = tool.parent !== "firecrawl" || snapshot.settings!.credential === "configured";
+		tool.available = !parent.credential || parent.credential.status === "configured";
 		tool.active = Boolean(tool.enabled && parent.enabled && tool.available);
 		tool.status = !tool.enabled ? "disabled-by-user" : !parent.enabled ? "parent-disabled" : !tool.available ? "api-key-required" : "active";
 	}

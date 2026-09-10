@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { ArrowLeft, Box, ChevronRight, RefreshCw, Search, Terminal, Workflow, type LucideIcon } from "lucide-react";
-import type { AgentToolSummary, AgentToolsSnapshot, ToolSettingsAction, ToolSettingsResult, JsonValue } from "../../../src/host/protocol.js";
+import type { AgentToolSummary, AgentToolsSnapshot, ToolSettingsAction, ToolSettingsResult, JsonValue, ToolGroupSummary } from "../../../src/host/protocol.js";
 import { cn } from "../lib/utils";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -30,24 +30,31 @@ const TOOL_STATUS: Record<NonNullable<AgentToolSummary["status"]>, string> = {
 	"registration-conflict": "Tool name conflicts with another extension",
 };
 
-type GroupName = "Rhino" | "Grasshopper" | "General" | "Firecrawl" | "Interaction" | "Skills";
-
-const TOOL_GROUPS: Array<{ name: GroupName; icon: LucideIcon; hint: string }> = [
-	{ name: "Rhino", icon: Box, hint: "Document objects, scripts, and viewports" },
-	{ name: "Grasshopper", icon: Workflow, hint: "Canvas components, wires, widgets, and scripts" },
-	{ name: "Firecrawl", icon: Search, hint: "Web search and webpage reading" },
-	{ name: "Interaction", icon: Terminal, hint: "Questions and discovery" },
-	{ name: "Skills", icon: Terminal, hint: "Skill references" },
-	{ name: "General", icon: Terminal, hint: "Files, search, and questions for you" },
+type ToolGroup = { id: string; name: string; icon: LucideIcon };
+const TOOL_GROUPS: ToolGroup[] = [
+	{ id: "hopper.rhino", name: "Rhino", icon: Box },
+	{ id: "hopper.grasshopper", name: "Grasshopper", icon: Workflow },
+	{ id: "hopper.interaction", name: "Interaction", icon: Terminal },
+	{ id: "hopper.skills", name: "Skills", icon: Terminal },
+	{ id: "hopper.general", name: "General", icon: Terminal },
 ];
 
-function toolGroup(name: string, parent?: string): GroupName {
-	if (parent === "firecrawl" || name === "web_search" || name === "web_fetch") return "Firecrawl";
-	if (parent === "hopper.interaction") return "Interaction";
-	if (parent === "hopper.skills") return "Skills";
-	if (name.startsWith("rh_")) return "Rhino";
-	if (name.startsWith("gh_")) return "Grasshopper";
-	return "General";
+function toolGroup(name: string, parent?: string): string {
+	if (parent) return parent;
+	if (name.startsWith("rh_")) return "hopper.rhino";
+	if (name.startsWith("gh_")) return "hopper.grasshopper";
+	return "hopper.general";
+}
+
+function availableGroups(snapshot: AgentToolsSnapshot | null): ToolGroup[] {
+	const groups = new Map(TOOL_GROUPS.map(group => [group.id, group]));
+	for (const parent of snapshot?.settings?.parents ?? []) {
+		groups.set(parent.id, { id: parent.id, name: parent.name, icon: groups.get(parent.id)?.icon ?? Box });
+	}
+	for (const tool of snapshot?.tools ?? []) {
+		if (tool.parent && !groups.has(tool.parent)) groups.set(tool.parent, { id: tool.parent, name: tool.parent, icon: Box });
+	}
+	return [...groups.values()];
 }
 
 // JSON Schema helpers. Tool parameters arrive as plain JSON, so every accessor tolerates missing or odd shapes.
@@ -180,8 +187,7 @@ function ParameterList({ schema, depth = 0, indent = depth > 0, omit }: { schema
 	);
 }
 
-function ToolDetail({ tool, onBack }: { tool: AgentToolSummary; onBack(): void }) {
-	const group = TOOL_GROUPS.find((entry) => entry.name === toolGroup(tool.name, tool.parent))!;
+function ToolDetail({ tool, group, onBack }: { tool: AgentToolSummary; group: ToolGroup; onBack(): void }) {
 	const schema = asSchema(tool.parameters);
 	const properties = schema && asSchema(schema.properties);
 	const count = properties ? Object.keys(properties).length : 0;
@@ -229,9 +235,11 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
-	const [keyMode, setKeyMode] = useState<"save" | "save-and-enable" | null>(null);
+	const [keySetup, setKeySetup] = useState<{
+		plugin: ToolGroupSummary;
+		expected: NonNullable<NonNullable<AgentToolsSnapshot["settings"]>["version"]>;
+	} | null>(null);
 	const [key, setKey] = useState("");
-	const [keyExpected, setKeyExpected] = useState<NonNullable<NonNullable<AgentToolsSnapshot["settings"]>["version"]> | null>(null);
 	const mutation = useRef(false);
 	const fetchSequence = useRef(0);
 	const contextSequence = useRef(0);
@@ -256,6 +264,7 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 	const list = useRef<HTMLElement>(null);
 
 	useEffect(() => {
+		setKey(""); setKeySetup(null);
 		latestSnapshot.current = null;
 		retiredEpochs.current.clear();
 		setSnapshot(null);
@@ -301,11 +310,11 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 			if (context !== contextSequence.current) return;
 			if (result.snapshot) applyToolsSnapshot(result.snapshot, sequence === fetchSequence.current);
 			if (!response.ok || !result.ok) {
-				if (result.code === "conflict" && action.type === "credential") { setKey(""); setKeyMode(null); }
+				if (result.code === "conflict" && action.type === "credential") { setKey(""); setKeySetup(null); }
 				setError(result.code === "conflict" ? "Settings changed in another window; review and try again." : result.error || "Could not save tool settings. Try again.");
 				return;
 			}
-			if (action.type === "credential") { setKey(""); setKeyMode(null); }
+			if (action.type === "credential") { setKey(""); setKeySetup(null); }
 		} catch { if (context === contextSequence.current) setError("Could not save tool settings. Reconnect and try again."); }
 		finally { mutation.current = false; setSaving(false); }
 	};
@@ -316,6 +325,7 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 			applyToolsSnapshot((event as CustomEvent<AgentToolsSnapshot>).detail);
 		};
 		const sessionChanged = () => {
+			setKey(""); setKeySetup(null);
 			++contextSequence.current;
 			++fetchSequence.current;
 			latestSnapshot.current = null;
@@ -336,15 +346,15 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 	const controlsDisabled = !connected || saving || !expected;
 	const toggleParent = (id: string, enabled: boolean) => {
 		if (!expected) return;
-		if (id === "firecrawl" && enabled && snapshot?.settings?.credential === "missing") { setKey(""); setKeyExpected(expected); setKeyMode("save-and-enable"); return; }
 		void update({ type: "patch", expected, patch: { target: "parents", id, enabled } });
 	};
 
+	const groupDefinitions = availableGroups(snapshot);
 	const search = query.trim().toLowerCase();
 	const filtered = search || activeOnly;
 	const visible = snapshot?.tools.filter((tool) => (!activeOnly || tool.active)
-		&& `${toolGroup(tool.name, tool.parent)} ${tool.name} ${tool.description}`.toLowerCase().includes(search)) ?? [];
-	const groups = TOOL_GROUPS.map((group) => ({ ...group, tools: visible.filter((tool) => toolGroup(tool.name, tool.parent) === group.name) }))
+		&& `${groupDefinitions.find(group => group.id === toolGroup(tool.name, tool.parent))?.name} ${tool.name} ${tool.description}`.toLowerCase().includes(search)) ?? [];
+	const groups = groupDefinitions.map((group) => ({ ...group, tools: visible.filter((tool) => toolGroup(tool.name, tool.parent) === group.id) }))
 		.filter((group) => group.tools.length > 0);
 	const ordered = groups.flatMap((group) => group.tools);
 	const active = snapshot?.tools.filter((tool) => tool.active).length ?? 0;
@@ -398,25 +408,27 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 				</div>
 				{snapshot?.settings && <div className="flex flex-wrap items-center gap-2">
 					<Button size="xs" variant="secondary" disabled={!connected || saving} onClick={() => void update({ type: "check-connection" })}>Check connection</Button>
-					<span className="text-xs text-muted">Firecrawl: {snapshot.settings.credential === "configured" ? "API key saved" : snapshot.settings.credential === "unavailable" ? "Credential store unavailable" : "API key required"}</span>
-					<Button size="xs" variant="secondary" disabled={controlsDisabled} onClick={() => { setKey(""); setKeyExpected(expected ?? null); setKeyMode("save"); }}>Manage API key</Button>
+					{snapshot.settings.parents.filter(parent => parent.credential).map(parent => <div key={parent.id} className="flex flex-wrap items-center gap-2">
+						<span className="text-xs text-muted">{parent.name}: {parent.credential!.status === "configured" ? "API key saved" : parent.credential!.status === "unavailable" ? "Credential store unavailable" : "API key required"}</span>
+						<Button size="xs" variant="secondary" aria-label={`Manage ${parent.name} API key`} disabled={controlsDisabled} onClick={() => { if (expected) { setKey(""); setKeySetup({ plugin: parent, expected }); } }}>Manage API key</Button>
+					</div>)}
 					<Button size="xs" variant="ghost" disabled={!connected || saving} onClick={() => {
-						if (window.confirm("Restore tool defaults and disconnect the saved Firecrawl key? Firecrawl will be disabled.")) void update(expected ? { type: "reset", expected } : { type: "repair" });
+						if (window.confirm("Restore tool defaults and disconnect saved plugin keys?")) void update(expected ? { type: "reset", expected } : { type: "repair" });
 					}}>{expected ? "Reset tools" : "Repair settings"}</Button>
 				</div>}
-				{keyMode && <Dialog open onOpenChange={(open) => { if (!open && !saving) { setKey(""); setKeyMode(null); } }}>
+				{keySetup?.plugin.credential && <Dialog open onOpenChange={(open) => { if (!open && !saving) { setKey(""); setKeySetup(null); } }}>
 					<DialogContent hideClose={saving}>
-					<DialogHeader><DialogTitle>Firecrawl API key</DialogTitle><DialogDescription>{keyMode === "save-and-enable" ? "Set up Firecrawl for web search and webpage reading." : "Save, replace, or remove your Firecrawl key."}</DialogDescription></DialogHeader>
-					<section aria-label="Firecrawl setup" className="grid gap-3">
+					<DialogHeader><DialogTitle>{keySetup.plugin.credential.label}</DialogTitle><DialogDescription>{`Save, replace, or remove your ${keySetup.plugin.name} key.`}</DialogDescription></DialogHeader>
+					<section aria-label={`${keySetup.plugin.name} setup`} className="grid gap-3">
 					{saving && <p role="status" className="text-xs text-muted">Saving…</p>}
 					{!connected && <p role="status" className="text-xs text-warn">Reconnect to manage your key.</p>}
 					{error && <p role="alert" className="text-xs text-danger">{error}</p>}
-					<p className="text-xs">Search queries and requested URLs are sent to Firecrawl and may consume credits on your account. Your key is kept in your operating system's protected credential store.</p>
-					<Input type="password" aria-label="Firecrawl API key" autoComplete="off" maxLength={4096} value={key} onChange={(event) => setKey(event.target.value)} disabled={saving} />
+					<p className="text-xs">{keySetup.plugin.credential.notice} Your key is kept in your operating system's protected credential store.</p>
+					<Input type="password" aria-label={keySetup.plugin.credential.label} autoComplete="off" maxLength={4096} value={key} onChange={(event) => setKey(event.target.value)} disabled={saving} />
 					<div className="flex flex-wrap gap-2">
-						<Button size="sm" disabled={controlsDisabled || !key.trim()} onClick={() => { if (keyExpected) { const value = key; setKey(""); void update({ type: "credential", expected: keyExpected, action: keyMode, key: value }); } }}>{keyMode === "save-and-enable" ? "Save key and enable" : snapshot?.settings?.credential === "configured" ? "Save replacement" : "Save key"}</Button>
-						{keyMode === "save" && <Button size="sm" variant="secondary" disabled={controlsDisabled} onClick={() => { if (keyExpected) void update({ type: "credential", expected: keyExpected, action: "remove" }); }}>Remove key</Button>}
-						<Button size="sm" variant="ghost" disabled={saving} onClick={() => { setKey(""); setKeyMode(null); }}>Cancel</Button>
+						<Button size="sm" disabled={controlsDisabled || !key.trim()} onClick={() => { const value = key; setKey(""); void update({ type: "credential", pluginId: keySetup.plugin.id, expected: keySetup.expected, action: "save", key: value }); }}>{keySetup.plugin.credential.status === "configured" ? "Save replacement" : "Save key"}</Button>
+						<Button size="sm" variant="secondary" disabled={controlsDisabled} onClick={() => { void update({ type: "credential", pluginId: keySetup.plugin.id, expected: keySetup.expected, action: "remove" }); }}>Remove key</Button>
+						<Button size="sm" variant="ghost" disabled={saving} onClick={() => { setKey(""); setKeySetup(null); }}>Cancel</Button>
 					</div>
 				</section>
 				</DialogContent></Dialog>}
@@ -431,10 +443,10 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 						className={cn("min-h-0 overflow-y-auto bg-panel sm:border-r sm:border-line", detailOpen ? "hidden sm:block" : "block")}
 					>
 						{groups.map((group) => (
-							<section key={group.name} aria-labelledby={`tools-group-${group.name}`}>
+							<section key={group.id} aria-labelledby={`tools-group-${group.id}`}>
 								<div className="sticky top-0 z-10 flex items-center gap-1.5 border-b border-line bg-panel/95 px-3 py-1.5 backdrop-blur">
 									<group.icon aria-hidden="true" className="size-3 text-muted" />
-									<h2 id={`tools-group-${group.name}`} className="text-[11px] font-semibold uppercase tracking-wider text-muted">{group.name}</h2>
+									<h2 id={`tools-group-${group.id}`} className="text-[11px] font-semibold uppercase tracking-wider text-muted">{group.name}</h2>
 									{snapshot?.settings?.parents.filter((parent) => group.tools.some((tool) => tool.parent === parent.id)).map((parent) => <input key={parent.id} type="checkbox" role="switch" aria-label={`Enable ${parent.name}`} checked={parent.enabled} disabled={controlsDisabled} onChange={(event) => toggleParent(parent.id, event.target.checked)} className="ml-auto size-4 accent-accent" />)}
 									<span title={`${group.tools.filter((tool) => tool.active).length} active of ${group.tools.length}`} className="ml-auto text-[11px] tabular-nums text-muted">{group.tools.filter((tool) => tool.active).length}/{group.tools.length}</span>
 								</div>
@@ -480,7 +492,7 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 								{selected.available && !selected.active && selected.enabled && snapshot.settings.parents.find((parent) => parent.id === selected.parent)?.enabled && <Button size="xs" variant="secondary" disabled={controlsDisabled} onClick={() => void update({ type: "activate", id: selected.id! })}>Activate for this session</Button>}
 							</div>}
 							{!selected.id && snapshot?.settings && <p className="mb-2 text-xs text-muted">Unmanaged tool</p>}
-							<ToolDetail key={selected.name} tool={selected} onBack={() => setDetailOpen(false)} />
+							<ToolDetail key={selected.name} tool={selected} group={groupDefinitions.find(group => group.id === toolGroup(selected.name, selected.parent))!} onBack={() => setDetailOpen(false)} />
 						</> : (
 							<p className="py-8 text-center text-xs text-muted">{snapshot ? "Select a tool to see what it does and what it needs." : connected && busy ? "Loading tools…" : "Tool details unavailable."}</p>
 						)}

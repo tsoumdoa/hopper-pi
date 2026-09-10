@@ -47,7 +47,6 @@ import {
 } from "./tools/rh-script.js";
 import { createRhRunScriptTool } from "./tools/rh-run-script.js";
 import { ToolPolicyRuntime } from "./services/tool-policy-runtime.js";
-import { createFirecrawlPlugin } from "./plugins/firecrawl/index.js";
 import { registerToolControlsCommand } from "./ui/tool-controls.js";
 
 export type HopperExtensionOptions = {
@@ -77,8 +76,7 @@ function registerHopperPiExtension(
 	pi.registerFlag("hopper-config-dir", { type: "string", description: "Absolute Hopper tool settings profile directory" });
 	const policy = options.toolPolicy ?? new ToolPolicyRuntime();
 	let profileConfigured = false;
-	const firecrawl = createFirecrawlPlugin({ admit: (name, signal) => policy.admitFirecrawl(name, signal) });
-	policy.abortProvider = name => name === "web_search" || name === "web_fetch" ? firecrawl.abortTool(name) : firecrawl.abortAll();
+
 	registerToolControlsCommand(pi, policy);
 	let scriptContext: ScriptToolContext | undefined;
 	const bindWorkspace = (directory: string, sessionId: string) => {
@@ -139,7 +137,7 @@ function registerHopperPiExtension(
 			alwaysActive: true,
 		},
 		RH_CAPTURE_VIEW_CATALOG_ENTRY,
-		...firecrawl.tools.map(tool => ({ tool, group: "firecrawl" as const, keywords: ["web", "search", "website", "research", "fetch", "read page"] })),
+		...policy.pluginCatalog,
 	];
 
 	registerBackendStatusUI(pi);
@@ -162,10 +160,7 @@ function registerHopperPiExtension(
 		}
 		policy.register(pi, searchTool);
 		policy.register(pi, RH_CAPTURE_VIEW_CATALOG_ENTRY.tool);
-		const names = new Set(pi.getAllTools().map(tool => tool.name));
-		// Decide the whole plugin before registering either tool, avoiding partial replacement.
-		if (firecrawl.tools.some(tool => names.has(tool.name) && !policy.hasRegistration(tool.name))) policy.markPluginConflict("firecrawl");
-		else for (const tool of firecrawl.tools) policy.register(pi, tool);
+		policy.registerPlugins(pi);
 		await policy.reconcile();
 	});
 
