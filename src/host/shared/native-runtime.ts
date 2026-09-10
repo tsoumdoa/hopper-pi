@@ -80,7 +80,7 @@ export class SharedNativeRuntime {
 		// attachments also keep a restarted host alive while Rhino reconnects.
 		if (this.registrations.size || this.registry.list().some((attachment) =>
 			this.isProcessAlive(attachment.processId))) {
-			this.idleDeadline = now + 10_000;
+			this.idleDeadline = now + 5_000;
 			return false;
 		}
 		return now >= this.idleDeadline;
@@ -198,7 +198,7 @@ export class SharedNativeRuntime {
 				generation: handshake.attachmentGeneration,
 			};
 			this.instances.set(connection.lifecycleInstanceId, instance);
-			this.idleDeadline = Date.now() + 10_000;
+			this.idleDeadline = Date.now() + 5_000;
 			// A transport/lifecycle replacement does not end a session while its Rhino process lives.
 			// Check exited processes here as well as during polling, including a quick quit/relaunch.
 			const previous = this.registry.list();

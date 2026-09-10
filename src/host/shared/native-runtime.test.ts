@@ -743,14 +743,14 @@ it("keeps the original host while any Rhino process survives and stops only afte
 	await runtime.register({ action: "detach", lifecycleInstanceId: "456", hostEpoch: "epoch" });
 	expect(runtime.shouldStopAfterRhinoExit(now + 80_000)).toBe(false);
 	alive.clear();
-	expect(runtime.shouldStopAfterRhinoExit(now + 89_000)).toBe(false);
+	expect(runtime.shouldStopAfterRhinoExit(now + 84_000)).toBe(false);
 	alive.add(789); // Another Rhino registers during the grace period.
 	wire.life = "789";
 	await runtime.register({ profilePath: "/789.json", hostEpoch: "epoch", process: { pid: 789, startIdentity: "start-789" } });
-	expect(runtime.shouldStopAfterRhinoExit(now + 89_000)).toBe(false);
+	expect(runtime.shouldStopAfterRhinoExit(now + 84_000)).toBe(false);
 	alive.clear();
-	expect(runtime.shouldStopAfterRhinoExit(now + 98_000)).toBe(false);
-	expect(runtime.shouldStopAfterRhinoExit(now + 99_000)).toBe(true);
+	expect(runtime.shouldStopAfterRhinoExit(now + 88_000)).toBe(false);
+	expect(runtime.shouldStopAfterRhinoExit(now + 89_000)).toBe(true);
 	await runtime.close();
 });
 
