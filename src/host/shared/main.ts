@@ -17,6 +17,7 @@ import { DocumentGrantService } from "./grants.js";
 import { GeometryTransferService } from "./transfer.js";
 import {
 	collectDelegationResults,
+	delegationBindingSchema,
 	selectDelegationImages,
 } from "./delegation.js";
 import { createNativeActionAdapters } from "./native-actions.js";
@@ -233,11 +234,11 @@ export async function startSharedHost(
 							name: "delegate",
 							label: "Delegate to a target",
 							description:
-								"Read or edit an accessible document in a child task. Dependencies must complete first.",
+								"Start a child agent for an accessible document and return immediately. Independent children run concurrently; omit dependencies unless another child's result is required. Native tools sharing a Rhino process take turns.",
 							parameters: Type.Object({
 								requestId: Type.String(),
 								assignment: Type.String(),
-								binding: Type.Unknown(),
+								binding: delegationBindingSchema,
 								dependencies: Type.Optional(Type.Array(Type.String())),
 								attachmentIndices: Type.Optional(
 									Type.Array(Type.Integer({ minimum: 0 }), {
@@ -280,7 +281,7 @@ export async function startSharedHost(
 							name: "waitForDelegates",
 							label: "Collect child results",
 							description:
-								"Wait for delegated tasks and inspect their attributed results, artifacts and failures before writing the combined response.",
+								"After submitting all independent assignments, wait for delegated tasks and inspect their attributed results, artifacts and failures before writing the combined response.",
 							parameters: Type.Object({}),
 							execute: async () => {
 								await tasks!.waitForChildren(context.taskId);
@@ -401,13 +402,6 @@ export async function startSharedHost(
 						requestId: `${command.requestId}:document`,
 						taskId,
 						...action,
-					});
-				},
-				authorizeLaunch: async (taskId, command) => {
-					await launches!.authorize({
-						requestId: `${command.requestId}:launch`,
-						rootTaskId: taskId,
-						...command.launch!,
 					});
 				},
 				installations: () => launches!.installations(),

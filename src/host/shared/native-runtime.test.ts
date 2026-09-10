@@ -78,7 +78,7 @@ beforeEach(() => {
 					? { attachmentGeneration: "generation" }
 					: operation === "listRhinoDocuments"
 						? {
-								documents: [{ documentId: "doc", stateToken: "observed" }],
+								documents: [{ documentId: "doc", stateToken: "observed", hopperInitialized: true }],
 								activeDocumentId: "doc",
 							}
 						: operation === "listGrasshopperDocuments"
@@ -102,6 +102,52 @@ async function setup(ready = true) {
 	if (ready) await runtime.refresh();
 	return { journal, registry, runtime };
 }
+it.each(["settings", "top-level"])("exposes initialized documents and their Grasshopper targets with %s associations", async (association) => {
+	const { registry, runtime } = await setup();
+	let initialized = false;
+	let closed = false;
+	const normal = wire.call.getMockImplementation()!;
+	wire.call.mockImplementation(async (operation: string, ...args: any[]) => {
+		if (operation === "listRhinoDocuments") return { operation, result: { class: "completed", data: {
+			documents: [
+				{ documentId: "doc", name: "Untitled 1", hopperInitialized: true },
+				...(!closed ? [{ documentId: "doc-2", name: "Untitled 2", hopperInitialized: initialized }] : []),
+			], activeDocumentId: "doc-2",
+		} } };
+		if (operation === "listGrasshopperDocuments") return { operation, result: { class: "completed", data: {
+			documents: [{ documentId: "gh-2", ...(association === "settings" ? { settings: { associatedRhinoDocumentId: "doc-2" } } : { associatedRhinoDocumentId: "doc-2" }) }],
+		} } };
+		return normal(operation, ...args);
+	});
+	await runtime.refresh();
+	expect(registry.list()[0]!.documents).toEqual([{ kind: "rhino", lifecycleInstanceId: "life", rhinoDocumentId: "doc" }]);
+	expect(registry.list()[0]!.documentLabels).not.toHaveProperty("doc-2");
+	// Running HopperCode in the second document changes metadata, without reconnecting the process.
+	initialized = true;
+	await runtime.refresh();
+	expect(registry.list()[0]!.documents).toHaveLength(3);
+	expect(registry.list()[0]!.documentLabels!["doc-2"]).toBe("Untitled 2");
+	expect(wire.clients).toBe(1);
+	closed = true;
+	await runtime.refresh();
+	expect(registry.list()[0]!.documents).toHaveLength(1);
+});
+it.each([undefined, null, false, "true"])("does not advertise a document with initialization metadata %s", async (hopperInitialized) => {
+	const { registry, runtime } = await setup();
+	const normal = wire.call.getMockImplementation()!;
+	wire.call.mockImplementation(async (operation: string, ...args: any[]) => {
+		if (operation === "listRhinoDocuments") return { result: { class: "completed", data: {
+			documents: [
+				{ documentId: "doc", hopperInitialized: true },
+				{ documentId: "not-initialized", hopperInitialized },
+			], activeDocumentId: "not-initialized",
+		} } };
+		return normal(operation, ...args);
+	});
+	await runtime.refresh();
+	expect(registry.list()[0]!.documents).toEqual([{ kind: "rhino", lifecycleInstanceId: "life", rhinoDocumentId: "doc" }]);
+	expect(registry.list()[0]!.documentLabels).not.toHaveProperty("not-initialized");
+});
 it("recovers a transient document-query outage without requiring plugin restart", async () => {
 	const { registry, runtime } = await setup();
 	wire.call.mockRejectedValueOnce(new Error("UI queue busy"));
@@ -165,45 +211,26 @@ it("permits exact-generation cleanup after document drift while rejecting new ge
 		attachments: [],
 		continuation: null,
 		signal: new AbortController().signal,
+		withNativeTool: async (work) => work(),
 		ask: () => "question",
 		requestDocumentAction: () => "handoff",
 		publish: () => {},
 	};
 	const geometry = await runtime.geometry(context);
 	geometry.runtimeSession.options.createRuntime!();
-	const normal = wire.call.getMockImplementation()!;
-	wire.call.mockImplementation(async (operation: string, ...args: any[]) =>
-		operation === "getDocumentTransactionState"
-			? {
-					operation,
-					result: {
-						class: "completed",
-						reasonCode: "OK",
-						data: { state: "active" },
-					},
-				}
-			: normal(operation, ...args),
-	);
-	await expect(geometry.cleanup()).resolves.toMatchObject({
-		confirmed: false,
-		evidence: { scopes: [{ state: "active" }, { state: "active" }] },
+	const transport = wire.transports.at(-1);
+	await expect(transport.call("queryRhinoObjects", {})).rejects.toThrow("tool execution lease");
+	await geometry.runTool("edit", async () => {
+		registry.updateDocuments("life", []);
+		await expect(transport.call("queryRhinoObjects", {})).rejects.toThrow("closed");
+		await expect(transport.call("commitRhinoAgentTransaction", {})).resolves.toMatchObject({ result: { class: "completed" } });
+		const attachment = registry.list()[0]!;
+		registry.register({ ...attachment, attachmentGeneration: "replacement" });
+		await expect(transport.call("cancelRhinoAgentTransaction", {})).rejects.toThrow("generation changed");
 	});
 	expect(wire.closeRuntime).toHaveBeenCalledTimes(1);
 	expect(wire.close).not.toHaveBeenCalled();
-	wire.call.mockImplementation(normal);
-	const transport = wire.transports.at(-1);
-	registry.updateDocuments("life", []);
-	await expect(transport.call("queryRhinoObjects", {})).rejects.toThrow(
-		"closed",
-	);
-	await expect(
-		transport.call("commitRhinoAgentTransaction", {}),
-	).resolves.toMatchObject({ result: { class: "completed" } });
-	const attachment = registry.list()[0]!;
-	registry.register({ ...attachment, attachmentGeneration: "replacement" });
-	await expect(
-		transport.call("cancelRhinoAgentTransaction", {}),
-	).rejects.toThrow("generation changed");
+
 });
 
 it("returns handshake-only admission before native startup opens the UI queue", async () => {
@@ -284,6 +311,7 @@ it("reserves bound saves durably and rejects target changes or coordinator trans
 			attachments: [],
 			continuation: null,
 			signal: new AbortController().signal,
+			withNativeTool: async (work) => work(),
 			ask: () => "q",
 			requestDocumentAction: () => "h",
 			publish: () => {},
@@ -298,6 +326,7 @@ it("reserves bound saves durably and rejects target changes or coordinator trans
 						result: {
 							class: "completed",
 							data: {
+								activeDocumentId: "doc",
 								documents: [
 									{
 										documentId: "doc",
@@ -323,37 +352,39 @@ it("reserves bound saves durably and rejects target changes or coordinator trans
 				return normal(operation, args, options);
 			},
 		);
-		await expect(
-			transport.call("manageRhinoDocument", {
-				action: "open",
-				path: join(root, "target.3dm"),
-			}),
-		).rejects.toThrow("coordinator");
-		await expect(
-			transport.call("manageRhinoDocument", {
-				action: "close",
-				documentId: "other",
-				expectedStateToken: "observed",
-			}),
-		).rejects.toThrow("captured binding");
-		await expect(
-			transport.call("manageRhinoDocument", {
+		await geometry.runTool("save", async () => {
+			await expect(
+				transport.call("manageRhinoDocument", {
+					action: "open",
+					path: join(root, "target.3dm"),
+				}),
+			).rejects.toThrow("coordinator");
+			await expect(
+				transport.call("manageRhinoDocument", {
+					action: "close",
+					documentId: "other",
+					expectedStateToken: "observed",
+				}),
+			).rejects.toThrow("captured binding");
+			await expect(
+				transport.call("manageRhinoDocument", {
+					action: "saveAs",
+					documentId: "doc",
+					expectedStateToken: "old",
+					path: join(root, "target.3dm"),
+				}),
+			).rejects.toThrow("changed");
+			await transport.call("manageRhinoDocument", {
 				action: "saveAs",
 				documentId: "doc",
-				expectedStateToken: "old",
+				expectedStateToken: "observed",
 				path: join(root, "target.3dm"),
-			}),
-		).rejects.toThrow("changed");
-		await transport.call("manageRhinoDocument", {
-			action: "saveAs",
-			documentId: "doc",
-			expectedStateToken: "observed",
-			path: join(root, "target.3dm"),
+			});
+			expect(journal.snapshot().operations).toMatchObject([
+				{ state: "uncertain" },
+			]);
+			expect(journal.snapshot().reservations).toHaveLength(1);
 		});
-		expect(journal.snapshot().operations).toMatchObject([
-			{ state: "uncertain" },
-		]);
-		expect(journal.snapshot().reservations).toHaveLength(1);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
@@ -397,7 +428,7 @@ it("ignores stale inventory after a newer same-lifecycle registration", async ()
 	release({
 		result: {
 			class: "completed",
-			data: { documents: [{ documentId: "stale-doc" }] },
+			data: { documents: [{ documentId: "stale-doc", hopperInitialized: true }] },
 		},
 	});
 	await pending;
@@ -440,7 +471,7 @@ it("refreshes healthy lifecycles while a different native UI query is stalled", 
 	release({
 		result: {
 			class: "completed",
-			data: { documents: [{ documentId: "doc" }] },
+			data: { documents: [{ documentId: "doc", hopperInitialized: true }] },
 		},
 	});
 	await pending;
@@ -564,7 +595,7 @@ it("activates only the captured inactive document before geometry initialization
 						class: "completed",
 						data: {
 							activeDocumentId: active,
-							documents: [{ documentId: "doc", stateToken: "observed" }],
+							documents: [{ documentId: "doc", stateToken: "observed", hopperInitialized: true }],
 						},
 					},
 				};
@@ -691,41 +722,4 @@ it("does not retire a current attachment when its proposed replacement fails aut
 	wire.call.mockRejectedValueOnce(new Error("Handshake rejected"));
 	await expect(runtime.register({ profilePath: "/replacement.json", hostEpoch: "epoch", process: { pid: 123, startIdentity: "start" } })).rejects.toThrow("Handshake rejected");
 	expect(registry.list().map((target) => [target.lifecycleInstanceId, target.admission])).toEqual([["life", "ready"]]);
-});
-
-
-it("commits the main task before yielding its process and reactivates the same document on resume", async () => {
-	const { journal, registry, runtime } = await setup();
-	const binding: TargetBinding = { kind: "rhino", lifecycleInstanceId: "life", rhinoDocumentId: "doc" };
-	journal.registerSession("conversation", "session");
-	const root = journal.accept({ requestId: "root", conversationId: "conversation", sessionId: "session", kind: "prompt", text: "Edit", bindings: [binding], messageTarget: binding, attachments: [] });
-	const owner = { taskId: root.taskId, turnId: root.turnId, binding, attachmentGeneration: "generation" };
-	journal.start(root.taskId, root.turnId, owner);
-	const geometry = await runtime.geometry({ taskId: root.taskId, turnId: root.turnId, owner, signal: new AbortController().signal } as DriverContext);
-	geometry.runtimeSession.options.createRuntime!();
-	const transport = wire.transports.at(-1);
-	await expect(geometry.pause()).resolves.toMatchObject({ confirmed: true });
-	expect(wire.commitRuntime).toHaveBeenCalledTimes(1);
-	expect(wire.commitRuntime.mock.invocationCallOrder[0]).toBeLessThan(wire.closeRuntime.mock.invocationCallOrder[0]!);
-	await expect(transport.call("queryRhinoObjects", {})).rejects.toThrow("paused");
-	await expect(transport.call("runRhinoScript", {})).rejects.toThrow("paused");
-	const normal = wire.call.getMockImplementation()!;
-	let activeDocumentId = "other-document";
-	wire.call.mockImplementation(async (operation: string, ...args: any[]) => {
-		if (operation === "manageRhinoDocument" && args[0]?.action === "activate") activeDocumentId = args[0].documentId;
-		const response = await normal(operation, ...args);
-		if (operation === "listRhinoDocuments") response.result.data.activeDocumentId = activeDocumentId;
-		return response;
-	});
-	await geometry.resume();
-	expect(wire.call).toHaveBeenCalledWith("manageRhinoDocument", expect.objectContaining({ action: "activate", documentId: "doc" }), expect.anything());
-	expect(wire.beginRuntime).toHaveBeenCalledTimes(1);
-	await expect(transport.call("queryRhinoObjects", {})).resolves.toMatchObject({ result: { class: "completed" } });
-	await geometry.pause();
-	registry.updateDocuments("life", []);
-	await expect(geometry.resume()).rejects.toThrow("closed");
-	wire.call.mockClear();
-	await expect(geometry.cleanup()).resolves.toMatchObject({ confirmed: true });
-	// A paused task no longer owns this process and cannot clean up another task's scope.
-	expect(wire.call).not.toHaveBeenCalled();
 });

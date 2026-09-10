@@ -4,6 +4,11 @@ import { join } from "node:path";
 import { WebSocket } from "ws";
 import { afterEach, expect, it, vi } from "vitest";
 import { createSharedBrowserServer } from "./browser-server.js";
+import { SharedBackend } from "./backend.js";
+import { TaskJournal } from "./journal.js";
+import { SharedRegistry } from "./registry.js";
+import { SharedTaskService } from "./task-service.js";
+import type { HostRuntime } from "../pi-runtime.js";
 const cleanup: (() => Promise<void> | void)[] = [];
 afterEach(async () => {
 	for (const fn of cleanup.splice(0).reverse()) await fn();
@@ -139,4 +144,64 @@ it("normal UI tools, skills and conversation export use the browser credential",
 	});
 	expect(response.status).toBe(200);
 	expect(runtime.updateSkills).toHaveBeenCalledWith({ type: "toggle", id: "skill", enabled: false });
+});
+
+
+it("builds streamed snapshots only while an authenticated browser is connected", async () => {
+	const journal = new TaskJournal(":memory:");
+	cleanup.push(() => journal.close());
+	const registry = new SharedRegistry(journal);
+	const tasks = new SharedTaskService(journal, {
+		resolveBinding: (binding) => registry.resolveBinding(binding),
+		validateBinding: () => {},
+		createDriver: () => { throw new Error("No model needed"); },
+	});
+	const admin = { snapshot: () => ({}), bus: { subscribe: () => () => {} } } as unknown as HostRuntime;
+	const backend = new SharedBackend(tasks, registry, admin, async () => {});
+	cleanup.push(() => backend.dispose());
+	const snapshot = vi.spyOn(backend, "snapshot");
+	const subscribe = backend.subscribe.bind(backend);
+	let onUnsubscribe: (() => void) | undefined;
+	vi.spyOn(backend, "subscribe").mockImplementation((listener) => {
+		const unsubscribe = subscribe(listener);
+		return () => { unsubscribe(); onUnsubscribe?.(); };
+	});
+	const f = await fixture(undefined, { backend });
+	const publish = () => {
+		vi.useFakeTimers();
+		try { backend.publish(); vi.advanceTimersByTime(50); }
+		finally { vi.useRealTimers(); }
+	};
+	publish();
+	expect(snapshot).not.toHaveBeenCalled();
+	const first = await f.connect();
+	publish();
+	expect(snapshot).not.toHaveBeenCalled();
+	const initial = next(first);
+	first.send(JSON.stringify({ type: "authenticate", token: "secret" }));
+	await initial;
+	snapshot.mockClear();
+	const update = next(first);
+	publish();
+	await update;
+	expect(snapshot).toHaveBeenCalledOnce();
+
+	// Closing the replaced tab must not unsubscribe the new controller.
+	const second = await f.connect();
+	const replacement = next(second);
+	const replaced = new Promise<void>((resolve) => first.once("close", () => resolve()));
+	second.send(JSON.stringify({ type: "authenticate", token: "secret" }));
+	await replacement;
+	await replaced;
+	snapshot.mockClear();
+	const latest = next(second);
+	publish();
+	await latest;
+	expect(snapshot).toHaveBeenCalledOnce();
+	const disconnected = new Promise<void>((resolve) => { onUnsubscribe = resolve; });
+	second.close();
+	await disconnected;
+	snapshot.mockClear();
+	publish();
+	expect(snapshot).not.toHaveBeenCalled();
 });

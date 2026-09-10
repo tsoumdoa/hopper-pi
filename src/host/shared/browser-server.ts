@@ -9,6 +9,7 @@ import {
 } from "./browser-protocol.js";
 
 import type { HostRuntime } from "../pi-runtime.js";
+import { createSnapshotSender } from "./snapshot-sender.js";
 
 export interface SharedBrowserBackend {
 	snapshot(): unknown;
@@ -95,13 +96,15 @@ export function createSharedBrowserServer(options: {
 		maxPayload: MAX_IMAGES * MAX_IMAGE_BASE64 + 1_048_576,
 	});
 	let controller: WebSocket | undefined;
+	const snapshotSenders = new WeakMap<WebSocket, ReturnType<typeof createSnapshotSender>>();
 	const send = (socket: WebSocket, event: unknown) => {
-		if (socket.readyState === WebSocket.OPEN)
+		if (socket.readyState !== WebSocket.OPEN) return;
+		if ((event as { type?: string })?.type === "shared_snapshot")
+			snapshotSenders.get(socket)?.push(event);
+		else
 			socket.send(JSON.stringify(event));
 	};
-	const unsubscribe = options.backend.subscribe((event) => {
-		if (controller) send(controller, event);
-	});
+	let unsubscribe: (() => void) | undefined;
 	server.on("upgrade", (request, socket, head) => {
 		const address = server.address();
 		const origin =
@@ -123,6 +126,11 @@ export function createSharedBrowserServer(options: {
 		);
 	});
 	sockets.on("connection", (socket: WebSocket) => {
+		const snapshots = createSnapshotSender((event, done) => {
+			if (socket.readyState !== WebSocket.OPEN) return done(new Error("Browser disconnected"));
+			socket.send(JSON.stringify(event), done);
+		});
+		snapshotSenders.set(socket, snapshots);
 		let authenticated = false;
 		const timeout = setTimeout(
 			() => socket.close(4003, "Authentication timed out"),
@@ -130,8 +138,13 @@ export function createSharedBrowserServer(options: {
 		);
 		timeout.unref();
 		socket.on("close", () => {
+			snapshots.close();
 			clearTimeout(timeout);
-			if (controller === socket) controller = undefined;
+			if (controller === socket) {
+				controller = undefined;
+				unsubscribe?.();
+				unsubscribe = undefined;
+			}
 		});
 		socket.on("message", (raw) => {
 			let command: SharedBrowserCommand;
@@ -170,6 +183,8 @@ export function createSharedBrowserServer(options: {
 				clearTimeout(timeout);
 				controller?.close(4001, "Replaced by another Hopper tab");
 				controller = socket;
+				unsubscribe?.();
+				unsubscribe = options.backend.subscribe((event) => send(socket, event));
 				send(socket, { type: "shared_snapshot", snapshot });
 				return;
 			}
@@ -198,7 +213,8 @@ export function createSharedBrowserServer(options: {
 	return {
 		server,
 		close: async () => {
-			unsubscribe();
+			unsubscribe?.();
+			unsubscribe = undefined;
 			for (const socket of sockets.clients) socket.terminate();
 			await new Promise<void>((resolve) => sockets.close(() => resolve()));
 			if (server.listening)

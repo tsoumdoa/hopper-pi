@@ -1,10 +1,30 @@
 import { expect, it } from "vitest";
+import { Type, validateToolArguments } from "@earendil-works/pi-ai";
+import { validateTargetBinding } from "../../protocol/shared-execution.js";
 import {
 	collectDelegationResults,
+	delegationBindingSchema,
 	selectDelegationImages,
 } from "./delegation.js";
 import { TaskJournal } from "./journal.js";
 const image = { type: "image", mimeType: "image/png", data: "aGk=" };
+it("advertises binding fields that match native validation, including the failed live calls", () => {
+	const tool = { name: "delegate", description: "Delegate", parameters: Type.Object({ binding: delegationBindingSchema }) };
+	const bindings = [
+		{ kind: "rhino", lifecycleInstanceId: "life", rhinoDocumentId: "doc" },
+		{ kind: "grasshopper", lifecycleInstanceId: "life", grasshopperDocumentId: "gh", associatedRhinoDocumentId: "doc" },
+		{ kind: "grasshopper", lifecycleInstanceId: "life", grasshopperDocumentId: "gh", associatedRhinoDocumentId: null },
+		{ documentId: "doc", lifecycleInstanceId: "life" },
+		{ kind: "rhino", rhinoDocumentId: "doc" },
+		{ kind: "rhino", lifecycleInstanceId: "life", rhinoDocumentId: "doc", documentId: "doc" },
+		{ kind: "grasshopper", lifecycleInstanceId: "life", grasshopperDocumentId: "gh" },
+	];
+	for (const binding of bindings) {
+		const validate = () => validateToolArguments(tool, { type: "toolCall", id: "call", name: "delegate", arguments: { binding } });
+		if (validateTargetBinding(binding).ok) expect(validate().binding).toEqual(binding);
+		else expect(validate).toThrow();
+	}
+});
 it("copies all supplied images by default without inheriting other source objects", () => {
 	const result = selectDelegationImages([image, { artifactId: "artifact" }]);
 	expect(result).toEqual([image]);

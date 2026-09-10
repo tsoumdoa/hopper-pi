@@ -12,6 +12,8 @@ public abstract class DocumentService<T> where T : class
     protected abstract string NativeId(T document);
     protected abstract string? PathOf(T document);
     protected abstract bool Modified(T document);
+    protected virtual bool HopperInitialized(T document) => true;
+    protected virtual void InitializeHopper(T document) { }
     protected abstract void MarkModified(T document);
     protected abstract string Fingerprint(T document);
     // Persisted content only: native overrides exclude path/dirty changes caused by a successful write.
@@ -38,7 +40,7 @@ public abstract class DocumentService<T> where T : class
             _files[Id(doc)] = (path, DocumentFiles.Stamp(path));
         return new(Id(doc), DocumentSession.LifecycleInstanceId, Kind, path == null ? "Untitled" : System.IO.Path.GetFileName(path), path,
             ReferenceEquals(doc, Active), Modified(doc), path == null || !File.Exists(path) ? null : new FileInfo(path).IsReadOnly,
-            DocumentSession.Digest(Id(doc) + "|" + path + "|" + Modified(doc) + "|" + Fingerprint(doc)), Settings(doc));
+            DocumentSession.Digest(Id(doc) + "|" + path + "|" + Modified(doc) + "|" + Fingerprint(doc)), Settings(doc), HopperInitialized(doc));
     }
     public void ObserveNativeSave(T doc) { var path = PathOf(doc); _files[Id(doc)] = (path, DocumentFiles.Stamp(path)); }
     public object List() => new { documents = Documents.Select(Describe).ToArray(), activeDocumentId = Active == null ? null : Id(Active), capabilities = Capabilities,
@@ -127,6 +129,8 @@ public abstract class DocumentService<T> where T : class
         else if (action is "save" or "saveAs") Save(doc!, path ?? PathOf(doc!)!, args, effects, destinations);
         else if (action == "close") { var id = Id(doc!); var closePath = PathOf(doc!); effects.Add(new("close", id, closePath, false)); Close(doc!); effects[^1] = new("close", id, closePath, true); doc = null; }
         if (action is "new" or "open" or "activate") effects[^1] = new(action, doc == null ? null : Id(doc), doc == null ? null : PathOf(doc), true);
+        // Explicit Hopper document creation/opening also makes the resulting target selectable.
+        if (action is "new" or "open") InitializeHopper(doc!);
         DocumentSession.Advance(Kind, null, "idle");
         return DocumentSession.Result(new { ok = true, document = doc == null ? null : Describe(doc), alreadyOpen = already != null,
             effects, outcomeUncertain = false, state = List(), transaction = DocumentSession.Segment(Kind) });

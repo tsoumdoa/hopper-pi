@@ -13,6 +13,7 @@ export class SharedBackend implements SharedBrowserBackend {
 	private readonly listeners = new Set<(event: unknown) => void>();
 	private readonly unsubscribe: (() => void)[];
 	private stopping = false;
+	private publishTimer?: ReturnType<typeof setTimeout>;
 	private readonly admissions = new Map<string, Promise<unknown>>();
 	stopAdmission(): void {
 		this.stopping = true;
@@ -25,10 +26,6 @@ export class SharedBackend implements SharedBrowserBackend {
 		private readonly stopHost: () => Promise<void>,
 		private readonly actions?: {
 			authorizeDocument(
-				taskId: string,
-				command: Extract<SharedBrowserCommand, { type: "submit" }>,
-			): Promise<void>;
-			authorizeLaunch(
 				taskId: string,
 				command: Extract<SharedBrowserCommand, { type: "submit" }>,
 			): Promise<void>;
@@ -105,7 +102,15 @@ export class SharedBackend implements SharedBrowserBackend {
 		for (const listener of this.listeners) listener(event);
 	}
 	publish(): void {
-		this.emit({ type: "shared_snapshot", snapshot: this.snapshot() });
+		// Token deltas can arrive much faster than a browser can consume full history.
+		// Persist every event, but build and send at most one current snapshot per interval.
+		if (!this.listeners.size || this.publishTimer) return;
+		this.publishTimer = setTimeout(() => {
+			this.publishTimer = undefined;
+			if (this.listeners.size)
+				this.emit({ type: "shared_snapshot", snapshot: this.snapshot() });
+		}, 50);
+		this.publishTimer.unref();
 	}
 	private taskInConversation(taskId: string, conversationId: string): void {
 		if (
@@ -199,7 +204,6 @@ export class SharedBackend implements SharedBrowserBackend {
 					...(command.documentAction
 						? { documentAction: command.documentAction }
 						: {}),
-					...(command.launch ? { launch: command.launch } : {}),
 				};
 				const prior = this.tasks.journal.findRequest(command.requestId, input);
 				if (
@@ -225,10 +229,6 @@ export class SharedBackend implements SharedBrowserBackend {
 							if (!this.actions)
 								throw new Error("Document actions are unavailable");
 							await this.actions.authorizeDocument(receipt.taskId, command);
-						}
-						if (command.launch) {
-							if (!this.actions) throw new Error("Rhino launch is unavailable");
-							await this.actions.authorizeLaunch(receipt.taskId, command);
 						}
 						this.tasks.journal.finishAdmission(receipt.taskId);
 					} catch (error) {
@@ -358,6 +358,7 @@ export class SharedBackend implements SharedBrowserBackend {
 		}
 	}
 	dispose(): void {
+		clearTimeout(this.publishTimer);
 		for (const unsubscribe of this.unsubscribe) unsubscribe();
 		this.listeners.clear();
 	}

@@ -138,42 +138,6 @@ it("rejects ambiguous document policies and malformed open or overwrite values",
 		).toThrow();
 	}
 });
-it("rejects launch grants combined with bindings or a preexisting-lifecycle action", () => {
-	const launch = { installationId: "rhino", independentProcess: false };
-	expect(() =>
-		parseSharedBrowserCommand(
-			JSON.stringify({
-				...submit,
-				launch,
-				bindings: [
-					{
-						kind: "rhino",
-						lifecycleInstanceId: "life",
-						rhinoDocumentId: "doc",
-					},
-				],
-			}),
-		),
-	).toThrow("coordinator");
-	expect(() =>
-		parseSharedBrowserCommand(
-			JSON.stringify({
-				...submit,
-				launch,
-				documentAction: {
-					lifecycleInstanceId: "life",
-					kind: "rhino",
-					action: "new",
-					modifiedPolicy: "refuse",
-				},
-			}),
-		),
-	).toThrow("one bounded");
-	expect(
-		parseSharedBrowserCommand(JSON.stringify({ ...submit, launch })),
-	).toMatchObject({ bindings: [], launch });
-});
-
 it("requires complete original launch scope and explicit recovery acknowledgement", () => {
 	const command = {
 		type: "recover_launch",

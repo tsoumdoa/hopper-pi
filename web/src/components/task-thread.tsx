@@ -230,11 +230,11 @@ function TaskReply({ task, snapshot, labelFor, commands }: {
 	const assistantMessages = messages.filter((message: any) => message.role === "assistant");
 	const idle = running && !assistantMessages.length && !liveMessages.length && !tools.length;
 	const targets = (input.messageTarget ? [input.messageTarget] : input.bindings)?.map(labelFor) ?? [];
+	const block = (snapshot.records ?? []).find((record) =>
+		record.kind === "scheduling" && record.task_id === task.id && record.state === "blocked");
+	const reason = block ? decode<{ reason?: string }>(block.payload, {}).reason : undefined;
 
 	if (state === "queued") {
-		const block = (snapshot.records ?? []).find((record) =>
-			record.kind === "scheduling" && record.task_id === task.id && record.state === "blocked");
-		const reason = block ? decode<{ reason?: string }>(block.payload, {}).reason : undefined;
 		return (
 			<div className="flex items-center justify-between gap-3 text-[13px] text-muted" aria-label="Hopper's reply">
 				<p role="status" className="flex items-center gap-2">
@@ -257,6 +257,7 @@ function TaskReply({ task, snapshot, labelFor, commands }: {
 				))}
 			</div>
 			<div className="grid gap-3">
+				{running && reason && <p role="status" className="text-xs text-muted">{reason}</p>}
 				{state === "failed" && <Notice tone="danger">Something went wrong. Please try again.</Notice>}
 				{state === "interrupted" && <Notice tone="danger">The connection to Rhino was interrupted before this task finished.</Notice>}
 				{state === "cancelled" && <Notice tone="muted">Stopped.</Notice>}

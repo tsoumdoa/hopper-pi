@@ -54,6 +54,8 @@ export type DocumentSettings = {
 	diagnostics?: string[];
 };
 export type DocumentMetadata = {
+	/** Only true opts a Rhino document into shared targets; absent metadata does not. */
+	hopperInitialized?: boolean;
 	documentId: string;
 	lifecycleInstanceId: string;
 	kind: DocumentKind;

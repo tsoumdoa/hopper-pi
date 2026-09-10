@@ -23,6 +23,7 @@ namespace rhino_zmq_poc
 
             SharedNativeHost.SuppressBrowser = false;
             SharedNativeHost.MessageDocumentSerialNumber = doc?.RuntimeSerialNumber;
+            SharedNativeHost.InitializeDocument(doc);
             SharedNativeHost.BootstrapTicket = null;
             RhinoCodeRunner.PreloadLanguages();
             var result = facade.RequestStart();
@@ -86,6 +87,7 @@ namespace rhino_zmq_poc
                 return Result.Failure;
             }
             SharedNativeHost.MessageDocumentSerialNumber = doc?.RuntimeSerialNumber;
+            SharedNativeHost.InitializeDocument(doc);
             RhinoCodeRunner.PreloadLanguages();
             var result = facade.RequestRestart();
             RhinoApp.WriteLine(result.Message);
@@ -112,6 +114,7 @@ namespace rhino_zmq_poc
                 if (facade is null || facade.GetStatus().Runtime.Lifecycle.State != Hopper.Core.Protocol.LifecycleState.stopped) return Result.Failure;
                 SharedNativeHost.BootstrapTicket = ticket;
                 SharedNativeHost.SuppressBrowser = true;
+                SharedNativeHost.InitializeDocument(doc);
                 return facade.RequestStart().Accepted ? Result.Success : Result.Failure;
             }
             catch { RhinoApp.WriteLine("Hopper bootstrap ticket is unavailable or invalid."); return Result.Failure; }

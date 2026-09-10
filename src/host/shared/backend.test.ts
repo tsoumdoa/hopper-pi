@@ -5,6 +5,30 @@ import { SharedTaskService } from "./task-service.js";
 import { SharedBackend } from "./backend.js";
 import type { HostRuntime } from "../pi-runtime.js";
 
+it("coalesces streamed updates before reading history and cancels pending publication on disposal", () => {
+	vi.useFakeTimers();
+	const s = setup();
+	const snapshot = vi.spyOn(s.backend, "snapshot");
+	try {
+		const receive = vi.fn();
+		s.backend.subscribe(receive);
+		for (let i = 0; i < 1000; i++) s.backend.publish();
+		expect(snapshot).not.toHaveBeenCalled();
+		vi.advanceTimersByTime(50);
+		expect(snapshot).toHaveBeenCalledTimes(1);
+		expect(receive).toHaveBeenCalledTimes(1);
+		expect(receive.mock.calls[0]![0]).toMatchObject({ type: "shared_snapshot" });
+		s.backend.publish();
+		s.backend.dispose();
+		vi.advanceTimersByTime(100);
+		expect(snapshot).toHaveBeenCalledTimes(1);
+	} finally {
+		s.backend.dispose();
+		s.journal.close();
+		vi.useRealTimers();
+	}
+});
+
 function setup(authorizeDocument = vi.fn(async () => {})) {
 	const journal = new TaskJournal(":memory:");
 	const registry = new SharedRegistry(journal);
@@ -26,7 +50,6 @@ function setup(authorizeDocument = vi.fn(async () => {})) {
 	const recoverLaunch = vi.fn(async () => ({ id: "launch" }));
 	const backend = new SharedBackend(tasks, registry, admin, async () => {}, {
 		authorizeDocument,
-		authorizeLaunch: async () => {},
 		installations: () => [],
 		recover: async () => {},
 		recoverLaunch,

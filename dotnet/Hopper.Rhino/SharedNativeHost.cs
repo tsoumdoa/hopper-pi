@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
@@ -16,6 +17,11 @@ namespace rhino_zmq_poc;
 
 internal static class SharedNativeHost
 {
+    // Accessed on Rhino's UI thread. Initialization belongs to a document, not a window focus.
+    private static readonly HashSet<uint> InitializedDocuments = new();
+    public static void InitializeDocument(Rhino.RhinoDoc doc) { if (doc != null) InitializedDocuments.Add(doc.RuntimeSerialNumber); }
+    public static bool IsDocumentInitialized(Rhino.RhinoDoc doc) => InitializedDocuments.Contains(doc.RuntimeSerialNumber);
+    public static void ForgetDocument(uint serial) => InitializedDocuments.Remove(serial);
     public static string BootstrapTicket { get; set; }
     public static bool SuppressBrowser { get; set; }
     public static uint? MessageDocumentSerialNumber { get; set; }

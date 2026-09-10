@@ -1,4 +1,21 @@
 import { parseImages, type ImageAttachment } from "../protocol.js";
+import { Type } from "@earendil-works/pi-ai";
+
+const bindingId = () => Type.String({ pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" });
+/** Match the native binding validator so agents can submit a valid target on the first call. */
+export const delegationBindingSchema = Type.Union([
+	Type.Object({
+		kind: Type.Literal("rhino"),
+		lifecycleInstanceId: bindingId(),
+		rhinoDocumentId: bindingId(),
+	}, { additionalProperties: false }),
+	Type.Object({
+		kind: Type.Literal("grasshopper"),
+		lifecycleInstanceId: bindingId(),
+		grasshopperDocumentId: bindingId(),
+		associatedRhinoDocumentId: Type.Union([bindingId(), Type.Null()]),
+	}, { additionalProperties: false }),
+], { description: "Copy one exact documents entry from listRhinoTargets, including kind and lifecycleInstanceId. Grasshopper requires associatedRhinoDocumentId, explicitly null when unassociated." });
 
 /** Child inputs are copies of explicitly selected parent images, never sibling history. */
 export function selectDelegationImages(

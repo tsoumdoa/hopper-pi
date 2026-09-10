@@ -336,7 +336,9 @@ export function App() {
 	const activeBindings = activeOwner?.binding ? [activeOwner.binding] : activeInput.messageTarget ? [activeInput.messageTarget] : activeInput.bindings;
 	const steeringDestination = activeBindings.length ? activeBindings.map(labelFor).join(", ") : "Conversation";
 	const unavailableSelected = selected.some((binding) => !availableTargets.some((target) => target.documents.some((document) => sameBinding(document, binding))));
-	const needsTarget = sendMode !== "steer" && Boolean(unavailableSelected || !selected.length);
+	const needsTarget = sendMode !== "steer" && Boolean(
+		unavailableSelected || (documentBindings.length > 0 && !selected.length),
+	);
 	const title = String(snapshot?.conversations.find((conversation) => conversation.id === conversationId)?.title ?? "New chat");
 
 	useEffect(() => {
@@ -422,12 +424,12 @@ export function App() {
 	};
 
 	const destinationLabel = sendMode === "steer" ? `Steering: ${steeringDestination}`
-		: selected[0] ? labelFor(selected[0])
+		: selected[0] && !unavailableSelected ? labelFor(selected[0])
 		: documentBindings.length ? "Choose a document" : "No documents connected";
 	const rhinoPicker = (
 		<>
 		<Select
-			value={selected.length === 1 ? JSON.stringify(selected[0]) : ""}
+			value={selected.length === 1 && !unavailableSelected ? JSON.stringify(selected[0]) : ""}
 			onValueChange={(value) => {
 				const binding = documentBindings.find((binding) => JSON.stringify(binding) === value);
 				if (binding) selectTargets([binding]);

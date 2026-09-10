@@ -11,6 +11,7 @@ import {
 } from "../../infra/rpc-client.js";
 import {
 	beginRuntimeAgentTurn,
+	cancelRuntimeAgentTurn,
 	commitRuntimeAgentTurn,
 	closeRuntimeRpc,
 	RuntimeRpc,
@@ -229,9 +230,17 @@ export class SharedNativeRuntime {
 				: Array.isArray(value?.documents)
 					? value.documents
 					: [];
+		// An open document is not necessarily a Hopper target. Missing metadata must
+		// not opt documents in when a host and native plugin have different versions.
+		const rhinoDocuments = list(rhino).filter((document) => document.hopperInitialized === true);
+		const rhinoIds = new Set(rhinoDocuments.map((document) => document.documentId));
+		const grasshopperDocuments = list(grasshopper).filter((document) => {
+			const rhinoId = document.associatedRhinoDocumentId ?? document.settings?.associatedRhinoDocumentId;
+			return !rhinoId || rhinoIds.has(rhinoId);
+		});
 		return {
 			labels: Object.fromEntries(
-				[...list(rhino), ...list(grasshopper)].map((document) => [
+				[...rhinoDocuments, ...grasshopperDocuments].map((document) => [
 					document.documentId,
 					document.path
 						? `${document.name ?? "Untitled"} — ${document.path}`
@@ -239,12 +248,12 @@ export class SharedNativeRuntime {
 				]),
 			),
 			bindings: [
-				...list(rhino).map((document) => ({
+				...rhinoDocuments.map((document) => ({
 					kind: "rhino" as const,
 					lifecycleInstanceId: instance.connection.lifecycleInstanceId,
 					rhinoDocumentId: document.documentId,
 				})),
-				...list(grasshopper).map((document) => ({
+				...grasshopperDocuments.map((document) => ({
 					kind: "grasshopper" as const,
 					lifecycleInstanceId: instance.connection.lifecycleInstanceId,
 					grasshopperDocumentId: document.documentId,
@@ -274,16 +283,15 @@ export class SharedNativeRuntime {
 		return [rhino, grasshopper];
 	}
 	async geometry(context: DriverContext) {
-		if (!context.owner)
-			throw new Error("Geometry requires execution ownership");
+		if (!context.owner || !context.withNativeTool)
+			throw new Error("Geometry requires execution ownership and a native tool lease");
+		const withNativeTool = context.withNativeTool;
 		const owner = context.owner;
 		this.registry.validateBinding(owner);
-		await this.activateBinding(owner);
 		const instance = this.instances.get(owner.binding.lifecycleInstanceId);
 		if (!instance) throw new Error("Lifecycle is detached");
-		let blocked = false;
-		let paused = false;
-		let pauseEvidence: unknown;
+		let toolActive = false;
+		let toolCleanupConfirmed = true;
 		const cleanupNames = new Set([
 			"commitAgentTransaction",
 			"cancelAgentTransaction",
@@ -295,9 +303,9 @@ export class SharedNativeRuntime {
 			args: RequestArgsFor<O>,
 			options: RpcCallOptions = {},
 		): Promise<RpcCallResult> => {
+			if (!toolActive && !["lifecycleHandshake", "getRuntimeStatus"].includes(operation))
+				throw new Error("Native document access requires a tool execution lease");
 			const cleanup = cleanupNames.has(operation);
-			if (paused || (blocked && !cleanup && !["getDocumentTransactionState", "getOperationResult", "getRuntimeStatus", "lifecycleHandshake"].includes(operation)))
-				throw new Error("Selected document is paused while delegated tasks run");
 			if (
 				cleanup ||
 				[
@@ -415,34 +423,38 @@ export class SharedNativeRuntime {
 		});
 		return {
 			runtimeSession,
-			pause: async () => {
-				blocked = true;
-				await runtimeSession.run(commitRuntimeAgentTurn);
-				// Dispose transaction state before another task uses this process.
-				await runtimeSession.run(closeRuntimeRpc);
-				const scopes = await this.scopes(instance);
-				paused = scopes.every((scope) => scope?.state === "idle");
-				pauseEvidence = { scopes };
-				return { confirmed: paused, evidence: pauseEvidence };
-			},
-			resume: async () => {
-				if (context.signal.aborted) throw new Error("Task cancelled");
+			runTool: <T>(_name: string, work: () => Promise<T>): Promise<T> => withNativeTool(async () => {
+				this.registry.validateBinding(owner);
 				await this.activateBinding(owner);
+				toolActive = true;
+				toolCleanupConfirmed = false;
 				runtimeSession.run(beginRuntimeAgentTurn);
-				paused = false;
-				blocked = false;
-			},
+				try {
+					return await runtimeSession.run(work);
+				} finally {
+					try {
+						await runtimeSession.run(context.signal.aborted ? cancelRuntimeAgentTurn : commitRuntimeAgentTurn);
+						await runtimeSession.run(closeRuntimeRpc);
+						const scopes = await this.scopes(instance);
+						toolCleanupConfirmed = scopes.every((scope) => scope?.state === "idle");
+						if (!toolCleanupConfirmed) throw new Error("Native tool cleanup did not confirm idle scopes");
+					} catch (error) {
+						toolCleanupConfirmed = false;
+						this.journal.markScopeUncertain(owner, context.taskId, context.turnId, { error: String(error) });
+						throw error;
+					} finally {
+						toolActive = false;
+					}
+				}
+			}),
 			cleanup: async () => {
-				await runtimeSession.run(closeRuntimeRpc);
-				if (paused) return { confirmed: true, evidence: pauseEvidence };
-				const scopes = await this.scopes(instance);
-				return {
-					confirmed: scopes.every((scope) => scope?.state === "idle"),
-					evidence: { scopes },
-				};
+				// Between tools this task owns no scopes. Never inspect a sibling's transaction.
+				if (toolCleanupConfirmed) await runtimeSession.run(closeRuntimeRpc);
+				return { confirmed: toolCleanupConfirmed, evidence: { perToolCleanup: toolCleanupConfirmed } };
 			},
 		};
 	}
+
 	async activateBinding(owner: ExecutionOwner): Promise<void> {
 		this.registry.validateBinding(owner);
 		const instance = this.instances.get(owner.binding.lifecycleInstanceId);

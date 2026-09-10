@@ -1,10 +1,10 @@
 import { expect, it, vi } from "vitest";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { createHopperPiExtension } from "./index.js";
+import { createHopperPiExtension, type HopperExtensionOptions } from "./index.js";
 import { RuntimeSessionContext } from "./infra/runtime-session-context.js";
 import { getRuntimeRpc, type RuntimeRpc } from "./infra/runtime-rpc.js";
 
-function extension(id: string) {
+function extension(id: string, runTool?: HopperExtensionOptions["runTool"]) {
 	const runtime = {
 		beginAgentTurn: vi.fn(), commitAgentTurn: vi.fn(async () => {}), cancelAgentTurn: vi.fn(async () => {}),
 		getRuntimeStatus: vi.fn(async () => ({})),
@@ -22,7 +22,7 @@ function extension(id: string) {
 		registerFlag() {}, getFlag: () => false, getAllTools: () => [...tools.values()],
 		getActiveTools: () => [...tools.keys()], setActiveTools() {},
 	};
-	createHopperPiExtension({ runtimeSession: session, sessionId: () => id })(pi as unknown as ExtensionAPI);
+	createHopperPiExtension({ runtimeSession: session, sessionId: () => id, runTool })(pi as unknown as ExtensionAPI);
 	return { runtime, session, tools, commands, async emit(name: string, event = {}) {
 		for (const hook of hooks.get(name) ?? []) await hook(event, { hasUI: false });
 	} };
@@ -51,4 +51,17 @@ it("binds independently registered Pi turn hooks and tools to their injected ses
 	await capture.execute("capture", {}, undefined, undefined, { model: { input: ["text", "image"] } } as never);
 	expect(a.runtime.request).toHaveBeenCalledWith("captureRhinoView", expect.anything());
 	expect(b.runtime.request).not.toHaveBeenCalled();
+});
+
+it("wraps dynamically registered native tools inside the lease and preserves their session context", async () => {
+	const trace: string[] = [];
+	const a = extension("a", async (name, work) => {
+		trace.push(`acquire:${name}`);
+		try { return await work(); }
+		finally { trace.push(`release:${name}`); }
+	});
+	a.runtime.request.mockImplementation(async () => { trace.push("native:a"); return { ok: false }; });
+	await a.emit("model_select", { model: { provider: "test", id: "vision", input: ["text", "image"] } });
+	await a.tools.get("rh_capture_view")!.execute("capture", {}, undefined, undefined, { model: { input: ["text", "image"] } } as never);
+	expect(trace).toEqual(["acquire:rh_capture_view", "native:a", "release:rh_capture_view"]);
 });

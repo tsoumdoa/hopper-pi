@@ -94,27 +94,37 @@ async function setup(
 	};
 }
 describe("production launch coordinator", () => {
-	it("requires explicit host admission before a coordinator can launch", async () => {
+	it("creates one root-task launch grant from the agent tool and observes retries", async () => {
 		const f = await setup();
 		const tools = f.coordinator.tools({
 			taskId: f.task.taskId,
+			parentTaskId: null,
 		} as DriverContext);
 		const launch = tools[1].execute as (
 			id: string,
-			args: { requestId: string },
-		) => Promise<unknown>;
-		await expect(launch("call", { requestId: "ungranted" })).rejects.toThrow(
-			"not authorized",
-		);
-		await f.coordinator.authorize({
-			requestId: "launch",
-			rootTaskId: f.task.taskId,
-			installationId: "rhino",
-			independentProcess: false,
-		});
-		await launch("call", { requestId: "launch" });
-		await launch("retry", { requestId: "launch" });
+			args: { installationId: string; requestId?: string },
+		) => Promise<any>;
+		const first = await launch("call", { installationId: "rhino" });
+		const requestId = first.details.request.requestId;
+		expect(requestId).toMatch(/^agent-launch-[a-f0-9]{64}$/);
+		expect(first.details.request.rootTaskId).toBe(f.task.taskId);
+		await launch("retry", { installationId: "rhino", requestId });
 		expect(f.spawns()).toBe(1);
+	});
+	it("does not let a child task authorize a process launch", async () => {
+		const f = await setup();
+		const launch = f.coordinator.tools({
+			taskId: f.task.taskId,
+			parentTaskId: "parent",
+		} as DriverContext)[1].execute as (
+			id: string,
+			args: { installationId: string },
+		) => Promise<unknown>;
+		await expect(
+			launch("call", { installationId: "rhino" }),
+		).rejects.toThrow("root user request");
+		expect(f.journal.snapshot().records).toEqual([]);
+		expect(f.spawns()).toBe(0);
 	});
 	it("adds only one verified launched document after matching native bootstrap", async () => {
 		const f = await setup();
@@ -128,9 +138,9 @@ describe("production launch coordinator", () => {
 			taskId: f.task.taskId,
 		} as DriverContext)[1].execute as (
 			id: string,
-			args: { requestId: string },
+			args: { installationId: string; requestId?: string },
 		) => Promise<unknown>;
-		await launch("call", { requestId: "launch" });
+		await launch("call", { installationId: "rhino", requestId: "launch" });
 		const directory = join(f.control.directory, "bootstrap");
 		const file = readdirSync(directory)[0];
 		const ticket = JSON.parse(readFileSync(join(directory, file), "utf8"));
@@ -201,9 +211,9 @@ describe("production launch coordinator", () => {
 			taskId: f.task.taskId,
 		} as DriverContext)[1].execute as (
 			id: string,
-			args: { requestId: string },
+			args: { installationId: string; requestId?: string },
 		) => Promise<unknown>;
-		await launch("call", { requestId: "launch" });
+		await launch("call", { installationId: "rhino", requestId: "launch" });
 		const directory = join(f.control.directory, "bootstrap"),
 			file = readdirSync(directory)[0],
 			ticket = JSON.parse(readFileSync(join(directory, file), "utf8"));
@@ -270,10 +280,10 @@ describe("production launch coordinator", () => {
 			signal: signal.signal,
 		} as DriverContext)[1].execute as (
 			id: string,
-			args: { requestId: string },
+			args: { installationId: string; requestId?: string },
 		) => Promise<any>;
 		let finished = false;
-		const pending = launch("call", { requestId: "launch" }).then((result) => {
+		const pending = launch("call", { installationId: "rhino", requestId: "launch" }).then((result) => {
 			finished = true;
 			return result;
 		});
@@ -336,14 +346,14 @@ describe("production launch coordinator", () => {
 			signal: controller.signal,
 		} as DriverContext)[1].execute as (
 			id: string,
-			args: { requestId: string },
+			args: { installationId: string; requestId?: string },
 		) => Promise<any>;
-		const result = await launch("call", { requestId: "launch" });
+		const result = await launch("call", { installationId: "rhino", requestId: "launch" });
 		expect(result.details.state).toBe("uncertain");
 		expect(result.details.nextAction).toContain("ask_user");
 		controller.abort();
 		expect(
-			(await launch("retry", { requestId: "launch" })).content[0].text,
+			(await launch("retry", { installationId: "rhino", requestId: "launch" })).content[0].text,
 		).toContain("cancelled");
 		expect(f.spawns()).toBe(1);
 	});
@@ -421,9 +431,9 @@ it.each(["darwin", "win32"] as const)(
 			taskId: f.task.taskId,
 		} as DriverContext)[1].execute as (
 			id: string,
-			args: { requestId: string },
+			args: { installationId: string; requestId?: string },
 		) => Promise<unknown>;
-		await launch("call", { requestId: "launch" });
+		await launch("call", { installationId: "rhino", requestId: "launch" });
 		const input = {
 			requestId: "recovery",
 			taskId: f.task.taskId,
@@ -507,9 +517,9 @@ it("cannot recover an empty snapshot while original spawn dispatch is still pend
 		taskId: f.task.taskId,
 	} as DriverContext)[1].execute as (
 		id: string,
-		args: { requestId: string },
+		args: { installationId: string; requestId?: string },
 	) => Promise<unknown>;
-	const pending = launch("call", { requestId: "launch" });
+	const pending = launch("call", { installationId: "rhino", requestId: "launch" });
 	await vi.waitFor(() => expect(f.spawns()).toBe(1));
 	f.journal.requestCancellation(f.task.taskId);
 	f.coordinator.cancelRoot(f.task.taskId);

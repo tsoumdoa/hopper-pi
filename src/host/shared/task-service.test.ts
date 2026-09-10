@@ -17,8 +17,6 @@ function setup(maxWorkers?: number) {
 	const contexts: DriverContext[] = [],
 		finish = new Map<string, () => void>(),
 		clean = new Map<string, (confirmed?: boolean) => void>();
-	const pause = vi.fn(async (_context: DriverContext) => ({ confirmed: true }));
-	const resume = vi.fn(async (_context: DriverContext) => {});
 	const service = new SharedTaskService(journal, {
 		maxWorkers,
 		resolveBinding: (b) => ({
@@ -29,8 +27,6 @@ function setup(maxWorkers?: number) {
 		createDriver: (context) => {
 			contexts.push(context);
 			return {
-				pauseGeometry: () => pause(context),
-				resumeGeometry: () => resume(context),
 				run: () =>
 					new Promise<void>((resolve) => finish.set(context.taskId, resolve)),
 				steer: async () => {},
@@ -60,28 +56,25 @@ function setup(maxWorkers?: number) {
 			attachments: [],
 		});
 	}
-	return { journal, service, contexts, finish, clean, submit, pause, resume };
+	return { journal, service, contexts, finish, clean, submit };
 }
 describe("shared scheduling", () => {
-	it("holds a process through cleanup while another process runs", async () => {
-		const s = setup(),
-			a = s.submit("a", "p"),
-			b = s.submit("b", "p"),
-			c = s.submit("c", "q");
+	it("lets native tools in separate Rhino processes execute concurrently", async () => {
+		const s = setup(4);
+		const a = s.submit("a", "p"), b = s.submit("b", "q");
 		await tick();
-		expect(s.contexts.map((c) => c.taskId)).toEqual([a.taskId, c.taskId]);
-		const waiting = s.journal.snapshot().records.find((record) => record.kind === "scheduling" && record.task_id === b.taskId)!;
-		expect(JSON.parse(String(waiting.payload))).toEqual({
-			reason: "Waiting for an earlier task in this Rhino instance to finish.",
-			blockingTaskId: a.taskId,
-		});
-		s.finish.get(a.taskId)!();
+		const started: string[] = [];
+		const release: (() => void)[] = [];
+		const tools = s.contexts.map((context) => context.withNativeTool!(async () => {
+			started.push(context.taskId);
+			await new Promise<void>((resolve) => release.push(resolve));
+		}));
 		await tick();
-		expect(s.contexts).toHaveLength(2);
-		s.clean.get(a.taskId)!();
-		await tick();
-		expect(s.contexts.map((c) => c.taskId)).toContain(b.taskId);
-		expect(s.journal.snapshot().records.find((record) => record.kind === "scheduling" && record.task_id === b.taskId)?.state).toBe("ready");
+		expect(started).toEqual([a.taskId, b.taskId]);
+		for (const resolve of release) resolve();
+		await Promise.all(tools);
+		for (const task of [a, b]) { s.finish.get(task.taskId)!(); await tick(); s.clean.get(task.taskId)!(); await tick(); }
+		s.journal.close();
 	});
 	it.each([true, false])("schedules a second document according to confirmed cleanup (%s), even after a greeting with no native calls", async (confirmed) => {
 		const s = setup();
@@ -167,12 +160,12 @@ describe("shared scheduling", () => {
 			arguments: {},
 			deadline: 100,
 		});
-		const b = s.submit("b", "p");
 		s.finish.get(a.taskId)!();
 		await tick();
 		s.clean.get(a.taskId)!();
 		await tick();
 		expect(s.service.snapshot().tasks[0]!.state).toBe("uncertain");
+		const b = s.submit("b", "p");
 		expect(s.contexts.map((c) => c.taskId)).not.toContain(b.taskId);
 		expect(() =>
 			s.journal.recoveryDisposition("recovery", a.taskId, {
@@ -278,6 +271,70 @@ it("does not run an accepted document action before its authorization commits", 
 	s.service.pump();
 	expect(s.service.snapshot().tasks[0]!.state).toBe("failed");
 });
+it.each(["same", "other"])("starts a new request and its child after historical usage exceeds the limit in the %s conversation", async (conversation) => {
+	const journal = new TaskJournal(":memory:");
+	journal.registerSession("same", "same");
+	journal.registerSession("other", "other");
+	const submission = { requestId: "old", conversationId: "same", sessionId: "same",
+		kind: "prompt" as const, text: "hello", bindings: [binding("p")], attachments: [] };
+	const old = journal.accept(submission);
+	journal.start(old.taskId, old.turnId);
+	journal.recordUsage(old.taskId, old.turnId, 1_040_900);
+	journal.settle(old.taskId, old.turnId, "completed");
+	const started: string[] = [];
+	const service = new SharedTaskService(journal, {
+		maxUsage: 1_000_000,
+		resolveBinding: () => ({ processKey: "p", attachmentGeneration: "g" }),
+		validateBinding: () => {},
+		createDriver: (context) => {
+			started.push(context.taskId);
+			let finish!: () => void;
+			const done = new Promise<void>((resolve) => { finish = resolve; });
+			return { run: () => done, steer: async () => {}, cancel: () => finish(), cleanup: async () => ({ confirmed: true }) };
+		},
+	});
+	try {
+		const root = service.submit({ ...submission, requestId: "new", conversationId: conversation,
+			sessionId: conversation, bindings: [binding("p"), binding("q")] });
+		await vi.waitFor(() => expect(started).toContain(root.taskId));
+		const child = service.delegate({ ...submission, requestId: "child", conversationId: conversation,
+			sessionId: "worker", parentTaskId: root.taskId, dependencies: [] });
+		await vi.waitFor(() => expect(started).toContain(child.taskId));
+	} finally {
+		await service.stop();
+		journal.close();
+	}
+});
+
+it("enforces the combined root and child budget at delegation and queued dispatch after service recreation", () => {
+	const journal = new TaskJournal(":memory:");
+	journal.registerSession("a", "a");
+	const submission = { requestId: "root", conversationId: "a", sessionId: "a",
+		kind: "prompt" as const, text: "work", bindings: [binding("p")], attachments: [] };
+	const root = journal.accept(submission);
+	journal.start(root.taskId, root.turnId);
+	const childInput = { ...submission, requestId: "child", sessionId: "worker",
+		parentTaskId: root.taskId, dependencies: [] };
+	const child = journal.delegate(childInput);
+	journal.start(child.taskId, child.turnId);
+	const queued = journal.delegate({ ...childInput, requestId: "queued", sessionId: "queued-worker" });
+	journal.recordUsage(root.taskId, root.turnId, 4);
+	journal.recordUsage(child.taskId, child.turnId, 6);
+	journal.settle(child.taskId, child.turnId, "completed");
+	const createDriver = vi.fn(() => { throw new Error("must not start"); });
+	const service = new SharedTaskService(journal, {
+		maxUsage: 10, createDriver,
+		resolveBinding: () => ({ processKey: "p", attachmentGeneration: "g" }),
+		validateBinding: () => {},
+	});
+	try {
+		expect(() => service.delegate({ ...childInput, requestId: "over-budget", sessionId: "extra" })).toThrow("Model usage budget exhausted");
+		service.pump();
+		expect(journal.snapshot().tasks.find((task) => task.id === queued.taskId)?.state).toBe("failed");
+		expect(createDriver).not.toHaveBeenCalled();
+	} finally { journal.close(); }
+});
+
 it("does not start a model when the usage budget is exhausted", () => {
 	const journal = new TaskJournal(":memory:");
 	journal.registerSession("a", "a");
@@ -442,59 +499,7 @@ it("keeps ownership of the selected document while delegating to another instanc
 	expect(() => s.service.delegate({ ...child, requestId: "forbidden", sessionId: "other-worker", bindings: [forbidden] })).toThrow("Child binding is not authorized");
 });
 
-
-it.each(["same Rhino process", "single worker slot"])("releases and restores the selected document when children need the %s", async (scenario) => {
-	const s = setup(scenario === "single worker slot" ? 1 : 4);
-	s.journal.registerSession("conversation", "session");
-	const selected = binding("selected");
-	const target = scenario === "same Rhino process" ? { ...selected, rhinoDocumentId: "other-document" } : binding("other-instance");
-	const root = s.service.submit({ requestId: "root", conversationId: "conversation", sessionId: "session", kind: "prompt", text: "Edit this document and inspect the other one", bindings: [selected, target], messageTarget: selected, attachments: [] });
-	await tick();
-	const originalOwner = s.journal.snapshot().turns[0]!.owner;
-	expect(JSON.parse(String(originalOwner)).binding).toEqual(selected);
-	const child = s.service.delegate({ requestId: "child", parentTaskId: root.taskId, dependencies: [], conversationId: "conversation", sessionId: "worker", kind: "prompt", text: "Inspect the other document", bindings: [target], attachments: [] });
-	await tick();
-	expect(s.contexts).toHaveLength(1);
-	const waiting = s.service.waitForChildren(root.taskId);
-	await tick();
-	expect(s.pause).toHaveBeenCalledWith(s.contexts[0]);
-	expect(s.contexts[1]!.owner?.binding).toEqual(target);
-	expect(s.journal.snapshot().turns[0]!.owner).toBe(originalOwner);
-	expect(s.resume).not.toHaveBeenCalled();
-	s.finish.get(child.taskId)!();
-	await tick();
-	s.clean.get(child.taskId)!();
-	await waiting;
-	expect(s.resume).toHaveBeenCalledWith(s.contexts[0]);
-	expect(s.journal.snapshot().turns[0]!.owner).toBe(originalOwner);
-	s.finish.get(root.taskId)!();
-	await tick();
-	s.clean.get(root.taskId)!();
-	await tick();
-	expect(s.journal.snapshot().tasks.every((task) => task.state === "completed")).toBe(true);
-	s.journal.close();
-});
-
-it("keeps the process locked when pausing the main task cannot confirm cleanup", async () => {
-	const s = setup();
-	s.journal.registerSession("conversation", "session");
-	const selected = binding("selected"), sibling = { ...selected, rhinoDocumentId: "sibling" };
-	const root = s.service.submit({ requestId: "root", conversationId: "conversation", sessionId: "session", kind: "prompt", text: "Inspect both", bindings: [selected, sibling], messageTarget: selected, attachments: [] });
-	await tick();
-	s.service.delegate({ requestId: "child", parentTaskId: root.taskId, dependencies: [], conversationId: "conversation", sessionId: "worker", kind: "prompt", text: "Inspect sibling", bindings: [sibling], attachments: [] });
-	s.pause.mockResolvedValueOnce({ confirmed: false });
-	await expect(s.service.waitForChildren(root.taskId)).rejects.toThrow("cleanup must be confirmed");
-	expect(s.contexts).toHaveLength(1);
-	expect(s.resume).not.toHaveBeenCalled();
-	await s.service.cancel(root.taskId);
-	await tick();
-	s.clean.get(root.taskId)!();
-	await tick();
-	s.journal.close();
-});
-
-
-it("cancels a main task while it waits without reacquiring its document", async () => {
+it("cancels a main task while it waits for a child to free its model slot", async () => {
 	const s = setup(1);
 	s.journal.registerSession("conversation", "session");
 	const selected = binding("selected"), other = binding("other");
@@ -508,7 +513,6 @@ it("cancels a main task while it waits without reacquiring its document", async 
 	await s.service.cancel(root.taskId);
 	await rejected;
 	await tick();
-	expect(s.resume).not.toHaveBeenCalled();
 	s.clean.get(child.taskId)!();
 	s.clean.get(root.taskId)!();
 	await tick();

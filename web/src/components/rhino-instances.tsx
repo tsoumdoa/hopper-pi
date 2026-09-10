@@ -42,7 +42,7 @@ export function RhinoInstancesPanel({ snapshot, connected }: { snapshot: SharedS
 				<ChevronDown className="size-3.5 shrink-0 text-muted transition-transform group-data-[state=open]:rotate-180" />
 			</CollapsibleTrigger>
 			<CollapsibleContent className="border-t border-line px-2.5 pb-2.5 pt-2 text-xs">
-				<p className="mb-2 text-muted">Only Rhino processes running Hopper Code appear here. Their open documents are available to Hopper.</p>
+				<p className="mb-2 text-muted">Run HopperCode in each Rhino document to make it available here. Documents created or opened through Hopper are added automatically.</p>
 				{ready.length ? (
 					<ul className="grid gap-2">
 						{ready.map((target, index) => (
@@ -64,7 +64,7 @@ export function RhinoInstancesPanel({ snapshot, connected }: { snapshot: SharedS
 										})}
 									</ul>
 								) : (
-									<p className="mt-1 pl-[18px] text-muted">No open documents</p>
+									<p className="mt-1 pl-[18px] text-muted">Run HopperCode in a document to add it.</p>
 								)}
 							</li>
 						))}

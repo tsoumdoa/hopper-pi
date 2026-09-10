@@ -10,6 +10,56 @@ import { SessionManager, type AgentSession } from "@earendil-works/pi-coding-age
 import { createPiTaskDriver } from "./pi-driver.js";
 import type { DriverContext } from "./task-service.js";
 import { HostSkillLibrary } from "../skills.js";
+import { TaskJournal } from "./journal.js";
+
+it("persists completed child messages with optional SDK fields to the real journal", async () => {
+	const root = await mkdtemp(join(tmpdir(), "shared-child-json-"));
+	const journal = new TaskJournal(":memory:");
+	const target = { kind: "rhino" as const, lifecycleInstanceId: "life", rhinoDocumentId: "doc" };
+	journal.registerSession("conversation", "session");
+	const parent = journal.accept({ requestId: "parent", conversationId: "conversation", sessionId: "session",
+		kind: "prompt", text: "Edit both", bindings: [target], attachments: [] });
+	journal.start(parent.taskId, parent.turnId, null);
+	const child = journal.delegate({ requestId: "child", parentTaskId: parent.taskId, dependencies: [],
+		conversationId: "conversation", sessionId: "worker", kind: "prompt", text: "Finish the edit", bindings: [target], attachments: [] });
+	journal.start(child.taskId, child.turnId, null);
+	let driver: Awaited<ReturnType<typeof createPiTaskDriver>> | undefined;
+	try {
+		driver = await createPiTaskDriver({ taskId: child.taskId, turnId: child.turnId, parentTaskId: parent.taskId,
+			sessionId: "worker", conversationId: "conversation", binding: null, owner: null, text: "Finish the edit",
+			attachments: [], continuation: null, signal: new AbortController().signal,
+			ask: () => "question", requestDocumentAction: () => "handoff",
+			publish: (payload) => { journal.publish(child.taskId, payload); },
+		}, {
+			dataDirectory: root, authPath: join(root, "auth.json"),
+			configureSession(session) {
+				session.agent.streamFunction = (model) => {
+					const message: AssistantMessage = {
+						role: "assistant", api: model.api, provider: model.provider, model: model.id,
+						timestamp: Date.now(), stopReason: "stop", errorMessage: undefined,
+						content: [{ type: "text", text: "Created hello", textSignature: undefined }],
+						usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
+							cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+					};
+					const stream = createAssistantMessageEventStream();
+					stream.push({ type: "done", reason: "stop", message });
+					return stream;
+				};
+			},
+		});
+		expect(await driver.run()).toEqual({ usage: 2 });
+		expect(await driver.cleanup()).toMatchObject({ confirmed: true });
+		journal.settle(child.taskId, child.turnId, "completed");
+		const events = journal.snapshot().events.map((event) => JSON.parse(String(event.payload)));
+		expect(events.find((event) => event.type === "messages")?.messages).toEqual(expect.arrayContaining([
+			expect.objectContaining({ role: "assistant", content: [{ type: "text", text: "Created hello" }] }),
+		]));
+	} finally {
+		await driver?.cleanup();
+		journal.close();
+		await rm(root, { recursive: true, force: true });
+	}
+});
 
 it("continues conversation history across task workspaces and isolates other sessions", async () => {
 	const root = await realpath(await mkdtemp(join(tmpdir(), "shared-driver-history-")));
@@ -382,11 +432,9 @@ it.each([null, "parent"])("keeps native tools with selected ownership and expose
 	const other = { ...binding, lifecycleInstanceId: "other" };
 	const context: DriverContext = { taskId: "task", turnId: "turn", sessionId: "session", conversationId: "conversation", parentTaskId, binding, messageTarget: binding, accessibleBindings: [binding, other], owner: { taskId: "task", turnId: "turn", binding, attachmentGeneration: "generation" }, text: "Edit this document", attachments: [], continuation: null, signal: new AbortController().signal, ask: () => "question", requestDocumentAction: () => "handoff", publish: () => {} };
 	let session: AgentSession | undefined;
-	const pause = vi.fn(async () => ({ confirmed: true }));
-	const resume = vi.fn(async () => {});
 	const driver = await createPiTaskDriver(context, {
 		dataDirectory: root, authPath: join(root, "auth.json"),
-		geometry: async () => ({ runtimeSession: new RuntimeSessionContext(), pause, resume, cleanup: async () => ({ confirmed: true }) }),
+		geometry: async () => ({ runtimeSession: new RuntimeSessionContext(), cleanup: async () => ({ confirmed: true }) }),
 		delegationTools: () => ["listRhinoTargets", "delegate", "waitForDelegates"].map((name) => ({ name, label: name, description: name, parameters: Type.Object({}), execute: async () => ({ content: [{ type: "text", text: "done" }], details: {} }) })),
 		configureSession: (created) => { session = created; },
 	});
@@ -396,10 +444,6 @@ it.each([null, "parent"])("keeps native tools with selected ownership and expose
 		for (const name of ["listRhinoTargets", "delegate", "waitForDelegates"])
 			expect(names.includes(name)).toBe(parentTaskId === null);
 		expect(session!.systemPrompt).toContain("Use your native geometry tools directly for this document");
-		await driver.pauseGeometry!();
-		await driver.resumeGeometry!();
-		expect(pause).toHaveBeenCalledTimes(1);
-		expect(resume).toHaveBeenCalledTimes(1);
 	} finally {
 		await driver.cleanup();
 		await rm(root, { recursive: true, force: true });

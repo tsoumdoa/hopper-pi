@@ -53,17 +53,18 @@ import { registerToolControlsCommand } from "./ui/tool-controls.js";
 export type HopperExtensionOptions = {
 	toolPolicy?: ToolPolicyRuntime;
 	runtimeSession?: RuntimeSessionContext;
+	runTool?<T>(name: string, work: () => Promise<T>): Promise<T>;
 	scriptWorkspaceDir?: string;
 	scriptWorkspaceQuotaBytes?: number;
 	sessionId?: () => string;
 };
 export function createHopperPiExtension(options: HopperExtensionOptions = {}) {
 	return (pi: ExtensionAPI) => registerHopperPiExtension(
-		options.runtimeSession ? withRuntimeSession(pi, options.runtimeSession) : pi, options,
+		options.runtimeSession ? withRuntimeSession(pi, options.runtimeSession, options.runTool) : pi, options,
 	);
 }
 /** Bind every hook and tool, including tools registered later by model selection. */
-function withRuntimeSession(pi: ExtensionAPI, session: RuntimeSessionContext): ExtensionAPI {
+function withRuntimeSession(pi: ExtensionAPI, session: RuntimeSessionContext, runTool?: HopperExtensionOptions["runTool"]): ExtensionAPI {
 	return new Proxy(pi, {
 		get(target, property) {
 			if (property === "on") {
@@ -79,7 +80,10 @@ function withRuntimeSession(pi: ExtensionAPI, session: RuntimeSessionContext): E
 			if (property === "registerTool") {
 				return (tool: Parameters<ExtensionAPI["registerTool"]>[0]) => target.registerTool({
 					...tool,
-					execute: (...args) => session.run(() => tool.execute(...args)),
+					execute: (...args) => {
+						const work = async () => session.run(() => tool.execute(...args));
+						return runTool && tool.name !== "hopper_search_tools" ? runTool(tool.name, work) : work();
+					},
 				});
 			}
 			const value = Reflect.get(target, property, target);
@@ -219,7 +223,8 @@ function registerHopperPiExtension(
 		if (!policy.isBusy()) await policy.reconcile();
 	});
 
-	// ── Agent undo (one GH undo step + one Rhino undo step per prompt) ─
+	// Owned-child sessions keep a prompt-wide undo segment. Shared task tools
+	// finish their own segments before releasing the process to another agent.
 
 	pi.on("agent_start", () => {
 		policy.setBusy(true);

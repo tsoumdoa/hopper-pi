@@ -24,6 +24,8 @@ export interface DriverContext {
 	attachments: readonly unknown[];
 	continuation: unknown;
 	signal: AbortSignal;
+	/** Serialize a native tool through cleanup, without reserving Rhino during model inference. */
+	withNativeTool?<T>(work: () => Promise<T>): Promise<T>;
 	ask(toolCallId: string, payload: unknown): string;
 	requestDocumentAction(grantId: string): string;
 	publish(payload: unknown): void;
@@ -33,8 +35,6 @@ export interface TaskDriver {
 	steer(payload: unknown, inputId?: number): Promise<void>;
 	cancel(): void | Promise<void>;
 	cleanup(): Promise<{ confirmed: boolean; evidence?: unknown }>;
-	pauseGeometry?(): Promise<{ confirmed: boolean; evidence?: unknown }>;
-	resumeGeometry?(): Promise<void>;
 }
 export interface TaskServiceOptions {
 	createDriver(context: DriverContext): TaskDriver | Promise<TaskDriver>;
@@ -49,18 +49,23 @@ export interface TaskServiceOptions {
 	};
 	maxWorkers?: number;
 	maxCoordinators?: number;
+	/** Token budget for one root request, including its continuations and children. */
 	maxUsage?: number;
 }
 interface Active {
 	controller: AbortController;
 	driver?: TaskDriver;
 	processKey?: string;
+	worker: boolean;
+	waitingForChildren?: boolean;
+	nativeRecoveryRequired?: boolean;
 	turnId: string;
 }
 /** Owns model lifetimes independently of browser connections. */
 export class SharedTaskService {
 	private readonly active = new Map<string, Active>();
 	private readonly held = new Map<string, string>();
+	private readonly processQueues = new Map<string, object[]>();
 	private readonly listeners = new Set<() => void>();
 	private pumping = false;
 	private stopped = false;
@@ -95,8 +100,8 @@ export class SharedTaskService {
 			(!Number.isFinite(options.maxUsage) || options.maxUsage < 0)
 		)
 			throw new Error("Invalid usage budget");
-		// Restore both edit-turn and ownerless coordinator action leases after recovery.
-		const snapshot = journal.snapshot(),
+		// Restore process fences for interrupted tasks and managed actions.
+		const snapshot = journal.snapshot({ includeEvents: false }),
 			unresolved = new Set(
 				snapshot.tasks
 					.filter(
@@ -111,7 +116,7 @@ export class SharedTaskService {
 		for (const record of [...snapshot.turns, ...snapshot.operations])
 			if (unresolved.has(record.task_id) && record.owner) {
 				const processKey = this.processOfOwner(
-					JSON.parse(String(record.owner)),
+					JSON.parse(String(record.owner)), snapshot,
 				);
 				if (processKey) this.held.set(processKey, String(record.task_id));
 			}
@@ -132,6 +137,12 @@ export class SharedTaskService {
 	snapshot() {
 		return this.journal.snapshot();
 	}
+	private schedulingSnapshot() {
+		return this.journal.snapshot({ includeEvents: false });
+	}
+	private workerCount(): number {
+		return [...this.active.values()].filter((active) => active.worker && !active.waitingForChildren).length;
+	}
 	submit(input: Submission): Receipt {
 		if (this.stopped) throw new Error("Host is stopping");
 		const receipt = this.journal.accept(input);
@@ -143,7 +154,7 @@ export class SharedTaskService {
 		input: Submission & { parentTaskId: string; dependencies: string[] },
 	): Receipt {
 		if (this.stopped) throw new Error("Host is stopping");
-		if (this.usage() >= (this.options.maxUsage ?? Infinity))
+		if (this.usage(input.parentTaskId) >= (this.options.maxUsage ?? Infinity))
 			throw new Error("Model usage budget exhausted");
 		const receipt = this.journal.delegate(input);
 		this.changed();
@@ -183,7 +194,7 @@ export class SharedTaskService {
 		const previous = this.delivery.get(taskId) ?? Promise.resolve();
 		const pending = previous.then(async () => {
 			const state = this.journal
-				.snapshot()
+				.snapshot({ includeEvents: false })
 				.inputs.find((row) => row.id === inputId)?.state;
 			if (state !== "accepted") return;
 			const active = this.active.get(taskId);
@@ -216,7 +227,7 @@ export class SharedTaskService {
 					/* cleanup decides certainty */
 				}
 			} else {
-				const snapshot = this.journal.snapshot(),
+				const snapshot = this.journal.snapshot({ includeEvents: false }),
 					task = snapshot.tasks.find((t) => t.id === id);
 				const turn = snapshot.turns.filter((t) => t.task_id === id).at(-1);
 				if (turn && ["queued", "awaiting_user"].includes(String(task?.state)))
@@ -228,7 +239,7 @@ export class SharedTaskService {
 	}
 	async stop(): Promise<void> {
 		this.stopped = true;
-		for (const task of this.snapshot().tasks)
+		for (const task of this.schedulingSnapshot().tasks)
 			if (
 				["queued", "running", "suspending", "awaiting_user"].includes(
 					String(task.state),
@@ -238,7 +249,7 @@ export class SharedTaskService {
 		await Promise.allSettled([...this.executions]);
 	}
 	releaseRecovered(taskId: string): void {
-		if (!this.snapshot().recoveries.some((row) => row.task_id === taskId))
+		if (!this.schedulingSnapshot().recoveries.some((row) => row.task_id === taskId))
 			throw new Error("No durable recovery disposition");
 		for (const [key, id] of this.held) if (id === taskId) this.held.delete(key);
 		this.changed();
@@ -255,28 +266,21 @@ export class SharedTaskService {
 	}
 	private async waitForChildrenOnce(taskId: string): Promise<{ tasks: Row[]; usage: number }> {
 		const active = this.active.get(taskId);
-		if (!active || this.snapshot().tasks.find((task) => task.id === taskId)?.parent_task_id !== null)
+		const snapshot = this.schedulingSnapshot();
+		if (!active || snapshot.tasks.find((task) => task.id === taskId)?.parent_task_id !== null)
 			throw new Error("Only an active root task can wait for children");
 		const settled = (task: Row) => ["completed", "failed", "cancelled", "interrupted", "uncertain"].includes(String(task.state));
-		const pending = this.snapshot().tasks.some((task) => task.parent_task_id === taskId && !settled(task));
-		const owner = JSON.parse(String(this.snapshot().turns.find((turn) => turn.id === active.turnId)?.owner ?? "null")) as ExecutionOwner | null;
-		let paused = false;
-		if (pending && active.processKey) {
-			if (!active.driver?.pauseGeometry || !active.driver.resumeGeometry || !owner)
-				throw new Error("This task cannot release its document while waiting for children");
-			const cleanup = await active.driver.pauseGeometry();
-			if (!cleanup.confirmed || this.unresolvedProcess(active.processKey))
-				throw new Error("Native edit cleanup must be confirmed before delegated work can start");
-			if (this.held.get(active.processKey) === taskId) this.held.delete(active.processKey);
-			active.processKey = undefined;
-			paused = true;
+		const pending = snapshot.tasks.some((task) => task.parent_task_id === taskId && !settled(task));
+		const releaseModelSlot = pending && active.worker;
+		if (releaseModelSlot) {
+			active.waitingForChildren = true;
 			this.changed();
 			this.pump();
 		}
 		try {
 			while (true) {
 				if (active.controller.signal.aborted) throw new Error("Task cancelled");
-				const snapshot = this.snapshot();
+				const snapshot = this.schedulingSnapshot();
 				const tasks = snapshot.tasks.filter((task) => task.parent_task_id === taskId);
 				if (tasks.every(settled)) {
 					const ids = new Set(tasks.map((task) => task.id));
@@ -285,34 +289,15 @@ export class SharedTaskService {
 				await this.waitForChange(active);
 			}
 		} finally {
-			if (paused && !active.controller.signal.aborted) {
-				// Reacquire the same document and generation before the main agent
-				// continues. Another document in the process may have been activated.
-				while (true) {
-					if (active.controller.signal.aborted) throw new Error("Task cancelled");
-					let target;
-					try { target = this.options.resolveBinding(owner!.binding); }
-					catch (error) {
-						if (!(error instanceof TargetUnavailableError) || error.permanent) throw error;
-						await this.waitForChange(active);
-						continue;
-					}
-					if (target.attachmentGeneration !== owner!.attachmentGeneration)
-						throw new Error("Selected document attachment changed while waiting for children");
-					const workers = [...this.active.values()].filter((task) => task.processKey !== undefined).length;
-					if (!this.held.has(target.processKey) && !this.unresolvedProcess(target.processKey) && workers < (this.options.maxWorkers ?? 4)) {
-						this.held.set(target.processKey, taskId);
-						active.processKey = target.processKey;
-						await this.options.validateBinding(owner!);
-						await active.driver!.resumeGeometry!();
-						this.changed();
-						break;
-					}
+			if (releaseModelSlot) {
+				while (!active.controller.signal.aborted && this.workerCount() >= (this.options.maxWorkers ?? 4))
 					await this.waitForChange(active);
-				}
+				active.waitingForChildren = false;
+				this.changed();
 			}
 		}
 	}
+
 	private waitForChange(active: Active): Promise<void> {
 		return new Promise((resolve) => {
 			const done = () => {
@@ -326,7 +311,83 @@ export class SharedTaskService {
 		});
 	}
 
-	/** Coordinator-managed actions acquire the same queue used by worker scopes. */
+	private async withNativeTool<T>(owner: ExecutionOwner, work: () => Promise<T>): Promise<T> {
+		const active = this.active.get(owner.taskId);
+		if (!active || active.turnId !== owner.turnId) throw new Error("Native tool requires an active turn");
+		return this.withProcessLease(owner.taskId, owner.binding.lifecycleInstanceId, () => {
+			const target = this.options.resolveBinding(owner.binding);
+			if (target.attachmentGeneration !== owner.attachmentGeneration)
+				throw new Error("Native tool target attachment changed while waiting");
+			return target;
+		}, async () => {
+			await this.options.validateBinding(owner);
+			return work();
+		});
+	}
+
+	/** All native tools and managed actions take turns in the same process queue. */
+	private async withProcessLease<T>(
+		taskId: string,
+		lifecycleId: string,
+		resolveTarget: () => { processKey: string; attachmentGeneration: string },
+		work: (target: { processKey: string; attachmentGeneration: string }) => Promise<T>,
+	): Promise<T> {
+		const active = this.active.get(taskId);
+		if (!active || active.controller.signal.aborted) throw new Error("Task cancelled or ended");
+		const original = resolveTarget();
+		const { processKey } = original;
+		const queue = this.processQueues.get(processKey) ?? [];
+		this.processQueues.set(processKey, queue);
+		const ticket = {};
+		queue.push(ticket);
+		let acquired = false;
+		let reportedWait = false;
+		try {
+			while (true) {
+				if (active.controller.signal.aborted || this.active.get(taskId) !== active)
+					throw new Error("Task cancelled or ended before native execution");
+				const target = resolveTarget();
+				if (target.processKey !== processKey || target.attachmentGeneration !== original.attachmentGeneration)
+					throw new Error("Native target attachment changed while waiting");
+				const heldBy = this.held.get(processKey);
+				if (this.unresolvedProcess(processKey) || (heldBy && (!this.active.has(heldBy) || this.active.get(heldBy)!.nativeRecoveryRequired)))
+					throw new Error("Rhino requires recovery before another native action can run");
+				if (queue[0] === ticket && !heldBy) {
+					this.held.set(processKey, taskId);
+					active.processKey = processKey;
+					acquired = true;
+					this.journal.setSchedulingBlock(taskId, null);
+					this.changed();
+					return await work(target);
+				}
+				if (!reportedWait) {
+					this.journal.setSchedulingBlock(taskId, "Waiting to use Rhino. Other agents can keep thinking while a native tool runs.", heldBy);
+					reportedWait = true;
+					this.changed();
+				}
+				await this.waitForChange(active);
+			}
+		} finally {
+			queue.splice(queue.indexOf(ticket), 1);
+			if (!queue.length) this.processQueues.delete(processKey);
+			if (acquired) {
+				const snapshot = this.schedulingSnapshot();
+				const unknown = snapshot.operations.some((op) => {
+					if (op.task_id !== taskId || !["dispatched", "uncertain"].includes(String(op.state))) return false;
+					const owner = JSON.parse(String(op.owner ?? "null"));
+					return (owner?.binding?.lifecycleInstanceId ?? owner?.lifecycleInstanceId) === lifecycleId;
+				}) || snapshot.records.some((record) =>
+					record.kind === "scope" && record.task_id === taskId && record.state === "uncertain");
+				if (!unknown && this.held.get(processKey) === taskId) this.held.delete(processKey);
+				active.nativeRecoveryRequired = unknown;
+				active.processKey = undefined;
+			}
+			this.journal.setSchedulingBlock(taskId, null);
+			this.changed();
+			this.pump();
+		}
+	}
+
 	async withProcess<T>(
 		taskId: string,
 		binding: TargetBinding,
@@ -336,146 +397,42 @@ export class SharedTaskService {
 		if (!active || active.controller.signal.aborted)
 			throw new Error("Managed action requires an active task");
 		if (active.processKey || [...this.held.values()].includes(taskId))
-			throw new Error(
-				"Direct edit scope must finish a durable handoff before a document or transfer action",
-			);
+			throw new Error("Direct edit scope must finish a durable handoff before a document or transfer action");
 		const input = JSON.parse(
-			String(this.snapshot().tasks.find((t) => t.id === taskId)!.payload),
+			String(this.schedulingSnapshot().tasks.find((t) => t.id === taskId)!.payload),
 		) as Submission;
-		const normalized = (b: TargetBinding) =>
-			b.kind === "rhino"
-				? [b.kind, b.lifecycleInstanceId, b.rhinoDocumentId].join("|")
-				: [
-						b.kind,
-						b.lifecycleInstanceId,
-						b.grasshopperDocumentId,
-						b.associatedRhinoDocumentId,
-					].join("|");
-		if (
-			![...input.bindings, ...this.journal.authorizationAdditions(taskId)].some(
-				(b) => normalized(b) === normalized(binding),
-			)
-		)
+		const normalized = (b: TargetBinding) => b.kind === "rhino"
+			? [b.kind, b.lifecycleInstanceId, b.rhinoDocumentId].join("|")
+			: [b.kind, b.lifecycleInstanceId, b.grasshopperDocumentId, b.associatedRhinoDocumentId].join("|");
+		if (![...input.bindings, ...this.journal.authorizationAdditions(taskId)].some((b) => normalized(b) === normalized(binding)))
 			throw new Error("Managed action target is not authorized");
-		while (true) {
-			if (active.controller.signal.aborted || !this.active.has(taskId))
-				throw new Error("Task cancelled or ended");
-			const target = this.options.resolveBinding(binding);
-			if (
-				!this.held.has(target.processKey) &&
-				!this.unresolvedProcess(target.processKey)
-			) {
-				this.held.set(target.processKey, taskId);
-				const owner: ExecutionOwner = Object.freeze({
-					taskId,
-					turnId: active.turnId,
-					binding: Object.freeze({ ...binding }),
-					attachmentGeneration: target.attachmentGeneration,
-				});
-				try {
-					await this.options.validateBinding(owner);
-					return await work(owner);
-				} finally {
-					const unresolved = this.snapshot().operations.some(
-						(op) =>
-							op.task_id === taskId &&
-							["dispatched", "uncertain"].includes(String(op.state)) &&
-							op.owner &&
-							JSON.parse(String(op.owner))?.binding?.lifecycleInstanceId ===
-								binding.lifecycleInstanceId,
-					);
-					const scopeUnknown = this.snapshot().records.some(
-						(record) =>
-							record.kind === "scope" &&
-							record.task_id === taskId &&
-							record.state === "uncertain",
-					);
-					if (!unresolved && !scopeUnknown) this.held.delete(target.processKey);
-					this.changed();
-					this.pump();
-				}
-			}
-			if (this.held.get(target.processKey) === taskId)
-				throw new Error("Managed actions cannot nest ownership in one process");
-			await new Promise<void>((resolve) => {
-				const done = () => {
-					unsubscribe();
-					active.controller.signal.removeEventListener("abort", done);
-					resolve();
-				};
-				const unsubscribe = this.subscribe(done);
-				active.controller.signal.addEventListener("abort", done, {
-					once: true,
-				});
+		return this.withProcessLease(taskId, binding.lifecycleInstanceId, () => this.options.resolveBinding(binding), async (target) => {
+			const owner: ExecutionOwner = Object.freeze({
+				taskId, turnId: active.turnId, binding: Object.freeze({ ...binding }),
+				attachmentGeneration: target.attachmentGeneration,
 			});
-		}
+			await this.options.validateBinding(owner);
+			return work(owner);
+		});
 	}
 
 	async withLifecycle<T>(
 		taskId: string,
 		lifecycleId: string,
-		work: (target: {
-			turnId: string;
-			attachmentGeneration: string;
-		}) => Promise<T>,
+		work: (target: { turnId: string; attachmentGeneration: string }) => Promise<T>,
 	): Promise<T> {
 		const active = this.active.get(taskId);
-		if (
-			!active ||
-			active.controller.signal.aborted ||
-			!this.options.resolveLifecycle
-		)
+		const resolveLifecycle = this.options.resolveLifecycle;
+		if (!active || active.controller.signal.aborted || !resolveLifecycle)
 			throw new Error("Lifecycle action is unavailable");
 		if (active.processKey || [...this.held.values()].includes(taskId))
 			throw new Error("Finish direct scope handoff before a lifecycle action");
-		while (true) {
-			if (active.controller.signal.aborted || !this.active.has(taskId))
-				throw new Error("Task cancelled or ended");
-			const target = this.options.resolveLifecycle(lifecycleId);
-			if (
-				!this.held.has(target.processKey) &&
-				!this.unresolvedProcess(target.processKey)
-			) {
-				this.held.set(target.processKey, taskId);
-				try {
-					return await work({
-						turnId: active.turnId,
-						attachmentGeneration: target.attachmentGeneration,
-					});
-				} finally {
-					const unresolved = this.snapshot().operations.some(
-						(op) =>
-							op.task_id === taskId &&
-							["dispatched", "uncertain"].includes(String(op.state)) &&
-							op.owner &&
-							JSON.parse(String(op.owner))?.lifecycleInstanceId === lifecycleId,
-					);
-					const scopeUnknown = this.snapshot().records.some(
-						(record) =>
-							record.kind === "scope" &&
-							record.task_id === taskId &&
-							record.state === "uncertain",
-					);
-					if (!unresolved && !scopeUnknown) this.held.delete(target.processKey);
-					this.changed();
-					this.pump();
-				}
-			}
-			await new Promise<void>((resolve) => {
-				const done = () => {
-					unsubscribe();
-					active.controller.signal.removeEventListener("abort", done);
-					resolve();
-				};
-				const unsubscribe = this.subscribe(done);
-				active.controller.signal.addEventListener("abort", done, {
-					once: true,
-				});
-			});
-		}
+		return this.withProcessLease(taskId, lifecycleId, () => resolveLifecycle(lifecycleId), (target) => work({
+			turnId: active.turnId, attachmentGeneration: target.attachmentGeneration,
+		}));
 	}
 
-	private processOfOwner(owner: any): string | undefined {
+	private processOfOwner(owner: any, snapshot = this.schedulingSnapshot()): string | undefined {
 		if (!owner) return;
 		const lifecycleId =
 			owner.binding?.lifecycleInstanceId ?? owner.lifecycleInstanceId;
@@ -487,7 +444,7 @@ export class SharedTaskService {
 		} catch {
 			/* Registry can retain a detached process identity below. */
 		}
-		const attachment = this.snapshot().attachments.find(
+		const attachment = snapshot.attachments.find(
 			(row) => row.lifecycle_id === lifecycleId,
 		);
 		if (attachment) {
@@ -495,9 +452,8 @@ export class SharedTaskService {
 			return `${value.processId}:${value.processStartTime}`;
 		}
 	}
-	private unresolvedProcess(processKey: string): string | undefined {
-		const snapshot = this.snapshot(),
-			unresolved = new Set(
+	private unresolvedProcess(processKey: string, snapshot = this.schedulingSnapshot()): string | undefined {
+		const unresolved = new Set(
 				snapshot.tasks
 					.filter(
 						(task) =>
@@ -510,21 +466,25 @@ export class SharedTaskService {
 			(record) =>
 				unresolved.has(record.task_id) &&
 				record.owner &&
-				this.processOfOwner(JSON.parse(String(record.owner))) === processKey,
+				this.processOfOwner(JSON.parse(String(record.owner)), snapshot) === processKey,
 		);
 		return record ? String(record.task_id) : undefined;
 	}
 
-	private usage(): number {
-		return this.journal
-			.snapshot()
-			.turns.reduce((total, row) => total + Number(row.usage), 0);
+	private usage(taskId: string, snapshot = this.schedulingSnapshot()): number {
+		const task = snapshot.tasks.find((task) => task.id === taskId);
+		const rootId = task?.root_task_id ?? taskId;
+		const ids = new Set(snapshot.tasks
+			.filter((task) => task.id === rootId || task.root_task_id === rootId)
+			.map((task) => task.id));
+		return snapshot.turns.reduce((total, turn) =>
+			total + (ids.has(turn.task_id) ? Number(turn.usage) : 0), 0);
 	}
 	pump(): void {
 		if (this.pumping || this.stopped) return;
 		this.pumping = true;
 		try {
-			const snapshot = this.journal.snapshot();
+			const snapshot = this.journal.snapshot({ includeEvents: false });
 			for (const task of snapshot.tasks) {
 				if (
 					task.state !== "queued" ||
@@ -545,7 +505,7 @@ export class SharedTaskService {
 					(t) => t.task_id === task.id && t.state === "queued",
 				);
 				if (!turn) continue;
-				if (this.usage() >= (this.options.maxUsage ?? Infinity)) {
+				if (this.usage(String(task.id), snapshot) >= (this.options.maxUsage ?? Infinity)) {
 					this.journal.failQueued(
 						String(task.id),
 						String(turn.id),
@@ -588,28 +548,21 @@ export class SharedTaskService {
 				if (
 					!binding &&
 					[...this.active.values()].filter(
-						(active) => active.processKey === undefined,
+						(active) => !active.worker,
 					).length >= (this.options.maxCoordinators ?? 4)
 				)
 					continue;
-				let processKey: string | undefined,
-					owner: ExecutionOwner | null = null;
+				let owner: ExecutionOwner | null = null;
 				if (binding) {
 					if (
-						[...this.active.values()].filter(
-							(active) => active.processKey !== undefined,
-						).length >= (this.options.maxWorkers ?? 4)
+						this.workerCount() >= (this.options.maxWorkers ?? 4)
 					)
 						continue;
 					try {
 						const target = this.options.resolveBinding(binding);
-						processKey = target.processKey;
-						const blockingTaskId = this.unresolvedProcess(processKey) ?? this.held.get(processKey);
+						const blockingTaskId = this.unresolvedProcess(target.processKey, snapshot);
 						if (blockingTaskId) {
-							const needsRecovery = snapshot.tasks.some((task) => task.id === blockingTaskId && task.state === "uncertain");
-							this.journal.setSchedulingBlock(String(task.id), needsRecovery
-								? "Waiting for recovery of an earlier task in this Rhino instance."
-								: "Waiting for an earlier task in this Rhino instance to finish.", blockingTaskId);
+							this.journal.setSchedulingBlock(String(task.id), "Waiting for recovery of an earlier task in this Rhino instance.", blockingTaskId);
 							this.changed();
 							continue;
 						}
@@ -645,11 +598,10 @@ export class SharedTaskService {
 				}
 				const active: Active = {
 					controller: new AbortController(),
-					processKey,
+					worker: !!binding,
 					turnId: String(turn.id),
 				};
 				this.active.set(String(task.id), active);
-				if (processKey) this.held.set(processKey, String(task.id));
 				this.changed();
 				const execution = this.execute(task, turn, input, owner, active);
 				this.executions.add(execution);
@@ -678,10 +630,11 @@ export class SharedTaskService {
 			if (owner) await this.options.validateBinding(owner);
 			if (active.controller.signal.aborted)
 				throw new Error("Cancelled before driver start");
-			const continuation = this.snapshot().questions.find(
+			const snapshot = this.schedulingSnapshot();
+			const continuation = snapshot.questions.find(
 				(q) => q.continuation_id === turn.id,
 			);
-			const handoff = this.snapshot().records.find(
+			const handoff = snapshot.records.find(
 				(r) =>
 					r.kind === "handoff" &&
 					r.state === "completed" &&
@@ -709,6 +662,8 @@ export class SharedTaskService {
 						? { documentAction: JSON.parse(String(handoff.payload)) }
 						: null,
 				signal: active.controller.signal,
+				...(owner
+					? { withNativeTool: <T>(work: () => Promise<T>) => this.withNativeTool(owner, work) } : {}),
 				ask: (toolCallId, payload) => {
 					if (active.controller.signal.aborted)
 						throw new Error("Task cancelled");
@@ -738,7 +693,7 @@ export class SharedTaskService {
 			if (
 				task.parent_task_id === null &&
 				!active.controller.signal.aborted &&
-				this.snapshot().tasks.find((task) => task.id === taskId)?.state ===
+				this.schedulingSnapshot().tasks.find((task) => task.id === taskId)?.state ===
 					"running"
 			)
 				await this.waitForChildren(taskId);
@@ -761,20 +716,21 @@ export class SharedTaskService {
 		} catch (error) {
 			evidence = String(error);
 		}
+		const snapshot = this.schedulingSnapshot();
 		const unknown =
-			this.snapshot().operations.some(
+			snapshot.operations.some(
 				(op) =>
 					op.turn_id === turnId &&
 					["dispatched", "uncertain"].includes(String(op.state)),
 			) ||
-			this.snapshot().records.some(
+			snapshot.records.some(
 				(record) =>
 					record.kind === "scope" &&
 					record.state === "uncertain" &&
 					JSON.parse(String(record.payload)).turnId === turnId,
 			);
 		try {
-			const state = this.snapshot().tasks.find((row) => row.id === taskId)!;
+			const state = snapshot.tasks.find((row) => row.id === taskId)!;
 			if (!clean || unknown)
 				this.journal.uncertain(taskId, turnId, {
 					cleanup: evidence,
@@ -783,7 +739,7 @@ export class SharedTaskService {
 			else if (active.controller.signal.aborted || state.cancellation_requested)
 				this.journal.settle(taskId, turnId, "cancelled");
 			else if (state.state === "suspending") {
-				const handoff = this.snapshot().records.find(
+				const handoff = snapshot.records.find(
 					(r) =>
 						r.kind === "handoff" &&
 						r.task_id === taskId &&
@@ -796,8 +752,6 @@ export class SharedTaskService {
 						turnId,
 						String(handoff.id),
 					);
-					if (active.processKey) this.held.delete(active.processKey);
-					active.processKey = undefined;
 					active.turnId = actionTurnId;
 					this.changed();
 					this.pump();
@@ -812,13 +766,14 @@ export class SharedTaskService {
 							result,
 						);
 					} catch (error) {
+						const snapshot = this.schedulingSnapshot();
 						const unresolved =
-							this.snapshot().operations.some(
+							snapshot.operations.some(
 								(op) =>
 									op.turn_id === actionTurnId &&
 									["dispatched", "uncertain"].includes(String(op.state)),
 							) ||
-							this.snapshot().records.some(
+							snapshot.records.some(
 								(record) =>
 									record.kind === "scope" &&
 									record.state === "uncertain" &&
@@ -836,8 +791,6 @@ export class SharedTaskService {
 			} else if (failure)
 				this.journal.failRunning(taskId, turnId, String(failure));
 			else this.journal.settle(taskId, turnId, "completed");
-			if (clean && !unknown && active.processKey)
-				this.held.delete(active.processKey);
 		} catch (error) {
 			this.journal.uncertain(taskId, active.turnId, { error: String(error) });
 		} finally {

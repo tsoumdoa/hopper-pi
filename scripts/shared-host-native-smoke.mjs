@@ -249,17 +249,11 @@ try {
 		validateBinding: (o) => registry.validateBinding(o),
 		createDriver: (context) => ({
 			run: async () => {
-				const requestId = context.taskId + ":launch";
-				await launches.authorize({
-					requestId,
-					rootTaskId: context.taskId,
-					installationId: "rhino-8-mac",
-					independentProcess: false,
-				});
-				await launches
+				const result = await launches
 					.tools(context)
 					.find((tool) => tool.name === "launchRhino")
-					.execute("native-fixture", { requestId });
+					.execute("native-fixture", { installationId: "rhino-8-mac" });
+				const requestId = result.details.request.requestId;
 				const launch = await wait(() => {
 					const row = journal
 						.snapshot()
@@ -372,11 +366,12 @@ try {
 								...context,
 								binding,
 								owner,
+								// The surrounding managed action already holds the process lease.
+								withNativeTool: (work) => work(),
 							});
 							try {
-								return await geometry.runtimeSession.run(async () => {
+								return await geometry.runTool("managed-save", async () => {
 									const rpc = getRuntimeRpc();
-									rpc.beginAgentTurn();
 									const observed = await rpc.request("getRhinoDocument", {
 										documentId: binding.rhinoDocumentId,
 									});

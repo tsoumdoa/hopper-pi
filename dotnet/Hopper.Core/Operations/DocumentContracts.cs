@@ -8,7 +8,8 @@ namespace Hopper.Core.Operations;
 public sealed record ExpectedDocument(string DocumentId, string LifecycleInstanceId, string? SettingsRevision = null);
 public sealed record DocumentSegment(string? DocumentId, string? SegmentId, long Epoch, string State, string LifecycleInstanceId);
 public sealed record ManagedDocument(string DocumentId, string LifecycleInstanceId, string Kind, string Name,
-    string? Path, bool IsActive, bool IsModified, bool? IsReadOnly, string StateToken, object? Settings);
+    string? Path, bool IsActive, bool IsModified, bool? IsReadOnly, string StateToken, object? Settings,
+    bool HopperInitialized = true);
 public sealed record DocumentEffect(string Stage, string? DocumentId, string? Path, bool Completed, string? Message = null);
 public sealed class DocumentOperationException : Exception
 {

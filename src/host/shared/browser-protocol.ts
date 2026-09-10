@@ -29,7 +29,6 @@ export type SharedBrowserCommand =
 			messageTarget?: TargetBinding;
 			attachments: ImageAttachment[];
 			documentAction?: NextDocumentAction;
-			launch?: { installationId: string; independentProcess: boolean };
 	  }
 	| {
 			type: "steer";
@@ -250,22 +249,6 @@ export function parseSharedBrowserCommand(raw: string): SharedBrowserCommand {
 					: { overwrite: action.overwrite }),
 			};
 		}
-		let launch: Extract<SharedBrowserCommand, { type: "submit" }>["launch"];
-		if (v.launch !== undefined) {
-			const value = object(v.launch);
-			if (typeof value.independentProcess !== "boolean")
-				throw new Error("Invalid process grant");
-			launch = {
-				installationId: string(value, "installationId"),
-				independentProcess: value.independentProcess,
-			};
-		}
-		if (documentAction && launch)
-			throw new Error("Submit one bounded startup action at a time");
-		if (launch && bindings.length)
-			throw new Error(
-				"Launch submissions require a coordinator without selected document bindings",
-			);
 		return {
 			type,
 			requestId,
@@ -277,7 +260,6 @@ export function parseSharedBrowserCommand(raw: string): SharedBrowserCommand {
 			...(messageTarget ? { messageTarget } : {}),
 			attachments,
 			...(documentAction ? { documentAction } : {}),
-			...(launch ? { launch } : {}),
 		};
 	}
 	throw new Error(`Unknown shared command: ${type}`);

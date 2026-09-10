@@ -433,6 +433,24 @@ it("shows the host's queue blocker and clears it when the block is removed", asy
 	expect(container.textContent).toContain("Waiting to start…");
 });
 
+it("shows both child agents working while one waits only for a native tool", async () => {
+	const task = { id: "root", conversation_id: "conversation", parent_task_id: null, state: "running",
+		payload: JSON.stringify({ text: "Edit both", bindings: [binding] }) };
+	const children = ["a", "b"].map((id) => ({ ...task, id, parent_task_id: "root",
+		payload: JSON.stringify({ text: `Edit ${id}`, bindings: [{ ...binding, rhinoDocumentId: id }] }) }));
+	const reason = "Waiting to use Rhino. Other agents can keep thinking while a native tool runs.";
+	const current = { ...snapshot, tasks: [task, ...children], turns: children.map((child) => ({
+		id: `${child.id}-turn`, task_id: child.id, state: "running", started_at: Date.now(), usage: 0,
+	})), records: [{ kind: "scheduling", id: "b", task_id: "b", state: "blocked", payload: JSON.stringify({ reason }) }] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: current }));
+	const summaries = [...container.querySelectorAll("details > summary")];
+	expect(summaries.filter((summary) => summary.textContent?.includes("Working"))).toHaveLength(2);
+	expect(container.textContent).toContain(reason);
+	expect(container.textContent).not.toContain("Waiting to start…");
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...current, records: [] } }));
+	expect(container.textContent).not.toContain(reason);
+});
+
 it("allows task recovery without a written note and waits for host confirmation", async () => {
 	const task = {
 		id: "root",
@@ -640,9 +658,25 @@ it("blocks sending when the selected model disconnects without disabling the dra
  expect(sendButton().disabled).toBe(true);
  expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.disabled).toBe(false);
  expect(container.textContent).toContain("Selected document disconnected");
- expect(container.querySelector('[aria-label="Message destination"]')!.textContent).toContain("Facade.3dm");
+ expect(container.querySelector('[aria-label="Message destination"]')!.textContent).toBe("No documents connected");
  await act(async () => socket.receive({ type: "shared_snapshot", snapshot }));
  expect(sendButton().disabled).toBe(false);
+});
+it("removes an ineligible selection from the picker without sending the draft to another document", async () => {
+ await value("#composer-input", "Create a sphere");
+ const otherBinding = { ...binding, rhinoDocumentId: "other-model" };
+ await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [{
+  ...snapshot.targets[0], documents: [otherBinding], documentLabels: { "other-model": "Eligible.3dm", model: "Facade.3dm" },
+ }] } }));
+ expect(container.querySelector('[aria-label="Message destination"]')!.textContent).toBe("Choose a document");
+ expect(sendButton().disabled).toBe(true);
+ expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Create a sphere");
+ await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Message document"]')!.click());
+ const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+ expect(options.map(option => option.textContent)).toEqual(["Eligible.3dm"]);
+ await act(async () => options[0]!.click());
+ await act(async () => sendButton().click());
+ expect(socket.sent.find(command => command.type === "submit").messageTarget).toEqual(otherBinding);
 });
 it("keeps a task target distinct from the next message selection", async () => {
 	const otherBinding = {
@@ -919,16 +953,19 @@ it("never switches to a historical conversation when the current chat disappears
 	expect(container.textContent).not.toContain("Second");
 });
 
-it("requires a connected document before sending", async () => {
+it("allows a coordinator message when no document is connected", async () => {
  await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [] } }));
  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="New session"]')!.click());
  const create = socket.sent.find((command) => command.type === "create_conversation");
  await act(async () => socket.receive({ type: "command_accepted", requestId: create.requestId, result: { conversationId: "other" } }));
- await value("#composer-input", "Create a sphere");
- expect(sendButton().disabled).toBe(true);
- expect(container.textContent).toContain("No documents connected");
- await act(async () => socket.receive({ type: "shared_snapshot", snapshot }));
+ await value("#composer-input", "Launch Rhino");
  expect(sendButton().disabled).toBe(false);
+ expect(container.textContent).toContain("No documents connected");
+ await act(async () => sendButton().click());
+ expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({
+	text: "Launch Rhino",
+	bindings: [],
+ });
 });
 
 it("opens a fresh chat without rendering saved test messages and retries startup once on reconnect", async () => {

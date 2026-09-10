@@ -1797,7 +1797,7 @@ PRAGMA user_version=5;`);
 		});
 	}
 
-	snapshot() {
+	snapshot(options: { includeEvents?: boolean } = {}) {
 		return this.transaction(() => ({
 			conversations: this.db
 				.prepare("SELECT * FROM conversations ORDER BY rowid")
@@ -1825,7 +1825,7 @@ PRAGMA user_version=5;`);
 				.prepare("SELECT * FROM questions ORDER BY rowid")
 				.all(),
 			inputs: this.db.prepare("SELECT * FROM inputs ORDER BY id").all(),
-			events: this.db.prepare("SELECT * FROM events ORDER BY id").all(),
+			events: options.includeEvents === false ? [] : this.db.prepare("SELECT * FROM events ORDER BY id").all(),
 		}));
 	}
 }

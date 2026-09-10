@@ -88,7 +88,7 @@ internal sealed class RhinoDocumentOperations : DocumentService<RhinoDoc>, IDisp
         EventHandler<Rhino.DocumentOpenEventArgs> BeginOpenDocumentHandler = (_, _) => ExternalBoundary();
         RhinoDoc.BeginOpenDocument += BeginOpenDocumentHandler;
         _unsubscribe.Add(() => RhinoDoc.BeginOpenDocument -= BeginOpenDocumentHandler);
-        EventHandler<Rhino.DocumentEventArgs> CloseDocumentHandler = (_, e) => { MacDocumentWindows.Forget(e.Document.RuntimeSerialNumber); ExternalBoundary(); };
+        EventHandler<Rhino.DocumentEventArgs> CloseDocumentHandler = (_, e) => { SharedNativeHost.ForgetDocument(e.Document.RuntimeSerialNumber); MacDocumentWindows.Forget(e.Document.RuntimeSerialNumber); ExternalBoundary(); };
         RhinoDoc.CloseDocument += CloseDocumentHandler;
         _unsubscribe.Add(() => RhinoDoc.CloseDocument -= CloseDocumentHandler);
         EventHandler<Rhino.DocumentEventArgs> ActiveDocumentChangedHandler = (_, _) => ExternalBoundary();
@@ -107,6 +107,8 @@ internal sealed class RhinoDocumentOperations : DocumentService<RhinoDoc>, IDisp
     }
     protected override string Kind => "rhino";
     protected override IEnumerable<RhinoDoc> Documents => RhinoDoc.OpenDocuments(false);
+    protected override bool HopperInitialized(RhinoDoc doc) => SharedNativeHost.IsDocumentInitialized(doc);
+    protected override void InitializeHopper(RhinoDoc doc) => SharedNativeHost.InitializeDocument(doc);
     protected override RhinoDoc? Active => RhinoDoc.ActiveDoc;
     protected override string NativeId(RhinoDoc doc) => doc.RuntimeSerialNumber.ToString();
     protected override string? PathOf(RhinoDoc doc) => doc.Path;

@@ -130,11 +130,13 @@ HopperCode
 
 Rhino attaches to one private loopback host for your OS user, starting it if needed, and opens the authenticated browser UI. This is the default behavior when you launch Rhino normally. Provider login, model choice, conversations, and work in progress stay in that browser tab.
 
-The sidebar lists connected **Hopper Code instances**, not every running Rhino process. Run `HopperCode` once in a Rhino process to attach it and open the browser. On Mac, that attachment serves all document windows in the process.
+When no Rhino document is connected, the composer remains available for host-only requests. You can ask the agent to "Launch Rhino." The agent may launch a verified local Rhino installation only when your root message explicitly requests it. The launch creates one task-bound process grant, authenticates the resulting Rhino process, and adds its initial document to that task. There is no separate launch control in the browser UI.
 
-Messages can read and edit all documents in connected Hopper Code instances by default. The main task owns the document selected in the picker and edits it directly. The shared Node host can send child tasks to other accessible documents and return their results to the main task. When a child needs the same Rhino process, Hopper finishes the current edit transaction, runs the child, then restores the selected document before continuing. Click **All instances** beside the message picker to switch to **Only this instance**, which restricts the next message to the chosen document's Rhino process. Access is captured when you send; changing the picker or access setting does not redirect work already in progress. The chat input starts at three lines and grows as you type.
+The sidebar lists connected **Hopper Code instances**, not every running Rhino process. Run `HopperCode` in each Rhino document you want in the picker. On Mac, those documents share one process connection. A document created manually with Rhino `New` stays out of the picker until you run `HopperCode` there. Documents created or opened through Hopper are initialized automatically.
 
-The compact document picker beside the composer shows where your next message will go. Open it to select an available Rhino document or Grasshopper canvas. Closed instances and internal document IDs stay out of the picker. Existing work keeps its selected documents; a closed selection shows an unavailable notice instead of silently switching targets. On Mac, create additional document windows with Rhino `New` inside the same Rhino process. Edits to documents in that process run sequentially.
+Messages can read and edit all initialized documents in connected Hopper Code instances by default. The main task owns the document selected in the picker and edits it directly. The shared Node host can send child tasks to other accessible documents and return their results to the main task. Independent child agents run concurrently, including within one Mac Rhino process. Each native tool call acquires the process, activates its captured document, and finishes its transaction before releasing Rhino. Thinking and skill reading do not reserve the process. Each editing tool call has its own undo segment. Click **All instances** beside the message picker to switch to **Only this instance**, which restricts the next message to the chosen document's Rhino process. Access is captured when you send; changing the picker or access setting does not redirect work already in progress. The chat input starts at three lines and grows as you type.
+
+The compact document picker beside the composer shows where your next message will go. Open it to select an available Rhino document or Grasshopper canvas. Closed instances and internal document IDs stay out of the picker. Existing work keeps its selected documents; a closed selection shows an unavailable notice instead of silently switching targets. On Mac, create additional document windows with Rhino `New` inside the same Rhino process. Agents in that process can think concurrently; only their native tool calls take turns. Native calls in separate Rhino processes can also run concurrently.
 
 The host remains running when you close Rhino. Closing a document or stopping its plugin removes that target without switching its tasks to another document. Use the browser's **Stop host** action to stop the background host; run `HopperCode` explicitly to start it again.
 
@@ -273,6 +275,7 @@ Browser UI  ⇄  private Hopper host + embedded Pi SDK  ⇄  authenticated ZMQ  
 - `Hopper.Grasshopper.gha` registers Grasshopper operations only after Grasshopper loads. It preserves the existing GHZMQ component identity for old definitions.
 - The host binds only `127.0.0.1`, checks the browser origin, and requires a 256-bit token as the first WebSocket message. The token begins in the URL fragment and is removed from browser history.
 - Provider credentials use the global Pi auth file at `~/.pi/agent/auth.json` by default, including `PI_CODING_AGENT_DIR` overrides. Login, token refresh, and logout in Hopper update that shared file. Model settings remain in Hopper's private user-data directory. Task sessions and workspaces are isolated, with durable conversation and task state in the host journal.
+- `HOPPER_SHARED_MAX_TOKENS` defaults to 1,000,000 tokens per root request, including its continuations and delegated tasks. The host checks recorded usage before starting another turn or child. Earlier requests do not consume a new request's budget.
 
 The RPC socket uses ROUTER and DEALER framing, authenticates every request, and correlates replies by request ID. The loopback PUB/SUB socket carries advisory status wakeups. Node always rereads Rhino's full status after a wakeup. Treat the workstation account as the confidentiality boundary and do not expose these endpoints beyond loopback.
 
@@ -295,6 +298,13 @@ External Pi users can run `/hopper-tools`. Use `--hopper-config-dir /absolute/pa
 Tool switches control named Hopper calls. An enabled general-purpose script tool can still perform equivalent operations, including network access; these switches are not a read-only or network sandbox.
 
 ## Agent tools (overview)
+
+**Rhino process**
+
+| Tool | Role |
+| ---- | ---- |
+| `listRhinoLaunches` | Inspect verified local Rhino installations and this task's launch attempts |
+| `launchRhino` | Launch one verified Rhino process after an explicit root-user request |
 
 **Rhino document**
 
