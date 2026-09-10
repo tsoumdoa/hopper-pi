@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { TaskJournal } from "./journal.js";
 import {
 	SharedTaskService,
@@ -12,12 +12,15 @@ const binding = (id: string): TargetBinding => ({
 	rhinoDocumentId: "doc",
 });
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
-function setup() {
+function setup(maxWorkers?: number) {
 	const journal = new TaskJournal(":memory:");
 	const contexts: DriverContext[] = [],
 		finish = new Map<string, () => void>(),
 		clean = new Map<string, () => void>();
+	const pause = vi.fn(async (_context: DriverContext) => ({ confirmed: true }));
+	const resume = vi.fn(async (_context: DriverContext) => {});
 	const service = new SharedTaskService(journal, {
+		maxWorkers,
 		resolveBinding: (b) => ({
 			processKey: b.lifecycleInstanceId,
 			attachmentGeneration: "generation",
@@ -26,6 +29,8 @@ function setup() {
 		createDriver: (context) => {
 			contexts.push(context);
 			return {
+				pauseGeometry: () => pause(context),
+				resumeGeometry: () => resume(context),
 				run: () =>
 					new Promise<void>((resolve) => finish.set(context.taskId, resolve)),
 				steer: async () => {},
@@ -55,7 +60,7 @@ function setup() {
 			attachments: [],
 		});
 	}
-	return { journal, service, contexts, finish, clean, submit };
+	return { journal, service, contexts, finish, clean, submit, pause, resume };
 }
 describe("shared scheduling", () => {
 	it("holds a process through cleanup while another process runs", async () => {
@@ -375,4 +380,92 @@ it("keeps failed driver initialization uncertain when native cleanup was not con
 	await tick();
 	expect(journal.snapshot().tasks[0]?.state).toBe("uncertain");
 	journal.close();
+});
+
+it("keeps ownership of the selected document while delegating to another instance", async () => {
+	const s = setup();
+	s.journal.registerSession("conversation", "session");
+	const first = binding("first"), second = binding("second"), forbidden = binding("third");
+	const root = s.service.submit({ requestId: "root", conversationId: "conversation", sessionId: "session", kind: "prompt", text: "Compare these models", bindings: [first, second], messageTarget: second, attachments: [] });
+	await tick();
+	expect(s.contexts[0]).toMatchObject({ binding: second, messageTarget: second, accessibleBindings: [first, second], owner: { binding: second } });
+	const child = { requestId: "child", parentTaskId: root.taskId, dependencies: [], conversationId: "conversation", sessionId: "worker", kind: "prompt" as const, text: "Read first model", bindings: [first], attachments: [] };
+	s.service.delegate(child);
+	await tick();
+	expect(s.contexts[1]).toMatchObject({ binding: first, accessibleBindings: [first] });
+	expect(() => s.service.delegate({ ...child, requestId: "forbidden", sessionId: "other-worker", bindings: [forbidden] })).toThrow("Child binding is not authorized");
+});
+
+
+it.each(["same Rhino process", "single worker slot"])("releases and restores the selected document when children need the %s", async (scenario) => {
+	const s = setup(scenario === "single worker slot" ? 1 : 4);
+	s.journal.registerSession("conversation", "session");
+	const selected = binding("selected");
+	const target = scenario === "same Rhino process" ? { ...selected, rhinoDocumentId: "other-document" } : binding("other-instance");
+	const root = s.service.submit({ requestId: "root", conversationId: "conversation", sessionId: "session", kind: "prompt", text: "Edit this document and inspect the other one", bindings: [selected, target], messageTarget: selected, attachments: [] });
+	await tick();
+	const originalOwner = s.journal.snapshot().turns[0]!.owner;
+	expect(JSON.parse(String(originalOwner)).binding).toEqual(selected);
+	const child = s.service.delegate({ requestId: "child", parentTaskId: root.taskId, dependencies: [], conversationId: "conversation", sessionId: "worker", kind: "prompt", text: "Inspect the other document", bindings: [target], attachments: [] });
+	await tick();
+	expect(s.contexts).toHaveLength(1);
+	const waiting = s.service.waitForChildren(root.taskId);
+	await tick();
+	expect(s.pause).toHaveBeenCalledWith(s.contexts[0]);
+	expect(s.contexts[1]!.owner?.binding).toEqual(target);
+	expect(s.journal.snapshot().turns[0]!.owner).toBe(originalOwner);
+	expect(s.resume).not.toHaveBeenCalled();
+	s.finish.get(child.taskId)!();
+	await tick();
+	s.clean.get(child.taskId)!();
+	await waiting;
+	expect(s.resume).toHaveBeenCalledWith(s.contexts[0]);
+	expect(s.journal.snapshot().turns[0]!.owner).toBe(originalOwner);
+	s.finish.get(root.taskId)!();
+	await tick();
+	s.clean.get(root.taskId)!();
+	await tick();
+	expect(s.journal.snapshot().tasks.every((task) => task.state === "completed")).toBe(true);
+	s.journal.close();
+});
+
+it("keeps the process locked when pausing the main task cannot confirm cleanup", async () => {
+	const s = setup();
+	s.journal.registerSession("conversation", "session");
+	const selected = binding("selected"), sibling = { ...selected, rhinoDocumentId: "sibling" };
+	const root = s.service.submit({ requestId: "root", conversationId: "conversation", sessionId: "session", kind: "prompt", text: "Inspect both", bindings: [selected, sibling], messageTarget: selected, attachments: [] });
+	await tick();
+	s.service.delegate({ requestId: "child", parentTaskId: root.taskId, dependencies: [], conversationId: "conversation", sessionId: "worker", kind: "prompt", text: "Inspect sibling", bindings: [sibling], attachments: [] });
+	s.pause.mockResolvedValueOnce({ confirmed: false });
+	await expect(s.service.waitForChildren(root.taskId)).rejects.toThrow("cleanup must be confirmed");
+	expect(s.contexts).toHaveLength(1);
+	expect(s.resume).not.toHaveBeenCalled();
+	await s.service.cancel(root.taskId);
+	await tick();
+	s.clean.get(root.taskId)!();
+	await tick();
+	s.journal.close();
+});
+
+
+it("cancels a main task while it waits without reacquiring its document", async () => {
+	const s = setup(1);
+	s.journal.registerSession("conversation", "session");
+	const selected = binding("selected"), other = binding("other");
+	const root = s.service.submit({ requestId: "root", conversationId: "conversation", sessionId: "session", kind: "prompt", text: "Compare", bindings: [selected, other], messageTarget: selected, attachments: [] });
+	await tick();
+	const child = s.service.delegate({ requestId: "child", parentTaskId: root.taskId, dependencies: [], conversationId: "conversation", sessionId: "worker", kind: "prompt", text: "Inspect", bindings: [other], attachments: [] });
+	const waiting = s.service.waitForChildren(root.taskId);
+	const rejected = expect(waiting).rejects.toThrow("cancelled");
+	await tick();
+	expect(s.contexts).toHaveLength(2);
+	await s.service.cancel(root.taskId);
+	await rejected;
+	await tick();
+	expect(s.resume).not.toHaveBeenCalled();
+	s.clean.get(child.taskId)!();
+	s.clean.get(root.taskId)!();
+	await tick();
+	expect(s.journal.snapshot().tasks.every((task) => task.state === "cancelled")).toBe(true);
+	s.journal.close();
 });

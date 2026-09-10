@@ -26,6 +26,7 @@ export type SharedBrowserCommand =
 			kind: "prompt" | "follow_up";
 			text: string;
 			bindings: TargetBinding[];
+			messageTarget?: TargetBinding;
 			attachments: ImageAttachment[];
 			documentAction?: NextDocumentAction;
 			launch?: { installationId: string; independentProcess: boolean };
@@ -185,8 +186,8 @@ export function parseSharedBrowserCommand(raw: string): SharedBrowserCommand {
 	if (type === "submit") {
 		if (v.kind !== "prompt" && v.kind !== "follow_up")
 			throw new Error("Invalid submission kind");
-		if (!Array.isArray(v.bindings) || v.bindings.length > 16)
-			throw new Error("Select up to 16 targets");
+		if (!Array.isArray(v.bindings))
+			throw new Error("Expected connected document targets");
 		const bindings = v.bindings.map((binding) => {
 			const parsed = validateTargetBinding(binding);
 			if (!parsed.ok) throw new Error(parsed.errors.join("; "));
@@ -197,6 +198,14 @@ export function parseSharedBrowserCommand(raw: string): SharedBrowserCommand {
 			bindings.length
 		)
 			throw new Error("Duplicate target selection");
+		let messageTarget: TargetBinding | undefined;
+		if (v.messageTarget !== undefined) {
+			const parsed = validateTargetBinding(v.messageTarget);
+			if (!parsed.ok) throw new Error(parsed.errors.join("; "));
+			messageTarget = parsed.value;
+			if (!bindings.some((binding) => JSON.stringify(binding) === JSON.stringify(messageTarget)))
+				throw new Error("Message document must be included in instance access");
+		}
 		let documentAction: Extract<
 			SharedBrowserCommand,
 			{ type: "submit" }
@@ -265,6 +274,7 @@ export function parseSharedBrowserCommand(raw: string): SharedBrowserCommand {
 			kind: v.kind,
 			text,
 			bindings,
+			...(messageTarget ? { messageTarget } : {}),
 			attachments,
 			...(documentAction ? { documentAction } : {}),
 			...(launch ? { launch } : {}),

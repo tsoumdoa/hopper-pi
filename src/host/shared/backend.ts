@@ -194,6 +194,7 @@ export class SharedBackend implements SharedBrowserBackend {
 					kind: command.kind,
 					text: command.text,
 					bindings: command.bindings,
+					...(command.messageTarget ? { messageTarget: command.messageTarget } : {}),
 					attachments: command.attachments,
 					...(command.documentAction
 						? { documentAction: command.documentAction }

@@ -106,6 +106,13 @@ namespace rhino_zmq_poc
             if (SharedNativeHost.SuppressBrowser) return;
             try
             {
+                if (SharedNativeHost.MessageDocumentSerialNumber is { } serial)
+                {
+                    var documentId = $"{DocumentSession.LifecycleInstanceId}:rhino:{serial}";
+                    var builder = new UriBuilder(ready);
+                    builder.Query = builder.Query.TrimStart('?') + "&document=" + Uri.EscapeDataString(documentId);
+                    ready = builder.Uri;
+                }
                 _browser.Open(ready);
             }
             catch (Exception exception)

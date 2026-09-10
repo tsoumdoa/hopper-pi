@@ -10,6 +10,8 @@ import {
 	type RpcCallResult,
 } from "../../infra/rpc-client.js";
 import {
+	beginRuntimeAgentTurn,
+	commitRuntimeAgentTurn,
 	closeRuntimeRpc,
 	RuntimeRpc,
 	type RuntimeRpcTransport,
@@ -163,6 +165,18 @@ export class SharedNativeRuntime {
 			);
 			if (typeof handshake?.attachmentGeneration !== "string")
 				throw new Error("Plugin does not support shared attachment ownership");
+			// A stopped or failed lifecycle may have missed its detach request. An
+			// authenticated replacement in that same native process supersedes it.
+			for (const previous of this.registry.list()) {
+				if (previous.lifecycleInstanceId === connection.lifecycleInstanceId ||
+					previous.processId !== v.process.pid ||
+					previous.processStartTime !== v.process.startIdentity ||
+					previous.admission === "detached") continue;
+				this.registry.detach(previous.lifecycleInstanceId);
+				const previousInstance = this.instances.get(previous.lifecycleInstanceId);
+				this.instances.delete(previous.lifecycleInstanceId);
+				await previousInstance?.client.close();
+			}
 			const instance = {
 				connection,
 				client,
@@ -267,6 +281,9 @@ export class SharedNativeRuntime {
 		await this.activateBinding(owner);
 		const instance = this.instances.get(owner.binding.lifecycleInstanceId);
 		if (!instance) throw new Error("Lifecycle is detached");
+		let blocked = false;
+		let paused = false;
+		let pauseEvidence: unknown;
 		const cleanupNames = new Set([
 			"commitAgentTransaction",
 			"cancelAgentTransaction",
@@ -279,6 +296,8 @@ export class SharedNativeRuntime {
 			options: RpcCallOptions = {},
 		): Promise<RpcCallResult> => {
 			const cleanup = cleanupNames.has(operation);
+			if (paused || (blocked && !cleanup && !["getDocumentTransactionState", "getOperationResult", "getRuntimeStatus", "lifecycleHandshake"].includes(operation)))
+				throw new Error("Selected document is paused while delegated tasks run");
 			if (
 				cleanup ||
 				[
@@ -396,8 +415,26 @@ export class SharedNativeRuntime {
 		});
 		return {
 			runtimeSession,
+			pause: async () => {
+				blocked = true;
+				await runtimeSession.run(commitRuntimeAgentTurn);
+				// Dispose transaction state before another task uses this process.
+				await runtimeSession.run(closeRuntimeRpc);
+				const scopes = await this.scopes(instance);
+				paused = scopes.every((scope) => scope?.state === "idle");
+				pauseEvidence = { scopes };
+				return { confirmed: paused, evidence: pauseEvidence };
+			},
+			resume: async () => {
+				if (context.signal.aborted) throw new Error("Task cancelled");
+				await this.activateBinding(owner);
+				runtimeSession.run(beginRuntimeAgentTurn);
+				paused = false;
+				blocked = false;
+			},
 			cleanup: async () => {
 				await runtimeSession.run(closeRuntimeRpc);
+				if (paused) return { confirmed: true, evidence: pauseEvidence };
 				const scopes = await this.scopes(instance);
 				return {
 					confirmed: scopes.every((scope) => scope?.state === "idle"),

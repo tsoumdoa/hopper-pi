@@ -16,7 +16,7 @@ The browser composer accepts PNG, JPEG, WebP, and GIF files through the image bu
 
 Click an image to annotate it with Excalidraw. Add arrows, shapes, text, or freehand marks, then choose **Save annotations**. You can reopen and edit the marks while the image is in your draft. Sending exports the drawing as a PNG for the selected vision model; the conversation retains that image after reconnecting. Draft images and editable drawing data are kept in memory and are cleared by a page reload or a new session.
 
-To sketch without an image, click **Draw** in the composer. This opens a blank Excalidraw canvas with the freehand tool selected. Choose **Save drawing** to attach it as a PNG; click its thumbnail to continue editing before sending. Drawings share the four-attachment limit with uploaded images.
+To sketch without an image, click the pen icon in the composer. This opens a blank Excalidraw canvas with the freehand tool selected. Choose **Save drawing** to attach it as a PNG; click its thumbnail to continue editing before sending. Drawings share the four-attachment limit with uploaded images.
 
 Use **Image opacity** below the editor to fade the source image from 100% to 0% while keeping your annotations visible. The setting is included in the saved PNG and restored when you reopen the draft's annotations.
 
@@ -130,7 +130,11 @@ HopperCode
 
 Rhino attaches to one private loopback host for your OS user, starting it if needed, and opens the authenticated browser UI. This is the default behavior when you launch Rhino normally. Provider login, model choice, conversations, and work in progress stay in that browser tab.
 
-The compact document picker beside the composer shows where your next message will go. Open it to select available documents or create/open a model. Closed instances and internal document IDs stay out of the picker. Existing work keeps its selected documents; a closed selection shows an unavailable notice instead of silently switching targets. On Mac, create additional document windows with Rhino `New` inside the same Rhino process. Edits to documents in that process run sequentially.
+The sidebar lists connected **Hopper Code instances**, not every running Rhino process. Run `HopperCode` once in a Rhino process to attach it and open the browser. On Mac, that attachment serves all document windows in the process.
+
+Messages can read and edit all documents in connected Hopper Code instances by default. The main task owns the document selected in the picker and edits it directly. The shared Node host can send child tasks to other accessible documents and return their results to the main task. When a child needs the same Rhino process, Hopper finishes the current edit transaction, runs the child, then restores the selected document before continuing. Click **All instances** beside the message picker to switch to **Only this instance**, which restricts the next message to the chosen document's Rhino process. Access is captured when you send; changing the picker or access setting does not redirect work already in progress. The chat input starts at three lines and grows as you type.
+
+The compact document picker beside the composer shows where your next message will go. Open it to select an available Rhino document or Grasshopper canvas. Closed instances and internal document IDs stay out of the picker. Existing work keeps its selected documents; a closed selection shows an unavailable notice instead of silently switching targets. On Mac, create additional document windows with Rhino `New` inside the same Rhino process. Edits to documents in that process run sequentially.
 
 The host remains running when you close Rhino. Closing a document or stopping its plugin removes that target without switching its tasks to another document. Use the browser's **Stop host** action to stop the background host; run `HopperCode` explicitly to start it again.
 

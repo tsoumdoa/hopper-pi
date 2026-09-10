@@ -122,6 +122,16 @@ export class SharedRegistry {
 	list(): SharedAttachment[] {
 		return structuredClone([...this.attachments.values()]);
 	}
+	accessibleTargets(bindings: readonly TargetBinding[]): SharedAttachment[] {
+		return this.list()
+			.filter((target) => target.admission === "ready")
+			.map((target) => ({
+				...target,
+				documents: target.documents.filter((document) =>
+					bindings.some((binding) => equal(binding, document))),
+			}))
+			.filter((target) => target.documents.length > 0);
+	}
 	private get(id: string): SharedAttachment {
 		const attachment = this.attachments.get(id);
 		if (!attachment)

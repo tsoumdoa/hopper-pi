@@ -18,6 +18,7 @@ internal static class SharedNativeHost
 {
     public static string BootstrapTicket { get; set; }
     public static bool SuppressBrowser { get; set; }
+    public static uint? MessageDocumentSerialNumber { get; set; }
     public static string ControlDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".hopper", "shared-control");
     public static JsonElement Read(string name) => JsonDocument.Parse(File.ReadAllText(Path.Combine(ControlDirectory, name))).RootElement.Clone();
     public static bool CompatibleDiscovery(JsonElement control, JsonElement discovery) =>
@@ -153,7 +154,7 @@ internal sealed class SharedNodeAttachment : IDisposable
         }
         _epoch = epoch;
         _bootstrapRegistered = true;
-        ReadyUri = new Uri($"http://127.0.0.1:{port}/#{control.GetProperty("browserCredential").GetString()}");
+        ReadyUri = new Uri($"http://127.0.0.1:{port}/?instance={Uri.EscapeDataString(_lifecycle)}#{control.GetProperty("browserCredential").GetString()}");
         Ready?.Invoke(ReadyUri);
     }
 

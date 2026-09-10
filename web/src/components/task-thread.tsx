@@ -19,7 +19,7 @@ import { WorkingTime } from "./working-time";
 const KIND_LABELS: Partial<Record<SendMode, string>> = { steer: "Steering note", follow_up: "Follow-up" };
 const SETTLED_STATES = ["completed", "cancelled", "failed", "interrupted", "uncertain"];
 
-type TaskInput = { text: string; bindings: TargetBinding[]; attachments?: unknown; kind?: SendMode };
+type TaskInput = { text: string; bindings: TargetBinding[]; messageTarget?: TargetBinding; attachments?: unknown; kind?: SendMode };
 type LiveAssistantMessage = { id: string; turnId: string; text: string; thinking: string; streaming: boolean };
 
 /** Elapsed time for a task, taken from its saved turn timestamps so reconnects keep the clock. */
@@ -229,7 +229,7 @@ function TaskReply({ task, snapshot, labelFor, commands }: {
 		);
 	const assistantMessages = messages.filter((message: any) => message.role === "assistant");
 	const idle = running && !assistantMessages.length && !liveMessages.length && !tools.length;
-	const targets = input.bindings?.map(labelFor) ?? [];
+	const targets = (input.messageTarget ? [input.messageTarget] : input.bindings)?.map(labelFor) ?? [];
 
 	if (state === "queued") {
 		return (
@@ -430,8 +430,9 @@ export function TaskThread({ snapshot, tasks, connected, conversationId, labelFo
 	}, [activeQuestionId]);
 	const questionTask = activeQuestion && waitingTasks.get(activeQuestion.task_id);
 	const questionTurn = snapshot?.turns.find((turn) => turn.id === activeQuestion?.turn_id);
-	const questionOwner = decode<{ binding?: TargetBinding }>(questionTurn?.owner, {});
-	const questionBindings = questionOwner.binding ? [questionOwner.binding] : decode<TaskInput>(questionTask?.payload, { text: "", bindings: [] }).bindings;
+	const questionOwner = decode<{ binding?: TargetBinding } | null>(questionTurn?.owner, null);
+	const questionInput = decode<TaskInput>(questionTask?.payload, { text: "", bindings: [] });
+	const questionBindings = questionOwner?.binding ? [questionOwner.binding] : questionInput.messageTarget ? [questionInput.messageTarget] : questionInput.bindings;
 	const questionTarget = questionBindings.length ? `Target: ${questionBindings.map(labelFor).join(", ")}` : "Conversation";
 
 	const scrollToLatest = (behavior: ScrollBehavior = "smooth") => {

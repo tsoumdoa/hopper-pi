@@ -15,6 +15,8 @@ const wire = vi.hoisted(() => ({
 	call: vi.fn(),
 	close: vi.fn(),
 	closeRuntime: vi.fn(),
+	commitRuntime: vi.fn(),
+	beginRuntime: vi.fn(),
 	transports: [] as any[],
 	clients: 0,
 	life: "life",
@@ -42,6 +44,8 @@ vi.mock("../../infra/rpc-client.js", () => ({
 }));
 vi.mock("../../infra/runtime-rpc.js", () => ({
 	closeRuntimeRpc: () => wire.closeRuntime(),
+	commitRuntimeAgentTurn: () => wire.commitRuntime(),
+	beginRuntimeAgentTurn: () => wire.beginRuntime(),
 	RuntimeRpc: class {
 		constructor(options: any) {
 			wire.transports.push(options.transport);
@@ -59,6 +63,8 @@ beforeEach(() => {
 	wire.call.mockReset();
 	wire.close.mockReset();
 	wire.closeRuntime.mockReset();
+	wire.commitRuntime.mockReset();
+	wire.beginRuntime.mockReset();
 	wire.transports.length = 0;
 	wire.clients = 0;
 	wire.life = "life";
@@ -652,5 +658,74 @@ it("detaches dead persisted attachments without pruning live unconnected process
 		registry.list().find((item) => item.lifecycleInstanceId === "alive")!
 			.admission,
 	).toBe("recovering");
+	expect(wire.call).not.toHaveBeenCalled();
+});
+
+it("replaces a stale attachment in the same process after a new lifecycle authenticates", async () => {
+	const { registry, runtime } = await setup();
+	wire.life = "replacement";
+	await runtime.register({ profilePath: "/replacement.json", hostEpoch: "epoch", process: { pid: 123, startIdentity: "start" } });
+	expect(registry.list().find((target) => target.lifecycleInstanceId === "life")!.admission).toBe("detached");
+	expect(wire.close).toHaveBeenCalledTimes(1);
+	await runtime.refresh();
+	const targets = registry.list().filter((target) => target.admission === "ready");
+	expect(targets.map((target) => target.lifecycleInstanceId)).toEqual(["replacement"]);
+	expect(targets[0]!.documents[0]!.lifecycleInstanceId).toBe("replacement");
+});
+
+it("keeps other Hopper instances attached when one process replaces its lifecycle", async () => {
+	const { registry, runtime } = await setup();
+	wire.life = "second";
+	await runtime.register({ profilePath: "/second.json", hostEpoch: "epoch", process: { pid: 456, startIdentity: "second-start" } });
+	wire.life = "replacement";
+	await runtime.register({ profilePath: "/replacement.json", hostEpoch: "epoch", process: { pid: 123, startIdentity: "start" } });
+	await runtime.refresh();
+	expect(registry.list().filter((target) => target.admission === "ready").map((target) => target.lifecycleInstanceId)).toEqual(["second", "replacement"]);
+	const restricted = registry.accessibleTargets([{ rhinoDocumentId: "doc", lifecycleInstanceId: "second", kind: "rhino" }]);
+	expect(restricted.map((target) => target.lifecycleInstanceId)).toEqual(["second"]);
+});
+
+it("does not retire a current attachment when its proposed replacement fails authentication", async () => {
+	const { registry, runtime } = await setup();
+	wire.life = "replacement";
+	wire.call.mockRejectedValueOnce(new Error("Handshake rejected"));
+	await expect(runtime.register({ profilePath: "/replacement.json", hostEpoch: "epoch", process: { pid: 123, startIdentity: "start" } })).rejects.toThrow("Handshake rejected");
+	expect(registry.list().map((target) => [target.lifecycleInstanceId, target.admission])).toEqual([["life", "ready"]]);
+});
+
+
+it("commits the main task before yielding its process and reactivates the same document on resume", async () => {
+	const { journal, registry, runtime } = await setup();
+	const binding: TargetBinding = { kind: "rhino", lifecycleInstanceId: "life", rhinoDocumentId: "doc" };
+	journal.registerSession("conversation", "session");
+	const root = journal.accept({ requestId: "root", conversationId: "conversation", sessionId: "session", kind: "prompt", text: "Edit", bindings: [binding], messageTarget: binding, attachments: [] });
+	const owner = { taskId: root.taskId, turnId: root.turnId, binding, attachmentGeneration: "generation" };
+	journal.start(root.taskId, root.turnId, owner);
+	const geometry = await runtime.geometry({ taskId: root.taskId, turnId: root.turnId, owner, signal: new AbortController().signal } as DriverContext);
+	geometry.runtimeSession.options.createRuntime!();
+	const transport = wire.transports.at(-1);
+	await expect(geometry.pause()).resolves.toMatchObject({ confirmed: true });
+	expect(wire.commitRuntime).toHaveBeenCalledTimes(1);
+	expect(wire.commitRuntime.mock.invocationCallOrder[0]).toBeLessThan(wire.closeRuntime.mock.invocationCallOrder[0]!);
+	await expect(transport.call("queryRhinoObjects", {})).rejects.toThrow("paused");
+	await expect(transport.call("runRhinoScript", {})).rejects.toThrow("paused");
+	const normal = wire.call.getMockImplementation()!;
+	let activeDocumentId = "other-document";
+	wire.call.mockImplementation(async (operation: string, ...args: any[]) => {
+		if (operation === "manageRhinoDocument" && args[0]?.action === "activate") activeDocumentId = args[0].documentId;
+		const response = await normal(operation, ...args);
+		if (operation === "listRhinoDocuments") response.result.data.activeDocumentId = activeDocumentId;
+		return response;
+	});
+	await geometry.resume();
+	expect(wire.call).toHaveBeenCalledWith("manageRhinoDocument", expect.objectContaining({ action: "activate", documentId: "doc" }), expect.anything());
+	expect(wire.beginRuntime).toHaveBeenCalledTimes(1);
+	await expect(transport.call("queryRhinoObjects", {})).resolves.toMatchObject({ result: { class: "completed" } });
+	await geometry.pause();
+	registry.updateDocuments("life", []);
+	await expect(geometry.resume()).rejects.toThrow("closed");
+	wire.call.mockClear();
+	await expect(geometry.cleanup()).resolves.toMatchObject({ confirmed: true });
+	// A paused task no longer owns this process and cannot clean up another task's scope.
 	expect(wire.call).not.toHaveBeenCalled();
 });

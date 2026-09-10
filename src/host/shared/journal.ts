@@ -56,6 +56,8 @@ export interface Submission {
 	kind: "prompt" | "follow_up";
 	text: string;
 	bindings: readonly TargetBinding[];
+	/** Starting document for the message; bindings capture all documents it may access. */
+	messageTarget?: TargetBinding;
 	attachments: readonly unknown[];
 	documentAction?: unknown;
 	launch?: unknown;
@@ -371,6 +373,9 @@ PRAGMA user_version=5;`);
 		for (const binding of input.bindings)
 			if (!validateTargetBinding(binding).ok)
 				throw new Error("Invalid target binding");
+		if (input.messageTarget && (!validateTargetBinding(input.messageTarget).ok ||
+			!input.bindings.some((binding) => canonical(binding) === canonical(input.messageTarget))))
+			throw new Error("Message document must be included in instance access");
 		if (input.kind !== "prompt" && input.kind !== "follow_up")
 			throw new Error("Invalid submission kind");
 		return this.request(input.requestId, input, () => {

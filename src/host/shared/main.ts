@@ -215,17 +215,16 @@ export async function startSharedHost(
 								},
 							}
 						: {}),
-					coordinatorTools: (context) => [
-						...(launches?.tools(context) ?? []),
+					delegationTools: (context) => context.parentTaskId === null ? [
 						{
 							name: "listRhinoTargets",
 							label: "Rhino targets",
 							description:
-								"List attached Rhino processes and their current document bindings.",
+								"List connected Hopper Code instances and documents accessible to this message.",
 							parameters: Type.Object({}),
 							execute: async () => ({
 								content: [
-									{ type: "text", text: JSON.stringify(registry.list()) },
+									{ type: "text", text: JSON.stringify(registry.accessibleTargets([...(context.accessibleBindings ?? []), ...journal!.authorizationAdditions(context.taskId)])) },
 								],
 								details: {},
 							}),
@@ -234,7 +233,7 @@ export async function startSharedHost(
 							name: "delegate",
 							label: "Delegate to a target",
 							description:
-								"Assign a separate child task to one binding authorized by the user's selection. Dependencies must complete first.",
+								"Read or edit an accessible document in a child task. Dependencies must complete first.",
 							parameters: Type.Object({
 								requestId: Type.String(),
 								assignment: Type.String(),
@@ -291,6 +290,9 @@ export async function startSharedHost(
 								);
 							},
 						},
+					] : [],
+					coordinatorTools: (context) => [
+						...(launches?.tools(context) ?? []),
 						{
 							name: "exportRhinoGeometry",
 							label: "Export geometry artifact",

@@ -201,3 +201,10 @@ it("accepts picker cancellation without accepting malformed answers", () => {
 	expect(parseSharedBrowserCommand(JSON.stringify(command))).toEqual(command);
 	for (const answer of [undefined, {}, [], false]) expect(() => parseSharedBrowserCommand(JSON.stringify({ ...command, answer }))).toThrow();
 });
+
+it("captures a message document separately from access to all connected documents", () => {
+	const bindings = Array.from({ length: 20 }, (_, index) => ({ kind: "rhino", lifecycleInstanceId: `life-${index}`, rhinoDocumentId: `doc-${index}` }));
+	const command = { ...submit, bindings, messageTarget: bindings[1] };
+	expect(parseSharedBrowserCommand(JSON.stringify(command))).toEqual(command);
+	expect(() => parseSharedBrowserCommand(JSON.stringify({ ...command, bindings: [bindings[0]] }))).toThrow("Message document must be included");
+});

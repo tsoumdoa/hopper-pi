@@ -6,11 +6,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collap
 
 export type InstanceTone = "ok" | "warn" | "danger" | "muted";
 
-/** One-line summary of the connected Rhino instances for the sidebar and the collapsed rail. */
+/** One-line summary of the connected Hopper Code instances for the sidebar and the collapsed rail. */
 export function summarizeInstances(snapshot: SharedSnapshot | undefined, connected: boolean): { tone: InstanceTone; text: string } {
 	if (!connected || !snapshot) return { tone: "muted", text: "Waiting for Hopper" };
 	const ready = readyTargets(snapshot);
-	if (!ready.length) return { tone: "warn", text: "No Rhino connected" };
+	if (!ready.length) return { tone: "warn", text: "No Hopper Code instances connected" };
 	const documents = ready.reduce((count, target) => count + target.documents.length, 0);
 	return {
 		tone: "ok",
@@ -36,19 +36,20 @@ export function RhinoInstancesPanel({ snapshot, connected }: { snapshot: SharedS
 					)}
 				/>
 				<span className="min-w-0 flex-1">
-					<span className="block text-xs font-medium text-ink">Rhino instances</span>
+					<span className="block text-xs font-medium text-ink">Hopper Code instances</span>
 					<span className="block truncate text-[11px] text-muted">{summary.text}</span>
 				</span>
 				<ChevronDown className="size-3.5 shrink-0 text-muted transition-transform group-data-[state=open]:rotate-180" />
 			</CollapsibleTrigger>
 			<CollapsibleContent className="border-t border-line px-2.5 pb-2.5 pt-2 text-xs">
+				<p className="mb-2 text-muted">Only Rhino processes running Hopper Code appear here. Their open documents are available to Hopper.</p>
 				{ready.length ? (
 					<ul className="grid gap-2">
 						{ready.map((target, index) => (
 							<li key={target.lifecycleInstanceId} className="min-w-0">
 								<p className="flex items-center gap-1.5 font-medium text-ink">
 									<Box className="size-3 shrink-0 text-muted" />
-									Rhino {index + 1}
+									Hopper Code {index + 1}
 									<span className="ml-auto text-[11px] font-normal text-muted">PID {target.processId}</span>
 								</p>
 								{target.documents.length ? (

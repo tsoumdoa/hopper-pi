@@ -81,7 +81,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 		const node = textarea.current;
 		if (!node) return;
 		node.style.height = "auto";
-		node.style.height = `${Math.min(node.scrollHeight, MAX_HEIGHT)}px`;
+		node.style.height = `${Math.max(88, Math.min(node.scrollHeight, MAX_HEIGHT))}px`;
 		node.style.overflowY = node.scrollHeight > MAX_HEIGHT ? "auto" : "hidden";
 	}, [draft]);
 
@@ -135,7 +135,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 				<textarea
 					id="composer-input"
 					ref={textarea}
-					rows={1}
+					rows={3}
 					value={draft}
 					disabled={disabled}
 					autoComplete="off"
@@ -143,11 +143,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 					onKeyDown={onKeyDown}
 					onPaste={(event) => { const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/")); if (files.length) { event.preventDefault(); void addImages(files); } }}
 					placeholder={disabled ? placeholder ?? "Waiting for the Hopper host…" : "Ask Hopper…"}
-					className="block max-h-[220px] w-full resize-none bg-transparent px-3.5 pb-1 pt-3 text-[14px] leading-6 outline-none placeholder:text-muted disabled:cursor-not-allowed"
+					className="block min-h-[88px] max-h-[220px] w-full resize-none bg-transparent px-3.5 pb-1 pt-3 text-[14px] leading-6 outline-none placeholder:text-muted disabled:cursor-not-allowed"
 				/>
 				<div className="flex flex-wrap items-center gap-1 px-1.5 pb-1.5 pt-0.5">
 					<Button type="button" variant="ghost" size="icon-sm" disabled={disabled || loading || images.length >= MAX_IMAGES} aria-label="Attach images" title="Attach images, or paste a screenshot" onClick={() => { replaceId.current = null; if (fileInput.current) { fileInput.current.multiple = true; fileInput.current.click(); } }}><ImagePlus className="size-4" /></Button>
-					<Button type="button" variant="ghost" size="sm" disabled={disabled || loading || images.length >= MAX_IMAGES} aria-label="New drawing" title="Draw on a blank canvas" onClick={() => { setImageError(null); setEditor({ kind: "new" }); }}><Pencil className="size-3.5" />Draw</Button>
+					<Button type="button" variant="ghost" size="icon-sm" disabled={disabled || loading || images.length >= MAX_IMAGES} aria-label="New drawing" title="Draw on a blank canvas" onClick={() => { setImageError(null); setEditor({ kind: "new" }); }}><Pencil className="size-4" /></Button>
 					{controls}
 					{streaming && (
 						<Select value={mode} onValueChange={(value) => onModeChange(value as SendMode)}>

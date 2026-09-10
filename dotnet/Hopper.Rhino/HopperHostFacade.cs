@@ -138,6 +138,7 @@ namespace Hopper.Rhino.Host
                 _pendingStart = pendingStart;
                 try
                 {
+                    _runningObserver?.Reset();
                     _ = _background.Schedule(() => StartInBackgroundAsync(pendingStart));
                 }
                 catch (Exception exception)

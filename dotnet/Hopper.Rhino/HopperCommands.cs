@@ -22,6 +22,7 @@ namespace rhino_zmq_poc
             }
 
             SharedNativeHost.SuppressBrowser = false;
+            SharedNativeHost.MessageDocumentSerialNumber = doc?.RuntimeSerialNumber;
             SharedNativeHost.BootstrapTicket = null;
             RhinoCodeRunner.PreloadLanguages();
             var result = facade.RequestStart();
@@ -84,6 +85,7 @@ namespace rhino_zmq_poc
                 RhinoApp.WriteLine("Hopper runtime adapters are not configured.");
                 return Result.Failure;
             }
+            SharedNativeHost.MessageDocumentSerialNumber = doc?.RuntimeSerialNumber;
             RhinoCodeRunner.PreloadLanguages();
             var result = facade.RequestRestart();
             RhinoApp.WriteLine(result.Message);

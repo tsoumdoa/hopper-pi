@@ -15,6 +15,19 @@ namespace rhino_zmq_poc.Tests;
 public sealed class HopperHostFacadeTests
 {
     [Fact]
+    public async Task FirstStartRequestsBrowserBeforeRunningNotification()
+    {
+        var fixture = new FacadeFixture();
+        Assert.True(fixture.Facade.RequestStart().Accepted);
+        Assert.Equal(1, fixture.RunningObserver.ResetCount);
+        Assert.Equal(0, fixture.RunningObserver.OpenCount);
+        await fixture.FacadeScheduler.RunNext();
+        Assert.Equal(1, fixture.RunningObserver.OpenCount);
+        fixture.RunningObserver.OnRunning();
+        Assert.Equal(1, fixture.RunningObserver.OpenCount);
+    }
+
+    [Fact]
     public async Task StartWhileRunningReopensBrowserWithoutRestartingHost()
     {
         var fixture = new FacadeFixture();
@@ -32,7 +45,7 @@ public sealed class HopperHostFacadeTests
         Assert.Equal(instanceId, fixture.Controller.Snapshot.LifecycleInstanceId);
         Assert.Equal(1, fixture.Transport.StartCount);
         Assert.Equal(1, fixture.RunningObserver.RunningCount);
-        Assert.Equal(0, fixture.RunningObserver.ResetCount);
+        Assert.Equal(1, fixture.RunningObserver.ResetCount);
     }
 
     [Fact]
@@ -305,14 +318,21 @@ public sealed class HopperHostFacadeTests
 
     private sealed class RunningObserver : IHopperRunningObserver
     {
+        private readonly BrowserOpenRequest _browser = new();
+        public int OpenCount { get; private set; }
         public int ResetCount { get; private set; }
         public int RunningCount { get; private set; }
 
-        public void Reset() => ResetCount++;
+        public void Reset()
+        {
+            ResetCount++;
+            _browser.Request();
+        }
 
         public void OnRunning()
         {
             RunningCount++;
+            if (_browser.Take(true, new Uri("http://127.0.0.1:54321/"))) OpenCount++;
         }
     }
 

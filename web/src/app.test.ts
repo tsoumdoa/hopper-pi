@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "./app";
 import { HopperStoreProvider } from "./state/hopper-store-context";
+import { TaskJournal } from "../../src/host/shared/journal.js";
 vi.mock("./hooks/use-runtime-status", () => ({
 	useRuntimeStatus: () => ({ refresh: async () => {}, refreshing: false }),
 }));
@@ -587,14 +588,15 @@ it("offers conservative inspected recovery for Windows independent launches", as
 	).not.toBeNull();
 });
 async function chooseModel(label: string) {
- await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Rhino model"]')!.click());
+ await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Message document"]')!.click());
  const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) => option.textContent?.includes(label))!;
  await act(async () => option.click());
 }
-it("only shows a Rhino model picker inside the composer and hides conversation history", async () => {
- const picker = container.querySelector('[aria-label="Rhino model"]')!;
+it("shows the document picker without the old target settings and hides conversation history", async () => {
+ const picker = container.querySelector('[aria-label="Message document"]')!;
  expect(picker.closest("form")!.querySelector("#composer-input")).not.toBeNull();
  expect(container.querySelector('[aria-label="Rhino targets"]')).toBeNull();
+ expect(container.querySelector('[aria-label="Message target settings"]')).toBeNull();
  expect(container.textContent).not.toContain("Second");
  for (const label of ["New Rhino document", "Open Rhino document", "Launch Rhino", "Modified document policy"]) {
   expect(container.textContent).not.toContain(label);
@@ -611,7 +613,7 @@ it("blocks sending when the selected model disconnects without disabling the dra
  await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [{ ...snapshot.targets[0], admission: "detached", documents: [] }] } }));
  expect(sendButton().disabled).toBe(true);
  expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.disabled).toBe(false);
- expect(container.textContent).toContain("Selected model disconnected");
+ expect(container.textContent).toContain("Selected document disconnected");
  expect(container.querySelector('[aria-label="Message destination"]')!.textContent).toContain("Facade.3dm");
  await act(async () => socket.receive({ type: "shared_snapshot", snapshot }));
  expect(sendButton().disabled).toBe(false);
@@ -652,13 +654,13 @@ it("keeps a task target distinct from the next message selection", async () => {
 	await chooseModel("Roof.3dm");
 	expect(
 		container.querySelector('[aria-label="Message destination"]')!.textContent,
-	).toContain("Roof.3dm · Rhino 2");
+	).toContain("Roof.3dm · Hopper Code 2");
 	expect(container.querySelector("article")!.textContent).toContain(
-		"Target: Facade.3dm · Rhino 1",
+		"Target: Facade.3dm · Hopper Code 1",
 	);
 	await value("#composer-input", "Edit the roof");
 	await act(async () => sendButton().click());
-	expect(socket.sent.find((command) => command.type === "submit").bindings).toEqual([otherBinding]);
+	expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({ bindings: [binding, otherBinding], messageTarget: otherBinding });
 });
 it("preserves normal sidebar controls and exports the selected durable conversation", async () => {
 	expect(
@@ -814,7 +816,7 @@ it("hides stale instances and gives unnamed available documents readable choices
 			},
 		}),
 	);
-	await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Rhino model"]')!.click());
+	await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Message document"]')!.click());
  const options = [...document.querySelectorAll('[role="option"]')];
  expect(options).toHaveLength(2);
  expect(options.map((option) => option.textContent).join(" ")).toContain("Untitled Rhino document 1");
@@ -891,19 +893,17 @@ it("never switches to a historical conversation when the current chat disappears
 	expect(container.textContent).not.toContain("Second");
 });
 
-
-it("requires a connected Rhino model before sending", async () => {
+it("requires a connected document before sending", async () => {
  await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [] } }));
  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="New session"]')!.click());
  const create = socket.sent.find((command) => command.type === "create_conversation");
  await act(async () => socket.receive({ type: "command_accepted", requestId: create.requestId, result: { conversationId: "other" } }));
  await value("#composer-input", "Create a sphere");
  expect(sendButton().disabled).toBe(true);
- expect(container.textContent).toContain("No Rhino models connected");
+ expect(container.textContent).toContain("No documents connected");
  await act(async () => socket.receive({ type: "shared_snapshot", snapshot }));
  expect(sendButton().disabled).toBe(false);
 });
-
 
 it("opens a fresh chat without rendering saved test messages and retries startup once on reconnect", async () => {
  await act(async () => root.unmount());
@@ -943,7 +943,6 @@ it("opens a fresh chat without rendering saved test messages and retries startup
  await act(async () => sendButton().click());
  expect(reconnected.sent.find((command) => command.type === "submit")).toMatchObject({ conversationId: "fresh", sessionId: "fresh-session", text: "Hello" });
 });
-
 
 it("counts working time from the saved start and freezes the completed duration", async () => {
  vi.useFakeTimers();
@@ -1118,6 +1117,56 @@ async function showPickQuestion() {
 }
 const dialogButton = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) => button.textContent === label)!;
 
+it.each([
+	{ state: "running", selectedOwner: true },
+	{ state: "awaiting_user", selectedOwner: true },
+	{ state: "running", selectedOwner: false },
+	{ state: "awaiting_user", selectedOwner: false },
+])("renders multi-instance work from the real journal: $state, selected owner $selectedOwner", async ({ state, selectedOwner }) => {
+	const second = { ...binding, lifecycleInstanceId: "second-life", rhinoDocumentId: "second-model" };
+	const targets = [...snapshot.targets, { ...snapshot.targets[0], lifecycleInstanceId: "second-life", processId: 43, documents: [second], documentLabels: { "second-model": "Roof.3dm" } }];
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets } }));
+	await value("#composer-input", "Compare these two models");
+	await act(async () => sendButton().click());
+	const command = socket.sent.find((command) => command.type === "submit");
+	expect(command.bindings).toEqual([binding, second]);
+	const journal = new TaskJournal(":memory:");
+	try {
+		journal.registerSession(command.conversationId, command.sessionId);
+		const receipt = journal.accept(command);
+		journal.finishAdmission(receipt.taskId);
+		// New messages keep the selected owner. Older saved coordinator turns can
+		// still contain JSON null and must remain readable after upgrading.
+		const owner = selectedOwner ? { taskId: receipt.taskId, turnId: receipt.turnId, binding: command.messageTarget, attachmentGeneration: "generation" } : null;
+		journal.start(receipt.taskId, receipt.turnId, owner);
+		let questionId: string | undefined;
+		if (state === "awaiting_user") {
+			questionId = journal.ask(receipt.taskId, receipt.turnId, "choose-model", { kind: "pick_option", question: "Which model should change?", options: ["Facade", "Roof"] });
+			journal.confirmSuspension(receipt.taskId, receipt.turnId);
+		}
+		const saved = journal.snapshot();
+		expect(JSON.parse(String(saved.turns[0]!.owner))).toEqual(owner);
+		await act(async () => {
+			socket.receive({ type: "command_accepted", requestId: command.requestId, result: receipt });
+			socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, ...saved, targets } });
+		});
+		expect(container.querySelector("#composer-input")).not.toBeNull();
+		expect(container.textContent).toContain("Compare these two models");
+		expect(container.textContent).toContain("Target: Facade.3dm");
+		if (state === "awaiting_user") {
+			expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Which model should change?");
+			await act(async () => dialogButton("Continue").click());
+			expect(socket.sent.find((sent) => sent.type === "answer")).toMatchObject({ questionId, answer: "Facade" });
+		} else {
+			await value("#composer-input", "Also compare their heights");
+			await act(async () => sendButton().click());
+			expect(socket.sent.filter((sent) => sent.type === "submit").at(-1)).toMatchObject({ kind: "follow_up", text: "Also compare their heights" });
+		}
+	} finally {
+		journal.close();
+	}
+});
+
 it("restores the original option modal with descriptions, default selection and an automatic Other choice", async () => {
 	await showPickQuestion();
 	const dialog = document.querySelector('[role="dialog"]')!;
@@ -1170,14 +1219,14 @@ it("queues worker pickers with their captured targets and advances only after an
 	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: next }));
 	expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
 	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("1 more waiting");
-	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Target: Facade.3dm · Rhino 1");
+	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Target: Facade.3dm · Hopper Code 1");
 	await act(async () => dialogButton("Continue").click());
 	expect(socket.sent.find(command => command.type === "answer")).toMatchObject({ questionId: firstQuestion.id });
 	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Facade.3dm");
 	const answered = { ...next, questions: [{ ...firstQuestion, answer: JSON.stringify("Small") }, secondQuestion, otherQuestion] };
 	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: answered }));
 	expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
-	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Target: Garden.3dm · Rhino 2");
+	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Target: Garden.3dm · Hopper Code 2");
 	expect(document.querySelector('[role="dialog"]')!.textContent).not.toContain("more waiting");
 	await act(async () => dialogButton("Cancel").click());
 	expect(socket.sent.filter(command => command.type === "answer").at(-1)).toMatchObject({ questionId: secondQuestion.id, answer: null });
@@ -1240,10 +1289,6 @@ it("reconnects to the same shared endpoint and retries a captured multi-target c
 	vi.useFakeTimers();
 	const second = { ...binding, lifecycleInstanceId: "life-2", rhinoDocumentId: "other-model" };
 	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [...snapshot.targets, { ...snapshot.targets[0], lifecycleInstanceId: "life-2", processId: 43, documents: [second] }] } }));
-	await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Message target settings"]')!.click());
-	const checks = document.querySelectorAll<HTMLInputElement>('[role="dialog"] input[type="checkbox"]');
-	await act(async () => checks[1]!.click());
-	await act(async () => [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) => button.textContent === "Done")!.click());
 	await value("#composer-input", "Compare these models");
 	await act(async () => sendButton().click());
 	const submitted = socket.sent.find((command) => command.type === "submit");
@@ -1333,96 +1378,40 @@ it("accepts a fresh token link on explicit reconnect and removes the fragment", 
 	expect(location.hash).toBe("");
 });
 
-async function targetSettings() {
-	await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Message target settings"]')!.click());
-}
-async function clickTargetButton(label: string) {
-	await act(async () => [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) => button.textContent === label)!.click());
-}
-
-it("submits one new document grant and clears it only after acceptance", async () => {
-	await targetSettings();
-	await clickTargetButton("New document");
-	await clickTargetButton("Done");
-	await value("#composer-input", "Build in a new document");
-	await act(async () => sendButton().click());
-	const command = socket.sent.find((command) => command.type === "submit");
-	expect(command.documentAction).toEqual({ lifecycleInstanceId: "life", kind: "rhino", action: "new", modifiedPolicy: "refuse" });
-	expect(container.querySelector('[aria-label="Message destination"]')!.textContent).toContain("New document");
-	await act(async () => socket.receive({ type: "error", requestId: command.requestId, message: "Try again" }));
-	expect(container.querySelector('[aria-label="Message destination"]')!.textContent).toContain("New document");
-	await act(async () => sendButton().click());
-	const retry = socket.sent.filter((command) => command.type === "submit").at(-1)!;
-	await act(async () => socket.receive({ type: "command_accepted", requestId: retry.requestId, result: { taskId: "task" } }));
-	expect(container.querySelector('[aria-label="Message destination"]')!.textContent).not.toContain("New document");
-});
-
-it("requires an open path and retains explicit save policy for a Grasshopper document", async () => {
-	await targetSettings();
-	await clickTargetButton("Open document");
-	await value('[aria-label="Document action kind"]', "grasshopper");
-	await clickTargetButton("Done");
-	await value("#composer-input", "Open the definition");
-	expect(sendButton().disabled).toBe(true);
-	await targetSettings();
-	await value('[aria-label="Document path to open"]', "/models/definition.gh");
-	await value('[aria-label="Modified document policy"]', "save");
-	await value('[aria-label="Replacement save path"]', "/models/preserved.gh");
-	await clickTargetButton("Done");
-	await act(async () => sendButton().click());
-	expect(socket.sent.find((command) => command.type === "submit").documentAction).toEqual({ lifecycleInstanceId: "life", kind: "grasshopper", action: "open", modifiedPolicy: "save", path: "/models/definition.gh", savePath: "/models/preserved.gh" });
-});
-
-it("allows a verified first Rhino launch with no connected documents", async () => {
-	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [], installations: [{ ...snapshot.installations[0], platform: "darwin" }] } }));
-	await targetSettings();
-	await clickTargetButton("Launch Rhino · rhino");
-	await clickTargetButton("Done");
-	await value("#composer-input", "Start Rhino and create a sphere");
-	expect(sendButton().disabled).toBe(false);
-	await act(async () => sendButton().click());
-	expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({ bindings: [], launch: { installationId: "rhino", independentProcess: false } });
-});
-
-it("hides additional Mac process launch and disables unverified Windows launch", async () => {
-	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, installations: [{ ...snapshot.installations[0], platform: "darwin" }, { id: "windows", build: "8", platform: "win32", bootstrapVerified: false }] } }));
-	await targetSettings();
-	expect(document.querySelector('[role="dialog"]')!.textContent).not.toContain("Launch Rhino · rhino");
-	const launch = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) => button.textContent === "Launch Rhino · windows")!;
-	expect(launch.disabled).toBe(true);
-});
-
-it("leaves multiple initial models for the user to choose and does not retarget as inventory changes", async () => {
+it("selects a default with multiple instances and preserves the chosen message document as inventory changes", async () => {
 	const second = { ...binding, lifecycleInstanceId: "other-life", rhinoDocumentId: "other-model" };
 	const two = { ...snapshot, targets: [...snapshot.targets, { ...snapshot.targets[0], lifecycleInstanceId: "other-life", processId: 43, documents: [second], documentLabels: { "other-model": "Garden.3dm" } }] };
 	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: two }));
 	await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="New session"]')!.click());
 	const create = socket.sent.find((command) => command.type === "create_conversation");
 	await act(async () => socket.receive({ type: "command_accepted", requestId: create.requestId, result: { conversationId: "other" } }));
-	expect(container.querySelector('[aria-label="Message destination"]')!.textContent).toBe("Choose a Rhino model");
+	expect(container.querySelector('[aria-label="Message destination"]')!.textContent).toContain("Facade.3dm");
 	await value("#composer-input", "Edit this model");
-	expect(sendButton().disabled).toBe(true);
+	expect(sendButton().disabled).toBe(false);
 	await chooseModel("Garden.3dm");
 	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...two, targets: [...two.targets].reverse() } }));
 	await act(async () => sendButton().click());
-	expect(socket.sent.find((command) => command.type === "submit").bindings).toEqual([second]);
+	expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({ bindings: [second, binding], messageTarget: second });
 });
 
-it("lets the user clear the automatic single-document selection", async () => {
-	await targetSettings();
-	await act(async () => document.querySelector<HTMLInputElement>('[role="dialog"] input[type="checkbox"]')!.click());
-	await clickTargetButton("Done");
-	await value("#composer-input", "Keep choosing");
-	expect(sendButton().disabled).toBe(true);
-	await act(async () => socket.receive({ type: "shared_snapshot", snapshot }));
-	expect(sendButton().disabled).toBe(true);
+it("restricts access to the chosen instance, including its other documents", async () => {
+	const sibling = { ...binding, rhinoDocumentId: "sibling" };
+	const second = { ...binding, lifecycleInstanceId: "other-life", rhinoDocumentId: "other-model" };
+	const two = { ...snapshot, targets: [{ ...snapshot.targets[0], documents: [binding, sibling] }, { ...snapshot.targets[0], lifecycleInstanceId: "other-life", processId: 43, documents: [second] }] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: two }));
+	await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Instance access"]')!.click());
+	await value("#composer-input", "Use only this instance");
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: two }));
+	expect(container.querySelector('[aria-label="Instance access"]')!.textContent).toBe("Only this instance");
+	await act(async () => sendButton().click());
+	expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({ bindings: [binding, sibling], messageTarget: binding });
 });
 
 it("keeps target identity across snapshots with reordered binding fields", async () => {
 	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [{ ...snapshot.targets[0], documents: [{ rhinoDocumentId: "model", lifecycleInstanceId: "life", kind: "rhino" }] }] } }));
 	await value("#composer-input", "Use the same model");
 	expect(sendButton().disabled).toBe(false);
-	expect(container.textContent).not.toContain("Selected model disconnected");
+	expect(container.textContent).not.toContain("Selected document disconnected");
 });
 
 it("retains a durable command when WebSocket.send throws and retries the same request", async () => {
@@ -1438,13 +1427,40 @@ it("retains a durable command when WebSocket.send throws and retries the same re
 	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Keep the request");
 });
 
-it("includes an explicitly selected Grasshopper canvas in the captured task bindings", async () => {
+it("includes Grasshopper canvases by default and can choose one as the message document", async () => {
 	const grasshopper = { kind: "grasshopper", lifecycleInstanceId: "life", grasshopperDocumentId: "canvas", associatedRhinoDocumentId: "model" };
 	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [{ ...snapshot.targets[0], documents: [binding, grasshopper], documentLabels: { model: "Facade.3dm", canvas: "Facade.gh" } }] } }));
-	await targetSettings();
-	await act(async () => document.querySelectorAll<HTMLInputElement>('[role="dialog"] input[type="checkbox"]')[1]!.click());
-	await clickTargetButton("Done");
+	await chooseModel("Facade.gh");
 	await value("#composer-input", "Compare the model and definition");
 	await act(async () => sendButton().click());
-	expect(socket.sent.find((command) => command.type === "submit").bindings).toEqual([binding, grasshopper]);
+	expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({ bindings: [binding, grasshopper], messageTarget: grasshopper });
+});
+
+it("waits for the document that opened the browser when another instance registers first", async () => {
+	await act(async () => root.unmount());
+	history.replaceState(null, "", "/?instance=origin&document=origin-doc#credential");
+	root = createRoot(container);
+	await act(async () => root.render(createElement(HopperStoreProvider, { children: createElement(App) })));
+	socket = Socket.sockets.at(-1)!;
+	await act(async () => { socket.onopen?.(); socket.receive({ type: "shared_snapshot", snapshot }); });
+	const startup = socket.sent.find((command) => command.type === "create_conversation");
+	await act(async () => socket.receive({ type: "command_accepted", requestId: startup.requestId, result: { conversationId: "conversation" } }));
+	await value("#composer-input", "Edit this model");
+	expect(sendButton().disabled).toBe(true);
+	const origin = { ...binding, lifecycleInstanceId: "origin", rhinoDocumentId: "origin-doc" };
+	const sibling = { ...origin, rhinoDocumentId: "sibling" };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [...snapshot.targets, { ...snapshot.targets[0], lifecycleInstanceId: "origin", processId: 43, documents: [sibling, origin], documentLabels: { "origin-doc": "Origin.3dm" } }] } }));
+	expect(container.querySelector('[aria-label="Message destination"]')!.textContent).toContain("Origin.3dm");
+	await act(async () => sendButton().click());
+	expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({ bindings: [binding, sibling, origin], messageTarget: origin });
+});
+
+it("restores access to all running instances after a restriction is removed", async () => {
+	const second = { ...binding, lifecycleInstanceId: "other-life", rhinoDocumentId: "other-model" };
+	await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Instance access"]')!.click());
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [...snapshot.targets, { ...snapshot.targets[0], lifecycleInstanceId: "other-life", processId: 43, documents: [second] }] } }));
+	await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Instance access"]')!.click());
+	await value("#composer-input", "Compare the models");
+	await act(async () => sendButton().click());
+	expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({ bindings: [binding, second], messageTarget: binding });
 });

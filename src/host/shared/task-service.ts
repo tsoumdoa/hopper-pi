@@ -15,7 +15,10 @@ export interface DriverContext {
 	turnId: string;
 	sessionId: string;
 	conversationId: string;
+	parentTaskId?: string | null;
 	binding: TargetBinding | null;
+	messageTarget?: TargetBinding;
+	accessibleBindings?: readonly TargetBinding[];
 	owner: ExecutionOwner | null;
 	text: string;
 	attachments: readonly unknown[];
@@ -30,6 +33,8 @@ export interface TaskDriver {
 	steer(payload: unknown, inputId?: number): Promise<void>;
 	cancel(): void | Promise<void>;
 	cleanup(): Promise<{ confirmed: boolean; evidence?: unknown }>;
+	pauseGeometry?(): Promise<{ confirmed: boolean; evidence?: unknown }>;
+	resumeGeometry?(): Promise<void>;
 }
 export interface TaskServiceOptions {
 	createDriver(context: DriverContext): TaskDriver | Promise<TaskDriver>;
@@ -239,48 +244,86 @@ export class SharedTaskService {
 		this.changed();
 		this.pump();
 	}
-	async waitForChildren(
-		taskId: string,
-	): Promise<{ tasks: Row[]; usage: number }> {
+	private readonly childWaits = new Map<string, Promise<{ tasks: Row[]; usage: number }>>();
+	async waitForChildren(taskId: string): Promise<{ tasks: Row[]; usage: number }> {
+		const existing = this.childWaits.get(taskId);
+		if (existing) return existing;
+		const pending = this.waitForChildrenOnce(taskId);
+		this.childWaits.set(taskId, pending);
+		try { return await pending; }
+		finally { this.childWaits.delete(taskId); }
+	}
+	private async waitForChildrenOnce(taskId: string): Promise<{ tasks: Row[]; usage: number }> {
 		const active = this.active.get(taskId);
-		if (!active || active.processKey)
-			throw new Error("Only an active coordinator can wait for children");
-		while (true) {
-			const snapshot = this.snapshot(),
-				tasks = snapshot.tasks.filter((task) => task.parent_task_id === taskId);
-			if (
-				tasks.every((task) =>
-					[
-						"completed",
-						"failed",
-						"cancelled",
-						"interrupted",
-						"uncertain",
-					].includes(String(task.state)),
-				)
-			) {
-				const ids = new Set(tasks.map((task) => task.id));
-				return {
-					tasks,
-					usage: snapshot.turns
-						.filter((turn) => ids.has(turn.task_id))
-						.reduce((sum, turn) => sum + Number(turn.usage), 0),
-				};
-			}
-			if (active.controller.signal.aborted)
-				throw new Error("Coordinator cancelled");
-			await new Promise<void>((resolve) => {
-				const done = () => {
-					unsubscribe();
-					active.controller.signal.removeEventListener("abort", done);
-					resolve();
-				};
-				const unsubscribe = this.subscribe(done);
-				active.controller.signal.addEventListener("abort", done, {
-					once: true,
-				});
-			});
+		if (!active || this.snapshot().tasks.find((task) => task.id === taskId)?.parent_task_id !== null)
+			throw new Error("Only an active root task can wait for children");
+		const settled = (task: Row) => ["completed", "failed", "cancelled", "interrupted", "uncertain"].includes(String(task.state));
+		const pending = this.snapshot().tasks.some((task) => task.parent_task_id === taskId && !settled(task));
+		const owner = JSON.parse(String(this.snapshot().turns.find((turn) => turn.id === active.turnId)?.owner ?? "null")) as ExecutionOwner | null;
+		let paused = false;
+		if (pending && active.processKey) {
+			if (!active.driver?.pauseGeometry || !active.driver.resumeGeometry || !owner)
+				throw new Error("This task cannot release its document while waiting for children");
+			const cleanup = await active.driver.pauseGeometry();
+			if (!cleanup.confirmed || this.unresolvedProcess(active.processKey))
+				throw new Error("Native edit cleanup must be confirmed before delegated work can start");
+			if (this.held.get(active.processKey) === taskId) this.held.delete(active.processKey);
+			active.processKey = undefined;
+			paused = true;
+			this.changed();
+			this.pump();
 		}
+		try {
+			while (true) {
+				if (active.controller.signal.aborted) throw new Error("Task cancelled");
+				const snapshot = this.snapshot();
+				const tasks = snapshot.tasks.filter((task) => task.parent_task_id === taskId);
+				if (tasks.every(settled)) {
+					const ids = new Set(tasks.map((task) => task.id));
+					return { tasks, usage: snapshot.turns.filter((turn) => ids.has(turn.task_id)).reduce((sum, turn) => sum + Number(turn.usage), 0) };
+				}
+				await this.waitForChange(active);
+			}
+		} finally {
+			if (paused && !active.controller.signal.aborted) {
+				// Reacquire the same document and generation before the main agent
+				// continues. Another document in the process may have been activated.
+				while (true) {
+					if (active.controller.signal.aborted) throw new Error("Task cancelled");
+					let target;
+					try { target = this.options.resolveBinding(owner!.binding); }
+					catch (error) {
+						if (!(error instanceof TargetUnavailableError) || error.permanent) throw error;
+						await this.waitForChange(active);
+						continue;
+					}
+					if (target.attachmentGeneration !== owner!.attachmentGeneration)
+						throw new Error("Selected document attachment changed while waiting for children");
+					const workers = [...this.active.values()].filter((task) => task.processKey !== undefined).length;
+					if (!this.held.has(target.processKey) && !this.unresolvedProcess(target.processKey) && workers < (this.options.maxWorkers ?? 4)) {
+						this.held.set(target.processKey, taskId);
+						active.processKey = target.processKey;
+						await this.options.validateBinding(owner!);
+						await active.driver!.resumeGeometry!();
+						this.changed();
+						break;
+					}
+					await this.waitForChange(active);
+				}
+			}
+		}
+	}
+	private waitForChange(active: Active): Promise<void> {
+		return new Promise((resolve) => {
+			const done = () => {
+				unsubscribe();
+				active.controller.signal.removeEventListener("abort", done);
+				resolve();
+			};
+			const unsubscribe = this.subscribe(done);
+			active.controller.signal.addEventListener("abort", done, { once: true });
+			if (active.controller.signal.aborted) done();
+		});
 	}
 
 	/** Coordinator-managed actions acquire the same queue used by worker scopes. */
@@ -531,7 +574,7 @@ export class SharedTaskService {
 					continue;
 				}
 				const input = JSON.parse(String(task.payload)) as Submission;
-				// Multi-target root sessions coordinate; only workers receive a geometry owner.
+				// Access to other documents never removes the selected document owner.
 				const handoff = snapshot.records.find(
 					(r) =>
 						r.kind === "handoff" &&
@@ -540,9 +583,7 @@ export class SharedTaskService {
 				);
 				const binding = handoff
 					? (JSON.parse(String(handoff.payload)).binding as TargetBinding)
-					: input.bindings.length === 1
-						? input.bindings[0]!
-						: null;
+					: input.messageTarget ?? (input.bindings.length === 1 ? input.bindings[0]! : null);
 				if (
 					!binding &&
 					[...this.active.values()].filter(
@@ -643,7 +684,10 @@ export class SharedTaskService {
 				turnId,
 				sessionId: String(task.session_id),
 				conversationId: String(task.conversation_id),
+				parentTaskId: task.parent_task_id === null ? null : String(task.parent_task_id),
 				binding: owner?.binding ?? null,
+				messageTarget: input.messageTarget,
+				accessibleBindings: input.bindings,
 				owner,
 				text: input.text,
 				attachments: input.attachments,
@@ -684,7 +728,7 @@ export class SharedTaskService {
 			if (result?.usage !== undefined)
 				this.journal.recordUsage(taskId, turnId, result.usage);
 			if (
-				!owner &&
+				task.parent_task_id === null &&
 				!active.controller.signal.aborted &&
 				this.snapshot().tasks.find((task) => task.id === taskId)?.state ===
 					"running"

@@ -33,7 +33,10 @@ export interface PiDriverOptions {
 	geometry?: (context: DriverContext) => Promise<{
 		runtimeSession: RuntimeSessionContext;
 		cleanup(): Promise<{ confirmed: boolean; evidence?: unknown }>;
+		pause?(): Promise<{ confirmed: boolean; evidence?: unknown }>;
+		resume?(): Promise<void>;
 	}>;
+	delegationTools?: (context: DriverContext) => ToolDefinition[];
 	coordinatorTools?: (context: DriverContext) => ToolDefinition[];
 	documentActions?: {
 		list(): unknown[];
@@ -77,6 +80,7 @@ export async function createPiTaskDriver(
 		});
 	};
 	const tools: ToolDefinition[] = [
+		...(context.parentTaskId === null ? (options.delegationTools?.(context) ?? []) : []),
 		...(!context.binding ? (options.coordinatorTools?.(context) ?? []) : []),
 		...(options.documentActions
 			? [
@@ -218,7 +222,9 @@ export async function createPiTaskDriver(
 			onError: (error) =>
 				context.publish({ type: "driver_error", message: error.error }),
 		});
-		session.agent.state.systemPrompt = `${session.systemPrompt}\nShared task ${context.taskId}, turn ${context.turnId}. Captured target: ${JSON.stringify(context.binding)}. Use only the captured document context. A user question ends this turn. Do not assume a new active Rhino window changes your target. If you delegate, call waitForDelegates to collect child results before summarizing. Use listDocumentGrants and executeDocumentGrant for authorized document actions. Additional Mac documents share one Rhino process and must run sequentially.`;
+		session.agent.state.systemPrompt = `${session.systemPrompt}\nShared task ${context.taskId}, turn ${context.turnId}. ${context.binding
+			? `Selected document: ${JSON.stringify(context.binding)}. Use your native geometry tools directly for this document.`
+			: `Message document: ${JSON.stringify(context.messageTarget ?? null)}. Accessible documents: ${JSON.stringify(context.accessibleBindings ?? [])}. Start with the message document when the user says this model or this document. Use delegate to read or edit these documents as needed.`} ${context.parentTaskId === null ? `You may also access these documents: ${JSON.stringify(context.accessibleBindings ?? [])}. Use listRhinoTargets to see their names and delegate only when work needs another document. No per-document permission is needed. The selected document remains your own target. waitForDelegates collects results and restores your document before you continue editing.` : ""} A user question ends this turn. Do not assume a new active Rhino window changes your target. If you delegate, call waitForDelegates to collect child results before summarizing. Use listDocumentGrants and executeDocumentGrant for authorized document actions. Additional Mac documents share one Rhino process and must run sequentially.`;
 		options.configureSession?.(session);
 		boundary = new QuestionSuspensionBoundary(
 			session.agent,
@@ -295,6 +301,7 @@ export async function createPiTaskDriver(
 		};
 		context.signal.addEventListener("abort", abort, { once: true });
 		return {
+			...(geometry?.pause && geometry.resume ? { pauseGeometry: () => geometry.pause!(), resumeGeometry: () => geometry.resume!() } : {}),
 			run: async () => {
 				if (context.signal.aborted)
 					throw new Error("Task was cancelled before model dispatch");

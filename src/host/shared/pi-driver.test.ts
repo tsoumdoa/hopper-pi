@@ -372,3 +372,36 @@ it("applies normal UI skill preferences and thinking to new tasks while retainin
 		await rm(root, { recursive: true, force: true });
 	}
 });
+
+
+it.each([null, "parent"])("keeps native tools with selected ownership and exposes delegation only to roots: %s", async (parentTaskId) => {
+	const root = await mkdtemp(join(tmpdir(), "shared-owned-delegation-"));
+	const { RuntimeSessionContext } = await import("../../infra/runtime-session-context.js");
+	const { Type } = await import("@earendil-works/pi-ai");
+	const binding = { kind: "rhino" as const, lifecycleInstanceId: "selected", rhinoDocumentId: "doc" };
+	const other = { ...binding, lifecycleInstanceId: "other" };
+	const context: DriverContext = { taskId: "task", turnId: "turn", sessionId: "session", conversationId: "conversation", parentTaskId, binding, messageTarget: binding, accessibleBindings: [binding, other], owner: { taskId: "task", turnId: "turn", binding, attachmentGeneration: "generation" }, text: "Edit this document", attachments: [], continuation: null, signal: new AbortController().signal, ask: () => "question", requestDocumentAction: () => "handoff", publish: () => {} };
+	let session: AgentSession | undefined;
+	const pause = vi.fn(async () => ({ confirmed: true }));
+	const resume = vi.fn(async () => {});
+	const driver = await createPiTaskDriver(context, {
+		dataDirectory: root, authPath: join(root, "auth.json"),
+		geometry: async () => ({ runtimeSession: new RuntimeSessionContext(), pause, resume, cleanup: async () => ({ confirmed: true }) }),
+		delegationTools: () => ["listRhinoTargets", "delegate", "waitForDelegates"].map((name) => ({ name, label: name, description: name, parameters: Type.Object({}), execute: async () => ({ content: [{ type: "text", text: "done" }], details: {} }) })),
+		configureSession: (created) => { session = created; },
+	});
+	try {
+		const names = session!.agent.state.tools.map((tool) => tool.name);
+		expect(names).toContain("rh_run_script");
+		for (const name of ["listRhinoTargets", "delegate", "waitForDelegates"])
+			expect(names.includes(name)).toBe(parentTaskId === null);
+		expect(session!.systemPrompt).toContain("Use your native geometry tools directly for this document");
+		await driver.pauseGeometry!();
+		await driver.resumeGeometry!();
+		expect(pause).toHaveBeenCalledTimes(1);
+		expect(resume).toHaveBeenCalledTimes(1);
+	} finally {
+		await driver.cleanup();
+		await rm(root, { recursive: true, force: true });
+	}
+});

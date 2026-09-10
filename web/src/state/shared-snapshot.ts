@@ -77,7 +77,7 @@ export function bindingLabeler(snapshot: SharedSnapshot | undefined): (binding: 
 		const index = target?.documents.findIndex((document) => sameBinding(document, binding)) ?? -1;
 		const duplicates = target?.documents.filter((document) => targetName(document, target.documentLabels) === name).length ?? 0;
 		const label = (name.startsWith("Untitled") || duplicates > 1) && index >= 0 ? `${name} ${index + 1}` : name;
-		if (available.length > 1 && target) return `${label} · Rhino ${available.indexOf(target) + 1 || "offline"}`;
+		if (available.length > 1 && target) return `${label} · Hopper Code ${available.indexOf(target) + 1 || "offline"}`;
 		return label;
 	};
 }

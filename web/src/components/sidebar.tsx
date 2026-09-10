@@ -214,7 +214,7 @@ export function Sidebar({
 						<Wrench className="size-4" />
 					</Button>
 					<div className="mt-auto grid gap-2.5 pb-2" aria-label="Status">
-						<span title={`${rhino ? "Rhino instances" : "Rhino runtime"} · ${runtime.text}`} aria-label={`${rhino ? "Rhino instances" : "Rhino runtime"}: ${runtime.text}`} role="img" className={cn("size-1.5 rounded-full", toneClass(runtime.tone))} />
+						<span title={`${rhino ? "Hopper Code instances" : "Rhino runtime"} · ${runtime.text}`} aria-label={`${rhino ? "Hopper Code instances" : "Rhino runtime"}: ${runtime.text}`} role="img" className={cn("size-1.5 rounded-full", toneClass(runtime.tone))} />
 						<span title={`Connection · ${connection.label}`} aria-label={`Connection: ${connection.label}`} role="img" className={cn("size-1.5 rounded-full", toneClass(connection.tone))} />
 					</div>
 				</div>

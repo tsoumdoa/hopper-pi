@@ -1,6 +1,6 @@
-import { Box, Power, Settings2 } from "lucide-react";
+import { Box, Power } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { NextDocumentAction, SharedBrowserCommand } from "../../src/host/shared/browser-protocol.js";
+import type { SharedBrowserCommand } from "../../src/host/shared/browser-protocol.js";
 import type { TargetBinding } from "../../src/protocol/shared-execution.js";
 import { Composer, type ComposerHandle } from "./components/composer";
 import { ConfirmDialog, type ConfirmRequest } from "./components/confirm-dialog";
@@ -13,7 +13,6 @@ import { Sidebar } from "./components/sidebar";
 import { SkillsDialog } from "./components/skills-dialog";
 import { TaskThread, TaskWorkingTime } from "./components/task-thread";
 import { ToastRegion } from "./components/toasts";
-import { TargetSettingsDialog, type LaunchSelection } from "./components/target-settings-dialog";
 import { ToolsDialog } from "./components/tools-dialog";
 import { UiRequestDialog } from "./components/ui-request-dialog";
 import { Badge } from "./components/ui/badge";
@@ -86,10 +85,10 @@ export function App() {
 	const [conversationId, setConversationId] = useState("");
 	const [selected, setSelected] = useState<TargetBinding[]>([]);
 	const selectionExplicit = useRef(false);
+	const initialInstance = useRef(new URLSearchParams(window.location.search).get("instance"));
+	const initialDocument = useRef(new URLSearchParams(window.location.search).get("document"));
+	const [onlyThisInstance, setOnlyThisInstance] = useState(false);
 	const selectTargets = (bindings: TargetBinding[]) => { selectionExplicit.current = true; setSelected(bindings); };
-	const [targetSettingsOpen, setTargetSettingsOpen] = useState(false);
-	const [documentAction, setDocumentAction] = useState<NextDocumentAction>();
-	const [launch, setLaunch] = useState<LaunchSelection>();
 	const [draft, setDraft] = useState("");
 	const [images, setImages] = useState<DraftImage[]>([]);
 	// Explicit delivery choice made while a task runs; null means the default for the current state.
@@ -139,7 +138,7 @@ export function App() {
 			socket.current = undefined;
 			if (deadline) clearTimeout(deadline);
 			if (timer) clearTimeout(timer);
-			actions.setBackendDetail("Rhino instances unknown while offline");
+			actions.setBackendDetail("Hopper Code instances unknown while offline");
 			actions.setConnection("disconnected", "Reconnecting to the local Hopper host…");
 			ws.close();
 			timer = setTimeout(() => setNonce((n) => n + 1), 1500);
@@ -197,18 +196,12 @@ export function App() {
 					if ((accepted?.type === "submit" || accepted?.type === "steer") && accepted.conversationId === currentConversation.current) {
 						setDraft((current) => (current === accepted.text ? "" : current));
 						setImages((current) => current.filter((image) => !accepted.attachments.some((attachment) => JSON.stringify(attachment) === JSON.stringify(image.image))));
-						if (accepted.type === "submit") {
-							setDocumentAction((current) => JSON.stringify(current) === JSON.stringify(accepted.documentAction) ? undefined : current);
-							setLaunch((current) => JSON.stringify(current) === JSON.stringify(accepted.launch) ? undefined : current);
-						}
 						if (message.result?.admissionError) toast(String(message.result.admissionError), "warning");
 					}
 					if (accepted?.type === "create_conversation") {
 						setConversationId(message.result.conversationId);
 						selectionExplicit.current = false;
 						setSelected([]);
-						setDocumentAction(undefined);
-						setLaunch(undefined);
 						setDraft("");
 						setImages([]);
 					}
@@ -235,7 +228,7 @@ export function App() {
 			if (!isCurrent()) return;
 			if (deadline) clearTimeout(deadline);
 			ready.current = false;
-			actions.setBackendDetail("Rhino instances unknown while offline");
+			actions.setBackendDetail("Hopper Code instances unknown while offline");
 			blocked.current = event.code === 4001 || event.code === 4003;
 			if (blocked.current) {
 				socket.current = undefined;
@@ -322,19 +315,28 @@ export function App() {
 	}, [taskIsRunning]);
 
 	const availableTargets = readyTargets(snapshot);
-	const modelBindings = availableTargets.flatMap((target) => target.documents.filter((binding) => binding.kind === "rhino"));
+	const documentBindings = availableTargets.flatMap((target) => target.documents);
+	const modelBindings = documentBindings.filter((binding) => binding.kind === "rhino");
 	useEffect(() => {
-		if (!selectionExplicit.current && !selected.length && !documentAction && !launch && modelBindings.length === 1) setSelected([modelBindings[0]!]);
-	}, [snapshot, selected.length, documentAction, launch]);
+		if (!selectionExplicit.current && !selected.length && documentBindings.length) {
+			const initial = initialInstance.current
+				? modelBindings.find((binding) => binding.lifecycleInstanceId === initialInstance.current &&
+					(!initialDocument.current || binding.rhinoDocumentId === initialDocument.current))
+				: modelBindings[0] ?? documentBindings[0];
+			if (initial) setSelected([initial]);
+		}
+	}, [snapshot, selected.length]);
+	const accessibleBindings = availableTargets
+		.filter((target) => !onlyThisInstance || target.lifecycleInstanceId === selected[0]?.lifecycleInstanceId)
+		.flatMap((target) => target.documents);
 	const labelFor = bindingLabeler(snapshot);
 	const activeTurn = snapshot?.turns.find((turn) => turn.task_id === activeRoot?.id && turn.state === "running");
-	const activeOwner = decode<{ binding?: TargetBinding }>(activeTurn?.owner, {});
-	const activeBindings = activeOwner.binding ? [activeOwner.binding] : decode<{ bindings: TargetBinding[] }>(activeRoot?.payload, { bindings: [] }).bindings;
+	const activeOwner = decode<{ binding?: TargetBinding } | null>(activeTurn?.owner, null);
+	const activeInput = decode<{ bindings: TargetBinding[]; messageTarget?: TargetBinding }>(activeRoot?.payload, { bindings: [] });
+	const activeBindings = activeOwner?.binding ? [activeOwner.binding] : activeInput.messageTarget ? [activeInput.messageTarget] : activeInput.bindings;
 	const steeringDestination = activeBindings.length ? activeBindings.map(labelFor).join(", ") : "Conversation";
 	const unavailableSelected = selected.some((binding) => !availableTargets.some((target) => target.documents.some((document) => sameBinding(document, binding))));
-	const actionUnavailable = documentAction && (!availableTargets.some((target) => target.lifecycleInstanceId === documentAction.lifecycleInstanceId) || (documentAction.action === "open" && !documentAction.path?.trim()));
-	const launchUnavailable = launch && (!snapshot?.installations?.some((item) => item.id === launch.installationId && item.bootstrapVerified) || (snapshot?.installations?.find((item) => item.id === launch.installationId)?.platform === "darwin" && snapshot.targets.some((target) => target.admission !== "detached")));
-	const needsTarget = sendMode !== "steer" && Boolean(unavailableSelected || actionUnavailable || launchUnavailable || (!selected.length && !documentAction && !launch));
+	const needsTarget = sendMode !== "steer" && Boolean(unavailableSelected || !selected.length);
 	const title = String(snapshot?.conversations.find((conversation) => conversation.id === conversationId)?.title ?? "New chat");
 
 	useEffect(() => {
@@ -347,7 +349,7 @@ export function App() {
 
 	const submit = () => {
 		if (needsTarget) {
-			toast("Choose a connected Rhino model first.", "warning");
+			toast("Choose a connected document first.", "warning");
 			return;
 		}
 		if ((!draft.trim() && !images.length) || !sessionId || (images.length && !imagesSupported)) return;
@@ -367,7 +369,7 @@ export function App() {
 			send({ type: "steer", requestId: crypto.randomUUID(), conversationId, sessionId: String(task.session_id), taskId: String(task.id), turnId: String(turn.id), text: draft, attachments });
 			return;
 		}
-		send({ type: "submit", requestId: crypto.randomUUID(), conversationId, sessionId, kind: sendMode, text: draft, bindings: selected, attachments, ...(documentAction ? { documentAction } : {}), ...(launch ? { launch } : {}) });
+		send({ type: "submit", requestId: crypto.randomUUID(), conversationId, sessionId, kind: sendMode, text: draft, bindings: accessibleBindings, ...(selected[0] ? { messageTarget: selected[0] } : {}), attachments });
 	};
 
 	const cancelTask = (taskId: string) => send({ type: "cancel", requestId: crypto.randomUUID(), conversationId, taskId });
@@ -420,22 +422,19 @@ export function App() {
 	};
 
 	const destinationLabel = sendMode === "steer" ? `Steering: ${steeringDestination}`
-		: launch ? "Launch Rhino"
-		: documentAction ? `${documentAction.action === "new" ? "New" : "Open"} document${selected.length ? ` + ${selected.length} selected` : ""}`
-		: selected.length > 1 ? `${selected.length} documents selected`
 		: selected[0] ? labelFor(selected[0])
-		: modelBindings.length ? "Choose a Rhino model" : "No Rhino models connected";
+		: documentBindings.length ? "Choose a document" : "No documents connected";
 	const rhinoPicker = (
 		<>
 		<Select
-			value={selected.length === 1 && !documentAction && !launch ? JSON.stringify(selected[0]) : ""}
+			value={selected.length === 1 ? JSON.stringify(selected[0]) : ""}
 			onValueChange={(value) => {
-				const binding = modelBindings.find((binding) => JSON.stringify(binding) === value);
-				if (binding) { selectTargets([binding]); setDocumentAction(undefined); setLaunch(undefined); }
+				const binding = documentBindings.find((binding) => JSON.stringify(binding) === value);
+				if (binding) selectTargets([binding]);
 			}}
-			disabled={!connected || sendMode === "steer" || !modelBindings.length}
+			disabled={!connected || sendMode === "steer" || !documentBindings.length}
 		>
-			<SelectTrigger aria-label="Rhino model" className={cn(toolbarTriggerClass, unavailableSelected && sendMode !== "steer" && "text-danger hover:text-danger")}>
+			<SelectTrigger aria-label="Message document" className={cn(toolbarTriggerClass, unavailableSelected && sendMode !== "steer" && "text-danger hover:text-danger")}>
 				<Box className="size-3.5 shrink-0" />
 				<SelectValue placeholder={<span aria-label="Message destination" className="block truncate">{destinationLabel}</span>}>
 					<span aria-label="Message destination" className="block truncate">
@@ -444,12 +443,12 @@ export function App() {
 				</SelectValue>
 			</SelectTrigger>
 			<SelectContent align="start" className="max-w-[calc(100vw-2rem)]">
-				{modelBindings.map((binding) => (
+				{documentBindings.map((binding) => (
 					<SelectItem key={JSON.stringify(binding)} value={JSON.stringify(binding)}>{labelFor(binding)}</SelectItem>
 				))}
 			</SelectContent>
 		</Select>
-		<Button variant="ghost" size="icon-sm" aria-label="Message target settings" title="Multiple documents, new/open, and launch" disabled={!connected || sendMode === "steer" || submitting} onClick={() => setTargetSettingsOpen(true)}><Settings2 className="size-3.5" /></Button>
+		<Button variant="ghost" size="sm" aria-label="Instance access" aria-pressed={onlyThisInstance} title="Choose which Hopper Code instances this message can access" disabled={!connected || sendMode === "steer" || submitting} onClick={() => setOnlyThisInstance((value) => !value)}>{onlyThisInstance ? "Only this instance" : "All instances"}</Button>
 		</>
 	);
 
@@ -502,7 +501,7 @@ export function App() {
 					disabled={!sessionId || !connected || submitting || taskBlocksComposer}
 					placeholder={activeRoot?.state === "awaiting_user" ? "Answer the question above to continue" : activeRoot?.state === "suspending" ? "Finishing the current operation…" : undefined}
 					submitDisabled={needsTarget}
-					alert={unavailableSelected && sendMode !== "steer" ? "Selected model disconnected. Choose another model." : undefined}
+					alert={unavailableSelected && sendMode !== "steer" ? "Selected document disconnected. Choose another document." : undefined}
 					streaming={taskIsRunning}
 					canAbort={Boolean(cancellableRoot)}
 					abortDisabled={!connected}
@@ -525,7 +524,6 @@ export function App() {
 				/>
 			</main>
 
-			{targetSettingsOpen && <TargetSettingsDialog snapshot={snapshot} selected={selected} onSelected={selectTargets} documentAction={documentAction} onDocumentAction={setDocumentAction} launch={launch} onLaunch={setLaunch} disabled={!connected || sendMode === "steer" || submitting} onOpenChange={setTargetSettingsOpen} />}
 
 			{providerOpen && (
 				<ProviderDialog
