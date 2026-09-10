@@ -181,6 +181,9 @@ export async function startSharedHost(
 		const registry = new SharedRegistry(journal);
 		native = new SharedNativeRuntime(epoch, registry, journal);
 		admin = await EmbeddedPiHost.create({
+			// Native connections belong to registered attachments and task sessions.
+			// Probing the default profile here can wait on a stale Rhino process.
+			probeBackend: false,
 			paths: {
 				...config.paths,
 				dataDir: state.dataDirectory,

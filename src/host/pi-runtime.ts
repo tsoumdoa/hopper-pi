@@ -27,6 +27,8 @@ import { ToolPolicyRuntime } from "../services/tool-policy-runtime.js";
 import type { ToolSettingsAction } from "./protocol.js";
 
 export type EmbeddedPiHostOptions = {
+	/** Disable automatic native probes for the shared host's unattached settings session. */
+	probeBackend?: boolean;
 	runtimeSession?: RuntimeSessionContext;
 	paths: HostPaths;
 	projectRoot?: string;
@@ -138,7 +140,7 @@ export class EmbeddedPiHost {
 			sessionManager,
 			sessionStartEvent,
 		}) => {
-			const policy = new ToolPolicyRuntime({ embedded: true, directory: paths.toolConfigDir });
+			const policy = new ToolPolicyRuntime({ embedded: true, directory: paths.toolConfigDir, probeBackendOnReconcile: options.probeBackend });
 			currentPolicy = policy;
 			policy.onChange = snapshot => host?.bus.publish({ type: "tool_settings", snapshot });
 			const services = await createAgentSessionServices({
@@ -146,6 +148,7 @@ export class EmbeddedPiHost {
 				agentDir: paths.agentDir,
 				modelRuntime,
 				resourceLoaderOptions: isolatedResourceLoaderOptions({
+					backendStatusUI: options.probeBackend,
 					toolPolicy: policy,
 					runtimeSession,
 					scriptWorkspaceDir: paths.scriptWorkspaceDir ?? join(paths.dataDir, "workspaces", "default"),

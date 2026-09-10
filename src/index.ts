@@ -54,6 +54,8 @@ export type HopperExtensionOptions = {
 	toolPolicy?: ToolPolicyRuntime;
 	/** Coordinators expose host/plugin tools without registering native geometry tools. */
 	nativeTools?: boolean;
+	/** Shared settings sessions have no native attachment to poll. */
+	backendStatusUI?: boolean;
 	runtimeSession?: RuntimeSessionContext;
 	runTool?: ToolExecutionScope;
 	documentTools?: ReturnType<typeof import("./tools/document-tools.js").createDocumentTool>[];
@@ -174,7 +176,7 @@ function registerHopperPiExtension(
 		...policy.pluginCatalog,
 	];
 
-	registerBackendStatusUI(pi);
+	if (options.backendStatusUI !== false) registerBackendStatusUI(pi);
 	registerToolSchemasUI(pi, getCatalog);
 
 	const captureModel = createRhinoCaptureModelController(pi);
