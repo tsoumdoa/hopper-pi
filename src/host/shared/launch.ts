@@ -71,7 +71,7 @@ export class JournalLaunchStore implements LaunchStore {
 	constructor(private readonly journal: TaskJournal) {}
 	allowsWork(rootTaskId: string): boolean {
 		const task = this.journal
-			.snapshot()
+			.snapshot({ includeEvents: false })
 			.tasks.find((row) => row.id === rootTaskId);
 		return (
 			!!task &&
@@ -88,7 +88,7 @@ export class JournalLaunchStore implements LaunchStore {
 	}
 	recovered(requestId: string): boolean {
 		return this.journal
-			.snapshot()
+			.snapshot({ includeEvents: false })
 			.records.some(
 				(row) =>
 					row.kind === "launch_recovery" &&
@@ -101,7 +101,7 @@ export class JournalLaunchStore implements LaunchStore {
 	}
 	all(): LaunchRecord[] {
 		return this.journal
-			.snapshot()
+			.snapshot({ includeEvents: false })
 			.records.filter((row) => row.kind === "launch")
 			.map((row) => JSON.parse(String(row.payload)) as LaunchRecord);
 	}

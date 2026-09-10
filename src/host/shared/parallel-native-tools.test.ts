@@ -3,6 +3,7 @@ import { TaskJournal } from "./journal.js";
 import { SharedRegistry } from "./registry.js";
 import { SharedNativeRuntime } from "./native-runtime.js";
 import { SharedTaskService, type DriverContext } from "./task-service.js";
+import { admitCurrentToolDispatch, ToolPolicyDenied } from "../../services/tool-policy-context.js";
 import { getRuntimeRpc } from "../../infra/runtime-rpc.js";
 import type { ExecutionOwner, TargetBinding } from "../../protocol/shared-execution.js";
 
@@ -33,10 +34,11 @@ let epoch: number;
 let trace: string[];
 let holdScript: ReturnType<typeof deferred> | undefined;
 let failCommit: boolean;
+let holdActivation: ReturnType<typeof deferred> | undefined;
 const journals: TaskJournal[] = [];
 afterEach(() => { for (const journal of journals.splice(0)) journal.close(); });
 beforeEach(() => {
-	activeDocument = "a"; scope = null; epoch = 0; trace = []; holdScript = undefined; failCommit = false;
+	activeDocument = "a"; scope = null; epoch = 0; trace = []; holdScript = undefined; holdActivation = undefined; failCommit = false;
 	const segment = () => ({ documentId: scope ? activeDocument : null, segmentId: scope ? `segment-${epoch}` : null,
 		epoch, state: scope ? "active" : "idle", lifecycleInstanceId: "life" });
 	wire.call.mockReset();
@@ -50,6 +52,8 @@ beforeEach(() => {
 		else if (operation === "getDocumentTransactionState") data = args.owner === "rhino" ? segment()
 			: { ...segment(), documentId: null, segmentId: null, state: "idle" };
 		else if (operation === "manageRhinoDocument") {
+			await holdActivation?.promise;
+			await admitCurrentToolDispatch();
 			expect(scope).toBeNull();
 			expect(args.action).toBe("activate");
 			expect(args.expectedActiveDocument).toBe(activeDocument);
@@ -145,6 +149,30 @@ it("rechecks the captured attachment before dispatching a waiting tool", async (
 	vi.spyOn(f.registry, "resolveBinding").mockImplementation((target) => ({ ...resolve(target),
 		...(target.kind === "rhino" && target.rhinoDocumentId === "b" ? { attachmentGeneration: "replacement" } : {}) }));
 	holdScript.resolve(); await first; await rejected;
+	expect(trace).toEqual(["begin:a", "script:a", "commit:a"]);
+	await f.finish(a!.taskId); await f.finish(b!.taskId); await f.finish(f.root.taskId);
+});
+
+it.each(["lease", "transport"])("rechecks tool admission after waiting for %s without activating a revoked tool's document", async (stage) => {
+	const f = await fixture(); const [a, b] = f.children;
+	holdScript = deferred();
+	const first = f.script(a!.taskId); await tick();
+	let allowed = true;
+	const work = vi.fn(async () => {});
+	const second = f.geometry.get(b!.taskId)!.runTool("rh_run_script", work, async () => {
+		if (!allowed) throw new ToolPolicyDenied("revoked");
+	});
+	const rejected = expect(second).rejects.toThrow("revoked");
+	await tick();
+	if (stage === "transport") {
+		holdActivation = deferred();
+		holdScript.resolve(); await first; await tick();
+	}
+	allowed = false;
+	holdActivation?.resolve();
+	holdScript.resolve(); await first; await rejected;
+	expect(f.journal.snapshot().operations.some((operation) => operation.state === "uncertain")).toBe(false);
+	expect(work).not.toHaveBeenCalled();
 	expect(trace).toEqual(["begin:a", "script:a", "commit:a"]);
 	await f.finish(a!.taskId); await f.finish(b!.taskId); await f.finish(f.root.taskId);
 });

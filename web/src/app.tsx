@@ -218,6 +218,7 @@ export function App() {
 					handleServerMessage(store, message);
 					if (message.event?.type === "success") setProviderOpen(false);
 					break;
+				case "tool_settings":
 				case "ui_request":
 				case "ui_notification":
 					handleServerMessage(store, message);

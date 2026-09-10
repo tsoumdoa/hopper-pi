@@ -47,24 +47,26 @@ import {
 	type ScriptToolContext,
 } from "./tools/rh-script.js";
 import { createRhRunScriptTool } from "./tools/rh-run-script.js";
-import { ToolPolicyRuntime } from "./services/tool-policy-runtime.js";
+import { ToolPolicyRuntime, type ToolExecutionScope } from "./services/tool-policy-runtime.js";
 import { registerToolControlsCommand } from "./ui/tool-controls.js";
 
 export type HopperExtensionOptions = {
 	toolPolicy?: ToolPolicyRuntime;
+	/** Coordinators expose host/plugin tools without registering native geometry tools. */
+	nativeTools?: boolean;
 	runtimeSession?: RuntimeSessionContext;
-	runTool?<T>(name: string, work: () => Promise<T>): Promise<T>;
+	runTool?: ToolExecutionScope;
 	scriptWorkspaceDir?: string;
 	scriptWorkspaceQuotaBytes?: number;
 	sessionId?: () => string;
 };
 export function createHopperPiExtension(options: HopperExtensionOptions = {}) {
 	return (pi: ExtensionAPI) => registerHopperPiExtension(
-		options.runtimeSession ? withRuntimeSession(pi, options.runtimeSession, options.runTool) : pi, options,
+		options.runtimeSession ? withRuntimeSession(pi, options.runtimeSession) : pi, options,
 	);
 }
 /** Bind every hook and tool, including tools registered later by model selection. */
-function withRuntimeSession(pi: ExtensionAPI, session: RuntimeSessionContext, runTool?: HopperExtensionOptions["runTool"]): ExtensionAPI {
+function withRuntimeSession(pi: ExtensionAPI, session: RuntimeSessionContext): ExtensionAPI {
 	return new Proxy(pi, {
 		get(target, property) {
 			if (property === "on") {
@@ -80,10 +82,7 @@ function withRuntimeSession(pi: ExtensionAPI, session: RuntimeSessionContext, ru
 			if (property === "registerTool") {
 				return (tool: Parameters<ExtensionAPI["registerTool"]>[0]) => target.registerTool({
 					...tool,
-					execute: (...args) => {
-						const work = async () => session.run(() => tool.execute(...args));
-						return runTool && tool.name !== "hopper_search_tools" ? runTool(tool.name, work) : work();
-					},
+					execute: (...args) => session.run(() => tool.execute(...args)),
 				});
 			}
 			const value = Reflect.get(target, property, target);
@@ -139,7 +138,7 @@ function registerHopperPiExtension(
 		}
 		return scriptContext!;
 	};
-	const registeredCatalog = HOPPER_REGISTERED_CATALOG.map((entry) => ({
+	const registeredCatalog = (options.nativeTools === false ? [] : HOPPER_REGISTERED_CATALOG).map((entry) => ({
 		...entry,
 		tool:
 			entry.tool.name === "rh_script"
@@ -170,7 +169,7 @@ function registerHopperPiExtension(
 			keywords: ["search tools", "activate", "discover"],
 			alwaysActive: true,
 		},
-		RH_CAPTURE_VIEW_CATALOG_ENTRY,
+		...(options.nativeTools === false ? [] : [RH_CAPTURE_VIEW_CATALOG_ENTRY]),
 		...policy.pluginCatalog,
 	];
 
@@ -190,10 +189,10 @@ function registerHopperPiExtension(
 		if (ctx.sessionManager) bindWorkspace(ctx.cwd, ctx.sessionManager.getSessionId());
 		policy.bind(pi, ctx, isProgressiveToolsEnabled(pi));
 		for (const entry of registeredCatalog) {
-			policy.register(pi, entry.tool);
+			policy.register(pi, entry.tool, options.runTool);
 		}
 		policy.register(pi, searchTool);
-		policy.register(pi, RH_CAPTURE_VIEW_CATALOG_ENTRY.tool);
+		if (options.nativeTools !== false) policy.register(pi, RH_CAPTURE_VIEW_CATALOG_ENTRY.tool, options.runTool);
 		policy.registerPlugins(pi);
 		await policy.reconcile();
 	});
@@ -209,7 +208,7 @@ function registerHopperPiExtension(
 		policy.setBusy(true);
 		policy.setContext(ctx);
 		await policy.reconcile(true);
-		if (promptTargetsRhino(event.prompt ?? "") && promptWantsVisualCapture(event.prompt ?? "")
+		if (options.nativeTools !== false && promptTargetsRhino(event.prompt ?? "") && promptWantsVisualCapture(event.prompt ?? "")
 			&& (await policy.allowedToolNames()).has("rh_capture_view")) {
 			await captureModel.maybeSwitchToMultimodalFallback(ctx);
 			await policy.reconcile(true);

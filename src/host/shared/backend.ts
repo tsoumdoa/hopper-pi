@@ -50,6 +50,7 @@ export class SharedBackend implements SharedBrowserBackend {
 				if (event.type === "snapshot" || event.type === "session_replaced")
 					this.publish();
 				else if (
+					event.type === "tool_settings" ||
 					event.type === "ui_request" ||
 					event.type === "auth_event" ||
 					event.type === "error" ||

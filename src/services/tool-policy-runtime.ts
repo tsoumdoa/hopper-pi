@@ -19,6 +19,8 @@ const shared = globalThis as typeof globalThis & { [registryKey]?: Map<string, T
 const runtimes = shared[registryKey] ??= new Map<string, ToolPolicyRuntime>();
 export const toolPolicyForSession = (id: string) => runtimes.get(id);
 
+export type ToolExecutionScope = <T>(name: string, work: () => Promise<T>, admit: () => Promise<void>) => Promise<T>;
+
 type CredentialStatuses = Record<string, CredentialStatus>;
 
 export const CREDENTIAL_STATUS_TIMEOUT_MS = 2_000;
@@ -46,13 +48,15 @@ export class ToolPolicyRuntime {
 	private published?: AgentToolsSnapshot;
 	private conflicts = new Set<string>();
 	private busy = false;
+	private readonly hasQuestionUi: boolean;
 	private closed = false;
 	private unsubscribe?: () => void;
 	private reconcileQueue: Promise<unknown> = Promise.resolve();
 	private credentialWaits = new Set<{ policy: PolicySnapshot; pluginId: string; cancel(): void }>();
 	onChange?: (snapshot: AgentToolsSnapshot) => void;
 
-	constructor(options: { directory?: string; embedded?: boolean; store?: ToolPolicyStore; credentials?: ReadonlyMap<string, ToolCredentials>; plugins?: readonly ToolPlugin[] } = {}) {
+	constructor(options: { directory?: string; embedded?: boolean; questionUi?: boolean; store?: ToolPolicyStore; credentials?: ReadonlyMap<string, ToolCredentials>; plugins?: readonly ToolPlugin[] } = {}) {
+		this.hasQuestionUi = options.questionUi === true;
 		this.plugins = options.store?.plugins ?? options.plugins ?? TOOL_PLUGINS;
 		const inventory = [...BUILTIN_POLICY_INVENTORY, ...this.plugins.flatMap(plugin => plugin.inventory)];
 		this.policyStore = options.store ?? new ToolPolicyStore(inventory, { directory: options.directory, plugins: this.plugins });
@@ -133,7 +137,7 @@ export class ToolPolicyRuntime {
 	isToolExposed(name: string): boolean { return this.session.activeIds.has(this.inventory.find(tool => tool.name === name)?.id ?? ""); }
 	markPluginConflict(owner: string): void { for (const tool of this.inventory.filter(tool => tool.owner === owner)) this.conflicts.add(tool.id); }
 
-	register(pi: ExtensionAPI, tool: ToolDefinition): boolean {
+	register(pi: ExtensionAPI, tool: ToolDefinition, runTool?: ToolExecutionScope): boolean {
 		const entry = this.inventory.find(entry => entry.name === tool.name);
 		if (!entry) throw new ToolPolicyDenied("unmanaged-registration");
 		if (this.definitions.has(tool.name)) return true;
@@ -142,7 +146,7 @@ export class ToolPolicyRuntime {
 			return false;
 		}
 		this.definitions.set(tool.name, tool);
-		pi.registerTool(this.wrap(tool));
+		pi.registerTool(this.wrap(tool, runTool));
 		return true;
 	}
 
@@ -152,21 +156,24 @@ export class ToolPolicyRuntime {
 		return this.wrap(tool);
 	}
 
-	wrap<T extends ToolDefinition>(tool: T): T {
+	wrap<T extends ToolDefinition>(tool: T, runTool?: ToolExecutionScope): T {
 		const runtime = this;
 		return { ...tool, async execute(...args) {
 			const generation = runtime.generation;
 			const signal = args[2];
 			try {
 				await runtime.preflight(tool.name, generation, signal);
-				return await withToolDispatchContext(
-					() => runtime.admit(tool.name, generation, signal),
+				const admit = () => runtime.admit(tool.name, generation, signal);
+				const work = () => withToolDispatchContext(
+					admit,
 					() => {
 						runtime.assertSession(generation, signal);
 						return tool.execute(...args);
 					},
 					() => runtime.assertSession(generation, signal),
 				);
+				// Native activation is admitted separately; cleanup must survive policy revocation.
+				return await (runTool ? runTool(tool.name, work, admit) : work());
 			} catch (error) {
 				if (!(error instanceof ToolPolicyDenied)) throw error;
 				return { isError: true, content: [{ type: "text", text: error.message }], details: { code: error.code } };
@@ -185,7 +192,7 @@ export class ToolPolicyRuntime {
 	private runtimeState(policy: PolicySnapshot | null, statuses: CredentialStatuses | "configured" | "unavailable" = {}): PolicyRuntime {
 		return {
 			backend: getCachedBackendStatus()?.online === true,
-			images: modelSupportsImages(this.ctx?.model), ui: this.ctx?.hasUI === true,
+			images: modelSupportsImages(this.ctx?.model), ui: this.hasQuestionUi || this.ctx?.hasUI === true,
 			credentials: Object.fromEntries(this.plugins.filter(plugin => plugin.credential).map(plugin => {
 				const status = typeof statuses === "string" ? statuses : statuses[plugin.id] ?? "missing";
 				return [plugin.id, { status, ...(status === "configured" && policy ? { generation: policy.credentials[plugin.id]?.generation } : {}) }];
@@ -330,7 +337,7 @@ export class ToolPolicyRuntime {
 			try { policy = await this.store.read(); }
 			catch { this.observe(null); this.applyBlocked(); return this.publish(this.formatToolSettings(null, "unavailable")); }
 			this.observe(policy);
-			if (getCachedBackendStatus()?.online !== true && this.inventory.some(tool => tool.requirements.includes("backend")
+			if (getCachedBackendStatus()?.online !== true && this.inventory.some(tool => this.definitions.has(tool.name) && tool.requirements.includes("backend")
 				&& policy.tools[tool.id]?.enabled && policy.parents[tool.parent]?.enabled)) await probeBackend();
 			const credential = await this.credentialStatuses(policy);
 			const snapshot = await this.locked(latest => {

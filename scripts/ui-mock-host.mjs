@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Fake shared Hopper host for browser UI development. No Rhino, no model provider, no SQLite.
 //
-//   pnpm ui:mock                     start the mock host and Vite on http://localhost:5174/#mock-running
+//   node scripts/ui-mock-host.mjs    start the mock host and Vite on http://localhost:5174/#mock-running
 //   node scripts/ui-mock-host.mjs --no-vite --port 19788
 //
 // The URL fragment picks the fixture: #mock-running, #mock-question, #mock-failed, #mock-empty.

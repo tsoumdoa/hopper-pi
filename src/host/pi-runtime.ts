@@ -67,13 +67,19 @@ export function isolatedResourceLoaderOptions(scriptOptions?: HopperExtensionOpt
 }
 
 /** Pi snapshots tool definitions after compaction for each continuation. */
-export function bindToolPolicyModelBoundary(session: AgentSession, policy: ToolPolicyRuntime): void {
+export function bindToolPolicyModelBoundary(session: AgentSession, policy: ToolPolicyRuntime, promptSuffix = ""): () => Promise<void> {
+	const refresh = async () => {
+		await policy.reconcile(true);
+		if (promptSuffix && !session.agent.state.systemPrompt.endsWith(promptSuffix))
+			session.agent.state.systemPrompt += promptSuffix;
+	};
 	const prepare = session.agent.prepareNextTurnWithContext;
 	session.agent.prepareNextTurnWithContext = async (turn, signal) => {
 		const next = await prepare?.(turn, signal);
-		await policy.reconcile(true);
+		await refresh();
 		return { ...next, context: { ...(next?.context ?? turn.context), tools: session.agent.state.tools.slice(), systemPrompt: session.agent.state.systemPrompt } };
 	};
+	return refresh;
 }
 
 export class EmbeddedPiHost {

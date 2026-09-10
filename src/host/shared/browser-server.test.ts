@@ -124,7 +124,7 @@ it("keeps the host alive when an authenticated browser reconnects during initial
 
 it("normal UI tools, skills and conversation export use the browser credential", async () => {
 	const runtime = {
-		listTools: vi.fn(() => ({ tools: [] })),
+		getToolSettings: vi.fn(async () => ({ tools: [] })),
 		listSkills: vi.fn(async () => ({ skills: [] })),
 		updateSkills: vi.fn(async () => ({ skills: [] })),
 	};
@@ -135,7 +135,7 @@ it("normal UI tools, skills and conversation export use the browser credential",
 		const response = await fetch(`http://127.0.0.1:${f.port}${path}`, { headers: { Authorization: "Bearer secret" } });
 		expect(response.status).toBe(200);
 	}
-	expect(runtime.listTools).toHaveBeenCalledOnce();
+	expect(runtime.getToolSettings).toHaveBeenCalledOnce();
 	expect(runtime.listSkills).toHaveBeenCalledOnce();
 	expect(exportConversation).toHaveBeenCalledWith("selected");
 	const response = await fetch(`http://127.0.0.1:${f.port}/api/skills`, {

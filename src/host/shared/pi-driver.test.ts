@@ -11,6 +11,9 @@ import { createPiTaskDriver } from "./pi-driver.js";
 import type { DriverContext } from "./task-service.js";
 import { HostSkillLibrary } from "../skills.js";
 import { TaskJournal } from "./journal.js";
+import { ToolPolicyStore } from "../../services/tool-policy-store.js";
+import { HOPPER_POLICY_INVENTORY } from "../../tools/policy-inventory.js";
+import { setCachedBackendStatus } from "../../infra/backend-status-cache.js";
 
 it("persists completed child messages with optional SDK fields to the real journal", async () => {
 	const root = await mkdtemp(join(tmpdir(), "shared-child-json-"));
@@ -31,7 +34,7 @@ it("persists completed child messages with optional SDK fields to the real journ
 			ask: () => "question", requestDocumentAction: () => "handoff",
 			publish: (payload) => { journal.publish(child.taskId, payload); },
 		}, {
-			dataDirectory: root, authPath: join(root, "auth.json"),
+			dataDirectory: root, toolConfigDir: join(root, "tool-settings"), authPath: join(root, "auth.json"),
 			configureSession(session) {
 				session.agent.streamFunction = (model) => {
 					const message: AssistantMessage = {
@@ -71,7 +74,7 @@ it("continues conversation history across task workspaces and isolates other ses
 	let activeSession: AgentSession;
 	const prompts: unknown[] = [];
 	const options = {
-		dataDirectory: root, authPath: join(root, "auth.json"),
+		dataDirectory: root, toolConfigDir: join(root, "tool-settings"), authPath: join(root, "auth.json"),
 		configureSession(session: AgentSession) {
 			activeSession = session;
 			session.agent.streamFunction = (model, providerContext) => {
@@ -138,7 +141,7 @@ it.each([
 		publish,
 	};
 	const options = {
-		dataDirectory: root,
+		dataDirectory: root, toolConfigDir: join(root, "tool-settings"),
 		authPath: join(root, "auth.json"),
 		configureSession: (
 			session: Parameters<
@@ -259,7 +262,7 @@ it.each(["error", "aborted"] as const)(
 		};
 		try {
 			const driver = await createPiTaskDriver(context, {
-				dataDirectory: root,
+				dataDirectory: root, toolConfigDir: join(root, "tool-settings"),
 				authPath: join(root, "auth.json"),
 				configureSession: (session) => {
 					session.agent.streamFunction = (model) => {
@@ -337,7 +340,7 @@ it("cleans a constructed native context when driver initialization fails", async
 	try {
 		await expect(
 			createPiTaskDriver(context, {
-				dataDirectory: root,
+				dataDirectory: root, toolConfigDir: join(root, "tool-settings"),
 				authPath: join(root, "auth.json"),
 				model: { provider: "missing", id: "missing" },
 				geometry: async () => ({
@@ -432,9 +435,11 @@ it.each([null, "parent"])("keeps native tools with selected ownership and expose
 	const other = { ...binding, lifecycleInstanceId: "other" };
 	const context: DriverContext = { taskId: "task", turnId: "turn", sessionId: "session", conversationId: "conversation", parentTaskId, binding, messageTarget: binding, accessibleBindings: [binding, other], owner: { taskId: "task", turnId: "turn", binding, attachmentGeneration: "generation" }, text: "Edit this document", attachments: [], continuation: null, signal: new AbortController().signal, ask: () => "question", requestDocumentAction: () => "handoff", publish: () => {} };
 	let session: AgentSession | undefined;
+	const runtimeSession = new RuntimeSessionContext();
+	runtimeSession.run(() => setCachedBackendStatus({ online: true }));
 	const driver = await createPiTaskDriver(context, {
-		dataDirectory: root, authPath: join(root, "auth.json"),
-		geometry: async () => ({ runtimeSession: new RuntimeSessionContext(), cleanup: async () => ({ confirmed: true }) }),
+		dataDirectory: root, toolConfigDir: join(root, "tool-settings"), authPath: join(root, "auth.json"),
+		geometry: async () => ({ runtimeSession, cleanup: async () => ({ confirmed: true }) }),
 		delegationTools: () => ["listRhinoTargets", "delegate", "waitForDelegates"].map((name) => ({ name, label: name, description: name, parameters: Type.Object({}), execute: async () => ({ content: [{ type: "text", text: "done" }], details: {} }) })),
 		configureSession: (created) => { session = created; },
 	});
@@ -446,6 +451,50 @@ it.each([null, "parent"])("keeps native tools with selected ownership and expose
 		expect(session!.systemPrompt).toContain("Use your native geometry tools directly for this document");
 	} finally {
 		await driver.cleanup();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+
+it("applies the host tool profile at model boundaries without losing shared task guidance", async () => {
+	const root = await mkdtemp(join(tmpdir(), "shared-policy-boundary-"));
+	const toolConfigDir = join(root, "tool-settings");
+	const store = new ToolPolicyStore(HOPPER_POLICY_INVENTORY, { directory: toolConfigDir });
+	const prompts: { tools: string[]; systemPrompt: string }[] = [];
+	let driver: Awaited<ReturnType<typeof createPiTaskDriver>> | undefined;
+	try {
+		driver = await createPiTaskDriver({
+			taskId: "root", turnId: "turn", parentTaskId: null, sessionId: "session", conversationId: "conversation",
+			binding: null, owner: null, text: "Discuss the model", attachments: [], continuation: null,
+			signal: new AbortController().signal, ask: () => "question", requestDocumentAction: () => "handoff", publish: () => {},
+		}, {
+			dataDirectory: root, authPath: join(root, "auth.json"), toolConfigDir,
+			configureSession(session) {
+				session.agent.streamFunction = (model, context) => {
+					prompts.push({ tools: context.tools?.map((tool) => tool.name) ?? [], systemPrompt: context.systemPrompt ?? "" });
+					const stream = createAssistantMessageEventStream();
+					stream.push({ type: "done", reason: "stop", message: {
+						role: "assistant", api: model.api, provider: model.provider, model: model.id,
+						timestamp: Date.now(), stopReason: "stop", content: [{ type: "text", text: "Done" }],
+						usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
+							cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+					} });
+					return stream;
+				};
+			},
+		});
+		for (const enabled of [false, true]) {
+			await store.update(await store.read(), { target: "tools", id: "hopper.tool.read_skill", enabled });
+			await driver.run();
+			expect(prompts.at(-1)!.tools.includes("read")).toBe(enabled);
+			expect(prompts.at(-1)!.tools).toContain("ask_user");
+			expect(prompts.at(-1)!.tools.some((name) => name.startsWith("rh_") || name.startsWith("gh_"))).toBe(false);
+			expect(prompts.at(-1)!.systemPrompt.split("Shared task root, turn turn")).toHaveLength(2);
+			expect(prompts.at(-1)!.systemPrompt).toContain("root user's message explicitly asks");
+		}
+	} finally {
+		await driver?.cleanup();
+		await store.close();
 		await rm(root, { recursive: true, force: true });
 	}
 });

@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { Type } from "@earendil-works/pi-ai";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
-import type { TargetBinding } from "../../protocol/shared-execution.js";
 import type { DriverContext } from "./task-service.js";
 import { SharedHostControl, type ControlState } from "./control.js";
 import { TaskJournal } from "./journal.js";
@@ -627,11 +626,6 @@ export async function createLaunchCoordinator(
 					service.documentReady(bootstrap.requestId, documents[0]),
 				);
 			return publicRecord(store.get(bootstrap.requestId)!);
-		},
-		async selectReadyDocument(requestId: string, binding: TargetBinding) {
-			await refreshIntent();
-			options.registry.resolveBinding(binding);
-			return publicRecord(service.documentReady(requestId, binding));
 		},
 		refresh: refreshLaunches,
 		cancelRoot(taskId: string) {

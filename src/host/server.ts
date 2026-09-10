@@ -277,7 +277,7 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 			void options.getRuntimeStatus().then(
 				(status) => writeJson(response, 200, status),
 				(error) => writeJson(response, 503, {
-					error: pathname === "/api/tools" ? "Could not update tool settings. Reconnect and try again." : error instanceof Error ? error.message : String(error),
+					error: error instanceof Error ? error.message : String(error),
 				}),
 			);
 			return;

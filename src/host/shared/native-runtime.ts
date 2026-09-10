@@ -17,6 +17,7 @@ import {
 	RuntimeRpc,
 	type RuntimeRpcTransport,
 } from "../../infra/runtime-rpc.js";
+import { ToolPolicyDenied, withToolDispatchContext } from "../../services/tool-policy-context.js";
 import { SubscriberStatusEventSource } from "../../infra/status-event-source.js";
 import {
 	classifyOperation,
@@ -423,9 +424,10 @@ export class SharedNativeRuntime {
 		});
 		return {
 			runtimeSession,
-			runTool: <T>(_name: string, work: () => Promise<T>): Promise<T> => withNativeTool(async () => {
+			runTool: <T>(_name: string, work: () => Promise<T>, admit?: () => Promise<void>): Promise<T> => withNativeTool(async () => {
+				await admit?.();
 				this.registry.validateBinding(owner);
-				await this.activateBinding(owner);
+				await this.activateBinding(owner, admit);
 				toolActive = true;
 				toolCleanupConfirmed = false;
 				runtimeSession.run(beginRuntimeAgentTurn);
@@ -455,7 +457,7 @@ export class SharedNativeRuntime {
 		};
 	}
 
-	async activateBinding(owner: ExecutionOwner): Promise<void> {
+	async activateBinding(owner: ExecutionOwner, admit?: () => Promise<void>): Promise<void> {
 		this.registry.validateBinding(owner);
 		const instance = this.instances.get(owner.binding.lifecycleInstanceId);
 		if (!instance) throw new Error("Lifecycle is detached");
@@ -508,6 +510,7 @@ export class SharedNativeRuntime {
 				expectedActiveDocument: inventory.activeDocumentId ?? null,
 				expectedDestinations: [],
 			};
+			await admit?.();
 			const operation = this.journal.operationIntent({
 				taskId: owner.taskId,
 				turnId: owner.turnId,
@@ -518,10 +521,11 @@ export class SharedNativeRuntime {
 				deadline: Date.now() + 8000,
 			});
 			try {
-				const response = await instance.client.call(name, args, {
+				const activate = () => instance.client.call(name, args, {
 					executionOwner: owner,
 					operationId: operation.operationId,
 				});
+				const response = await (admit ? withToolDispatchContext(admit, activate) : activate());
 				const result = data(response);
 				if (result?.ok === false) {
 					this.journal.operationResult(
@@ -561,7 +565,7 @@ export class SharedNativeRuntime {
 					.snapshot()
 					.operations.find((item) => item.id === operation.id);
 				if (recorded?.state === "dispatched")
-					this.journal.operationResult(operation.id, "uncertain", {
+					this.journal.operationResult(operation.id, error instanceof ToolPolicyDenied ? "failed" : "uncertain", {
 						error: String(error),
 					});
 				throw error;

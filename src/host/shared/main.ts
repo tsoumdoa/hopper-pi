@@ -115,8 +115,10 @@ export async function startSharedHost(
 				return backend.command(command);
 			},
 			subscribe: (listener) => {
+				if (!backend) throw new Error("Host is initializing");
+				const unsubscribe = backend.subscribe(listener);
 				listeners.add(listener);
-				return () => listeners.delete(listener);
+				return () => { unsubscribe(); listeners.delete(listener); };
 			},
 		},
 		browserCredential: state.browserCredential,
@@ -193,14 +195,12 @@ export async function startSharedHost(
 				createPiTaskDriver(context, {
 					dataDirectory: state.dataDirectory,
 					authPath: config.paths.authPath,
+					toolConfigDir: config.paths.toolConfigDir,
 					model: admin!.snapshot().model,
 					thinkingLevel: admin!.snapshot().thinkingLevel,
 					skillDataDirectory: state.dataDirectory,
 					geometry: (context) => native!.geometry(context),
-					...(journal!
-						.snapshot()
-						.tasks.find((task) => task.id === context.taskId)
-						?.parent_task_id === null
+					...(context.parentTaskId === null
 						? {
 								documentActions: {
 									list: () =>
@@ -417,9 +417,6 @@ export async function startSharedHost(
 			},
 			epoch,
 		);
-		backend.subscribe((event) => {
-			for (const listener of listeners) listener(event);
-		});
 		let refreshing = false;
 		refresh = setInterval(() => {
 			if (refreshing || closing) return;
