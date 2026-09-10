@@ -8,7 +8,6 @@ import { ToolPolicyRuntime } from "./tool-policy-runtime.js";
 import { ToolPolicyStore } from "./tool-policy-store.js";
 import { ToolCredentials } from "./tool-credentials.js";
 import { HOPPER_POLICY_INVENTORY } from "../tools/policy-inventory.js";
-import { withBackendGuard } from "../tools/with-backend-guard.js";
 import { admitCurrentToolDispatch } from "./tool-policy-context.js";
 import { HopperRpcClient, type DealerSocket } from "../infra/rpc-client.js";
 
@@ -75,6 +74,93 @@ async function fixture(progressive = false) {
 const completed = () => ({ content: [{ type: "text" as const, text: "done" }], details: {} });
 
 describe("shared runtime policy admissions", () => {
+	it.each(["parent", "children"])("does not wait for protected storage when Firecrawl's %s is disabled", async disabled => {
+		const f = await fixture();
+		f.tool("rh_run_script", async () => completed());
+		f.tool("web_search", async () => completed());
+		await f.enableFirecrawl();
+		if (disabled === "parent") await f.patch("firecrawl", false, "parents");
+		else {
+			await f.patch("firecrawl.tool.search", false);
+			await f.patch("firecrawl.tool.fetch", false);
+		}
+		const resume = deferred<string | null>();
+		const read = vi.spyOn(f.credentials, "read").mockImplementation(() => resume.promise);
+		const pending = f.runtime.reconcile(true);
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			const result = await Promise.race([pending.then(() => "ready"), new Promise(resolve => { timer = setTimeout(() => resolve("blocked"), 100); })]);
+			expect(result).toBe("ready");
+			expect(f.pi.getActiveTools()).toContain("rh_run_script");
+			expect(f.pi.getActiveTools()).not.toContain("web_search");
+			expect((await f.runtime.getToolSettings()).settings?.credential).toBe("configured");
+			expect(read).not.toHaveBeenCalled();
+		} finally { clearTimeout(timer); resume.resolve(null); await pending; }
+	});
+
+	it("reuses schemas and suppresses unchanged exposure and notifications while publishing runtime changes", async () => {
+		const f = await fixture();
+		f.tool("rh_run_script", async () => completed());
+		f.tool("rh_capture_view", async () => completed());
+		const publish = vi.fn();
+		f.runtime.onChange = publish;
+		await f.runtime.reconcile();
+		const first = await f.runtime.getToolSettings();
+		await f.runtime.reconcile(true);
+		const next = await f.runtime.getToolSettings();
+		expect(publish).toHaveBeenCalledOnce();
+		expect(f.pi.setActiveTools).toHaveBeenCalledOnce();
+		expect(next.tools.find(tool => tool.name === "rh_run_script")!.parameters).toBe(first.tools.find(tool => tool.name === "rh_run_script")!.parameters);
+		f.runtime.setContext({ sessionManager: { getSessionId: () => "first" }, hasUI: true, model: { input: ["text", "image"] } } as unknown as ExtensionContext);
+		await f.runtime.reconcile(true);
+		expect(f.pi.getActiveTools()).toContain("rh_capture_view");
+		expect(publish).toHaveBeenCalledTimes(2);
+		expect(publish.mock.calls[1][0].settings.version).toEqual(first.settings?.version);
+		await f.patch("hopper.tool.rh_run_script", false);
+		await f.runtime.reconcile();
+		expect(f.pi.getActiveTools()).not.toContain("rh_run_script");
+		expect(publish).toHaveBeenCalledTimes(3);
+	});
+
+	it("does not treat a disabled plugin's saved reference as verified after a concurrent enable", async () => {
+		const f = await fixture();
+		f.tool("web_search", async () => completed());
+		await f.enableFirecrawl();
+		await f.patch("firecrawl", false, "parents");
+		const started = deferred(), resume = deferred();
+		const read = f.store.read.bind(f.store);
+		vi.spyOn(f.store, "read").mockImplementationOnce(async () => {
+			const snapshot = await read();
+			started.resolve();
+			await resume.promise;
+			return snapshot;
+		});
+		const pending = f.runtime.reconcile();
+		await started.promise;
+		await f.patch("firecrawl", true, "parents");
+		resume.resolve();
+		await pending;
+		expect(f.pi.getActiveTools()).not.toContain("web_search");
+		await f.runtime.reconcile();
+		expect(f.pi.getActiveTools()).toContain("web_search");
+	});
+
+	it("uses one preflight read for a ready tool and refuses execution when backend recovery fails", async () => {
+		const f = await fixture();
+		const execute = vi.fn(async () => completed());
+		const tool = f.tool("rh_run_script", execute);
+		await f.runtime.reconcile();
+		const admission = vi.spyOn(f.store, "withSnapshot");
+		await f.invoke(tool);
+		expect(admission).toHaveBeenCalledOnce();
+		expect(execute).toHaveBeenCalledOnce();
+		backend.online = false;
+		backend.probe.mockResolvedValue(undefined);
+		expect((await f.invoke(tool)).details).toMatchObject({ code: "backend-unavailable" });
+		expect(backend.probe).toHaveBeenCalledOnce();
+		expect(execute).toHaveBeenCalledOnce();
+	});
+
 	it.each([false, true])("samples credentials once and publishes the returned save snapshot while busy=%s", async busy => {
 		const f = await fixture();
 		f.tool("web_search", async () => completed());
@@ -149,21 +235,6 @@ describe("shared runtime policy admissions", () => {
 		expect(execute).not.toHaveBeenCalled();
 	});
 
-	it("checks again after withBackendGuard refresh", async () => {
-		const f = await fixture();
-		const execute = vi.fn(async () => completed());
-		const guarded = withBackendGuard({ name: "rh_run_script", label: "Script", description: "Script", parameters: Type.Object({}), execute });
-		const tool = f.tool(guarded.name, guarded.execute);
-		await f.runtime.reconcile();
-		const started = deferred(), resume = deferred();
-		backend.refresh.mockImplementation(async () => { started.resolve(); await resume.promise; return true; });
-		const pending = f.invoke(tool);
-		await started.promise;
-		await f.patch("hopper.rhino", false, "parents");
-		resume.resolve();
-		expect((await pending).details).toMatchObject({ code: "parent-disabled" });
-		expect(execute).not.toHaveBeenCalled();
-	});
 
 	it("admits each dispatch in a batch and blocks the later script", async () => {
 		const f = await fixture();
@@ -256,12 +327,10 @@ describe("shared runtime policy admissions", () => {
 		const tool = f.tool("rh_script", execute);
 		await f.runtime.reconcile();
 		const withSnapshot = f.store.withSnapshot.bind(f.store);
-		let reads = 0;
 		vi.spyOn(f.store, "withSnapshot").mockImplementation(async fn => {
 			const result = await withSnapshot(fn);
-			// Preflight is the first read, final admission is the second. Model the
-			// asynchronous lock release after its permission callback succeeded.
-			if (++reads === 2) f.replaceSession();
+			// Replace the session during asynchronous release of the preflight lock.
+			f.replaceSession();
 			return result;
 		});
 		expect((await f.invoke(tool)).details).toMatchObject({ code: "cancelled" });

@@ -157,16 +157,16 @@ describe("shared profile location", () => {
 describe("settings decoding", () => {
 	it("round trips the schema and refuses corrupt, incomplete, future, or secret-bearing data", () => {
 		const policy = fresh();
-		expect(decodeToolPolicy(JSON.stringify(policy), inventory)).toEqual({ ok: true, snapshot: policy });
-		for (const invalid of ["{sentinel-secret", "null", JSON.stringify({ ...policy, tools: {} }), JSON.stringify({ ...policy, key: "sentinel-secret" }), JSON.stringify({ ...policy, revision: -1 })]) {
-			expect(decodeToolPolicy(invalid, inventory)).toEqual({ ok: false, code: "invalid-settings" });
+		expect(decodeToolPolicy(JSON.stringify(policy))).toEqual({ ok: true, snapshot: policy });
+		for (const invalid of ["{sentinel-secret", "null", JSON.stringify({ ...policy, tools: null }), JSON.stringify({ ...policy, key: "sentinel-secret" }), JSON.stringify({ ...policy, revision: -1 })]) {
+			expect(decodeToolPolicy(invalid)).toEqual({ ok: false, code: "invalid-settings" });
 		}
-		expect(decodeToolPolicy(JSON.stringify({ ...policy, schemaVersion: 2 }), inventory)).toEqual({ ok: false, code: "unsupported-schema" });
+		expect(decodeToolPolicy(JSON.stringify({ ...policy, schemaVersion: 2 }))).toEqual({ ok: false, code: "unsupported-schema" });
 	});
-	it("rejects invalid revisions, credential references, and unknown gates without echoing values", () => {
+	it("rejects invalid revisions, credential references, and malformed gates without echoing values", () => {
 		const policy = fresh();
 		policy.tools[tool("rh_run_script").id].enabledAt = 1;
-		expect(decodeToolPolicy(JSON.stringify(policy), inventory).ok).toBe(false);
+		expect(decodeToolPolicy(JSON.stringify(policy)).ok).toBe(false);
 		const result = publishFirecrawlCredential(fresh(), { ...fresh(), generation: 0 }, "sentinel-secret", true);
 		expect(result.ok).toBe(false);
 		expect(JSON.stringify(result)).not.toContain("sentinel-secret");

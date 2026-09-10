@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { getCachedBackendStatus, probeBackend } from "../infra/backend-status.js";
 import { modelSupportsImages } from "./model-capabilities.js";
@@ -5,7 +6,7 @@ import { HOPPER_POLICY_INVENTORY } from "../tools/policy-inventory.js";
 import { ToolPolicyStore } from "./tool-policy-store.js";
 import { ToolCredentials } from "./tool-credentials.js";
 import {
-	checkPolicyPreflight, PARENT_DEFAULTS, reconcilePolicySession, resolveToolPolicy,
+	PARENT_DEFAULTS, reconcilePolicySession, resolveToolPolicy,
 	type PolicyRuntime, type PolicySession, type PolicySnapshot, type PolicyUpdate,
 } from "./tool-policy.js";
 import { assertCurrentToolDispatchValid, ToolPolicyDenied, withToolDispatchContext } from "./tool-policy-context.js";
@@ -34,6 +35,8 @@ export class ToolPolicyRuntime {
 	private session: PolicySession = { epoch: "", appliedRevision: -1, activeIds: new Set() };
 	private manual = new Map<string, { epoch: string; revision: number; generation: number }>();
 	private definitions = new Map<string, ToolDefinition>();
+	private schemas = new WeakMap<object, AgentToolSummary["parameters"]>();
+	private published?: AgentToolsSnapshot;
 	private conflicts = new Set<string>();
 	private busy = false;
 	private closed = false;
@@ -70,6 +73,7 @@ export class ToolPolicyRuntime {
 			this.abortProvider?.();
 			this.session = { epoch: "", appliedRevision: -1, activeIds: new Set() };
 			this.sessionId = id;
+			this.published = undefined;
 		}
 		runtimes.set(id, this);
 		this.unsubscribe ??= this.store.subscribe(snapshot => {
@@ -114,8 +118,7 @@ export class ToolPolicyRuntime {
 				await runtime.preflight(tool.name, generation, signal);
 				return await withToolDispatchContext(
 					() => runtime.admit(tool.name, generation, signal),
-					async () => {
-						await runtime.admit(tool.name, generation, signal);
+					() => {
 						runtime.assertSession(generation, signal);
 						return tool.execute(...args);
 					},
@@ -146,15 +149,22 @@ export class ToolPolicyRuntime {
 		};
 	}
 
-	async preflight(name: string, generation = this.generation, signal?: AbortSignal): Promise<void> {
+	async preflight(name: string, generation = this.generation, signal?: AbortSignal): Promise<PolicySnapshot> {
 		const entry = this.entry(name);
-		await this.locked(policy => {
+		const prepared = await this.locked(policy => {
 			this.assertSession(generation, signal);
-			const denied = checkPolicyPreflight(entry, policy, this.session);
-			if (denied) throw new ToolPolicyDenied(denied);
+			// Check all gates before execution, allowing an offline backend to recover.
+			const state = { ...this.runtimeState(policy, "configured"), backend: true };
+			const status = resolveToolPolicy(entry, policy, state, this.session, true);
+			if (!status.callable) throw new ToolPolicyDenied(status.status);
+			return policy;
 		});
-		if (entry.requirements.includes("backend") && getCachedBackendStatus()?.online !== true) await probeBackend();
+		if (entry.requirements.includes("backend") && getCachedBackendStatus()?.online !== true) {
+			await probeBackend();
+			await this.admit(name, generation, signal);
+		}
 		this.assertSession(generation, signal);
+		return prepared;
 	}
 
 	async admit(name: string, generation = this.generation, signal?: AbortSignal): Promise<void> {
@@ -170,8 +180,7 @@ export class ToolPolicyRuntime {
 	async admitFirecrawl(name: "web_search" | "web_fetch", signal?: AbortSignal): Promise<{ apiKey: string }> {
 		assertCurrentToolDispatchValid();
 		const generation = this.generation;
-		await this.preflight(name, generation, signal);
-		const prepared = await this.store.read();
+		const prepared = await this.preflight(name, generation, signal);
 		let apiKey: string | null;
 		try { apiKey = await this.credentials.read(prepared); }
 		catch { throw new ToolPolicyDenied("credential-store-unavailable"); }
@@ -213,6 +222,20 @@ export class ToolPolicyRuntime {
 		await this.reconcileSnapshot(boundary);
 	}
 
+	private needsCredentialStatus(policy: PolicySnapshot): boolean {
+		return policy.parents.firecrawl.enabled && this.inventory.some(tool => tool.owner === "firecrawl" && policy.tools[tool.id]?.enabled);
+	}
+
+	private credentialStatus(policy: PolicySnapshot) {
+		// A saved reference is enough to display disabled Firecrawl's setup state.
+		// Only enabled tools need protected-store availability checked at a boundary.
+		if (!policy.credentials.firecrawl.reference) return Promise.resolve("missing" as const);
+		if (!this.needsCredentialStatus(policy)) {
+			return Promise.resolve("configured" as const);
+		}
+		return this.credentials.status(policy);
+	}
+
 	private reconcileSnapshot(boundary = false): Promise<AgentToolsSnapshot> {
 		const pending = this.reconcileQueue.catch(() => {}).then(async () => {
 			if (!this.pi || !this.ctx || this.closed) return this.getToolSettings();
@@ -223,18 +246,19 @@ export class ToolPolicyRuntime {
 			this.observe(policy);
 			if (getCachedBackendStatus()?.online !== true && this.inventory.some(tool => tool.requirements.includes("backend")
 				&& policy.tools[tool.id]?.enabled && policy.parents[tool.parent]?.enabled)) await probeBackend();
-			const credential = await this.credentials.status(policy);
+			const credential = await this.credentialStatus(policy);
 			const snapshot = await this.locked(latest => {
 				this.assertSession(generation);
 				this.observe(latest);
 				const currentCredential = latest.credentials.firecrawl.generation === policy.credentials.firecrawl.generation
-					&& latest.credentials.firecrawl.reference === policy.credentials.firecrawl.reference && latest.epoch === policy.epoch ? credential : "unavailable";
+					&& latest.credentials.firecrawl.reference === policy.credentials.firecrawl.reference && latest.epoch === policy.epoch
+					&& (!this.needsCredentialStatus(latest) || this.needsCredentialStatus(policy)) ? credential : "unavailable";
 				if (!boundary && this.busy) return this.formatToolSettings(latest, currentCredential);
 				const eligible = this.inventory.filter(tool => !this.conflicts.has(tool.id) && this.definitions.has(tool.name));
 				this.session = reconcilePolicySession(eligible, latest, this.runtimeState(latest, currentCredential), this.progressive, new Set(this.manual.keys()));
 				const managed = new Set(this.inventory.filter(tool => !this.conflicts.has(tool.id)).map(tool => tool.name));
 				const preserved = this.pi!.getActiveTools().filter(name => !managed.has(name));
-				this.pi!.setActiveTools([...preserved, ...eligible.filter(tool => this.session.activeIds.has(tool.id)).map(tool => tool.name)]);
+				this.setActiveTools([...preserved, ...eligible.filter(tool => this.session.activeIds.has(tool.id)).map(tool => tool.name)]);
 				return this.formatToolSettings(latest, currentCredential);
 			});
 			return this.publish(snapshot);
@@ -243,10 +267,14 @@ export class ToolPolicyRuntime {
 		return pending;
 	}
 
+	private setActiveTools(names: string[]): void {
+		if (this.pi && !isDeepStrictEqual(this.pi.getActiveTools(), names)) this.pi.setActiveTools(names);
+	}
+
 	private applyBlocked(): void {
 		this.session = { epoch: "", appliedRevision: -1, activeIds: new Set() };
 		const managed = new Set(this.inventory.filter(tool => !this.conflicts.has(tool.id)).map(tool => tool.name));
-		this.pi?.setActiveTools(this.pi.getActiveTools().filter(name => !managed.has(name)));
+		this.setActiveTools(this.pi?.getActiveTools().filter(name => !managed.has(name)) ?? []);
 	}
 
 	async activateByName(name: string): Promise<void> {
@@ -281,8 +309,18 @@ export class ToolPolicyRuntime {
 		let policy: PolicySnapshot | null;
 		try { policy = await this.store.read(); } catch { policy = null; }
 		this.observe(policy);
-		const credential = policy ? await this.credentials.status(policy) : "unavailable";
+		const credential = policy ? await this.credentialStatus(policy) : "unavailable";
 		return this.formatToolSettings(policy, credential);
+	}
+
+	private parameters(schema?: object): AgentToolSummary["parameters"] {
+		if (!schema) return {};
+		let parameters = this.schemas.get(schema);
+		if (!parameters) {
+			parameters = JSON.parse(JSON.stringify(schema)) as AgentToolSummary["parameters"];
+			this.schemas.set(schema, parameters);
+		}
+		return parameters;
 	}
 
 	private formatToolSettings(policy: PolicySnapshot | null, credential: "configured" | "missing" | "unavailable"): AgentToolsSnapshot {
@@ -293,7 +331,7 @@ export class ToolPolicyRuntime {
 			const status = resolveToolPolicy(entry, policy, state, this.session, discovery);
 			return {
 				name: entry.name, id: entry.id, parent: entry.parent, description: definition?.description ?? entry.name,
-				parameters: JSON.parse(JSON.stringify(definition?.parameters ?? {})),
+				parameters: this.parameters(definition?.parameters),
 				...status, enabled: policy?.tools[entry.id]?.enabled ?? false,
 				...(this.conflicts.has(entry.id) ? { status: "registration-conflict" as const, available: false, callable: false, active: false } : {}),
 				...(this.busy && policy && (policy.epoch !== this.session.epoch || policy.revision > this.session.appliedRevision)
@@ -304,7 +342,7 @@ export class ToolPolicyRuntime {
 		const activeNames = new Set(this.pi?.getActiveTools() ?? []);
 		for (const tool of this.pi?.getAllTools() ?? []) {
 			if (!managedNames.has(tool.name)) tools.push({ name: tool.name, description: tool.description,
-				parameters: JSON.parse(JSON.stringify(tool.parameters ?? {})), active: activeNames.has(tool.name) });
+				parameters: this.parameters(tool.parameters), active: activeNames.has(tool.name) });
 		}
 		return { tools, settings: {
 			version: policy ? { epoch: policy.epoch, revision: policy.revision } : null,
@@ -343,7 +381,10 @@ export class ToolPolicyRuntime {
 
 	private async publish(prepared?: AgentToolsSnapshot): Promise<AgentToolsSnapshot> {
 		const snapshot = prepared ?? await this.getToolSettings();
-		if (!this.closed) this.onChange?.(snapshot);
+		if (!this.closed && !isDeepStrictEqual(this.published, snapshot)) {
+			this.published = snapshot;
+			this.onChange?.(snapshot);
+		}
 		return snapshot;
 	}
 	async close(): Promise<void> {

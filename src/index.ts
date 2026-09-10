@@ -32,7 +32,6 @@ import {
 import {
 	createHopperSearchToolsTool,
 } from "./tools/hopper-search-tools.js";
-import { withBackendGuard } from "./tools/with-backend-guard.js";
 import { ENV, isProgressiveToolsEnvEnabled } from "./config.js";
 import {
 	createRhinoCaptureModelController,
@@ -159,10 +158,10 @@ function registerHopperPiExtension(
 		if (ctx.sessionManager) bindWorkspace(ctx.cwd, ctx.sessionManager.getSessionId());
 		policy.bind(pi, ctx, isProgressiveToolsEnabled(pi));
 		for (const entry of registeredCatalog) {
-			policy.register(pi, entry.requires === "backend" ? withBackendGuard(entry.tool) : entry.tool);
+			policy.register(pi, entry.tool);
 		}
 		policy.register(pi, searchTool);
-		policy.register(pi, withBackendGuard(RH_CAPTURE_VIEW_CATALOG_ENTRY.tool));
+		policy.register(pi, RH_CAPTURE_VIEW_CATALOG_ENTRY.tool);
 		const names = new Set(pi.getAllTools().map(tool => tool.name));
 		// Decide the whole plugin before registering either tool, avoiding partial replacement.
 		if (firecrawl.tools.some(tool => names.has(tool.name) && !policy.hasRegistration(tool.name))) policy.markPluginConflict("firecrawl");

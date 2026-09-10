@@ -109,19 +109,21 @@ it("filters by search and active state and moves the selection with arrow keys",
 	expect(document.querySelector('[aria-current="true"]')?.getAttribute("data-tool")).toBe("read");
 });
 
-it("polls for activation changes, keeps the selection, and stops requests when disconnected", async () => {
+it("recovers missed activation events with fallback polling, keeps the selection, and stops requests when disconnected", async () => {
 	vi.useFakeTimers();
 	await render();
 	await act(async () => toolButtons().find((button) => button.dataset.tool === "gh_edit")!.click());
 	vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ tools: tools.map((tool) => ({ ...tool, active: true })) })));
 	await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+	expect(fetch).toHaveBeenCalledOnce();
+	await act(async () => { await vi.advanceTimersByTimeAsync(27_000); });
 	expect(document.body.textContent).toContain("3 active · 3 registered");
 	expect(detail()?.querySelector("h2")?.textContent).toBe("gh_edit");
 	expect(detail()?.textContent).toContain("Active");
 	expect(detail()?.textContent).not.toContain("Inactive");
 	await render(false);
 	vi.mocked(fetch).mockClear();
-	await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+	await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
 	expect(fetch).not.toHaveBeenCalled();
 	expect(document.body.textContent).toContain("Disconnected.");
 });
@@ -184,7 +186,7 @@ it("keeps mobile back navigation when polling removes the selected tool", async 
 	await render();
 	await act(async () => toolButtons()[0].click());
 	vi.mocked(fetch).mockImplementation(async () => new Response(JSON.stringify({ tools: [] })));
-	await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+	await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
 	expect(detail()).toBeNull();
 	const back = Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "All tools");
 	expect(back).toBeDefined();

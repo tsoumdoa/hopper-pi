@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ToolPolicyStore } from "./tool-policy-store.js";
 import { ToolCredentials, type ProtectedCredentialBackend } from "./tool-credentials.js";
-import type { ToolPolicyDescriptor } from "./tool-policy.js";
+import { publishFirecrawlCredential, type ToolPolicyDescriptor } from "./tool-policy.js";
 
 const inventory: ToolPolicyDescriptor[] = [{ id: "test", name: "test", owner: "hopper", parent: "hopper.rhino", defaultActive: true, requirements: [] }];
 const directories: string[] = [];
@@ -21,6 +21,39 @@ async function create() {
 afterEach(async () => { await Promise.all(stores.splice(0).map(store => store.close())); await Promise.all(directories.splice(0).map(directory => rm(directory, { recursive: true, force: true }))); });
 
 describe("authoritative policy persistence", () => {
+	it("migrates catalog additions once and retains opt-outs across mixed catalogs", async () => {
+		const original = await create();
+		await original.update(await original.read(), { target: "tools", id: "test", enabled: false });
+		await original.update(await original.read(), { target: "parents", id: "hopper.rhino", enabled: false });
+		await original.transition(current => publishFirecrawlCredential(current, { ...current, generation: 0 }, "00000000-0000-4000-8000-000000000001", false));
+		const before = await original.read();
+		const added = { ...inventory[0], id: "next", name: "next" };
+		const newer = new ToolPolicyStore([...inventory, added], { directory: original.directory });
+		const retired = new ToolPolicyStore([added], { directory: original.directory });
+		stores.push(newer, retired);
+		const migrated = await newer.read();
+		expect(migrated).toEqual({ ...before, revision: before.revision + 1, tools: {
+			...before.tools, next: { enabled: true, enabledAt: before.revision + 1 },
+		} });
+		expect(await newer.read()).toEqual(migrated);
+		expect(await original.read()).toEqual(migrated);
+		expect(await retired.read()).toEqual(migrated);
+		expect(await original.update(before, { target: "tools", id: "test", enabled: true })).toMatchObject({ ok: false, code: "conflict" });
+		await retired.update(migrated, { target: "tools", id: "next", enabled: false });
+		expect((await original.read()).tools).toMatchObject({ test: { enabled: false }, next: { enabled: false } });
+		expect(JSON.parse(await readFile(join(original.directory, "tool-settings.json"), "utf8"))).toEqual(await newer.read());
+		await expect(newer.repair()).rejects.toThrow("Tool settings are unavailable");
+	});
+
+	it("still rejects malformed retired entries instead of treating them as catalog changes", async () => {
+		const store = await create();
+		const policy = await store.read();
+		const json = JSON.stringify({ ...policy, tools: { ...policy.tools, retired: { enabled: "false", enabledAt: 0 } } });
+		await writeFile(join(store.directory, "tool-settings.json"), json);
+		await expect(store.read()).rejects.toThrow("Tool settings are unavailable");
+		expect(await readFile(join(store.directory, "tool-settings.json"), "utf8")).toBe(json);
+	});
+
 	it("drains lock operations on close and rejects new work", async () => {
 		const store = await create();
 		let entered!: () => void, resume!: () => void;

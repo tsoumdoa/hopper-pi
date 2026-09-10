@@ -2,14 +2,10 @@ import { Type } from "@earendil-works/pi-ai";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { FirecrawlClient, FirecrawlError, type FirecrawlOptions, type FirecrawlToolName } from "./client.js";
 
-export const FIRECRAWL_PLUGIN = {
-	id: "firecrawl", displayName: "Firecrawl", defaultEnabled: false,
-	configurationRequirements: ["firecrawl-key"],
-	tools: [
-		{ id: "firecrawl.tool.search", name: "web_search", owner: "firecrawl", parent: "firecrawl", defaultActive: false, requirements: ["firecrawl-key"] },
-		{ id: "firecrawl.tool.fetch", name: "web_fetch", owner: "firecrawl", parent: "firecrawl", defaultActive: false, requirements: ["firecrawl-key"] },
-	],
-} as const;
+export const FIRECRAWL_TOOLS = [
+	{ id: "firecrawl.tool.search", name: "web_search", owner: "firecrawl", parent: "firecrawl", defaultActive: false, requirements: ["firecrawl-key"] },
+	{ id: "firecrawl.tool.fetch", name: "web_fetch", owner: "firecrawl", parent: "firecrawl", defaultActive: false, requirements: ["firecrawl-key"] },
+] as const;
 
 export function createFirecrawlPlugin(options: FirecrawlOptions) {
 	const client = new FirecrawlClient(options);
@@ -34,7 +30,7 @@ export function createFirecrawlPlugin(options: FirecrawlOptions) {
 		parameters: Type.Object({ url: Type.String({ minLength: 1, maxLength: 8192 }) }),
 		execute: async (_id, params, signal) => result(() => client.scrape(params as { url: string }, signal)),
 	}];
-	return { descriptor: FIRECRAWL_PLUGIN, tools, abortAll: () => client.abortAll(), abortTool: (name: FirecrawlToolName) => client.abortTool(name) };
+	return { tools, abortAll: () => client.abortAll(), abortTool: (name: FirecrawlToolName) => client.abortTool(name) };
 }
 
 export type { FirecrawlOptions, FirecrawlAdmission, FirecrawlToolName } from "./client.js";

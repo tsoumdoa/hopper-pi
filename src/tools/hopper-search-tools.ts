@@ -114,10 +114,8 @@ export function clampSearchLimit(limit: number | undefined): number {
 export function rankHopperTools(
 	catalog: readonly HopperToolCatalogEntry[],
 	query: string,
-	limit?: number,
 ): { matches: ToolSearchMatch[]; noMatch?: ToolSearchNoMatchHint } {
 	const tokens = tokenize(query);
-	const cappedLimit = clampSearchLimit(limit);
 
 	if (tokens.length === 0) {
 		return {
@@ -147,7 +145,7 @@ export function rankHopperTools(
 			return a.entry.tool.name.localeCompare(b.entry.tool.name);
 		});
 
-	const matches: ToolSearchMatch[] = scored.slice(0, cappedLimit).map((row) => ({
+	const matches: ToolSearchMatch[] = scored.map((row) => ({
 		name: row.entry.tool.name,
 		group: row.entry.group,
 		score: row.score,
@@ -194,7 +192,7 @@ export async function activateSearchMatches(
 	options: ActivateSearchMatchesOptions,
 ): Promise<ActivateSearchMatchesResult> {
 	const limit = clampSearchLimit(options.limit);
-	const ranked = rankHopperTools(catalog, query, Math.max(limit * 3, MAX_SEARCH_LIMIT));
+	const ranked = rankHopperTools(catalog, query);
 	const active = pi.getActiveTools();
 	const activeSet = new Set(active);
 

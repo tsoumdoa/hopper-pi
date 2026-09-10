@@ -108,6 +108,25 @@ test("rankHopperTools returns actionable no-match hints", () => {
 	assert.ok(result.noMatch.suggestions.length > 0);
 });
 
+test("discovery reaches inactive tools after ten active or unavailable matches", async () => {
+	const catalog = Array.from({ length: 12 }, (_, index) => ({
+		...HOPPER_REGISTERED_CATALOG[0],
+		tool: { ...HOPPER_REGISTERED_CATALOG[0].tool, name: `tool_${String(index).padStart(2, "0")}` },
+		keywords: ["review"],
+	}));
+	for (const active of [[], catalog.slice(0, 10).map(entry => entry.tool.name)]) {
+		const activated: string[] = [];
+		const result = await activateSearchMatches({ getActiveTools: () => active }, catalog, "review", {
+			registeredNames: new Set(catalog.slice(10).map(entry => entry.tool.name)),
+			limit: 1,
+			activate: async name => { activated.push(name); },
+		});
+		assert.deepEqual(activated, ["tool_10"]);
+		assert.deepEqual(result.added, ["tool_10"]);
+		assert.equal(result.truncated, true);
+	}
+});
+
 test("activateSearchMatches is additive and respects limit", async () => {
 	const catalog = withSearchCatalog();
 	let active = ["read", "rh_run_script", "hopper_search_tools", "gh_get_canvas"];

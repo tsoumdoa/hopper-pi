@@ -1,4 +1,3 @@
-import { admitCurrentToolDispatch } from "../services/tool-policy-context.js";
 import { clearDocumentGuidAliases } from "../services/guid-shortener.js";
 import type { DocumentTransactionState } from "../types/document-management.js";
 import {
@@ -444,7 +443,6 @@ export class RuntimeRpc {
 		args: RequestArgsFor<O>,
 		options: RpcCallOptions = {},
 	): Promise<RpcOperationResponse<O>> {
-		await admitCurrentToolDispatch();
 		const response = await this.transport.call(operation, args, options);
 		if ("source" in response) throw new RpcOutcomeUnknownError(response);
 		if (response.result.class !== "completed") {

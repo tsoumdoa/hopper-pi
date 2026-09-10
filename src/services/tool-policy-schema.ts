@@ -1,4 +1,4 @@
-import { PARENT_DEFAULTS, type PolicySnapshot, type ToolPolicyDescriptor } from "./tool-policy.js";
+import { PARENT_DEFAULTS, type PolicySnapshot } from "./tool-policy.js";
 
 export type PolicyDecodeResult = { ok: true; snapshot: PolicySnapshot }
 	| { ok: false; code: "invalid-settings" | "unsupported-schema" };
@@ -13,9 +13,9 @@ function counter(value: unknown): value is number {
 	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
-/** No fallback to defaults, and no raw parser messages that might contain secrets.
- * There are no prior tool-settings schemas to migrate in this first version. */
-export function decodeToolPolicy(json: string, inventory: readonly ToolPolicyDescriptor[]): PolicyDecodeResult {
+/** Validate storage independently of the installed tool catalog. Missing catalog
+ * entries are added under the store lock; retired entries retain their preferences. */
+export function decodeToolPolicy(json: string): PolicyDecodeResult {
 	const invalid = { ok: false, code: "invalid-settings" } as const;
 	let value: unknown;
 	try { value = JSON.parse(json); } catch { return invalid; }
@@ -24,8 +24,7 @@ export function decodeToolPolicy(json: string, inventory: readonly ToolPolicyDes
 	if (!keys(value, ["schemaVersion", "epoch", "revision", "parents", "tools", "credentials"])
 		|| value.schemaVersion !== 1 || typeof value.epoch !== "string" || !value.epoch || value.epoch.length > 128
 		|| !counter(value.revision) || !record(value.parents) || !record(value.tools)
-		|| !keys(value.parents, Object.keys(PARENT_DEFAULTS))
-		|| !keys(value.tools, inventory.map(tool => tool.id))) return invalid;
+		|| !keys(value.parents, Object.keys(PARENT_DEFAULTS))) return invalid;
 	for (const gate of [...Object.values(value.parents), ...Object.values(value.tools)]) {
 		if (!record(gate) || !keys(gate, ["enabled", "enabledAt"]) || typeof gate.enabled !== "boolean"
 			|| !counter(gate.enabledAt) || gate.enabledAt > value.revision) return invalid;

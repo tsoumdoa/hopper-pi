@@ -283,7 +283,8 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 			}
 		};
 		void refresh();
-		const timer = window.setInterval(() => void refresh(), 3_000);
+		// Websocket events carry changes immediately; polling recovers missed events.
+		const timer = window.setInterval(() => void refresh(), 30_000);
 		return () => { controller.abort(); window.clearInterval(timer); };
 	}, [connected, token, revision]);
 

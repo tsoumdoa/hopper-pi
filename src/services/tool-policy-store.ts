@@ -75,10 +75,17 @@ export class ToolPolicyStore {
 			throw new ToolSettingsError();
 		}
 		this.observed = true;
-		const decoded = decodeToolPolicy(json, this.inventory);
+		const decoded = decodeToolPolicy(json);
 		if (!decoded.ok) throw new ToolSettingsError();
 		// Restore a deleted marker while the settings themselves remain readable.
 		await this.mark();
+		const missing = this.inventory.filter(tool => !Object.hasOwn(decoded.snapshot.tools, tool.id));
+		if (missing.length) {
+			if (decoded.snapshot.revision === Number.MAX_SAFE_INTEGER) throw new ToolSettingsError();
+			decoded.snapshot.revision++;
+			for (const tool of missing) decoded.snapshot.tools[tool.id] = { enabled: true, enabledAt: decoded.snapshot.revision };
+			await this.write(decoded.snapshot);
+		}
 		return decoded.snapshot;
 	}
 	/** Keep callbacks short. Provider, backend and protected-store work belongs outside this lock. */
@@ -105,7 +112,7 @@ export class ToolPolicyStore {
 			try {
 				const damaged = await readFile(join(this.directory, "tool-settings.json"));
 				// A stale recovery dialog must not erase a now-healthy policy. Use revisioned reset instead.
-				if (decodeToolPolicy(damaged.toString("utf8"), this.inventory).ok) throw new ToolSettingsError();
+				if (decodeToolPolicy(damaged.toString("utf8")).ok) throw new ToolSettingsError();
 				const backup = await open(join(this.directory, `tool-settings.damaged.${randomUUID()}.json`), "wx", 0o600);
 				try { await backup.writeFile(damaged); await backup.sync(); } finally { await backup.close(); }
 			} catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new ToolSettingsError(); }
