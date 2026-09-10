@@ -16,6 +16,7 @@ export interface EnsureSharedHostOptions {
 	entrypoint: string;
 	hostArguments?: string[];
 	timeoutMs?: number;
+	onBrowserReady?: (discovery: HostDiscovery) => void;
 	/** Test seam; production always uses a detached structured spawn. */
 	spawnHost?: (state: ControlState) => Promise<void>;
 }
@@ -28,7 +29,13 @@ export async function ensureSharedHost(
 		throw new Error(
 			"Shared host was intentionally stopped; run HopperCode explicitly to start it",
 		);
-	const existing = await healthyDiscovery(options.control, state);
+	let announcedEpoch: string | undefined;
+	const browserReady = (discovery: HostDiscovery) => {
+		if (announcedEpoch === discovery.hostEpoch) return;
+		announcedEpoch = discovery.hostEpoch;
+		options.onBrowserReady?.(discovery);
+	};
+	const existing = await healthyDiscovery(options.control, state, browserReady);
 	if (existing) return existing;
 	const deadline = Date.now() + (options.timeoutMs ?? 15000);
 	if (await endpointOccupied(state.endpointPort)) {
@@ -52,7 +59,7 @@ export async function ensureSharedHost(
 				current.revision !== state.revision
 			)
 				throw new Error("Shared startup was superseded by newer host intent");
-			const replacement = await healthyDiscovery(options.control, state);
+			const replacement = await healthyDiscovery(options.control, state, browserReady);
 			if (replacement) return replacement;
 			if (Date.now() >= deadline)
 				throw new Error(
@@ -107,7 +114,7 @@ export async function ensureSharedHost(
 			current.revision !== state.revision
 		)
 			throw new Error("Shared startup was superseded by newer host intent");
-		const discovery = await healthyDiscovery(options.control, state);
+		const discovery = await healthyDiscovery(options.control, state, browserReady);
 		if (discovery) return discovery;
 		await new Promise((resolve) => setTimeout(resolve, 100));
 	}
@@ -118,6 +125,7 @@ export async function ensureSharedHost(
 async function healthyDiscovery(
 	control: SharedHostControl,
 	state: ControlState,
+	onBrowserReady?: (discovery: HostDiscovery) => void,
 ): Promise<HostDiscovery | null> {
 	const discovery = control.readDiscovery();
 	if (!discovery) return null;
@@ -139,14 +147,14 @@ async function healthyDiscovery(
 			{ signal: AbortSignal.timeout(750), redirect: "error" },
 		);
 		if (!response.ok) return null;
-		const health = (await response.json()) as Partial<HostDiscovery> & { ready?: boolean };
-		return health.ready === true && health.hostEpoch === discovery.hostEpoch &&
+		const health = (await response.json()) as Partial<HostDiscovery> & { ready?: boolean; listening?: boolean };
+		const verified = health.hostEpoch === discovery.hostEpoch &&
 			health.protocolVersion === discovery.protocolVersion &&
 			health.schemaVersion === discovery.schemaVersion &&
 			health.journalIdentity === state.journalIdentity &&
-			health.dataDirectory === state.dataDirectory
-			? discovery
-			: null;
+			health.dataDirectory === state.dataDirectory;
+		if (verified && (health.listening || health.ready)) onBrowserReady?.(discovery);
+		return verified && health.ready === true ? discovery : null;
 	} catch {
 		return null;
 	}

@@ -4,6 +4,8 @@ The shared host runs outside Rhino and owns conversations, model sessions, task 
 
 The first HopperCode launch starts a detached Node host. That Rhino process does not own the host: closing it leaves the same host and browser connection serving the remaining Rhino processes. There is no leader election. After the last registered Rhino process exits, the host waits about five seconds, drains tasks, saves history, and exits. Browser closure, document closure, and transport loss do not trigger shutdown while a registered Rhino process remains alive. An initial launch has sixty seconds to register, and an unexpired managed Rhino launch also postpones shutdown. A subsequent HopperCode launch starts a new host; if the old host is still draining, it waits for the endpoint to close first.
 
+The Web UI opens as soon as the shared HTTP server is available. It shows a loading state while the AI runtime initializes and Rhino registers. The launcher does not load the AI runtime; the detached host imports it after binding HTTP. Browser availability is separate from authenticated native readiness. An early browser waits for its launching Rhino before restoring or creating a conversation, and subsequent registration notifications do not open duplicate tabs.
+
 ## Ownership and scheduling
 
 Each message captures its selected document and accessible targets. Its root task can edit the selected document directly and delegate to other allowed documents. Child tasks use separate Pi sessions and inherit only their assignment and selected attachments. A child cannot expand document or launch authority.

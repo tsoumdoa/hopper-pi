@@ -1432,6 +1432,40 @@ it("reconnects to the same shared endpoint and retries a captured multi-target c
 	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("");
 });
 
+it("shows startup progress and waits for its Rhino before restoring or creating a conversation", async () => {
+	await act(async () => root.unmount());
+	history.replaceState(null, "", "/?instance=new-rhino&starting=1#credential");
+	root = createRoot(container);
+	await act(async () => root.render(createElement(HopperStoreProvider, null, createElement(App))));
+	let early = Socket.sockets.at(-1)!;
+	expect(container.textContent).toContain("Starting Hopper…");
+	expect(sendButton().disabled).toBe(true);
+	vi.useFakeTimers();
+	await act(async () => {
+		early.onopen?.();
+		early.onclose?.({ code: 1013, reason: "Host is initializing; retry shortly" });
+	});
+	expect(container.textContent).not.toContain("Connection to the local Hopper host was lost");
+	await act(async () => vi.advanceTimersByTimeAsync(250));
+	early = Socket.sockets.at(-1)!;
+	await act(async () => {
+		early.onopen?.();
+		early.receive({ type: "shared_snapshot", snapshot });
+	});
+	expect(container.textContent).toContain("Starting Hopper…");
+	expect(container.querySelector("h1")!.textContent).toBe("New chat");
+	expect(early.sent.map((command) => command.type)).toEqual(["authenticate"]);
+	expect(sendButton().disabled).toBe(true);
+	await act(async () => early.receive({ type: "shared_snapshot", snapshot: {
+		...snapshot,
+		conversationSession: { id: "new-session", afterConversationSequence: 2 },
+		targets: [{ ...snapshot.targets[0], lifecycleInstanceId: "new-rhino" }],
+	} }));
+	expect(container.textContent).not.toContain("Starting Hopper…");
+	expect(new URLSearchParams(location.search).has("starting")).toBe(false);
+	expect(early.sent.filter((command) => command.type === "create_conversation")).toHaveLength(1);
+});
+
 it.each([4001, 4003])("does not take control automatically after close code %s", async (code) => {
 	vi.useFakeTimers();
 	await act(async () => socket.onclose?.({ code, reason: "Disconnected" }));

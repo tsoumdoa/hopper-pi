@@ -112,12 +112,42 @@ internal sealed class SharedNodeAttachment : IDisposable
         info.ArgumentList.Add(entry); info.ArgumentList.Add("--ensure-host");
         if (explicitStart) info.ArgumentList.Add("--explicit-start");
         using var launcher = Process.Start(info) ?? throw new InvalidOperationException("Could not start shared host launcher.");
-        var stdout = launcher.StandardOutput.ReadToEndAsync(); var stderr = launcher.StandardError.ReadToEndAsync();
+        var stderr = launcher.StandardError.ReadToEndAsync();
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); deadline.CancelAfter(TimeSpan.FromSeconds(20));
+        var stdout = ObserveBrowserReadyAsync(launcher, deadline.Token);
         await launcher.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
         await stdout.ConfigureAwait(false);
         var error = await stderr.ConfigureAwait(false);
         if (launcher.ExitCode != 0) throw new InvalidOperationException("Shared host startup failed: " + error);
+    }
+
+    private async Task ObserveBrowserReadyAsync(Process launcher, CancellationToken cancellationToken)
+    {
+        while (await launcher.StandardOutput.ReadLineAsync().WaitAsync(cancellationToken).ConfigureAwait(false) is { } line)
+        {
+            JsonDocument message;
+            try { message = JsonDocument.Parse(line); }
+            catch (JsonException) { continue; }
+            using (message)
+            {
+                if (!message.RootElement.TryGetProperty("type", out var type) || type.GetString() != "shared_browser_ready") continue;
+                var control = SharedNativeHost.Read("control.json");
+                var discovery = SharedNativeHost.Read("discovery.json");
+                if (!SharedNativeHost.CompatibleDiscovery(control, discovery)
+                    || control.GetProperty("desiredState").GetString() != "running"
+                    || control.GetProperty("revision").GetInt64() != discovery.GetProperty("revision").GetInt64()
+                    || message.RootElement.GetProperty("hostEpoch").GetString() != discovery.GetProperty("hostEpoch").GetString()
+                    || message.RootElement.GetProperty("port").GetInt32() != control.GetProperty("endpointPort").GetInt32()) continue;
+                PublishBrowserUri(control, starting: true);
+            }
+        }
+    }
+
+    private void PublishBrowserUri(JsonElement control, bool starting = false)
+    {
+        var port = control.GetProperty("endpointPort").GetInt32();
+        ReadyUri = new Uri($"http://127.0.0.1:{port}/?instance={Uri.EscapeDataString(_lifecycle)}{(starting ? "&starting=1" : "")}#{control.GetProperty("browserCredential").GetString()}");
+        Ready?.Invoke(ReadyUri);
     }
 
     private async Task Register(CancellationToken cancellationToken)
@@ -160,8 +190,7 @@ internal sealed class SharedNodeAttachment : IDisposable
         }
         _epoch = epoch;
         _bootstrapRegistered = true;
-        ReadyUri = new Uri($"http://127.0.0.1:{port}/?instance={Uri.EscapeDataString(_lifecycle)}#{control.GetProperty("browserCredential").GetString()}");
-        Ready?.Invoke(ReadyUri);
+        PublishBrowserUri(control);
     }
 
     private static object CurrentProcessIdentity()

@@ -1,27 +1,20 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { HostConfig } from "../config.js";
-import { EmbeddedPiHost } from "../pi-runtime.js";
+import type { EmbeddedPiHost } from "../pi-runtime.js";
 import { SharedHostControl } from "./control.js";
 import { ensureSharedHost } from "./ensure-host.js";
 import { TaskJournal } from "./journal.js";
 import { SharedTaskService } from "./task-service.js";
 import { SharedRegistry } from "./registry.js";
 import { SharedBackend } from "./backend.js";
-import { createPiTaskDriver } from "./pi-driver.js";
 import { createSharedBrowserServer } from "./browser-server.js";
-import { SharedNativeRuntime } from "./native-runtime.js";
-import { Type } from "@earendil-works/pi-ai";
+import type { SharedNativeRuntime } from "./native-runtime.js";
 import { SharedRecoveryService } from "./recovery.js";
 import { DocumentGrantService } from "./grants.js";
 import { GeometryTransferService } from "./transfer.js";
-import {
-	collectDelegationResults,
-	delegationBindingSchema,
-	selectDelegationImages,
-} from "./delegation.js";
 import { createNativeActionAdapters } from "./native-actions.js";
-import { createLaunchCoordinator } from "./launch-coordinator.js";
+import type { createLaunchCoordinator } from "./launch-coordinator.js";
 import { validateTargetBinding } from "../../protocol/shared-execution.js";
 
 function sharedLimit(name: string, fallback: number): number {
@@ -63,6 +56,7 @@ export async function startSharedHost(
 			...initialize,
 			entrypoint,
 			hostArguments: forwarded,
+			onBrowserReady: (host) => process.stdout.write(`${JSON.stringify({ type: "shared_browser_ready", hostEpoch: host.hostEpoch, port: host.endpointPort })}\n`),
 		});
 		process.stdout.write(
 			`${JSON.stringify({ type: "shared_ready", hostEpoch: discovery.hostEpoch, port: discovery.endpointPort })}\n`,
@@ -134,10 +128,7 @@ export async function startSharedHost(
 			process.stderr.write(
 				`[shared-host] Registration failed: ${error instanceof Error ? error.message : "Unknown registration failure"}\n`,
 			),
-		health: () =>
-			backend && !closing
-				? { ...discovery, registrationToken: undefined, ready: true }
-				: { ready: false },
+		health: () => ({ ...discovery, registrationToken: undefined, listening: !closing, ready: Boolean(backend && !closing) }),
 		register: async (request) => {
 			if (closing)
 				throw new Error("Host is stopping; registrations are closed");
@@ -167,6 +158,15 @@ export async function startSharedHost(
 		})());
 	try {
 		await control.acquireOwnership(browser.server, state.revision);
+		await control.publish(discovery);
+		// Serve the loading UI before importing and initializing the AI runtime.
+		// The short-lived --ensure-host launcher never loads these modules.
+		const [{ EmbeddedPiHost }, { createPiTaskDriver }, { Type },
+			{ collectDelegationResults, delegationBindingSchema, selectDelegationImages },
+			{ createLaunchCoordinator }, { SharedNativeRuntime }] = await Promise.all([
+			import("../pi-runtime.js"), import("./pi-driver.js"), import("@earendil-works/pi-ai"),
+			import("./delegation.js"), import("./launch-coordinator.js"), import("./native-runtime.js"),
+		]);
 		journal = new TaskJournal(join(state.dataDirectory, "journal.sqlite"));
 		if (journal.identity !== state.journalIdentity)
 			throw new Error(
@@ -446,7 +446,6 @@ export async function startSharedHost(
 					refreshing = false;
 				});
 		}, 3000);
-		await control.publish(discovery);
 		process.once("SIGINT", () => {
 			void close();
 		});

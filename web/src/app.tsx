@@ -1,4 +1,4 @@
-import { Box, Power } from "lucide-react";
+import { Box, Loader2, Power } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SharedBrowserCommand } from "../../src/host/shared/browser-protocol.js";
 import type { TargetBinding } from "../../src/protocol/shared-execution.js";
@@ -108,6 +108,7 @@ export function App() {
 	const credential = useRef<string>(undefined);
 	const ready = useRef(false);
 	const startupRequested = useRef(false);
+	const awaitingInitialRegistration = useRef(new URLSearchParams(window.location.search).get("starting") === "1");
 	const conversationSession = useRef<string | undefined>(undefined);
 	const pending = useRef(new Map<string, SharedBrowserCommand>());
 	const [, refreshPending] = useState(0);
@@ -139,20 +140,20 @@ export function App() {
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		let deadline: ReturnType<typeof setTimeout> | undefined;
 		const isCurrent = () => !disposed && socket.current === ws;
-		const retry = () => {
+		const retry = (starting = false) => {
 			if (!isCurrent() || blocked.current) return;
 			ready.current = false;
 			socket.current = undefined;
 			if (deadline) clearTimeout(deadline);
 			if (timer) clearTimeout(timer);
 			actions.setBackendDetail("Hopper Code instances unknown while offline");
-			actions.setConnection("disconnected", "Reconnecting to the local Hopper host…");
+			actions.setConnection(starting ? "connecting" : "disconnected", starting ? "Starting Hopper…" : "Reconnecting to the local Hopper host…");
 			ws.close();
-			timer = setTimeout(() => setNonce((n) => n + 1), 1500);
+			timer = setTimeout(() => setNonce((n) => n + 1), starting ? 250 : 1500);
 		};
 		const armDeadline = () => {
 			if (deadline) clearTimeout(deadline);
-			deadline = setTimeout(retry, 10_000);
+			deadline = setTimeout(() => retry(), 10_000);
 		};
 		actions.setConnection("connecting", nonce ? "Reconnecting to the local Hopper host" : "Opening the local Hopper host");
 		const url = new URL("/ws-shared", location.href);
@@ -176,6 +177,20 @@ export function App() {
 					if (deadline) clearTimeout(deadline);
 					deadline = undefined;
 					const next = message.snapshot as SharedSnapshot;
+					// An early browser can connect before its Rhino registers. Do not
+					// restore a previous session or create a chat until that registration arrives.
+					if (awaitingInitialRegistration.current && initialInstance.current &&
+						!next.targets.some((target) => target.lifecycleInstanceId === initialInstance.current && target.admission !== "detached")) {
+						actions.setConnection("authenticating", "Waiting for Rhino to connect…");
+						armDeadline();
+						break;
+					}
+					if (awaitingInitialRegistration.current) {
+						awaitingInitialRegistration.current = false;
+						const url = new URL(window.location.href);
+						url.searchParams.delete("starting");
+						window.history.replaceState(window.history.state, "", url);
+					}
 					setSnapshot(next);
 					actions.applySnapshot(next.runtime);
 					const available = readyTargets(next).length;
@@ -278,10 +293,10 @@ export function App() {
 					? `${event.reason || "Authentication failed"}. Run _HopperCode in Rhino to open a fresh link.`
 					: `${event.reason || "Disconnected"}. Reconnect to take control in this tab.`);
 			} else {
-				retry();
+				retry(event.code === 1013);
 			}
 		};
-		ws.onerror = retry;
+		ws.onerror = () => retry();
 		armDeadline();
 		// A half-open socket can survive sleep without receiving a close event.
 		const probe = () => {
@@ -523,7 +538,12 @@ export function App() {
 					</Button>
 				</header>
 				<ConnectionBanner connection={connection} onReconnect={reconnect} />
-				<TaskThread
+				{!snapshot && (connection.status === "connecting" || connection.status === "authenticating") ? (
+					<div role="status" className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted">
+						<Loader2 className="size-5 animate-spin" />
+						<p>Starting Hopper…</p>
+					</div>
+				) : <TaskThread
 					snapshot={snapshot}
 					tasks={orderedTasks}
 					connected={connected}
@@ -531,7 +551,7 @@ export function App() {
 					labelFor={labelFor}
 					commands={commands}
 					onSuggestion={useSuggestion}
-				/>
+				/>}
 				<Composer
 					key={conversationId}
 					ref={composer}

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -222,9 +222,10 @@ it("lets a second Rhino join the winner while it has bound HTTP but not publishe
 				protocolVersion: 2, schemaVersion: 2, registrationToken: "private",
 			};
 			let ready = false;
-			const server = createServer((_request, response) => response.end(JSON.stringify(ready ? { ...discovery, ready: true } : { ready: false })));
+			const server = createServer((_request, response) => response.end(JSON.stringify({ ...discovery, ready, listening: true })));
 			servers.push(server);
 			await options.control.acquireOwnership(server, state.revision);
+			await options.control.publish(discovery);
 			bound();
 			await release;
 			ready = true;
@@ -232,14 +233,21 @@ it("lets a second Rhino join the winner while it has bound HTTP but not publishe
 		},
 	});
 	await listening;
-	const second = ensureSharedHost({ ...options, explicitStart: true, timeoutMs: 2000, spawnHost: async () => { spawns++; } });
-	const timer = setTimeout(publish, 150);
+	const onBrowserReady = vi.fn();
+	let completed = false;
+	const second = ensureSharedHost({ ...options, explicitStart: true, timeoutMs: 2000, onBrowserReady, spawnHost: async () => { spawns++; } });
+	void second.then(() => { completed = true; });
 	try {
+		await vi.waitFor(() => expect(onBrowserReady).toHaveBeenCalledOnce());
+		expect(completed).toBe(false);
+		expect(onBrowserReady.mock.calls[0]![0].hostEpoch).toBe("shared-winner");
+		publish();
 		const [a, b] = await Promise.all([first, second]);
 		expect(b).toEqual(a);
 		expect(b.hostEpoch).toBe("shared-winner");
 		expect(spawns).toBe(1);
-	} finally { clearTimeout(timer); publish(); await first; }
+		expect(onBrowserReady).toHaveBeenCalledOnce();
+	} finally { publish(); await first; }
 });
 
 it("honors Stop while another Rhino waits for the initializing owner", async () => {
