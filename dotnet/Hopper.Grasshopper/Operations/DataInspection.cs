@@ -153,12 +153,40 @@ namespace rhino_zmq_poc
         {
             var row = new Dictionary<string, object> { ["index"] = index, ["type"] = Clip(item?.GetType().Name ?? "null") };
             if (item == null) { row["value"] = null; return row; }
+            // Unknown goo can execute arbitrary formatting/validation on the UI thread.
+            // A byte limit applied after those calls would not bound their allocations.
+            if (item.GetType().Assembly != typeof(GH_Number).Assembly)
+                return Omitted(row);
+            if (item is GH_ObjectWrapper wrapper)
+            {
+                object wrapped = wrapper.Value;
+                row["wrappedType"] = Clip(wrapped?.GetType().FullName ?? "null");
+                switch (wrapped)
+                {
+                    case null: row["value"] = null; row["valid"] = false; break;
+                    case string text: row["value"] = Clip(text); row["truncated"] = text.Length > TextLimit; break;
+                    case bool or byte or sbyte or short or ushort or int or uint or long or ulong or decimal:
+                        row["value"] = wrapped; break;
+                    case double number: row["value"] = Number(number); break;
+                    case float number: row["value"] = Number(number); break;
+                    default: return Omitted(row);
+                }
+                return row;
+            }
+            if (item is not (GH_Number or GH_Integer or GH_Boolean or GH_String or GH_Point or GH_Vector or IGH_GeometricGoo))
+                return Omitted(row);
             try
             {
                 if (item is IGH_Goo goo)
                 {
-                    row["valid"] = goo.IsValid;
-                    if (!goo.IsValid) { row["invalidReason"] = Clip(goo.IsValidWhyNot); row["truncated"] = goo.IsValidWhyNot?.Length > TextLimit; }
+                    bool valid = goo.IsValid;
+                    row["valid"] = valid;
+                    if (!valid)
+                    {
+                        string reason = goo.IsValidWhyNot;
+                        row["invalidReason"] = Clip(reason);
+                        row["truncated"] = reason?.Length > TextLimit;
+                    }
                 }
                 object value;
                 switch (item)
@@ -174,7 +202,7 @@ namespace rhino_zmq_poc
                         value = box.IsValid ? new { boundingBox = new { min = Coordinates(box.Min.X, box.Min.Y, box.Min.Z), max = Coordinates(box.Max.X, box.Max.Y, box.Max.Z) } } : null;
                         row["summary"] = true;
                         break;
-                    default: value = item.ToString(); row["summary"] = true; break;
+                    default: return Omitted(row);
                 }
                 if (value is string description)
                 {
@@ -184,6 +212,13 @@ namespace rhino_zmq_poc
                 row["value"] = value;
             }
             catch (Exception ex) { row["error"] = Clip(ex.Message); }
+            return row;
+        }
+
+        private static object Omitted(Dictionary<string, object> row)
+        {
+            row["summary"] = true;
+            row["omitted"] = "Unsupported value; type only. Formatting and validation were not invoked.";
             return row;
         }
     }

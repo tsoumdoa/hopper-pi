@@ -16,6 +16,7 @@ export const ghInspectDataTool = defineTool({
 		"Every mode is paged. Fetch only relevant pages; never automatically exhaust cursors. " +
 		"Use offset to jump directly to a port, branch, or item. Continue with cursor alone and optional limit. " +
 		"Cursors expire on solution/document changes; refresh after a stale cursor error. Values are bounded, geometry is summarized. " +
+		"Unsupported/custom values return type-only summaries without running their formatters or validators. " +
 		"Phase/locked describe cached data availability, not proof of a current successful result. Input trees are not per-iteration script arguments. " +
 		"Use gh_get_canvas_errors for runtime messages.",
 	parameters: Type.Object({
