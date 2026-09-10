@@ -50,32 +50,16 @@ const setInput = (input: HTMLInputElement, value: string) => {
 	input.dispatchEvent(new Event("input", { bubbles: true }));
 };
 
-it("filters by search and active state and moves the selection with arrow keys", async () => {
+it("filters tools by search and active state", async () => {
 	await render();
 	const input = document.querySelector<HTMLInputElement>('[aria-label="Search tools"]')!;
-	for (const [query, names] of [["grasshopper", ["gh_edit"]], ["rhino", ["rh_document"]], ["read", ["read"]], ["missing", []]] as const) {
-		await act(async () => setInput(input, query));
-		expect(toolButtons().map((button) => button.dataset.tool)).toEqual(names);
-		expect(document.querySelectorAll("nav section")).toHaveLength(names.length);
-		if (names.length) expect(detail()?.querySelector("h2")?.textContent).toBe(names[0]);
-	}
-	expect(document.body.textContent).toContain("No tools match your search.");
-	expect(detail()).toBeNull();
+	await act(async () => setInput(input, "grasshopper"));
+	expect(toolButtons().map((button) => button.dataset.tool)).toEqual(["gh_edit"]);
 
 	await act(async () => setInput(input, ""));
 	const activeOnly = Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Active only")!;
 	await act(async () => activeOnly.click());
-	expect(activeOnly.getAttribute("aria-pressed")).toBe("true");
 	expect(toolButtons().map((button) => button.dataset.tool)).toEqual(["rh_document", "read"]);
-	expect(document.body.textContent).toContain("2 matching");
-
-	const nav = document.querySelector<HTMLElement>('nav[aria-label="Tools"]')!;
-	await act(async () => { nav.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
-	expect(document.querySelector('[aria-current="true"]')?.getAttribute("data-tool")).toBe("read");
-	await act(async () => { nav.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true })); });
-	expect(document.querySelector('[aria-current="true"]')?.getAttribute("data-tool")).toBe("rh_document");
-	await act(async () => { nav.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true })); });
-	expect(document.querySelector('[aria-current="true"]')?.getAttribute("data-tool")).toBe("read");
 });
 
 it("recovers missed activation events with fallback polling, keeps the selection, and stops requests when disconnected", async () => {

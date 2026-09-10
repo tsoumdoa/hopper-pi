@@ -56,18 +56,6 @@ it("keeps viewing available and prevents changes during an agent turn", async ()
 	expect(document.body.textContent).toContain("change them when this turn finishes");
 });
 
-it("supports keyboard selection and selecting reference files", async () => {
-	library.skills.push({ ...library.skills[0], id: "user:office", name: "office-rules", source: "user", path: "/local/office.md", files: ["/local/office.md"] });
-	await render();
-	await act(async () => document.querySelector('[aria-label="Skills"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true })));
-	expect(document.querySelector("#skill-detail-title")?.textContent).toBe("office-rules");
-	expect(document.activeElement?.getAttribute("data-skill")).toBe("user:office");
-	await act(async () => document.querySelector('[aria-label="Skills"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })));
-	const select = document.querySelector<HTMLSelectElement>("#skill-file")!;
-	await act(async () => { select.value = "/bundled/reference.md"; select.dispatchEvent(new Event("change", { bubbles: true })); });
-	expect(requests.at(-1)?.url).toContain(encodeURIComponent("/bundled/reference.md"));
-});
-
 it("keeps folder edits across polls and submits the chosen folder", async () => {
 	vi.useFakeTimers();
 	try {

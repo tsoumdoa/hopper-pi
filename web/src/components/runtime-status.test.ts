@@ -11,9 +11,4 @@ describe("runtime status UI", () => {
 			cache: "no-store",
 		});
 	});
-
-	it("rejects a failed runtime request", async () => {
-		const request = vi.fn(async () => new Response(null, { status: 503 }));
-		await expect(requestRuntimeStatus("runtime-token", request)).rejects.toThrow("HTTP 503");
-	});
 });

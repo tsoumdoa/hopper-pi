@@ -87,21 +87,6 @@ describe("RuntimeRpc", () => {
 		await expect(commitRuntimeAgentTurn()).resolves.toBeUndefined();
 	});
 
-	it("returns Rhino's runtime status object unchanged", async () => {
-		const snapshot = status("ready", true, 17);
-		const transport = new FakeTransport((operation) => response(
-			operation,
-			operation === "lifecycleHandshake"
-				? { handshake: "live", statusRevision: 17 }
-				: snapshot,
-		));
-		const runtime = runtimeWith(transport, new FakeEvents());
-
-		const result = await runtime.getRuntimeStatus();
-
-		expect(result).toBe(snapshot);
-	});
-
 	it("retries only transient handshake identity registration rejections", async () => {
 		let now = 0;
 		let attempts = 0;

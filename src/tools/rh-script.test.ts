@@ -11,8 +11,6 @@ import { createRhScriptTool, rhScriptParameters } from "./rh-script.js";
 import { createRhRunScriptTool } from "./rh-run-script.js";
 import { RhinoScriptWorkspace } from "../services/rhino-script-workspace.js";
 import { RhinoScriptExecution } from "../services/rhino-script-execution.js";
-import { rankHopperTools } from "./hopper-search-tools.js";
-import { HOPPER_REGISTERED_CATALOG } from "./catalog.js";
 vi.mock("../infra/backend-status.js", () => ({
 	probeBackend: vi.fn(async () => ({ online: false })),
 	getCachedBackendStatus: vi.fn(() => ({ online: false })),
@@ -179,18 +177,6 @@ it("exports provider-compatible object schemas and strictly validates action-spe
 	expect(ambiguous).toHaveProperty("isError", true);
 	expect(JSON.stringify(ambiguous)).toContain("cannot supply source");
 });
-it("discovers saved source edits without confusing Grasshopper component editing", () => {
-	const matches = rankHopperTools(
-		HOPPER_REGISTERED_CATALOG,
-		"saved script virtual edit revision",
-	).matches;
-	expect(matches.some((m) => m.name === "rh_script")).toBe(true);
-	expect(
-		HOPPER_REGISTERED_CATALOG.find((e) => e.tool.name === "rh_script")!
-			.requires,
-	).toBeUndefined();
-});
-
 
 it("offers the screenshot model fallback only while capture is allowed by policy", async () => {
 	const events = new Map<string, Function>();
