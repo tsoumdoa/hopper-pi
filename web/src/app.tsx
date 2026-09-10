@@ -373,7 +373,6 @@ export function App() {
 	const cancelTask = (taskId: string) => send({ type: "cancel", requestId: crypto.randomUUID(), conversationId, taskId });
 	const commands = {
 		answer: (questionId: string, answer: string | null) => send({ type: "answer", requestId: crypto.randomUUID(), conversationId, questionId, answer }),
-		cancel: cancelTask,
 		recover: (taskId: string, acknowledgement: string) => send({ type: "recover", requestId: crypto.randomUUID(), conversationId, taskId, acknowledgement }),
 		recoverLaunch: (taskId: string, launchRequestId: string, acknowledgement: string) =>
 			send({ type: "recover_launch", requestId: crypto.randomUUID(), conversationId, taskId, launchRequestId, acknowledgement }),

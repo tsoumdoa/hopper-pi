@@ -99,6 +99,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 	};
 
 	const canSend = !disabled && !submitDisabled && !loading && (draft.trim().length > 0 || images.length > 0) && (!images.length || imagesSupported);
+	const showStop = canAbort && !canSend;
 
 	return (
 		<footer className="shrink-0 px-4 pb-4 pt-1 sm:px-6">
@@ -161,14 +162,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 						</Select>
 					)}
 					<span className="flex-1" />
-					{canAbort && (
-						<Button type="button" size="sm" variant="destructive" disabled={abortDisabled} onClick={onAbort}>
-							<Square className="size-3 fill-current" />
-							Stop
-						</Button>
-					)}
-					<Button type="submit" size="icon-sm" disabled={!canSend} aria-label="Send message" title="Send (Enter)">
-						<ArrowUp className="size-4" />
+					<Button
+						type={showStop ? "button" : "submit"}
+						size="icon-sm"
+						disabled={showStop ? abortDisabled : !canSend}
+						onClick={showStop ? onAbort : undefined}
+						aria-label={showStop ? "Stop" : "Send message"}
+						title={showStop ? "Stop" : "Send (Enter)"}
+					>
+						{showStop ? <Square className="size-3 fill-current" /> : <ArrowUp className="size-4" />}
 					</Button>
 				</div>
 			</form>

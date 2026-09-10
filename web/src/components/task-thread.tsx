@@ -1,4 +1,4 @@
-import { ArrowDown, Box, ChevronRight, CircleAlert, Loader2, Square } from "lucide-react";
+import { ArrowDown, Box, ChevronRight, CircleAlert, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { parseImages, type ImageAttachment } from "../../../src/host/protocol";
 import type { TargetBinding } from "../../../src/protocol/shared-execution.js";
@@ -17,7 +17,6 @@ import { Textarea } from "./ui/textarea";
 import { WorkingTime } from "./working-time";
 
 const KIND_LABELS: Partial<Record<SendMode, string>> = { steer: "Steering note", follow_up: "Follow-up" };
-const ACTIVE_STATES = ["running", "suspending", "awaiting_user"];
 const SETTLED_STATES = ["completed", "cancelled", "failed", "interrupted", "uncertain"];
 
 type TaskInput = { text: string; bindings: TargetBinding[]; attachments?: unknown; kind?: SendMode };
@@ -193,17 +192,15 @@ function LaunchRecovery({ recover }: { recover(acknowledgement: string): boolean
 
 export type TaskThreadCommands = {
 	answer(questionId: string, answer: string | null): boolean;
-	cancel(taskId: string): boolean;
 	recover(taskId: string, acknowledgement: string): boolean;
 	recoverLaunch(taskId: string, launchRequestId: string, acknowledgement: string): boolean;
 };
 
-function TaskReply({ task, snapshot, labelFor, commands, stoppable }: {
+function TaskReply({ task, snapshot, labelFor, commands }: {
 	task: Row;
 	snapshot: SharedSnapshot;
 	labelFor(binding: TargetBinding): string;
 	commands: TaskThreadCommands;
-	stoppable: boolean;
 }) {
 	const state = String(task.state);
 	const input = decode<TaskInput>(task.payload, { text: "", bindings: [] });
@@ -241,12 +238,6 @@ function TaskReply({ task, snapshot, labelFor, commands, stoppable }: {
 					<Loader2 className="size-3.5 animate-spin" />
 					Waiting to start…
 				</p>
-				{stoppable && (
-					<Button size="sm" variant="destructive" onClick={() => commands.cancel(String(task.id))}>
-						<Square className="size-3 fill-current" />
-						Cancel
-					</Button>
-				)}
 			</div>
 		);
 	}
@@ -360,12 +351,11 @@ function TaskReply({ task, snapshot, labelFor, commands, stoppable }: {
 	);
 }
 
-function TaskCard({ task, snapshot, labelFor, commands, stoppable }: {
+function TaskCard({ task, snapshot, labelFor, commands }: {
 	task: Row;
 	snapshot: SharedSnapshot;
 	labelFor(binding: TargetBinding): string;
 	commands: TaskThreadCommands;
-	stoppable: boolean;
 }) {
 	const input = decode<TaskInput>(task.payload, { text: "", bindings: [] });
 	const inputs = snapshot.inputs?.filter((entry) => entry.task_id === task.id) ?? [];
@@ -384,7 +374,7 @@ function TaskCard({ task, snapshot, labelFor, commands, stoppable }: {
 					/>
 				);
 			})}
-			<TaskReply task={task} snapshot={snapshot} labelFor={labelFor} commands={commands} stoppable={stoppable} />
+			<TaskReply task={task} snapshot={snapshot} labelFor={labelFor} commands={commands} />
 		</article>
 	);
 }
@@ -410,7 +400,7 @@ function ChildTask({ task, snapshot, labelFor, commands }: {
 				</span>
 			</summary>
 			<div className="border-t border-line px-3 py-3">
-				<TaskCard task={task} snapshot={snapshot} labelFor={labelFor} commands={commands} stoppable={false} />
+				<TaskCard task={task} snapshot={snapshot} labelFor={labelFor} commands={commands} />
 			</div>
 		</details>
 	);
@@ -483,7 +473,7 @@ export function TaskThread({ snapshot, tasks, connected, conversationId, labelFo
 							task.parent_task_id ? (
 								<ChildTask key={String(task.id)} task={task} snapshot={snapshot} labelFor={labelFor} commands={commands} />
 							) : (
-								<TaskCard key={String(task.id)} task={task} snapshot={snapshot} labelFor={labelFor} commands={commands} stoppable={ACTIVE_STATES.includes(String(task.state)) || task.state === "queued"} />
+								<TaskCard key={String(task.id)} task={task} snapshot={snapshot} labelFor={labelFor} commands={commands} />
 							),
 						)
 					)}

@@ -260,29 +260,48 @@ it("groups child work under its document without diagnostic history", async () =
 	expect(details.nextElementSibling!.textContent).toContain("Next task");
 });
 
-it.each(["queued", "running", "suspending", "awaiting_user"])("keeps the Stop button beside the message input while a task is %s", async (state) => {
+it.each(["queued", "running", "suspending", "awaiting_user"])("uses one square Stop button in place of Send while a task is %s", async (state) => {
 	const task = { id: "cancel-task", conversation_id: "conversation", parent_task_id: null, state, payload: JSON.stringify({ text: "Create a courtyard", bindings: [binding] }) };
 	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [task] } }));
-	const stop = [...container.querySelectorAll<HTMLButtonElement>("footer button")].find(button => button.textContent === "Stop");
-	expect(stop).toBeDefined();
-	expect(stop!.disabled).toBe(false);
-	expect(stop!.classList.contains("border")).toBe(true);
-	expect([...container.querySelectorAll('[aria-label="Conversation"] button')].some(button => button.textContent === "Stop")).toBe(false);
-	await act(async () => stop!.click());
+	const stop = container.querySelector<HTMLButtonElement>('footer button[aria-label="Stop"]')!;
+	expect(stop).not.toBeNull();
+	expect(stop.disabled).toBe(false);
+	expect(stop.textContent).toBe("");
+	expect(stop.querySelector("svg.lucide-square")).not.toBeNull();
+	expect(sendButton()).toBeNull();
+	expect([...container.querySelectorAll('[aria-label="Conversation"] button')].some(button => ["Stop", "Cancel"].includes(button.textContent ?? ""))).toBe(false);
+	await act(async () => stop.click());
 	expect(socket.sent.find(command => command.type === "cancel")).toMatchObject({ taskId: task.id, conversationId: "conversation" });
+	expect(socket.sent.some(command => command.type === "submit")).toBe(false);
 	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [{ ...task, state: "cancelled" }] } }));
-	expect([...container.querySelectorAll("footer button")].some(button => button.textContent === "Stop")).toBe(false);
+	expect(container.querySelector('footer button[aria-label="Stop"]')).toBeNull();
+	expect(sendButton()).not.toBeNull();
 });
 
 it("stops the active task before queued follow-ups and disables Stop while disconnected", async () => {
 	const queued = { id: "queued-task", conversation_id: "conversation", parent_task_id: null, state: "queued", payload: JSON.stringify({ text: "Follow-up", bindings: [binding] }) };
 	const running = { ...queued, id: "running-task", state: "running" };
 	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [queued, running] } }));
-	const stop = [...container.querySelectorAll<HTMLButtonElement>("footer button")].find(button => button.textContent === "Stop")!;
+	const stop = container.querySelector<HTMLButtonElement>('footer button[aria-label="Stop"]')!;
 	await act(async () => stop.click());
 	expect(socket.sent.find(command => command.type === "cancel")).toMatchObject({ taskId: running.id });
 	await act(async () => socket.onclose?.({ code: 4001, reason: "Replaced by another tab" }));
 	expect(stop.disabled).toBe(true);
+});
+
+it("switches the shared button to Send for a follow-up draft and back to Stop after acceptance", async () => {
+	const task = { id: "running-task", conversation_id: "conversation", parent_task_id: null, state: "running", payload: JSON.stringify({ text: "Create a courtyard", bindings: [binding] }) };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [task] } }));
+	await value("#composer-input", "Add a tree afterward");
+	expect(container.querySelector('footer button[aria-label="Stop"]')).toBeNull();
+	expect(sendButton().disabled).toBe(false);
+	await act(async () => sendButton().click());
+	const command = socket.sent.find(command => command.type === "submit");
+	expect(command).toMatchObject({ kind: "follow_up", text: "Add a tree afterward" });
+	expect(socket.sent.some(command => command.type === "cancel")).toBe(false);
+	await act(async () => socket.receive({ type: "command_accepted", requestId: command.requestId, result: { taskId: "follow-up" } }));
+	expect(sendButton()).toBeNull();
+	expect(container.querySelector('footer button[aria-label="Stop"]')).not.toBeNull();
 });
 it("keeps assistant output from each turn and the answered question after continuation", async () => {
 	const task = {
@@ -979,7 +998,8 @@ it("presents an active ask_user question as selectable choices and sends the sel
 	expect(document.querySelector("datalist")).toBeNull();
 	expect(document.querySelector<HTMLInputElement>('input[value="Large"]')!.disabled).toBe(false);
 	expect(document.querySelector("header")!.textContent).toContain("Answer needed");
-	expect(sendButton().disabled).toBe(true);
+	expect(sendButton()).toBeNull();
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.disabled).toBe(true);
 	await act(async () => document.querySelector<HTMLInputElement>('input[value="Large"]')!.click());
 	await act(async () => [...document.querySelectorAll("button")].find((button) => button.textContent === "Continue")!.click());
 	expect(socket.sent.find((command) => command.type === "answer")).toMatchObject({
