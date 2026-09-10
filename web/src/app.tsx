@@ -26,6 +26,7 @@ import { CONNECTED_DETAIL } from "./state/initial-state";
 import { handleServerMessage } from "./state/server-messages";
 import { bindingLabeler, decode, readyTargets, sameBinding, type Row, type SharedSnapshot } from "./state/shared-snapshot";
 
+const CONVERSATION_KEY = "hopper.conversation";
 const SIDEBAR_KEY = "hopper.sidebar.collapsed";
 const ACTIVE_ROOT_STATES = ["running", "suspending", "awaiting_user"];
 
@@ -97,6 +98,11 @@ export function App() {
 	const composer = useRef<ComposerHandle>(null);
 	const currentConversation = useRef(conversationId);
 	currentConversation.current = conversationId;
+	const selectConversation = (id: string) => {
+		currentConversation.current = id;
+		setConversationId(id);
+		try { window.localStorage.setItem(CONVERSATION_KEY, id); } catch { /* Restore from the journal if storage is unavailable. */ }
+	};
 
 	const socket = useRef<WebSocket>(undefined);
 	const credential = useRef<string>(undefined);
@@ -176,11 +182,29 @@ export function App() {
 					actions.setConnection("connected", CONNECTED_DETAIL, 0);
 					if (!ready.current) {
 						ready.current = true;
-						// A new page starts a fresh chat. Reconnects retry the same request.
+						// Restore once per page; reconnects keep the selection and pending request IDs.
 						if (!startupRequested.current) {
 							startupRequested.current = true;
-							const command: SharedBrowserCommand = { type: "create_conversation", requestId: crypto.randomUUID(), title: "New chat" };
-							pending.current.set(command.requestId, command);
+							let saved: string | null = null;
+							try { saved = window.localStorage.getItem(CONVERSATION_KEY); } catch { /* Use the journal fallback below. */ }
+							const conversations = next.conversations.filter((conversation) => next.sessions.some((session) => session.conversation_id === conversation.id));
+							const roots = next.tasks.filter((task) => task.parent_task_id === null && conversations.some((conversation) => conversation.id === task.conversation_id)).reverse();
+							const recentTask = roots.find((task) => [...ACTIVE_ROOT_STATES, "queued"].includes(String(task.state))) ?? roots[0];
+							const previous = conversations.find((conversation) => conversation.id === saved)
+								?? conversations.find((conversation) => conversation.id === recentTask?.conversation_id)
+								?? conversations.at(-1);
+							if (previous) {
+								selectConversation(String(previous.id));
+								if (!initialInstance.current) {
+									const lastTask = roots.find((task) => task.conversation_id === previous.id);
+									const input = decode<{ messageTarget?: TargetBinding; bindings?: TargetBinding[] }>(lastTask?.payload, {});
+									const target = input.messageTarget ?? input.bindings?.[0];
+									if (target) { selectionExplicit.current = true; setSelected([target]); }
+								}
+							} else {
+								const command: SharedBrowserCommand = { type: "create_conversation", requestId: crypto.randomUUID(), title: "New chat" };
+								pending.current.set(command.requestId, command);
+							}
 						}
 						try {
 							for (const command of pending.current.values()) ws.send(JSON.stringify(command));
@@ -199,7 +223,7 @@ export function App() {
 						if (message.result?.admissionError) toast(String(message.result.admissionError), "warning");
 					}
 					if (accepted?.type === "create_conversation") {
-						setConversationId(message.result.conversationId);
+						selectConversation(message.result.conversationId);
 						selectionExplicit.current = false;
 						setSelected([]);
 						setDraft("");

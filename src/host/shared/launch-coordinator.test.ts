@@ -41,7 +41,6 @@ async function setup(
 	const registry = new SharedRegistry(journal);
 	let spawns = 0;
 	let candidates: { pid: number; startIdentity: string }[] = [];
-	const documents: unknown[] = [];
 	const coordinator = await createLaunchCoordinator({
 		journal,
 		control,
@@ -69,15 +68,6 @@ async function setup(
 				return { pid: 12, startIdentity: "start" };
 			},
 		},
-		documentActions: {
-			authorize(grant) {
-				documents.push(grant);
-				return { grantId: "grant", actionId: "action" };
-			},
-			async execute() {
-				throw new Error("unused");
-			},
-		},
 	});
 	return {
 		root,
@@ -90,7 +80,8 @@ async function setup(
 		coordinator,
 		task,
 		spawns: () => spawns,
-		documents,
+		launch: (requestId = "launch", rootTaskId = task.taskId) => coordinator.tools({ taskId: rootTaskId, parentTaskId: null } as DriverContext)[1]!
+			.execute("call", { installationId: "rhino", requestId }, undefined, undefined, {} as never),
 	};
 }
 describe("production launch coordinator", () => {
@@ -128,12 +119,6 @@ describe("production launch coordinator", () => {
 	});
 	it("adds only one verified launched document after matching native bootstrap", async () => {
 		const f = await setup();
-		await f.coordinator.authorize({
-			requestId: "launch",
-			rootTaskId: f.task.taskId,
-			installationId: "rhino",
-			independentProcess: false,
-		});
 		const launch = f.coordinator.tools({
 			taskId: f.task.taskId,
 		} as DriverContext)[1].execute as (
@@ -201,12 +186,6 @@ describe("production launch coordinator", () => {
 	});
 	it("reconciles late authenticated document readiness after startup timeout without respawning", async () => {
 		const f = await setup();
-		await f.coordinator.authorize({
-			requestId: "launch",
-			rootTaskId: f.task.taskId,
-			installationId: "rhino",
-			independentProcess: false,
-		});
 		const launch = f.coordinator.tools({
 			taskId: f.task.taskId,
 		} as DriverContext)[1].execute as (
@@ -268,12 +247,6 @@ describe("production launch coordinator", () => {
 	});
 	it("holds the launch tool until authenticated document readiness instead of ending the root early", async () => {
 		const f = await setup(true, 1000);
-		await f.coordinator.authorize({
-			requestId: "launch",
-			rootTaskId: f.task.taskId,
-			installationId: "rhino",
-			independentProcess: false,
-		});
 		const signal = new AbortController();
 		const launch = f.coordinator.tools({
 			taskId: f.task.taskId,
@@ -334,12 +307,6 @@ describe("production launch coordinator", () => {
 	});
 	it("returns bounded startup uncertainty and observes cancellation without another spawn", async () => {
 		const f = await setup();
-		await f.coordinator.authorize({
-			requestId: "launch",
-			rootTaskId: f.task.taskId,
-			installationId: "rhino",
-			independentProcess: false,
-		});
 		const controller = new AbortController();
 		const launch = f.coordinator.tools({
 			taskId: f.task.taskId,
@@ -357,7 +324,7 @@ describe("production launch coordinator", () => {
 		).toContain("cancelled");
 		expect(f.spawns()).toBe(1);
 	});
-	it("routes extra Mac targets to a bounded New document action without spawning", async () => {
+	it("rejects another Mac process through the launch tool", async () => {
 		const f = await setup();
 		f.registry.register({
 			lifecycleInstanceId: "lifecycle",
@@ -377,40 +344,13 @@ describe("production launch coordinator", () => {
 			rhinoScopeIdle: true,
 			grasshopperScopeIdle: true,
 		});
-		await expect(
-			f.coordinator.authorize({
-				requestId: "launch",
-				rootTaskId: f.task.taskId,
-				installationId: "rhino",
-				independentProcess: true,
-			}),
-		).rejects.toThrow("one Rhino process");
-		await f.coordinator.authorizeAdditionalMacDocument({
-			requestId: "new-document",
-			rootTaskId: f.task.taskId,
-			lifecycleInstanceId: "lifecycle",
-		});
-		expect(f.documents).toEqual([
-			{
-				requestId: "new-document",
-				taskId: f.task.taskId,
-				lifecycleInstanceId: "lifecycle",
-				kind: "rhino",
-				action: "new",
-				modifiedPolicy: "refuse",
-			},
-		]);
+		await expect(f.launch()).rejects.toThrow("one Rhino process");
 		expect(f.spawns()).toBe(0);
 	});
 	it("reports missing packaged evidence before persisting or spawning", async () => {
 		const f = await setup(false);
 		await expect(
-			f.coordinator.authorize({
-				requestId: "launch",
-				rootTaskId: f.task.taskId,
-				installationId: "rhino",
-				independentProcess: false,
-			}),
+			f.launch(),
 		).rejects.toThrow("not verified");
 		expect(f.journal.snapshot().records).toEqual([]);
 		expect(f.spawns()).toBe(0);
@@ -421,12 +361,6 @@ it.each(["darwin", "win32"] as const)(
 	"releases only the %s respawn gate after acknowledged empty-process recovery and retains cancelled evidence",
 	async (platform) => {
 		const f = await setup(true, 10, platform);
-		await f.coordinator.authorize({
-			requestId: "launch",
-			rootTaskId: f.task.taskId,
-			installationId: "rhino",
-			independentProcess: platform === "win32",
-		});
 		const launch = f.coordinator.tools({
 			taskId: f.task.taskId,
 		} as DriverContext)[1].execute as (
@@ -443,7 +377,7 @@ it.each(["darwin", "win32"] as const)(
 		};
 		await expect(f.coordinator.recoverLaunch(input)).rejects.toThrow("Cancel");
 		f.journal.requestCancellation(f.task.taskId);
-		f.coordinator.cancelRoot(f.task.taskId);
+		await f.coordinator.refresh();
 		f.setCandidates([{ pid: 12, startIdentity: "start" }]);
 		await expect(f.coordinator.recoverLaunch(input)).rejects.toThrow(
 			"still exist",
@@ -468,13 +402,9 @@ it.each(["darwin", "win32"] as const)(
 			attachments: [],
 		});
 		await expect(
-			f.coordinator.authorize({
-				requestId: "next-launch",
-				rootTaskId: next.taskId,
-				installationId: "rhino",
-				independentProcess: platform === "win32",
-			}),
-		).resolves.toMatchObject({ state: "granted" });
+			f.launch("next-launch", next.taskId),
+		).resolves.toMatchObject({ details: { state: "uncertain" } });
+		expect(f.spawns()).toBe(2);
 		const directory = join(f.control.directory, "bootstrap"),
 			files = readdirSync(directory);
 		const file = files.find(
@@ -507,12 +437,6 @@ it("cannot recover an empty snapshot while original spawn dispatch is still pend
 		release = resolve;
 	});
 	const f = await setup(true, 10, "darwin", gate);
-	await f.coordinator.authorize({
-		requestId: "launch",
-		rootTaskId: f.task.taskId,
-		installationId: "rhino",
-		independentProcess: false,
-	});
 	const launch = f.coordinator.tools({
 		taskId: f.task.taskId,
 	} as DriverContext)[1].execute as (
@@ -522,7 +446,7 @@ it("cannot recover an empty snapshot while original spawn dispatch is still pend
 	const pending = launch("call", { installationId: "rhino", requestId: "launch" });
 	await vi.waitFor(() => expect(f.spawns()).toBe(1));
 	f.journal.requestCancellation(f.task.taskId);
-	f.coordinator.cancelRoot(f.task.taskId);
+	await f.coordinator.refresh();
 	const input = {
 		requestId: "recovery",
 		taskId: f.task.taskId,

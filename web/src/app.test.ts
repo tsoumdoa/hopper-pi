@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { Storage } from "happy-dom";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -127,6 +128,7 @@ beforeEach(async () => {
 	Socket.sockets = [];
 	history.replaceState(null, "", "/#credential");
 	sessionStorage.clear();
+	vi.stubGlobal("localStorage", new Storage());
 	container = document.createElement("div");
 	document.body.append(container);
 	root = createRoot(container);
@@ -138,7 +140,7 @@ beforeEach(async () => {
 	socket = Socket.sockets[0]!;
 	await act(async () => {
 		socket.onopen?.();
-		socket.receive({ type: "shared_snapshot", snapshot });
+		socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, conversations: [], sessions: [] } });
 	});
 	expect(container.querySelector("h1")!.textContent).toBe("New chat");
 	const startup = socket.sent.find((command) => command.type === "create_conversation");
@@ -147,6 +149,7 @@ beforeEach(async () => {
 		type: "command_accepted", requestId: startup.requestId,
 		result: { conversationId: "conversation" },
 	}));
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot }));
 	socket.sent = [];
 });
 afterEach(async () => {
@@ -968,16 +971,12 @@ it("allows a coordinator message when no document is connected", async () => {
  });
 });
 
-it("opens a fresh chat without rendering saved test messages and retries startup once on reconnect", async () => {
+it("creates a chat only when the journal has none and retries startup once on reconnect", async () => {
  await act(async () => root.unmount());
  root = createRoot(container);
  await act(async () => root.render(createElement(HopperStoreProvider, { children: createElement(App) })));
  socket = Socket.sockets.at(-1)!;
- const oldSnapshot = {
-  ...snapshot,
-  conversations: [{ id: "old-probe", title: "Native first-launch acceptance probe" }],
-  tasks: [{ id: "old-task", conversation_id: "old-probe", parent_task_id: null, state: "completed", payload: JSON.stringify({ text: "Explicit native launch acceptance fixture. No model driver is started for this test.", bindings: [] }) }],
- };
+ const oldSnapshot = { ...snapshot, conversations: [], sessions: [], tasks: [] };
  await act(async () => {
   socket.onopen?.();
   socket.receive({ type: "shared_snapshot", snapshot: oldSnapshot });
@@ -1005,6 +1004,32 @@ it("opens a fresh chat without rendering saved test messages and retries startup
  await value("#composer-input", "Hello");
  await act(async () => sendButton().click());
  expect(reconnected.sent.find((command) => command.type === "submit")).toMatchObject({ conversationId: "fresh", sessionId: "fresh-session", text: "Hello" });
+});
+
+it.each(["reload", "relaunch", "missing browser storage", "host restart", "completed task", "pending question"])("restores the existing thread after %s without submitting or creating a task", async (scenario) => {
+	const task = { id: "persisted-task", session_id: "session", conversation_id: "conversation", parent_task_id: null,
+		state: scenario === "host restart" ? "interrupted" : scenario === "completed task" ? "completed" : scenario === "pending question" ? "awaiting_user" : "running",
+		payload: JSON.stringify({ text: "Build the persistent courtyard", messageTarget: binding, bindings: [binding] }) };
+	const persisted = { ...snapshot,
+		questions: scenario === "pending question" ? [{ id: "question", task_id: task.id, answer: null, payload: JSON.stringify({ kind: "ask_user", question: "Which courtyard?", options: ["North", "South"] }) }] : [],
+		hostEpoch: scenario === "host restart" ? "new-epoch" : "epoch", tasks: [task],
+		events: [{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "messages", turnId: "turn", messages: [
+			{ role: "assistant", content: [{ type: "text", text: "The first stage is complete." }] },
+		] }) }] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: persisted }));
+	await act(async () => root.unmount());
+	if (scenario !== "reload") { sessionStorage.clear(); history.replaceState(null, "", "/#credential"); }
+	if (scenario === "missing browser storage") window.localStorage.clear();
+	root = createRoot(container);
+	await act(async () => root.render(createElement(HopperStoreProvider, { children: createElement(App) })));
+	socket = Socket.sockets.at(-1)!;
+	await act(async () => { socket.onopen?.(); socket.receive({ type: "shared_snapshot", snapshot: persisted }); });
+	expect(container.textContent).toContain("Build the persistent courtyard");
+	expect(container.textContent).toContain("The first stage is complete.");
+	expect(container.querySelector("h1")!.textContent).toBe("First");
+	expect(socket.sent.some((command) => ["create_conversation", "submit", "steer"].includes(command.type))).toBe(false);
+	if (!["host restart", "completed task"].includes(scenario)) expect(container.querySelector('button[aria-label="Stop"]')).not.toBeNull();
+	if (scenario === "pending question") expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Which courtyard?");
 });
 
 it("counts working time from the saved start and freezes the completed duration", async () => {
@@ -1506,8 +1531,7 @@ it("waits for the document that opened the browser when another instance registe
 	await act(async () => root.render(createElement(HopperStoreProvider, { children: createElement(App) })));
 	socket = Socket.sockets.at(-1)!;
 	await act(async () => { socket.onopen?.(); socket.receive({ type: "shared_snapshot", snapshot }); });
-	const startup = socket.sent.find((command) => command.type === "create_conversation");
-	await act(async () => socket.receive({ type: "command_accepted", requestId: startup.requestId, result: { conversationId: "conversation" } }));
+	expect(socket.sent.some((command) => command.type === "create_conversation")).toBe(false);
 	await value("#composer-input", "Edit this model");
 	expect(sendButton().disabled).toBe(true);
 	const origin = { ...binding, lifecycleInstanceId: "origin", rhinoDocumentId: "origin-doc" };

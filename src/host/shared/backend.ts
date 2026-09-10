@@ -134,7 +134,7 @@ export class SharedBackend implements SharedBrowserBackend {
 	}
 	async resumeAdmissions(): Promise<void> {
 		if (this.stopping) return;
-		const snapshot = this.tasks.snapshot();
+		const snapshot = this.tasks.journal.snapshot({ includeEvents: false });
 		for (const record of snapshot.records.filter(
 			(record) => record.kind === "admission" && record.state === "pending",
 		)) {

@@ -18,7 +18,6 @@ import {
 	type LaunchRecord,
 	type VerifiedInstallation,
 } from "./launch.js";
-import type { DocumentGrantService } from "./grants.js";
 const execute = promisify(execFile);
 export interface DiscoveredRhinoInstallation extends VerifiedInstallation {
 	build: string;
@@ -152,7 +151,6 @@ export interface LaunchCoordinatorOptions {
 	installations?: DiscoveredRhinoInstallation[];
 	adapter?: LaunchAdapter;
 	platform?: NodeJS.Platform;
-	documentActions?: Pick<DocumentGrantService, "authorize" | "execute">;
 	isProcessAlive?: (pid: number) => boolean;
 	launchWaitMs?: number;
 	launchPollMs?: number;
@@ -401,36 +399,6 @@ export async function createLaunchCoordinator(
 				}),
 			);
 		},
-		/** Call only for an authenticated, explicit user action. One request authorizes one process. */
-		async authorize(input: {
-			requestId: string;
-			rootTaskId: string;
-			installationId: string;
-			independentProcess: boolean;
-		}) {
-			return authorizeLaunch(input);
-		},
-		/** Mac additional target action. It never invokes the process launcher. */
-		async authorizeAdditionalMacDocument(input: {
-			requestId: string;
-			rootTaskId: string;
-			lifecycleInstanceId: string;
-		}) {
-			if (platform !== "darwin" || !options.documentActions)
-				throw new Error("Mac document action adapter is unavailable");
-			await refreshIntent();
-			if (intent!.desiredState !== "running")
-				throw new Error("Shared host is stopped");
-			options.registry.resolveLifecycle(input.lifecycleInstanceId);
-			return options.documentActions.authorize({
-				requestId: input.requestId,
-				taskId: input.rootTaskId,
-				lifecycleInstanceId: input.lifecycleInstanceId,
-				kind: "rhino",
-				action: "new",
-				modifiedPolicy: "refuse",
-			});
-		},
 		tools(context: DriverContext): ToolDefinition[] {
 			return [
 				{
@@ -628,11 +596,5 @@ export async function createLaunchCoordinator(
 			return publicRecord(store.get(bootstrap.requestId)!);
 		},
 		refresh: refreshLaunches,
-		cancelRoot(taskId: string) {
-			for (const record of store
-				.all()
-				.filter((record) => record.request.rootTaskId === taskId))
-				service.cancel(record.request.requestId);
-		},
 	};
 }

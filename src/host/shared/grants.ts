@@ -45,7 +45,7 @@ export class DocumentGrantService {
 	) {}
 	authorize(grant: DocumentGrant): { grantId: string; actionId: string } {
 		const task = this.journal
-			.snapshot()
+			.snapshot({ includeEvents: false })
 			.tasks.find((task) => task.id === grant.taskId);
 		if (
 			!task ||
@@ -93,7 +93,7 @@ export class DocumentGrantService {
 		grantId: string,
 	): Promise<{ binding: TargetBinding; result: unknown; actionId: string }> {
 		const grantRecord = this.journal
-			.snapshot()
+			.snapshot({ includeEvents: false })
 			.records.find(
 				(record) => record.kind === "grant" && record.id === grantId,
 			);
@@ -101,7 +101,7 @@ export class DocumentGrantService {
 		const grant = JSON.parse(String(grantRecord.payload)) as DocumentGrant,
 			actionId = stable("document-", grant.requestId);
 		const action = this.journal
-			.snapshot()
+			.snapshot({ includeEvents: false })
 			.records.find(
 				(record) => record.kind === "document-action" && record.id === actionId,
 			)!;
@@ -170,7 +170,7 @@ export class DocumentGrantService {
 				} catch (error) {
 					if (
 						this.journal
-							.snapshot()
+							.snapshot({ includeEvents: false })
 							.operations.find((op) => op.id === operation.id)?.state ===
 						"dispatched"
 					)

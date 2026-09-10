@@ -80,6 +80,10 @@ it("returns bounded deduplicated capture image blocks with attributed text and m
 		mimeType: "image/png",
 		data: Buffer.from(data).toString("base64"),
 	});
+	for (let i = 0; i < 1000; i++) journal.publish(child.taskId, {
+		type: "agent_event", turnId: child.turnId,
+		event: { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "Repeated streaming text" } },
+	});
 	journal.publish(child.taskId, {
 		type: "messages",
 		turnId: child.turnId,
@@ -99,6 +103,7 @@ it("returns bounded deduplicated capture image blocks with attributed text and m
 			},
 		],
 	});
+	journal.failRunning(child.taskId, child.turnId, "Provider disconnected after measuring");
 	const result = collectDelegationResults(journal.snapshot(), root.taskId);
 	expect(result.details).toEqual({ imageCount: 4, omittedImages: 1 });
 	expect(result.content.filter((part) => part.type === "image")).toHaveLength(
@@ -109,6 +114,10 @@ it("returns bounded deduplicated capture image blocks with attributed text and m
 		.map((part) => part.text)
 		.join(" ");
 	expect(text).toContain("Measured area: 42");
+	expect(text).not.toContain("Repeated streaming text");
+	expect(text).toContain("Provider disconnected after measuring");
+	expect(text.length).toBeLessThan(5000);
+	expect(journal.snapshot().events.length).toBeGreaterThan(1000);
 	expect(text).toContain(child.taskId);
 	expect(text).toContain("doc");
 	expect(text).not.toContain(capture("one").data);

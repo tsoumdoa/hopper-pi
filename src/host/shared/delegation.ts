@@ -140,13 +140,13 @@ export function collectDelegationResults(
 	};
 	const summary = {
 		children: children.map((child) => ({
-			...child,
-			payload: sanitize(parse(child.payload)),
+			taskId: child.id,
+			state: child.state,
+			input: sanitize(parse(child.payload)),
 		})),
-		events: events.map((event) => ({
-			...event,
-			payload: sanitize(parse(event.payload)),
-		})),
+		outcomes: events.filter((event) => ["failed", "recovery_required", "interrupted"].includes(String(event.kind)))
+			.map((event) => ({ taskId: event.task_id, kind: event.kind, ...sanitize(parse(event.payload)) })),
+		turns: [...messages.values()].map((turn) => ({ ...turn, messages: sanitize(turn.messages) })),
 		artifacts: snapshot.records
 			.filter((record) => record.kind === "artifact" && ids.has(record.task_id))
 			.map((record) => ({

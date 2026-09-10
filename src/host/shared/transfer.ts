@@ -129,7 +129,7 @@ export class GeometryTransferService {
 		if (
 			record.state !== "accepted" ||
 			this.journal
-				.snapshot()
+				.snapshot({ includeEvents: false })
 				.operations.some(
 					(op) =>
 						op.task_id === input.taskId &&
@@ -288,7 +288,7 @@ export class GeometryTransferService {
 		const artifactRecord = this.record("artifact", input.artifactId);
 		if (artifactRecord.state !== "published")
 			throw new Error("Artifact is not published");
-		const snapshot = this.journal.snapshot(),
+		const snapshot = this.journal.snapshot({ includeEvents: false }),
 			task = snapshot.tasks.find((task) => task.id === input.taskId),
 			sourceTask = snapshot.tasks.find(
 				(task) => task.id === artifactRecord.task_id,
@@ -326,7 +326,7 @@ export class GeometryTransferService {
 		if (
 			record.state !== "accepted" ||
 			this.journal
-				.snapshot()
+				.snapshot({ includeEvents: false })
 				.operations.some(
 					(op) =>
 						op.task_id === input.taskId && String(op.arguments).includes(id),
@@ -386,7 +386,7 @@ export class GeometryTransferService {
 				} catch (error) {
 					if (
 						this.journal
-							.snapshot()
+							.snapshot({ includeEvents: false })
 							.operations.find((op) => op.id === operation.id)?.state ===
 						"dispatched"
 					)
@@ -420,7 +420,7 @@ export class GeometryTransferService {
 	}
 	private record(kind: string, id: string) {
 		const record = this.journal
-			.snapshot()
+			.snapshot({ includeEvents: false })
 			.records.find((record) => record.kind === kind && record.id === id);
 		if (!record) throw new Error("Unknown retained artifact or transfer");
 		return record;

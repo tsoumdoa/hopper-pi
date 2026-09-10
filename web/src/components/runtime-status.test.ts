@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { mockRuntimeStatus } from "../mocks/hopper-mock";
+import { mockRuntimeStatus } from "../mocks/runtime-status-mock";
 import { requestRuntimeStatus } from "../hooks/use-runtime-status";
 
 describe("runtime status UI", () => {

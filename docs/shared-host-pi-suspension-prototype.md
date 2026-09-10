@@ -1,6 +1,6 @@
-# Pi question suspension prototype
+# Pi question suspension
 
-The shipped `@earendil-works/pi-coding-agent` 0.85.1 and its `pi-agent-core` 0.85.1 dependency support the model/tool stopping boundary required by milestone 1. The prototype is in `src/host/question-suspension.ts`; it is a standalone proof of the boundary, separate from the production task driver and browser question handler.
+The shared task driver uses `src/host/question-suspension.ts` to stop the Pi model/tool loop at a durable user question. Its integration test exercises the installed Pi SDK directly.
 
 Install the boundary on `session.agent` after AgentSession construction and before prompting. It preserves the existing tool authorization hook, selects sequential tool execution, blocks remaining calls after a question, and uses `shouldStopAfterTurn` to end the run. The task's question tool calls `suspend` with its stable question, task, session, turn, and Pi tool-call identities. An injected persistence function must commit the question before the tool returns `awaiting_user`. A failed commit still stops dispatch and leaves an error tool result. The scheduler must interpret that failure and retain ownership until it has resolved cleanup.
 
@@ -17,10 +17,10 @@ The SDK's blocked-tool path produces an error result for every remaining valid s
 
 Source evidence is in the installed package files `pi-agent-core/dist/agent-loop.js`, specifically `executeToolCallsSequential`, `prepareToolCall`, `shouldTerminateToolBatch`, and the `shouldStopAfterTurn` check in `runLoop`. `pi-agent-core/dist/agent.js` captures the stop callback when the run starts, so installing it after prompting is too late. `pi-coding-agent/dist/core/agent-session.js` installs extension tool hooks during session construction; install this boundary afterward so those hooks remain chained.
 
-## Remaining integration work
+## Scheduler integration
 
-This proves the SDK stopping and history behavior, not milestone 1 completion or the shared question workflow. The shared scheduler and journal must still implement question/answer transactions, native-operation settlement, scope cleanup, process ownership, cancellation races, model-start intent, crash recovery, and answer-linked turn deduplication. The test's explicit answer prompt is not an implementation of durable answer admission.
+The shared scheduler and journal implement question/answer transactions, native-operation settlement, cleanup, cancellation, crash recovery, and answer-linked turn deduplication. This SDK-level test isolates dispatch and history behavior. The shared driver and task-service tests cover durable admission and continuation.
 
 Do not enable answers or release a Rhino process merely because Pi stopped. Resolve actual native effects and close the owned scopes first. A question commit alone does not establish an answerable question. During recovery, reconstruct question state from the journal and reconcile history without rewriting the old tool result as an answer.
 
-One boundary belongs to one execution. Remove it only after Pi settles, and install a new boundary before a newly admitted execution. The scheduler must keep ownership of these hooks and sequential execution mode throughout the run. No extension may replace them. Pending Pi steering/follow-up queues remain in memory when the stop hook ends a run; shared mode must use journaled admission and explicitly settle or clear old queues before starting another execution. This prototype neither consumes those commands nor silently carries them into a continuation.
+One boundary belongs to one execution. Remove it only after Pi settles, and install a new boundary before a newly admitted execution. The scheduler must keep ownership of these hooks and sequential execution mode throughout the run. No extension may replace them. Pending Pi steering/follow-up queues remain in memory when the stop hook ends a run; shared mode must use journaled admission and explicitly settle or clear old queues before starting another execution. The shared driver settles or clears those queues before a continuation.

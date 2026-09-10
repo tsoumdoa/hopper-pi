@@ -374,7 +374,6 @@ export async function startSharedHost(
 			journal,
 			control,
 			registry,
-			documentActions: documents,
 		});
 		const recovery = new SharedRecoveryService(
 			journal,
