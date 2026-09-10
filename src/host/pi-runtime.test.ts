@@ -6,6 +6,35 @@ import { resolveHostConfig } from "./config.js";
 import { isolatedResourceLoaderOptions, providerAuthMethods } from "./pi-runtime.js";
 import { HOPPER_REGISTERED_CATALOG } from "../tools/catalog.js";
 
+it.each([false, true])("creates the settings session with automatic native probes=%s while preserving tool schemas", async (probeBackend) => {
+	const { EmbeddedPiHost } = await import("./pi-runtime.js");
+	const backend = await import("../infra/backend-status.js");
+	const probe = vi.spyOn(backend, "probeBackend").mockResolvedValue({ online: false });
+	const root = await mkdtemp(join(tmpdir(), "hopper-startup-"));
+	const paths = resolveHostConfig(["--data-dir", root, "--auth-path", join(root, "auth.json"), "--tool-config-dir", join(root, "tools")]).paths;
+	let host: import("./pi-runtime.js").EmbeddedPiHost | undefined;
+	try {
+		await writeFile(paths.authPath, "{}");
+		host = await EmbeddedPiHost.create({ paths, projectRoot: resolve("."), probeBackend });
+		if (probeBackend) expect(probe).toHaveBeenCalled();
+		else expect(probe).not.toHaveBeenCalled();
+		const tools = host.listTools().tools;
+		for (const { tool } of HOPPER_REGISTERED_CATALOG) {
+			expect(tools.find(entry => entry.name === tool.name)).toMatchObject({
+				description: tool.description,
+				parameters: JSON.parse(JSON.stringify(tool.parameters)),
+			});
+		}
+		await host.newSession();
+		await host.getToolSettings();
+		if (!probeBackend) expect(probe).not.toHaveBeenCalled();
+	} finally {
+		await host?.dispose();
+		probe.mockRestore();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 it("refreshes external Pi credentials and model availability without restarting or changing the selected model", async () => {
 	const { EmbeddedPiHost } = await import("./pi-runtime.js");
 	const backend = await import("../infra/backend-status.js");

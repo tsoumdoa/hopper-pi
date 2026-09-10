@@ -49,14 +49,16 @@ export class ToolPolicyRuntime {
 	private conflicts = new Set<string>();
 	private busy = false;
 	private readonly hasQuestionUi: boolean;
+	private readonly probeBackendOnReconcile: boolean;
 	private closed = false;
 	private unsubscribe?: () => void;
 	private reconcileQueue: Promise<unknown> = Promise.resolve();
 	private credentialWaits = new Set<{ policy: PolicySnapshot; pluginId: string; cancel(): void }>();
 	onChange?: (snapshot: AgentToolsSnapshot) => void;
 
-	constructor(options: { hostRoutedTools?: readonly string[]; directory?: string; embedded?: boolean; questionUi?: boolean; store?: ToolPolicyStore; credentials?: ReadonlyMap<string, ToolCredentials>; plugins?: readonly ToolPlugin[] } = {}) {
+	constructor(options: { hostRoutedTools?: readonly string[]; directory?: string; embedded?: boolean; questionUi?: boolean; probeBackendOnReconcile?: boolean; store?: ToolPolicyStore; credentials?: ReadonlyMap<string, ToolCredentials>; plugins?: readonly ToolPlugin[] } = {}) {
 		this.hasQuestionUi = options.questionUi === true;
+		this.probeBackendOnReconcile = options.probeBackendOnReconcile !== false;
 		this.plugins = options.store?.plugins ?? options.plugins ?? TOOL_PLUGINS;
 		const inventory = [...BUILTIN_POLICY_INVENTORY, ...this.plugins.flatMap(plugin => plugin.inventory)];
 		this.policyStore = options.store ?? new ToolPolicyStore(inventory, { directory: options.directory, plugins: this.plugins });
@@ -338,7 +340,7 @@ export class ToolPolicyRuntime {
 			try { policy = await this.store.read(); }
 			catch { this.observe(null); this.applyBlocked(); return this.publish(this.formatToolSettings(null, "unavailable")); }
 			this.observe(policy);
-			if (getCachedBackendStatus()?.online !== true && this.inventory.some(tool => this.definitions.has(tool.name) && tool.requirements.includes("backend")
+			if (this.probeBackendOnReconcile && getCachedBackendStatus()?.online !== true && this.inventory.some(tool => this.definitions.has(tool.name) && tool.requirements.includes("backend")
 				&& policy.tools[tool.id]?.enabled && policy.parents[tool.parent]?.enabled)) await probeBackend();
 			const credential = await this.credentialStatuses(policy);
 			const snapshot = await this.locked(latest => {

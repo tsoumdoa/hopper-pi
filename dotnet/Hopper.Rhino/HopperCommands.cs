@@ -23,7 +23,8 @@ namespace rhino_zmq_poc
 
             SharedNativeHost.MessageDocumentSerialNumber = doc?.RuntimeSerialNumber;
             SharedNativeHost.InitializeDocument(doc);
-            RhinoCodeRunner.PreloadLanguages();
+            // Script execution initializes its requested language on demand.
+            // Cold Python/C# setup must not block host startup on Rhino's UI thread.
             var result = facade.RequestStart();
             RhinoApp.WriteLine(result.Message);
             return result.Accepted ? Result.Success : Result.Failure;
@@ -86,7 +87,6 @@ namespace rhino_zmq_poc
             }
             SharedNativeHost.MessageDocumentSerialNumber = doc?.RuntimeSerialNumber;
             SharedNativeHost.InitializeDocument(doc);
-            RhinoCodeRunner.PreloadLanguages();
             var result = facade.RequestRestart();
             RhinoApp.WriteLine(result.Message);
             return result.Accepted ? Result.Success : Result.Nothing;
