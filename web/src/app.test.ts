@@ -387,6 +387,38 @@ it("shows captured tool images as visual child evidence", async () => {
 	expect(image.src).toContain("data:image/png;base64,aGk=");
 });
 
+it("allows task recovery without a written note and waits for host confirmation", async () => {
+	const task = {
+		id: "root",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "uncertain",
+		payload: JSON.stringify({ text: "Edit the model", bindings: [binding] }),
+	};
+	await act(async () => socket.receive({
+		type: "shared_snapshot",
+		snapshot: { ...snapshot, tasks: [task] },
+	}));
+	expect(container.querySelector('textarea[aria-label="Recovery inspection"]')).toBeNull();
+	expect(container.textContent).not.toContain("safe release");
+	await act(async () => byText("I've checked, continue").click());
+	expect(socket.sent.find((command) => command.type === "recover")).toMatchObject({
+		conversationId: "conversation",
+		taskId: "root",
+		acknowledgement: expect.stringContaining("User checked"),
+	});
+	expect(container.textContent).not.toContain("You can send a new message.");
+	expect(byText("I've checked, continue")).toBeDefined();
+	await act(async () => socket.receive({
+		type: "shared_snapshot",
+		snapshot: { ...snapshot, tasks: [task], recoveries: [{ id: "recovery", task_id: "root" }] },
+	}));
+	expect(byText("I've checked, continue")).toBeUndefined();
+	expect(container.textContent).not.toContain("Check your model and any saved files");
+	expect(container.textContent).toContain("You can send a new message.");
+	expect(container.textContent).toContain("This task's result remains unknown");
+});
+
 it("requires inspection for launch recovery and preserves the original outcome after confirmation", async () => {
 	const task = {
 		id: "root",

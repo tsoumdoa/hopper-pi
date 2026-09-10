@@ -163,7 +163,7 @@ function Question({ question, enabled, inactive, waiting, target, queued = 0, an
 	}} />;
 }
 
-function Recovery({ recover, launch = false }: { recover(acknowledgement: string): boolean; launch?: boolean }) {
+function LaunchRecovery({ recover }: { recover(acknowledgement: string): boolean }) {
 	const [acknowledgement, setAcknowledgement] = useState("");
 	return (
 		<form
@@ -174,11 +174,9 @@ function Recovery({ recover, launch = false }: { recover(acknowledgement: string
 			}}
 		>
 			<label className="block text-xs leading-5 text-ink-soft">
-				{launch
-					? "Preserve your models, inspect startup or autosave dialogs, and close all Rhino processes before recovery. Record what you checked. The host verifies that no Rhino process remains before allowing a new grant; it does not close Rhino for you."
-					: "Record what you inspected in the affected Rhino documents and files. This acknowledges the unknown outcome; it does not undo or repeat the operation."}
+				Preserve your models, inspect startup or autosave dialogs, and close all Rhino processes before recovery. Record what you checked. The host verifies that no Rhino process remains before allowing a new grant; it does not close Rhino for you.
 				<Textarea
-					aria-label={launch ? "Launch recovery inspection" : "Recovery inspection"}
+					aria-label="Launch recovery inspection"
 					className="mt-2 min-h-20"
 					value={acknowledgement}
 					onChange={(event) => setAcknowledgement(event.target.value)}
@@ -186,7 +184,7 @@ function Recovery({ recover, launch = false }: { recover(acknowledgement: string
 			</label>
 			<div className="mt-3 flex justify-end">
 				<Button type="submit" size="sm" variant="secondary" disabled={!acknowledgement.trim()}>
-					{launch ? "Acknowledge and verify launch recovery" : "Acknowledge and verify safe release"}
+					Acknowledge and verify launch recovery
 				</Button>
 			</div>
 		</form>
@@ -220,7 +218,7 @@ function TaskReply({ task, snapshot, labelFor, commands, stoppable }: {
 	const tools = taskTools(events);
 	const running = state === "running" || state === "suspending";
 	const questions = snapshot.questions.filter((question) => question.task_id === task.id);
-	const recoveries = snapshot.recoveries ?? [];
+	const recovered = snapshot.recoveries?.some((record) => record.task_id === task.id) ?? false;
 	const launches = (snapshot.records ?? []).filter(
 		(record) => record.kind === "launch" && record.task_id === task.id && ["cancelled", "uncertain"].includes(String(record.state)) && decode<any>(record.payload, {}).dispatchAttempted,
 	);
@@ -337,7 +335,7 @@ function TaskReply({ task, snapshot, labelFor, commands, stoppable }: {
 							{recovered ? (
 								<p className="text-[13px] text-ink-soft">Ready to launch Rhino again.</p>
 							) : supported ? (
-								<Recovery launch recover={(acknowledgement) => commands.recoverLaunch(String(task.id), String(record.id), acknowledgement)} />
+								<LaunchRecovery recover={(acknowledgement) => commands.recoverLaunch(String(task.id), String(record.id), acknowledgement)} />
 							) : (
 								<p className="text-[13px] text-ink-soft">
 									Inspect the original Rhino process and its documents. Automatic launch recovery is unavailable for this launch.
@@ -346,14 +344,16 @@ function TaskReply({ task, snapshot, labelFor, commands, stoppable }: {
 						</section>
 					);
 				})}
-				{state === "uncertain" && (
-					<Notice tone="warn">The operation or cleanup outcome is unknown. Inspect Rhino before starting recovery. This task will not be replayed.</Notice>
+				{state === "uncertain" && !recovered && (
+					<div className="grid justify-items-start gap-2">
+						<Notice tone="muted">Hopper couldn't confirm how this task ended. Check your model and any saved files before continuing.</Notice>
+						<Button size="sm" variant="secondary" onClick={() => commands.recover(String(task.id), "User checked the model and saved files and requested permission for new work.")}>
+							I've checked, continue
+						</Button>
+					</div>
 				)}
-				{state === "uncertain" && !recoveries.some((record) => record.task_id === task.id) && (
-					<Recovery recover={(acknowledgement) => commands.recover(String(task.id), acknowledgement)} />
-				)}
-				{recoveries.some((record) => record.task_id === task.id) && (
-					<p className="text-xs text-muted">Unknown outcome acknowledged. Submit a fresh task against the inspected state.</p>
+				{recovered && (
+					<Notice tone="muted">You can send a new message. This task's result remains unknown and it won't be repeated automatically.</Notice>
 				)}
 			</div>
 		</div>
