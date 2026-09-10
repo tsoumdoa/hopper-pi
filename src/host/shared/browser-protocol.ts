@@ -4,16 +4,6 @@ import {
 	type TargetBinding,
 } from "../../protocol/shared-execution.js";
 
-export type NextDocumentAction = {
-	lifecycleInstanceId: string;
-	kind: "rhino" | "grasshopper";
-	action: "new" | "open";
-	path?: string;
-	modifiedPolicy: "refuse" | "save" | "discard";
-	savePath?: string;
-	overwrite?: boolean;
-};
-
 export type SharedBrowserCommand =
 	| { type: "authenticate"; token: string }
 	| { type: "snapshot" }
@@ -28,7 +18,6 @@ export type SharedBrowserCommand =
 			bindings: TargetBinding[];
 			messageTarget?: TargetBinding;
 			attachments: ImageAttachment[];
-			documentAction?: NextDocumentAction;
 	  }
 	| {
 			type: "steer";
@@ -46,14 +35,6 @@ export type SharedBrowserCommand =
 			conversationId: string;
 			questionId: string;
 			answer: string | null;
-	  }
-	| {
-			type: "recover_launch";
-			requestId: string;
-			conversationId: string;
-			taskId: string;
-			launchRequestId: string;
-			acknowledgement: string;
 	  }
 	| {
 			type: "recover";
@@ -149,15 +130,6 @@ export function parseSharedBrowserCommand(raw: string): SharedBrowserCommand {
 			questionId: string(v, "questionId"),
 			answer: v.answer === null ? null : string(v, "answer"),
 		};
-	if (type === "recover_launch")
-		return {
-			type,
-			requestId,
-			conversationId,
-			taskId: string(v, "taskId"),
-			launchRequestId: string(v, "launchRequestId"),
-			acknowledgement: string(v, "acknowledgement"),
-		};
 	if (type === "recover")
 		return {
 			type,
@@ -205,50 +177,6 @@ export function parseSharedBrowserCommand(raw: string): SharedBrowserCommand {
 			if (!bindings.some((binding) => JSON.stringify(binding) === JSON.stringify(messageTarget)))
 				throw new Error("Message document must be included in instance access");
 		}
-		let documentAction: Extract<
-			SharedBrowserCommand,
-			{ type: "submit" }
-		>["documentAction"];
-		if (v.documentAction !== undefined) {
-			const action = object(v.documentAction);
-			if (
-				!["rhino", "grasshopper"].includes(String(action.kind)) ||
-				!["new", "open"].includes(String(action.action))
-			)
-				throw new Error("Invalid document action");
-			const modifiedPolicy = action.modifiedPolicy ?? "refuse";
-			if (!["refuse", "save", "discard"].includes(String(modifiedPolicy)))
-				throw new Error("Invalid modified document policy");
-			if (action.action === "open" && action.path === undefined)
-				throw new Error("Open action requires a path");
-			if (action.action === "new" && action.path !== undefined)
-				throw new Error("New action does not accept an open path");
-			if (
-				modifiedPolicy !== "save" &&
-				(action.savePath !== undefined || action.overwrite !== undefined)
-			)
-				throw new Error(
-					"Save path and overwrite require an explicit save policy",
-				);
-			if (
-				action.overwrite !== undefined &&
-				typeof action.overwrite !== "boolean"
-			)
-				throw new Error("Overwrite authorization must be a boolean");
-			documentAction = {
-				lifecycleInstanceId: string(action, "lifecycleInstanceId"),
-				kind: action.kind as "rhino" | "grasshopper",
-				action: action.action as "new" | "open",
-				modifiedPolicy: modifiedPolicy as NextDocumentAction["modifiedPolicy"],
-				...(action.path === undefined ? {} : { path: string(action, "path") }),
-				...(action.savePath === undefined
-					? {}
-					: { savePath: string(action, "savePath") }),
-				...(action.overwrite === undefined
-					? {}
-					: { overwrite: action.overwrite }),
-			};
-		}
 		return {
 			type,
 			requestId,
@@ -259,7 +187,6 @@ export function parseSharedBrowserCommand(raw: string): SharedBrowserCommand {
 			bindings,
 			...(messageTarget ? { messageTarget } : {}),
 			attachments,
-			...(documentAction ? { documentAction } : {}),
 		};
 	}
 	throw new Error(`Unknown shared command: ${type}`);

@@ -391,6 +391,11 @@ export function App() {
 	const activeOwner = decode<{ binding?: TargetBinding } | null>(activeTurn?.owner, null);
 	const activeInput = decode<{ bindings: TargetBinding[]; messageTarget?: TargetBinding }>(activeRoot?.payload, { bindings: [] });
 	const activeBindings = activeOwner?.binding ? [activeOwner.binding] : activeInput.messageTarget ? [activeInput.messageTarget] : activeInput.bindings;
+	const toolsContextQuery = new URLSearchParams({
+		conversationId,
+		...(activeRoot ? { taskId: String(activeRoot.id) } : {}),
+		...(selected[0] ? { target: JSON.stringify(selected[0]) } : {}),
+	}).toString();
 	const steeringDestination = activeBindings.length ? activeBindings.map(labelFor).join(", ") : "Conversation";
 	const unavailableSelected = selected.some((binding) => !availableTargets.some((target) => target.documents.some((document) => sameBinding(document, binding))));
 	const needsTarget = sendMode !== "steer" && Boolean(
@@ -435,8 +440,6 @@ export function App() {
 	const commands = {
 		answer: (questionId: string, answer: string | null) => send({ type: "answer", requestId: crypto.randomUUID(), conversationId, questionId, answer }),
 		recover: (taskId: string, acknowledgement: string) => send({ type: "recover", requestId: crypto.randomUUID(), conversationId, taskId, acknowledgement }),
-		recoverLaunch: (taskId: string, launchRequestId: string, acknowledgement: string) =>
-			send({ type: "recover_launch", requestId: crypto.randomUUID(), conversationId, taskId, launchRequestId, acknowledgement }),
 	};
 
 	const newChat = () => {
@@ -600,7 +603,7 @@ export function App() {
 				/>
 			)}
 			{skillsOpen && <SkillsDialog token={credential.current ?? ""} connected={connected} streaming={Boolean(activeRoot)} onOpenChange={setSkillsOpen} />}
-			{toolsOpen && <ToolsDialog key={sessionId} token={credential.current ?? ""} connected={connected} onOpenChange={setToolsOpen} />}
+			{toolsOpen && <ToolsDialog key={`${sessionId}:${toolsContextQuery}`} contextQuery={toolsContextQuery} token={credential.current ?? ""} connected={connected} onOpenChange={setToolsOpen} />}
 			<UiRequestDialog send={(message) => message.type === "ui_response" && send({ type: "auth_response", requestId: message.requestId, value: message.value })} />
 			<ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
 			<ToastRegion />

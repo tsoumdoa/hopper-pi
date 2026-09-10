@@ -52,23 +52,6 @@ export class SharedRecoveryService {
 		const snapshot = this.journal.snapshot(),
 			task = snapshot.tasks.find((task) => task.id === taskId);
 		if (task?.state !== "uncertain") throw new Error("Task is not uncertain");
-		const pendingLaunch = snapshot.records.find(
-			(record) =>
-				record.kind === "launch" &&
-				!snapshot.records.some(
-					(disposition) =>
-						disposition.kind === "launch_recovery" &&
-						disposition.id === record.id &&
-						disposition.state === "confirmed",
-				) &&
-				record.task_id === taskId &&
-				!["completed", "failed"].includes(String(record.state)) &&
-				JSON.parse(String(record.payload)).dispatchAttempted,
-		);
-		if (pendingLaunch)
-			throw new Error(
-				"Reconcile the original Rhino launch candidate before acknowledging this task",
-			);
 		const operations = snapshot.operations.filter(
 			(operation) => operation.task_id === taskId,
 		);

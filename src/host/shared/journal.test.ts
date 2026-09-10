@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +17,7 @@ function fixture() {
 	cleanup.push(() => journal.close());
 	journal.registerSession("conversation", "session");
 	return {
+		path,
 		get journal() {
 			return journal;
 		},
@@ -257,4 +259,22 @@ it("commits a whole reservation set with dispatch and rolls all of it back on co
 	expect(j.snapshot().reservations.map((r) => r.destination)).toEqual([
 		"path:b",
 	]);
+});
+
+it("retires old pending authorization submissions on restart while preserving their history", () => {
+ const f = fixture();
+ const input = submission("old-document-permission");
+ const receipt = f.journal.accept(input);
+ const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite");
+ const db = new DatabaseSync(f.path);
+ try {
+  db.prepare("INSERT INTO records VALUES ('admission',?,?,?,'pending')").run(receipt.taskId, receipt.taskId, JSON.stringify({ documentAction: { action: "new" } }));
+ } finally { db.close(); }
+ f.reopen().recover();
+ const snapshot = f.journal.snapshot();
+ expect(snapshot.tasks[0]!.state).toBe("failed");
+ expect(JSON.parse(String(snapshot.tasks[0]!.payload))).toEqual(input);
+ expect(snapshot.records.find(row => row.kind === "admission")!.state).toBe("failed");
+ expect(snapshot.events.some(row => String(row.payload).includes("Submit the request again"))).toBe(true);
+ expect(snapshot.operations).toHaveLength(0);
 });

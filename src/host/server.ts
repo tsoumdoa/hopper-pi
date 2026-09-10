@@ -155,6 +155,7 @@ export function handleUiApi(request: IncomingMessage, response: ServerResponse, 
 	runtime: HostRuntime;
 	token: string;
 	exportSession?: (conversationId: string | null) => unknown;
+	tools?: (query: URLSearchParams) => Pick<HostRuntime, "getToolSettings" | "updateToolSettings">;
 }): boolean {
 	const token = options.token;
 	const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
@@ -190,8 +191,9 @@ export function handleUiApi(request: IncomingMessage, response: ServerResponse, 
 		}
 		void (async () => {
 			if (pathname === "/api/tools") {
+				const tools = options.tools?.(new URL(request.url ?? "/", "http://localhost").searchParams) ?? options.runtime;
 				if (request.method === "GET") {
-					writeJson(response, 200, await options.runtime.getToolSettings());
+					writeJson(response, 200, await tools.getToolSettings());
 				} else {
 					const chunks: Buffer[] = [];
 					let bytes = 0;
@@ -201,7 +203,7 @@ export function handleUiApi(request: IncomingMessage, response: ServerResponse, 
 						chunks.push(chunk);
 					}
 					const action = parseToolSettingsAction(JSON.parse(Buffer.concat(chunks).toString("utf8")));
-					const result = await options.runtime.updateToolSettings(action);
+					const result = await tools.updateToolSettings(action);
 					writeJson(response, result.ok ? 200 : result.code === "conflict" ? 409 : 400, result);
 				}
 				return;

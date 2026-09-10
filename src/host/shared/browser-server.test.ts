@@ -205,3 +205,18 @@ it("builds streamed snapshots only while an authenticated browser is connected",
 	publish();
 	expect(snapshot).not.toHaveBeenCalled();
 });
+
+it("routes tool context only after authenticating the browser request", async () => {
+	const runtime = { getToolSettings: vi.fn(async () => ({ tools: [] })) };
+	const target = { getToolSettings: vi.fn(async () => ({ tools: [], context: { kind: "target" as const, label: "Selected target" } })), updateToolSettings: vi.fn(async () => ({ ok: true, snapshot: { tools: [] } })) };
+	const tools = vi.fn((_query: URLSearchParams) => target);
+	const f = await fixture(undefined, { uiRuntime: () => runtime as any, tools });
+	const url = `http://127.0.0.1:${f.port}/api/tools?conversationId=second&taskId=running`;
+	expect((await fetch(url)).status).toBe(403);
+	expect(tools).not.toHaveBeenCalled();
+	expect(await (await fetch(url, { headers: { Authorization: "Bearer secret" } })).json()).toMatchObject({ context: { kind: "target" } });
+	expect(tools.mock.calls[0]?.[0]?.get("conversationId")).toBe("second");
+	expect(runtime.getToolSettings).not.toHaveBeenCalled();
+	await fetch(url, { method: "POST", headers: { Authorization: "Bearer secret" }, body: JSON.stringify({ type: "check-connection" }) });
+	expect(target.updateToolSettings).toHaveBeenCalledWith({ type: "check-connection" });
+});

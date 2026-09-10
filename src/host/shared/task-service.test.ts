@@ -248,29 +248,6 @@ it("a coordinator question does not wait for a running child", async () => {
 		s.service.snapshot().tasks.find((t) => t.id === child.taskId)!.state,
 	).toBe("running");
 });
-it("does not run an accepted document action before its authorization commits", async () => {
-	const s = setup();
-	s.journal.registerSession("a", "a");
-	const receipt = s.service.submit({
-		requestId: "pending",
-		conversationId: "a",
-		sessionId: "a",
-		kind: "prompt",
-		text: "create",
-		bindings: [],
-		attachments: [],
-		documentAction: { action: "new" },
-	});
-	s.service.pump();
-	await tick();
-	expect(s.contexts).toHaveLength(0);
-	expect(() => s.journal.start(receipt.taskId, receipt.turnId)).toThrow(
-		"admission",
-	);
-	s.journal.finishAdmission(receipt.taskId, "No validated installation");
-	s.service.pump();
-	expect(s.service.snapshot().tasks[0]!.state).toBe("failed");
-});
 it.each(["same", "other"])("starts a new request and its child after historical usage exceeds the limit in the %s conversation", async (conversation) => {
 	const journal = new TaskJournal(":memory:");
 	journal.registerSession("same", "same");

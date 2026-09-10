@@ -1,11 +1,8 @@
 import type { HostRuntime } from "../pi-runtime.js";
 import type { SharedBrowserBackend } from "./browser-server.js";
-import {
-	parseSharedBrowserCommand,
-	type SharedBrowserCommand,
-} from "./browser-protocol.js";
+import type { SharedBrowserCommand } from "./browser-protocol.js";
 import { SharedTaskService } from "./task-service.js";
-import { SharedRegistry, TargetUnavailableError } from "./registry.js";
+import { SharedRegistry } from "./registry.js";
 import { conversationSnapshot } from "./conversation-snapshot.js";
 
 /** Authenticated browser commands enter here; no model or native work starts before journal commit. */
@@ -14,7 +11,6 @@ export class SharedBackend implements SharedBrowserBackend {
 	private readonly unsubscribe: (() => void)[];
 	private stopping = false;
 	private publishTimer?: ReturnType<typeof setTimeout>;
-	private readonly admissions = new Map<string, Promise<unknown>>();
 	stopAdmission(): void {
 		this.stopping = true;
 	}
@@ -25,17 +21,6 @@ export class SharedBackend implements SharedBrowserBackend {
 		private readonly admin: HostRuntime,
 		private readonly stopHost: () => Promise<void>,
 		private readonly actions?: {
-			authorizeDocument(
-				taskId: string,
-				command: Extract<SharedBrowserCommand, { type: "submit" }>,
-			): Promise<void>;
-			installations(): unknown[];
-			recoverLaunch?(
-				requestId: string,
-				taskId: string,
-				launchRequestId: string,
-				acknowledgement: string,
-			): Promise<unknown>;
 			recover(
 				requestId: string,
 				taskId: string,
@@ -67,7 +52,6 @@ export class SharedBackend implements SharedBrowserBackend {
 			hostEpoch: this.hostEpoch,
 			conversationSession: this.registry.conversationSession,
 			targets: this.registry.list(),
-			installations: this.actions?.installations() ?? [],
 			runtime: this.admin.snapshot(),
 			eventCursor: Number(journal.events.at(-1)?.id ?? 0),
 		};
@@ -130,47 +114,6 @@ export class SharedBackend implements SharedBrowserBackend {
 		this.settings = pending.catch(() => {});
 		return pending;
 	}
-	async drainAdmissions(): Promise<void> {
-		await Promise.allSettled([...this.admissions.values()]);
-	}
-	async resumeAdmissions(): Promise<void> {
-		if (this.stopping) return;
-		const snapshot = this.tasks.journal.snapshot({ includeEvents: false });
-		for (const record of snapshot.records.filter(
-			(record) => record.kind === "admission" && record.state === "pending",
-		)) {
-			const task = snapshot.tasks.find(
-				(task) =>
-					task.id === record.task_id &&
-					task.state === "queued" &&
-					!task.cancellation_requested,
-			);
-			if (!task) continue;
-			let command: SharedBrowserCommand;
-			try {
-				command = parseSharedBrowserCommand(
-					JSON.stringify({
-						...JSON.parse(String(task.payload)),
-						type: "submit",
-					}),
-				);
-				if (command.type !== "submit") continue;
-				for (const binding of command.bindings)
-					this.registry.resolveBinding(binding);
-				if (command.documentAction)
-					this.registry.resolveLifecycle(
-						command.documentAction.lifecycleInstanceId,
-					);
-			} catch (error) {
-				if (error instanceof TargetUnavailableError && error.permanent) {
-					this.tasks.journal.finishAdmission(String(task.id), error.message);
-					this.publish();
-				}
-				continue;
-			}
-			await this.command(command);
-		}
-	}
 	async command(
 		command: Exclude<SharedBrowserCommand, { type: "authenticate" }>,
 	): Promise<unknown> {
@@ -203,61 +146,13 @@ export class SharedBackend implements SharedBrowserBackend {
 					bindings: command.bindings,
 					...(command.messageTarget ? { messageTarget: command.messageTarget } : {}),
 					attachments: command.attachments,
-					...(command.documentAction
-						? { documentAction: command.documentAction }
-						: {}),
 				};
 				const prior = this.tasks.journal.findRequest(command.requestId, input);
-				if (
-					prior &&
-					this.tasks
-						.snapshot()
-						.records.find(
-							(record) =>
-								record.kind === "admission" &&
-								record.id === (prior as { taskId: string }).taskId,
-						)?.state !== "pending"
-				)
-					return prior;
-				const ongoing = this.admissions.get(command.requestId);
-				if (ongoing) return ongoing;
-				if (!prior)
-					for (const binding of command.bindings)
-						this.registry.resolveBinding(binding);
-				const receipt = this.tasks.journal.accept(input);
-				const admission = (async () => {
-					try {
-						if (command.documentAction) {
-							if (!this.actions)
-								throw new Error("Document actions are unavailable");
-							await this.actions.authorizeDocument(receipt.taskId, command);
-						}
-						this.tasks.journal.finishAdmission(receipt.taskId);
-					} catch (error) {
-						if (
-							this.tasks
-								.snapshot()
-								.tasks.find((task) => task.id === receipt.taskId)?.state ===
-							"queued"
-						)
-							this.tasks.journal.finishAdmission(receipt.taskId, String(error));
-						this.publish();
-						return {
-							...receipt,
-							admissionError:
-								error instanceof Error ? error.message : String(error),
-						};
-					}
-					this.publish();
-					this.tasks.pump();
-					return receipt;
-				})();
-				this.admissions.set(command.requestId, admission);
-				try {
-					return await admission;
-				} finally {
-					this.admissions.delete(command.requestId);
-				}
+				if (prior) return prior;
+				for (const binding of command.bindings) this.registry.resolveBinding(binding);
+				const receipt = this.tasks.submit(input);
+				this.publish();
+				return receipt;
 			}
 			case "steer":
 				this.taskInConversation(command.taskId, command.conversationId);
@@ -282,29 +177,6 @@ export class SharedBackend implements SharedBrowserBackend {
 					command.questionId,
 					command.answer,
 				);
-			}
-			case "recover_launch": {
-				this.taskInConversation(command.taskId, command.conversationId);
-				const snapshot = this.tasks.snapshot();
-				const task = snapshot.tasks.find((row) => row.id === command.taskId);
-				const launch = snapshot.records.find(
-					(row) =>
-						row.kind === "launch" &&
-						row.id === command.launchRequestId &&
-						row.task_id === command.taskId,
-				);
-				if (task?.parent_task_id || !launch)
-					throw new Error("Launch does not belong to this root task");
-				if (!this.actions?.recoverLaunch)
-					throw new Error("Launch recovery is unavailable");
-				const result = await this.actions.recoverLaunch(
-					command.requestId,
-					command.taskId,
-					command.launchRequestId,
-					command.acknowledgement,
-				);
-				this.publish();
-				return result;
 			}
 			case "recover":
 				this.taskInConversation(command.taskId, command.conversationId);

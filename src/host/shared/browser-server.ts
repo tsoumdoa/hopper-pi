@@ -28,6 +28,7 @@ export function createSharedBrowserServer(options: {
 	onRegistrationError?: (error: unknown) => void;
 	health?: () => unknown;
 	uiRuntime?: () => HostRuntime | undefined;
+	tools?: (query: URLSearchParams) => Pick<HostRuntime, "getToolSettings" | "updateToolSettings">;
 	exportConversation?: (conversationId: string | null) => unknown;
 }): { server: Server; close(): Promise<void> } {
 	const staticDir = validateStaticDirectory(options.staticDir);
@@ -88,7 +89,7 @@ export function createSharedBrowserServer(options: {
 			return;
 		}
 		const uiRuntime = options.uiRuntime?.();
-		if (uiRuntime && handleUiApi(request, response, { runtime: uiRuntime, token: options.browserCredential, exportSession: options.exportConversation })) return;
+		if (uiRuntime && handleUiApi(request, response, { runtime: uiRuntime, token: options.browserCredential, exportSession: options.exportConversation, tools: options.tools })) return;
 		serveStatic(staticDir, request, response);
 	});
 	const sockets = new WebSocketServer({

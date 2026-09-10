@@ -22,8 +22,6 @@ internal static class SharedNativeHost
     public static void InitializeDocument(Rhino.RhinoDoc doc) { if (doc != null) InitializedDocuments.Add(doc.RuntimeSerialNumber); }
     public static bool IsDocumentInitialized(Rhino.RhinoDoc doc) => InitializedDocuments.Contains(doc.RuntimeSerialNumber);
     public static void ForgetDocument(uint serial) => InitializedDocuments.Remove(serial);
-    public static string BootstrapTicket { get; set; }
-    public static bool SuppressBrowser { get; set; }
     public static uint? MessageDocumentSerialNumber { get; set; }
     public static string ControlDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".hopper", "shared-control");
     public static JsonElement Read(string name) => JsonDocument.Parse(File.ReadAllText(Path.Combine(ControlDirectory, name))).RootElement.Clone();
@@ -58,7 +56,6 @@ internal sealed class SharedNodeAttachment : IDisposable
     private long _hostProcessStartTicks;
     private NodeRuntime _runtime;
     private volatile bool _attached;
-    private bool _bootstrapRegistered;
     public Uri ReadyUri { get; private set; }
     public event Action<Uri> Ready;
     public bool IsAlive => _attached;
@@ -74,7 +71,7 @@ internal sealed class SharedNodeAttachment : IDisposable
         _lifetime?.Cancel(); _lifetime = new CancellationTokenSource();
         try
         {
-            await _recovery.EnsureAsync(SharedNativeHost.BootstrapTicket == null, true, cancellationToken).ConfigureAwait(false);
+            await _recovery.EnsureAsync(true, true, cancellationToken).ConfigureAwait(false);
             _attached = true;
             _ = Reconnect(_lifetime.Token);
             return new(true, true, "Attached to the shared Hopper host.");
@@ -163,18 +160,9 @@ internal sealed class SharedNodeAttachment : IDisposable
             _hostProcessStartTicks = hostProcess.StartTime.ToUniversalTime().Ticks;
         _status.UpdateHost(new HostRuntimeStatusUpdate(Hopper.Core.Lifecycle.LifecycleState.Starting,
             discovery.GetProperty("pid").GetInt32(), _runtime.ExecutablePath, _runtime.Version.ToString(), HandshakeState.connecting, 0));
-        object bootstrap = null;
-        if (!_bootstrapRegistered && SharedNativeHost.BootstrapTicket is { } ticketId)
-        {
-            var ticket = SharedNativeHost.Read(Path.Combine("bootstrap", ticketId + ".json"));
-            if (ticket.GetProperty("expiresAt").GetInt64() <= DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()) throw new InvalidOperationException("Launch bootstrap ticket expired.");
-            using var process = Process.GetCurrentProcess();
-            bootstrap = new { ticketId, nonce = ticket.GetProperty("nonce").GetString(), requestId = ticket.GetProperty("requestId").GetString(),
-                installationId = ticket.GetProperty("installationId").GetString(), process = new { pid = process.Id, startIdentity = process.StartTime.ToUniversalTime().ToString("O") }, lifecycleInstanceId = _lifecycle };
-        }
         using var request = new HttpRequestMessage(HttpMethod.Post, $"http://127.0.0.1:{port}/api/shared/register");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", credential);
-        request.Content = new StringContent(JsonSerializer.Serialize(new { profilePath = _profile, hostEpoch = epoch, bootstrap, process = CurrentProcessIdentity() }), Encoding.UTF8, "application/json");
+        request.Content = new StringContent(JsonSerializer.Serialize(new { profilePath = _profile, hostEpoch = epoch, process = CurrentProcessIdentity() }), Encoding.UTF8, "application/json");
         using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
@@ -189,7 +177,6 @@ internal sealed class SharedNodeAttachment : IDisposable
             throw new InvalidOperationException(reason);
         }
         _epoch = epoch;
-        _bootstrapRegistered = true;
         PublishBrowserUri(control);
     }
 

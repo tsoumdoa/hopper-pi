@@ -16,7 +16,7 @@ import type {
 	DocumentRequest,
 } from "../../types/document-management.js";
 import { NativeActionError } from "./action-errors.js";
-import type { DocumentActionAdapter, DocumentGrant } from "./grants.js";
+import type { DocumentActionAdapter, DocumentActionRequest } from "./document-actions.js";
 import type { TransferAdapter } from "./transfer.js";
 import type { SharedNativeRuntime } from "./native-runtime.js";
 import { SharedRegistry } from "./registry.js";
@@ -95,7 +95,7 @@ export function createNativeActionAdapters(
 		string,
 		{ args: DocumentRequest; baselines: { path: string; baseline: unknown }[] }
 	>();
-	const inventory = async (grant: DocumentGrant) =>
+	const inventory = async (grant: DocumentActionRequest) =>
 		resultData(
 			await native
 				.getClient(grant.lifecycleInstanceId)
@@ -191,6 +191,7 @@ export function createNativeActionAdapters(
 					expectedActiveDocument: state.activeDocumentId ?? null,
 					...(grant.path ? { path: grant.path } : {}),
 					...(grant.templatePath ? { templatePath: grant.templatePath } : {}),
+					...(grant.createDirectories !== undefined ? { createDirectories: grant.createDirectories } : {}),
 				};
 				const destinations: { identity: string; baseline: unknown }[] = [],
 					baselines: { path: string; baseline: unknown }[] = [];
@@ -199,7 +200,7 @@ export function createNativeActionAdapters(
 				for (const document of affected) {
 					if (document.isModified && grant.modifiedPolicy === "refuse")
 						throw new Error(
-							"The replaced document has unsaved changes; grant an explicit save or discard policy",
+							"The replaced document has unsaved changes; ask the user whether to save or discard, then retry with onUnsaved",
 						);
 					if (document.isModified && grant.modifiedPolicy === "save") {
 						const path = grant.savePath ?? document.path;
@@ -263,6 +264,7 @@ export function createNativeActionAdapters(
 							grant.modifiedPolicy === "refuse" ? "fail" : grant.modifiedPolicy,
 						...(grant.savePath ? { savePath: grant.savePath } : {}),
 						overwrite: grant.overwrite ?? false,
+						createDirectories: grant.createDirectories ?? false,
 					});
 				}
 				prepared.set(grant.requestId, { args, baselines });
@@ -338,7 +340,7 @@ export function createNativeActionAdapters(
 						!document?.path ||
 						(await realpath(document.path)) !== (await realpath(grant.path!))
 					)
-						throw new Error("Opened document path does not match its grant");
+						throw new Error("Opened document path does not match the request");
 				}
 			},
 		},

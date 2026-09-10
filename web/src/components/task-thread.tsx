@@ -13,7 +13,6 @@ import { OTHER_OPTION_LABEL, formatPickOptionLabels, type PickOption } from "../
 import { ThinkingBlock, ToolCard, Welcome } from "./conversation";
 import { MessageMarkdown } from "./message-markdown";
 import { Button } from "./ui/button";
-import { Textarea } from "./ui/textarea";
 import { WorkingTime } from "./working-time";
 
 const KIND_LABELS: Partial<Record<SendMode, string>> = { steer: "Steering note", follow_up: "Follow-up" };
@@ -162,38 +161,9 @@ function Question({ question, enabled, inactive, waiting, target, queued = 0, an
 	}} />;
 }
 
-function LaunchRecovery({ recover }: { recover(acknowledgement: string): boolean }) {
-	const [acknowledgement, setAcknowledgement] = useState("");
-	return (
-		<form
-			className="rounded-md border border-line bg-surface p-3"
-			onSubmit={(event) => {
-				event.preventDefault();
-				recover(acknowledgement);
-			}}
-		>
-			<label className="block text-xs leading-5 text-ink-soft">
-				Preserve your models, inspect startup or autosave dialogs, and close all Rhino processes before recovery. Record what you checked. The host verifies that no Rhino process remains before allowing a new grant; it does not close Rhino for you.
-				<Textarea
-					aria-label="Launch recovery inspection"
-					className="mt-2 min-h-20"
-					value={acknowledgement}
-					onChange={(event) => setAcknowledgement(event.target.value)}
-				/>
-			</label>
-			<div className="mt-3 flex justify-end">
-				<Button type="submit" size="sm" variant="secondary" disabled={!acknowledgement.trim()}>
-					Acknowledge and verify launch recovery
-				</Button>
-			</div>
-		</form>
-	);
-}
-
 export type TaskThreadCommands = {
 	answer(questionId: string, answer: string | null): boolean;
 	recover(taskId: string, acknowledgement: string): boolean;
-	recoverLaunch(taskId: string, launchRequestId: string, acknowledgement: string): boolean;
 };
 
 function TaskReply({ task, snapshot, labelFor, commands }: {
@@ -216,9 +186,6 @@ function TaskReply({ task, snapshot, labelFor, commands }: {
 	const running = state === "running" || state === "suspending";
 	const questions = snapshot.questions.filter((question) => question.task_id === task.id);
 	const recovered = snapshot.recoveries?.some((record) => record.task_id === task.id) ?? false;
-	const launches = (snapshot.records ?? []).filter(
-		(record) => record.kind === "launch" && record.task_id === task.id && ["cancelled", "uncertain"].includes(String(record.state)) && decode<any>(record.payload, {}).dispatchAttempted,
-	);
 	const captures = messages
 		.filter((message) => message.role === "toolResult" && Array.isArray(message.content))
 		.flatMap((message, i) =>
@@ -315,30 +282,6 @@ function TaskReply({ task, snapshot, labelFor, commands }: {
 						answer={(value) => commands.answer(String(question.id), value)}
 					/>
 				))}
-				{launches.map((record) => {
-					const payload = decode<any>(record.payload, {});
-					const supported = snapshot.installations?.some(
-						(installation) => installation.id === payload.request?.installationId
-							&& (installation.platform === "win32" || (installation.platform === "darwin" && !payload.request?.independentProcess)),
-					);
-					const recovered = snapshot.records?.some(
-						(row) => row.kind === "launch_recovery" && row.id === record.id && row.task_id === task.id && row.state === "confirmed",
-					);
-					return (
-						<section key={String(record.id)} aria-label="Launch recovery" className="grid gap-3">
-							<Notice tone="warn">{`Original launch outcome: ${String(record.state)}. ${String(payload.detail ?? "")}`.trim()}</Notice>
-							{recovered ? (
-								<p className="text-[13px] text-ink-soft">Ready to launch Rhino again.</p>
-							) : supported ? (
-								<LaunchRecovery recover={(acknowledgement) => commands.recoverLaunch(String(task.id), String(record.id), acknowledgement)} />
-							) : (
-								<p className="text-[13px] text-ink-soft">
-									Inspect the original Rhino process and its documents. Automatic launch recovery is unavailable for this launch.
-								</p>
-							)}
-						</section>
-					);
-				})}
 				{state === "uncertain" && !recovered && (
 					<div className="grid justify-items-start gap-2">
 						<Notice tone="muted">Hopper couldn't confirm how this task ended. Check your model and any saved files before continuing.</Notice>

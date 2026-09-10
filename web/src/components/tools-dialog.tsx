@@ -7,13 +7,13 @@ import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 
-async function toolsRequest(token: string, action?: ToolSettingsAction, signal?: AbortSignal): Promise<Response> {
+async function toolsRequest(token: string, action?: ToolSettingsAction, signal?: AbortSignal, contextQuery = ""): Promise<Response> {
 	if (import.meta.env.MODE === "mock") {
 		const { mockToolSettings } = await import("../mocks/tool-settings-mock");
 		const result = mockToolSettings(action);
 		return new Response(JSON.stringify(result), { status: "ok" in result && !result.ok ? 409 : 200 });
 	}
-	return fetch("/api/tools", {
+	return fetch(`/api/tools${contextQuery ? `?${contextQuery}` : ""}`, {
 		...(action ? { method: "POST", body: JSON.stringify(action) } : {}),
 		headers: { Authorization: `Bearer ${token}`, ...(action ? { "Content-Type": "application/json" } : {}) },
 		cache: "no-store", ...(signal ? { signal } : {}),
@@ -224,7 +224,8 @@ function ToolDetail({ tool, group, onBack }: { tool: AgentToolSummary; group: To
 	);
 }
 
-export function ToolsDialog({ token, connected, onOpenChange }: {
+export function ToolsDialog({ token, connected, onOpenChange, contextQuery = "" }: {
+	contextQuery?: string;
 	token: string;
 	connected: boolean;
 	onOpenChange(open: boolean): void;
@@ -268,7 +269,7 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 		latestSnapshot.current = null;
 		retiredEpochs.current.clear();
 		setSnapshot(null);
-	}, [token]);
+	}, [token, contextQuery]);
 
 	useEffect(() => {
 		if (!connected) return;
@@ -280,7 +281,7 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 			inFlight = true;
 			setBusy(true);
 			try {
-				const response = await toolsRequest(token, undefined, controller.signal);
+				const response = await toolsRequest(token, undefined, controller.signal, contextQuery);
 				const result = await response.json();
 				if (!response.ok) throw new Error(result.error || `Tools request failed (${response.status})`);
 				if (!controller.signal.aborted && sequence === fetchSequence.current) { applyToolsSnapshot(result); }
@@ -295,7 +296,7 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 		// Websocket events carry changes immediately; polling recovers missed events.
 		const timer = window.setInterval(() => void refresh(), 30_000);
 		return () => { controller.abort(); window.clearInterval(timer); };
-	}, [connected, token, revision]);
+	}, [connected, token, revision, contextQuery]);
 
 	const update = async (action: ToolSettingsAction) => {
 		if (!connected || mutation.current) return;
@@ -305,7 +306,7 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 		setSaving(true);
 		setError(null);
 		try {
-			const response = await toolsRequest(token, action);
+			const response = await toolsRequest(token, action, undefined, contextQuery);
 			const result = await response.json() as ToolSettingsResult;
 			if (context !== contextSequence.current) return;
 			if (result.snapshot) applyToolsSnapshot(result.snapshot, sequence === fetchSequence.current);
@@ -321,6 +322,8 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 	useEffect(() => {
 		const changed = (event: Event) => {
 			if (!connected) return;
+			// Admin broadcasts contain profile changes, not this target's live state.
+			if (contextQuery) { setRevision(value => value + 1); return; }
 			++fetchSequence.current;
 			applyToolsSnapshot((event as CustomEvent<AgentToolsSnapshot>).detail);
 		};
@@ -341,7 +344,7 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 			window.removeEventListener("hopper-tool-settings", changed);
 			window.removeEventListener("hopper-tools-session-changed", sessionChanged);
 		};
-	}, [connected, token]);
+	}, [connected, token, contextQuery]);
 	const expected = snapshot?.settings?.version;
 	const controlsDisabled = !connected || saving || !expected;
 	const toggleParent = (id: string, enabled: boolean) => {
@@ -349,15 +352,19 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 		void update({ type: "patch", expected, patch: { target: "parents", id, enabled } });
 	};
 
+	const preview = snapshot?.context?.kind === "target";
+	const highlighted = (tool: AgentToolSummary) => preview
+		? !!tool.available && !!tool.enabled && snapshot?.settings?.parents.find(parent => parent.id === tool.parent)?.enabled !== false
+		: tool.active;
 	const groupDefinitions = availableGroups(snapshot);
 	const search = query.trim().toLowerCase();
 	const filtered = search || activeOnly;
-	const visible = snapshot?.tools.filter((tool) => (!activeOnly || tool.active)
+	const visible = snapshot?.tools.filter((tool) => (!activeOnly || highlighted(tool))
 		&& `${groupDefinitions.find(group => group.id === toolGroup(tool.name, tool.parent))?.name} ${tool.name} ${tool.description}`.toLowerCase().includes(search)) ?? [];
 	const groups = groupDefinitions.map((group) => ({ ...group, tools: visible.filter((tool) => toolGroup(tool.name, tool.parent) === group.id) }))
 		.filter((group) => group.tools.length > 0);
 	const ordered = groups.flatMap((group) => group.tools);
-	const active = snapshot?.tools.filter((tool) => tool.active).length ?? 0;
+	const active = snapshot?.tools.filter(highlighted).length ?? 0;
 	const selected = ordered.find((tool) => tool.name === selectedName) ?? ordered[0] ?? null;
 
 	useEffect(() => {
@@ -400,7 +407,7 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 						<Input aria-label="Search tools" placeholder="Search tools…" value={query} onChange={(event) => { setQuery(event.target.value); setDetailOpen(false); }} className="pl-8" />
 					</div>
 					<Button variant={activeOnly ? "default" : "secondary"} size="sm" aria-pressed={activeOnly} onClick={() => { setActiveOnly((value) => !value); setDetailOpen(false); }}>
-						Active only
+						{preview ? "Available only" : "Active only"}
 					</Button>
 					<Button variant="secondary" size="sm" disabled={!connected || busy} onClick={() => { setError(null); setRevision((value) => value + 1); }}>
 						<RefreshCw className={cn("size-3.5", busy && "animate-spin")} />Refresh
@@ -433,8 +440,9 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 				</section>
 				</DialogContent></Dialog>}
 				<p role="status" className="-mt-2 text-xs text-muted">
-					{snapshot ? `${active} active · ${snapshot.tools.length} registered${filtered ? ` · ${visible.length} matching` : ""}` : connected && busy ? "Loading tools…" : "Tool list unavailable."}
+					{snapshot ? `${active} ${preview ? "available" : "active"} · ${snapshot.tools.length} registered${filtered ? ` · ${visible.length} matching` : ""}` : connected && busy ? "Loading tools…" : "Tool list unavailable."}
 				</p>
+				{snapshot?.context && <p className="text-xs text-muted">{snapshot.context.label}</p>}
 				<div className="grid min-h-0 flex-1 overflow-hidden rounded-md border border-line sm:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
 					<nav
 						ref={list}
@@ -448,7 +456,7 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 									<group.icon aria-hidden="true" className="size-3 text-muted" />
 									<h2 id={`tools-group-${group.id}`} className="text-[11px] font-semibold uppercase tracking-wider text-muted">{group.name}</h2>
 									{snapshot?.settings?.parents.filter((parent) => group.tools.some((tool) => tool.parent === parent.id)).map((parent) => <input key={parent.id} type="checkbox" role="switch" aria-label={`Enable ${parent.name}`} checked={parent.enabled} disabled={controlsDisabled} onChange={(event) => toggleParent(parent.id, event.target.checked)} className="ml-auto size-4 accent-accent" />)}
-									<span title={`${group.tools.filter((tool) => tool.active).length} active of ${group.tools.length}`} className="ml-auto text-[11px] tabular-nums text-muted">{group.tools.filter((tool) => tool.active).length}/{group.tools.length}</span>
+									<span title={`${group.tools.filter(highlighted).length} ${preview ? "available" : "active"} of ${group.tools.length}`} className="ml-auto text-[11px] tabular-nums text-muted">{group.tools.filter(highlighted).length}/{group.tools.length}</span>
 								</div>
 								<ul className="py-1">
 									{group.tools.map((tool) => {
@@ -465,7 +473,7 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 														current && "bg-surface text-ink before:absolute before:bottom-1 before:left-0 before:top-1 before:w-0.5 before:rounded-r before:bg-accent",
 													)}
 												>
-													<span aria-hidden="true" className={cn("mt-[7px] size-1.5 rounded-full", tool.active ? "bg-accent" : "border border-line-strong")} />
+													<span title={tool.status ? TOOL_STATUS[tool.status] : tool.active ? "Active" : "Inactive"} className={cn("mt-[7px] size-1.5 rounded-full", highlighted(tool) ? "bg-accent" : tool.available && tool.enabled ? "border border-accent" : "border border-line-strong")} />
 													<span className="min-w-0">
 														<span title={tool.name} className="block truncate font-mono text-xs font-medium">{tool.name}</span>
 														<span className="block truncate text-[11px] text-muted">{tool.description}</span>
@@ -480,7 +488,7 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 						))}
 						{snapshot && !visible.length && (
 							<p className="px-4 py-8 text-center text-xs text-muted">
-								{!snapshot.tools.length ? "No tools are registered in this session." : activeOnly && !search ? "No tools are active right now." : "No tools match your search."}
+								{!snapshot.tools.length ? "No tools are registered in this session." : activeOnly && !search ? preview ? "No tools are available for this target." : "No tools are active right now." : "No tools match your search."}
 							</p>
 						)}
 					</nav>
@@ -489,7 +497,7 @@ export function ToolsDialog({ token, connected, onOpenChange }: {
 						{selected ? <>
 							{selected.id && snapshot?.settings && <div className="mb-4 grid gap-2">
 								<label className="flex items-center gap-2 text-xs"><input type="checkbox" role="switch" aria-label={`Enable ${selected.name}`} checked={selected.enabled ?? false} disabled={controlsDisabled || !snapshot.settings.parents.find((parent) => parent.id === selected.parent)?.enabled} onChange={(event) => { if (expected) void update({ type: "patch", expected, patch: { target: "tools", id: selected.id!, enabled: event.target.checked } }); }} className="size-4 accent-accent" />Enable tool</label>
-								{selected.available && !selected.active && selected.enabled && snapshot.settings.parents.find((parent) => parent.id === selected.parent)?.enabled && <Button size="xs" variant="secondary" disabled={controlsDisabled} onClick={() => void update({ type: "activate", id: selected.id! })}>Activate for this session</Button>}
+								{!preview && selected.available && !selected.active && selected.enabled && snapshot.settings.parents.find((parent) => parent.id === selected.parent)?.enabled && <Button size="xs" variant="secondary" disabled={controlsDisabled} onClick={() => void update({ type: "activate", id: selected.id! })}>Activate for this session</Button>}
 							</div>}
 							{!selected.id && snapshot?.settings && <p className="mb-2 text-xs text-muted">Unmanaged tool</p>}
 							<ToolDetail key={selected.name} tool={selected} group={groupDefinitions.find(group => group.id === toolGroup(selected.name, selected.parent))!} onBack={() => setDetailOpen(false)} />

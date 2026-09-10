@@ -55,12 +55,13 @@ export class ToolPolicyRuntime {
 	private credentialWaits = new Set<{ policy: PolicySnapshot; pluginId: string; cancel(): void }>();
 	onChange?: (snapshot: AgentToolsSnapshot) => void;
 
-	constructor(options: { directory?: string; embedded?: boolean; questionUi?: boolean; store?: ToolPolicyStore; credentials?: ReadonlyMap<string, ToolCredentials>; plugins?: readonly ToolPlugin[] } = {}) {
+	constructor(options: { hostRoutedTools?: readonly string[]; directory?: string; embedded?: boolean; questionUi?: boolean; store?: ToolPolicyStore; credentials?: ReadonlyMap<string, ToolCredentials>; plugins?: readonly ToolPlugin[] } = {}) {
 		this.hasQuestionUi = options.questionUi === true;
 		this.plugins = options.store?.plugins ?? options.plugins ?? TOOL_PLUGINS;
 		const inventory = [...BUILTIN_POLICY_INVENTORY, ...this.plugins.flatMap(plugin => plugin.inventory)];
 		this.policyStore = options.store ?? new ToolPolicyStore(inventory, { directory: options.directory, plugins: this.plugins });
-		this.inventory = this.store.inventory.filter(tool => options.embedded || tool.id !== "hopper.tool.read_skill");
+		this.inventory = this.store.inventory.filter(tool => options.embedded || tool.id !== "hopper.tool.read_skill")
+			.map(tool => options.hostRoutedTools?.includes(tool.name) ? { ...tool, requirements: tool.requirements.filter(requirement => requirement !== "backend") } : tool);
 		this.initializeCredentials(options.credentials);
 		for (const plugin of this.plugins) {
 			const instance = plugin.create({ admit: (name, signal) => this.admitPlugin(plugin.id, name, signal) });
@@ -397,12 +398,12 @@ export class ToolPolicyRuntime {
 			&& policy.tools[tool.id]?.enabled && policy.parents[tool.parent]?.enabled).map(tool => tool.name)));
 	}
 
-	async getToolSettings(): Promise<AgentToolsSnapshot> {
+	async getToolSettings(backendPreview?: boolean): Promise<AgentToolsSnapshot> {
 		let policy: PolicySnapshot | null;
 		try { policy = await this.store.read(); } catch { policy = null; }
 		this.observe(policy);
 		const credential = policy ? await this.credentialStatuses(policy) : "unavailable";
-		return this.formatToolSettings(policy, credential);
+		return this.formatToolSettings(policy, credential, backendPreview);
 	}
 
 	private parameters(schema?: object): AgentToolSummary["parameters"] {
@@ -415,18 +416,23 @@ export class ToolPolicyRuntime {
 		return parameters;
 	}
 
-	private formatToolSettings(policy: PolicySnapshot | null, credential: CredentialStatuses | "unavailable"): AgentToolsSnapshot {
+	private formatToolSettings(policy: PolicySnapshot | null, credential: CredentialStatuses | "unavailable", backendPreview?: boolean): AgentToolsSnapshot {
 		const state = this.runtimeState(policy, credential);
+		if (backendPreview !== undefined) state.backend = backendPreview;
+		// A target preview describes availability, never the admin agent's exposure.
+		const session = backendPreview === undefined ? this.session : {
+			epoch: policy?.epoch ?? "", appliedRevision: policy?.revision ?? -1, activeIds: new Set<string>(),
+		};
 		const discovery = !!policy?.tools["hopper.tool.hopper_search_tools"]?.enabled && !!policy?.parents["hopper.interaction"]?.enabled;
 		const tools: AgentToolSummary[] = this.inventory.map(entry => {
 			const definition = this.definitions.get(entry.name);
-			const status = resolveToolPolicy(entry, policy, state, this.session, discovery);
+			const status = resolveToolPolicy(entry, policy, state, session, discovery);
 			return {
 				name: entry.name, id: entry.id, parent: entry.parent, description: definition?.description ?? entry.name,
 				parameters: this.parameters(definition?.parameters),
 				...status, enabled: policy?.tools[entry.id]?.enabled ?? false,
 				...(this.conflicts.has(entry.id) ? { status: "registration-conflict" as const, available: false, callable: false, active: false } : {}),
-				...(this.busy && policy && (policy.epoch !== this.session.epoch || policy.revision > this.session.appliedRevision)
+				...(backendPreview === undefined && this.busy && policy && (policy.epoch !== this.session.epoch || policy.revision > this.session.appliedRevision)
 					&& status.enabled && status.available ? { status: "pending-exposure" as const } : {}),
 			};
 		});
@@ -434,7 +440,7 @@ export class ToolPolicyRuntime {
 		const activeNames = new Set(this.pi?.getActiveTools() ?? []);
 		for (const tool of this.pi?.getAllTools() ?? []) {
 			if (!managedNames.has(tool.name)) tools.push({ name: tool.name, description: tool.description,
-				parameters: this.parameters(tool.parameters), active: activeNames.has(tool.name) });
+				parameters: this.parameters(tool.parameters), active: backendPreview === undefined && activeNames.has(tool.name) });
 		}
 		return { tools, settings: {
 			version: policy ? { epoch: policy.epoch, revision: policy.revision } : null,

@@ -112,7 +112,7 @@ public sealed class SharedExecutionFence
         {
             var action = request.DocumentActionOwner is { } actionJson ? SharedExecutionContract.ParseDocumentActionOwner(actionJson) : null;
             if (action is null || action.LifecycleInstanceId != _lifecycle || action.AttachmentGeneration != _generation)
-                return Failure("DOCUMENT_GRANT_REQUIRED: Managed document transitions require an authenticated bounded document action owner.");
+                return Failure("DOCUMENT_ACTION_REQUIRED: Managed document transitions require host execution ownership.");
             if (!request.Args.TryGetProperty("expectedDestinations", out var destinations) || destinations.ValueKind != System.Text.Json.JsonValueKind.Array)
                 return Failure("DESTINATION_BASELINES_REQUIRED: Shared managed actions require explicit reserved write destinations.");
             if (_recoveryRequired || _rhinoScope is not null || _grasshopperScope is not null)
@@ -129,7 +129,7 @@ public sealed class SharedExecutionFence
         if (boundDocumentAction)
         {
             if (!request.Args.TryGetProperty("action", out var action) || action.GetString() is not ("save" or "saveAs" or "close" or "activate"))
-                return Failure("DOCUMENT_GRANT_REQUIRED: New and open require a coordinator document grant.");
+                return Failure("DOCUMENT_ACTION_REQUIRED: New and open must run through the shared document action service.");
             if (!request.Args.TryGetProperty("expectedDestinations", out var destinations) || destinations.ValueKind != System.Text.Json.JsonValueKind.Array)
                 return Failure("DESTINATION_BASELINES_REQUIRED: Bound document writes require reserved destination baselines.");
             if (request.Operation == RpcOperation.manageGrasshopperDocument && owner.Binding is not GrasshopperTargetBinding ||

@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { HostConfig } from "../config.js";
 import type { EmbeddedPiHost } from "../pi-runtime.js";
+import { sharedToolSettings } from "./tool-settings.js";
 import { monitorHostLifetime } from "./lifetime.js";
 import { SharedHostControl } from "./control.js";
 import { ensureSharedHost } from "./ensure-host.js";
@@ -12,10 +13,10 @@ import { SharedBackend } from "./backend.js";
 import { createSharedBrowserServer } from "./browser-server.js";
 import type { SharedNativeRuntime } from "./native-runtime.js";
 import { SharedRecoveryService } from "./recovery.js";
-import { DocumentGrantService } from "./grants.js";
+import { admitDocumentTool } from "./document-tool-policy.js";
+import { DocumentActionService } from "./document-actions.js";
 import { GeometryTransferService } from "./transfer.js";
 import { createNativeActionAdapters } from "./native-actions.js";
-import type { createLaunchCoordinator } from "./launch-coordinator.js";
 import { validateTargetBinding } from "../../protocol/shared-execution.js";
 
 function sharedLimit(name: string, fallback: number): number {
@@ -77,9 +78,8 @@ export async function startSharedHost(
 	let admin: EmbeddedPiHost | undefined;
 	let native: SharedNativeRuntime | undefined;
 	let tasks: SharedTaskService | undefined;
-	let documents: DocumentGrantService | undefined;
+	let documents: DocumentActionService | undefined;
 	let transfers: GeometryTransferService | undefined;
-	let launches: Awaited<ReturnType<typeof createLaunchCoordinator>> | undefined;
 	let refresh: ReturnType<typeof setInterval> | undefined;
 	let stopLifetimeMonitor: (() => void) | undefined;
 	let refreshWork: Promise<void> | undefined;
@@ -121,6 +121,10 @@ export async function startSharedHost(
 		registrationCredential: registrationToken,
 		staticDir: config.paths.staticDir,
 		uiRuntime: () => admin,
+		tools: query => {
+			if (!admin || !tasks || !native) throw new Error("Host is initializing");
+			return sharedToolSettings(query, { admin, tasks, checkConnection: binding => native!.checkToolConnection(binding) });
+		},
 		exportConversation: (conversationId) => {
 			if (!backend) throw new Error("Host is initializing");
 			return backend.exportConversation(conversationId);
@@ -136,7 +140,6 @@ export async function startSharedHost(
 				throw new Error("Host is stopping; registrations are closed");
 			if (!native || !backend) throw new Error("Host is initializing");
 			const result = await native.register(request);
-			if (launches) await launches.registered(request, result);
 			backend.publish();
 			tasks!.pump();
 			return {
@@ -151,7 +154,6 @@ export async function startSharedHost(
 			stopLifetimeMonitor?.();
 			if (refresh) clearInterval(refresh);
 			await tasks?.stop();
-			await backend?.drainAdmissions();
 			await refreshWork?.catch(() => {});
 			await native?.close();
 			backend?.dispose();
@@ -166,9 +168,9 @@ export async function startSharedHost(
 		// The short-lived --ensure-host launcher never loads these modules.
 		const [{ EmbeddedPiHost }, { createPiTaskDriver }, { Type },
 			{ collectDelegationResults, delegationBindingSchema, selectDelegationImages },
-			{ createLaunchCoordinator }, { SharedNativeRuntime }] = await Promise.all([
+			{ SharedNativeRuntime }] = await Promise.all([
 			import("../pi-runtime.js"), import("./pi-driver.js"), import("@earendil-works/pi-ai"),
-			import("./delegation.js"), import("./launch-coordinator.js"), import("./native-runtime.js"),
+			import("./delegation.js"), import("./native-runtime.js"),
 		]);
 		journal = new TaskJournal(join(state.dataDirectory, "journal.sqlite"));
 		if (journal.identity !== state.journalIdentity)
@@ -206,16 +208,7 @@ export async function startSharedHost(
 					...(context.parentTaskId === null
 						? {
 								documentActions: {
-									list: () =>
-										journal!
-											.snapshot()
-											.records.filter(
-												(record) =>
-													record.task_id === context.taskId &&
-													record.kind === "grant" &&
-													JSON.parse(String(record.payload)).action,
-											),
-									execute: (grantId: string) => documents!.execute(grantId),
+									prepare: (toolCallId, kind, request) => documents!.prepareForTask(context, toolCallId, kind, request),
 								},
 							}
 						: {}),
@@ -295,7 +288,6 @@ export async function startSharedHost(
 							},
 						},
 					] : [],
-					launchTools: (context) => launches?.tools(context) ?? [],
 					coordinatorTools: (context) => [
 						{
 							name: "exportRhinoGeometry",
@@ -365,7 +357,7 @@ export async function startSharedHost(
 				}),
 		});
 		const adapters = createNativeActionAdapters(native, journal, registry);
-		documents = new DocumentGrantService(journal, tasks, adapters.documents);
+		documents = new DocumentActionService(journal, tasks, adapters.documents, kind => admitDocumentTool(kind, config.paths.toolConfigDir));
 		transfers = new GeometryTransferService(
 			journal,
 			tasks,
@@ -373,11 +365,6 @@ export async function startSharedHost(
 			adapters.transfer,
 		);
 		tasks.setDocumentActionExecutor((grantId) => documents!.execute(grantId));
-		launches = await createLaunchCoordinator({
-			journal,
-			control,
-			registry,
-		});
 		const recovery = new SharedRecoveryService(
 			journal,
 			registry,
@@ -397,23 +384,6 @@ export async function startSharedHost(
 				});
 			},
 			{
-				authorizeDocument: async (taskId, command) => {
-					const action = command.documentAction!;
-					registry.resolveLifecycle(action.lifecycleInstanceId);
-					documents!.authorize({
-						requestId: `${command.requestId}:document`,
-						taskId,
-						...action,
-					});
-				},
-				installations: () => launches!.installations(),
-				recoverLaunch: (requestId, taskId, launchRequestId, acknowledgement) =>
-					launches!.recoverLaunch({
-						requestId,
-						taskId,
-						launchRequestId,
-						acknowledgement,
-					}),
 				recover: (requestId, taskId, acknowledgement) =>
 					recovery.recover(requestId, taskId, acknowledgement),
 			},
@@ -421,7 +391,7 @@ export async function startSharedHost(
 		);
 		let refreshing = false;
 		stopLifetimeMonitor = monitorHostLifetime({
-			shouldStop: () => !closing && native!.shouldStopAfterRhinoExit() && !launches!.hasPendingLaunch,
+			shouldStop: () => !closing && native!.shouldStopAfterRhinoExit(),
 			close,
 			exit: code => process.exit(code),
 			log: message => process.stdout.write(`[shared-host] ${message}\n`),
@@ -432,8 +402,6 @@ export async function startSharedHost(
 			refreshWork = Promise.all([native!.refresh(), admin!.refreshAuth()])
 				.then(async () => {
 					if (closing) return;
-					await launches!.refresh();
-					await backend!.resumeAdmissions();
 					if (closing) return;
 					backend!.publish();
 					tasks!.pump();
@@ -456,7 +424,6 @@ export async function startSharedHost(
 		process.once("SIGTERM", () => {
 			void close();
 		});
-		await backend.resumeAdmissions();
 		tasks.pump();
 		process.stdout.write(
 			`${JSON.stringify({ type: "ready", mode: "shared", url: `http://127.0.0.1:${state.endpointPort}/`, pid: process.pid })}\n`,

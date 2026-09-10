@@ -295,3 +295,21 @@ it("clears plugin key setup on session replacement", async () => {
 	expect(document.querySelector('[aria-label="Firecrawl API key"]')).toBeNull();
 	expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
 });
+
+it("shows target availability separately from active tools and ignores admin status broadcasts", async () => {
+	const targetSnapshot = {
+		context: { kind: "target", label: "Availability for the selected target. No task is running." },
+		settings: { version: { epoch: "epoch", revision: 0 }, parents: [{ id: "hopper.rhino", name: "Rhino", enabled: true }] },
+		tools: [{ name: "rh_document", id: "hopper.tool.rh_document", parent: "hopper.rhino", description: "Manage document", parameters: {}, enabled: true, available: true, active: false, status: "available-on-demand" }],
+	};
+	vi.mocked(fetch).mockImplementation(async () => new Response(JSON.stringify(targetSnapshot)));
+	const contextQuery = "conversationId=second&taskId=task";
+	await act(async () => root.render(createElement(ToolsDialog, { token: "test-token", connected: true, contextQuery, onOpenChange: () => {} })));
+	expect(fetch).toHaveBeenCalledWith(`/api/tools?${contextQuery}`, expect.anything());
+	expect(document.body.textContent).toContain("1 available · 1 registered");
+	expect(document.body.textContent).not.toContain("Activate for this session");
+	expect(document.querySelector('[title="Available on demand"]')).not.toBeNull();
+	await act(async () => window.dispatchEvent(new CustomEvent("hopper-tool-settings", { detail: { tools: [] } })));
+	expect(document.body.textContent).toContain("1 available · 1 registered");
+	expect(fetch).toHaveBeenCalledTimes(2);
+});

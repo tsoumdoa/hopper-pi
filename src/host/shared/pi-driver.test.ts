@@ -427,7 +427,7 @@ it("applies normal UI skill preferences and thinking to new tasks while retainin
 });
 
 
-it.each([null, "parent"])("keeps native tools with selected ownership and exposes delegation and launch tools only to roots: %s", async (parentTaskId) => {
+it.each([null, "parent"])("keeps native tools with selected ownership and exposes delegation tools only to roots: %s", async (parentTaskId) => {
 	const root = await mkdtemp(join(tmpdir(), "shared-owned-delegation-"));
 	const { RuntimeSessionContext } = await import("../../infra/runtime-session-context.js");
 	const { Type } = await import("@earendil-works/pi-ai");
@@ -441,14 +441,16 @@ it.each([null, "parent"])("keeps native tools with selected ownership and expose
 		dataDirectory: root, toolConfigDir: join(root, "tool-settings"), authPath: join(root, "auth.json"),
 		geometry: async () => ({ runtimeSession, cleanup: async () => ({ confirmed: true }) }),
 		delegationTools: () => ["listRhinoTargets", "delegate", "waitForDelegates"].map((name) => ({ name, label: name, description: name, parameters: Type.Object({}), execute: async () => ({ content: [{ type: "text", text: "done" }], details: {} }) })),
-		launchTools: () => ["listRhinoLaunches", "launchRhino"].map((name) => ({ name, label: name, description: name, parameters: Type.Object({}), execute: async () => ({ content: [{ type: "text", text: "done" }], details: {} }) })),
 		configureSession: (created) => { session = created; },
 	});
 	try {
 		const names = session!.agent.state.tools.map((tool) => tool.name);
 		expect(names).toContain("rh_run_script");
-		for (const name of ["listRhinoTargets", "delegate", "waitForDelegates", "listRhinoLaunches", "launchRhino"])
+		for (const name of ["listRhinoTargets", "delegate", "waitForDelegates"])
 			expect(names.includes(name)).toBe(parentTaskId === null);
+		const listed = (await driver.toolSettings!.getToolSettings()).tools;
+		for (const name of ["listRhinoLaunches", "launchRhino"])
+			expect(listed.some(tool => tool.name === name)).toBe(false);
 		expect(session!.systemPrompt).toContain("Use your native geometry tools directly for this document");
 	} finally {
 		await driver.cleanup();
@@ -489,13 +491,44 @@ it("applies the host tool profile at model boundaries without losing shared task
 			await driver.run();
 			expect(prompts.at(-1)!.tools.includes("read")).toBe(enabled);
 			expect(prompts.at(-1)!.tools).toContain("ask_user");
-			expect(prompts.at(-1)!.tools.some((name) => name.startsWith("rh_") || name.startsWith("gh_"))).toBe(false);
+			expect(prompts.at(-1)!.tools.filter(name => name.startsWith("rh_") || name.startsWith("gh_"))).toEqual(expect.arrayContaining(["rh_document", "gh_document"]));
+			expect(prompts.at(-1)!.tools).not.toContain("rh_run_script");
 			expect(prompts.at(-1)!.systemPrompt.split("Shared task root, turn turn")).toHaveLength(2);
-			expect(prompts.at(-1)!.systemPrompt).toContain("root user's message explicitly asks");
+			expect(prompts.at(-1)!.systemPrompt).toContain("open Rhino and run HopperCode");
 		}
 	} finally {
 		await driver?.cleanup();
 		await store.close();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+it("reads task tool status in its own runtime context from an outside HTTP caller", async () => {
+	const { RuntimeSessionContext } = await import("../../infra/runtime-session-context.js");
+	const root = await mkdtemp(join(tmpdir(), "shared-driver-tool-status-"));
+	const runtimeSession = new RuntimeSessionContext();
+	runtimeSession.run(() => setCachedBackendStatus({ online: true }));
+	setCachedBackendStatus({ online: false });
+	const binding = { kind: "rhino" as const, lifecycleInstanceId: "life", rhinoDocumentId: "doc" };
+	let driver: Awaited<ReturnType<typeof createPiTaskDriver>> | undefined;
+	try {
+		driver = await createPiTaskDriver({
+			taskId: "task", turnId: "turn", sessionId: "session", conversationId: "conversation",
+			binding, owner: null, text: "Inspect", attachments: [], continuation: null,
+			signal: new AbortController().signal, ask: () => "question", requestDocumentAction: () => "handoff", publish: () => {},
+		}, {
+			dataDirectory: root, authPath: join(root, "auth.json"), toolConfigDir: join(root, "tool-settings"),
+			geometry: async () => ({ runtimeSession, cleanup: async () => ({ confirmed: true }) }),
+		});
+		const snapshot = await driver.toolSettings!.getToolSettings();
+		expect(snapshot.tools.find(tool => tool.name === "rh_run_script")).toMatchObject({ available: true, active: true, status: "active" });
+		const checked = await driver.toolSettings!.updateToolSettings({
+			type: "patch", expected: snapshot.settings!.version!, patch: { target: "tools", id: "hopper.tool.rh_document", enabled: false },
+		});
+		expect(checked.ok).toBe(true);
+		expect(checked.snapshot.tools.find(tool => tool.name === "rh_run_script")).toMatchObject({ available: true, active: true });
+	} finally {
+		await driver?.cleanup();
 		await rm(root, { recursive: true, force: true });
 	}
 });

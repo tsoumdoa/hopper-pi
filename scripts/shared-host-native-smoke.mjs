@@ -8,9 +8,8 @@ import {
 import { join, resolve, dirname } from "node:path";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { pathToFileURL, fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
-// This explicit probe tests a candidate binary; production capability evidence is written only after success.
+// This explicit probe tests document operations in a manually connected Rhino process.
 const { values } = parseArgs({
 	options: {
 		"allow-new-test-documents": { type: "boolean" },
@@ -40,16 +39,6 @@ if (readdirSync(outputDirectory).length)
 		"Use a new empty output directory to keep passing and failed evidence separate",
 	);
 const packageDirectory = resolve(values["package-directory"]);
-const executable = "/Applications/Rhino 8.app/Contents/MacOS/Rhinoceros";
-const build = execFileSync(
-	"/usr/libexec/PlistBuddy",
-	[
-		"-c",
-		"Print :CFBundleVersion",
-		"/Applications/Rhino 8.app/Contents/Info.plist",
-	],
-	{ encoding: "utf8" },
-).trim();
 const nativePlugin = {
 	rhinoPath: join(packageDirectory, "Hopper.Rhino.rhp"),
 	corePath: join(packageDirectory, "Hopper.Core.dll"),
@@ -60,15 +49,6 @@ nativePlugin.rhinoSha256 = createHash("sha256")
 nativePlugin.coreSha256 = createHash("sha256")
 	.update(readFileSync(nativePlugin.corePath))
 	.digest("hex");
-const candidateInstallation = {
-	id: "rhino-8-mac",
-	executable,
-	build,
-	platform: "darwin",
-	bootstrapVerified: true,
-	independentProcessVerified: false,
-	bootstrapArguments: (ticket) => ["-runscript=_HopperBootstrap " + ticket],
-};
 const load = (name) =>
 	import(pathToFileURL(join(repository, "dist/host/shared", name + ".js")));
 const [
@@ -78,9 +58,8 @@ const [
 	{ SharedNativeRuntime },
 	{ SharedTaskService },
 	{ createNativeActionAdapters },
-	{ DocumentGrantService },
+	{ DocumentActionService },
 	{ GeometryTransferService },
-	{ createLaunchCoordinator },
 	{ createSharedBrowserServer },
 ] = await Promise.all(
 	[
@@ -90,9 +69,8 @@ const [
 		"native-runtime",
 		"task-service",
 		"native-actions",
-		"grants",
+		"document-actions",
 		"transfer",
-		"launch-coordinator",
 		"browser-server",
 	].map(load),
 );
@@ -112,15 +90,14 @@ const discovery = {
 	journalIdentity: state.journalIdentity,
 	revision: state.revision,
 };
-let journal, native, registry, tasks, launches, documents, transfer;
+let journal, native, registry, tasks, documents, transfer;
 let ready = false,
 	refreshing = false,
 	timer,
 	refreshWork,
 	finished = false,
 	fixtureTask,
-	passingReport,
-	passingEvidence;
+	passingReport;
 const reportPath = join(outputDirectory, "report.json");
 const browser = createSharedBrowserServer({
 	browserCredential: state.browserCredential,
@@ -140,7 +117,6 @@ const browser = createSharedBrowserServer({
 	health: () => ({ ...discovery, registrationToken: undefined, ready }),
 	register: async (request) => {
 		const result = await native.register(request);
-		await launches.registered(request, result);
 		return result;
 	},
 });
@@ -249,28 +225,14 @@ try {
 		validateBinding: (o) => registry.validateBinding(o),
 		createDriver: (context) => ({
 			run: async () => {
-				const result = await launches
-					.tools(context)
-					.find((tool) => tool.name === "launchRhino")
-					.execute("native-fixture", { installationId: "rhino-8-mac" });
-				const requestId = result.details.request.requestId;
-				const launch = await wait(() => {
-					const row = journal
-						.snapshot()
-						.records.find(
-							(row) => row.kind === "launch" && row.id === requestId,
-						);
-					if (row?.state === "completed") return JSON.parse(row.payload);
-					if (row && ["failed", "cancelled", "uncertain"].includes(row.state))
-						throw Error("Launch did not complete: " + row.state);
-				}, "first launch document");
-				const source = launch.binding;
+				const source = context.binding;
+				if (!source) throw Error("Open an empty Rhino document and run HopperCode before this fixture.");
 				await script(
 					context.taskId,
 					source,
 					`import System, os, Rhino\nimport scriptcontext as sc\nassert not sc.doc.Path and sc.doc.Objects.Count == 0 and not sc.doc.Modified, 'Recovered or existing document: preserve and stop fixture'\nlocations=[str(a.Location) for a in System.AppDomain.CurrentDomain.GetAssemblies() if not a.IsDynamic]\nassert ${JSON.stringify(nativePlugin.rhinoPath)} in locations, 'Rhino plugin loaded from another package'\nassert ${JSON.stringify(nativePlugin.corePath)} in locations, 'Core plugin loaded from another package'\nprint('HOPPER_LOADED_PACKAGE_VERIFIED')`,
 				);
-				const grant = documents.authorize({
+				const grant = documents.prepare({
 					requestId: context.taskId + ":new-document",
 					taskId: context.taskId,
 					lifecycleInstanceId: source.lifecycleInstanceId,
@@ -403,21 +365,6 @@ try {
 					);
 					savedDocuments.push(saved);
 				}
-				const evidence = {
-					installations: [
-						{
-							id: candidateInstallation.id,
-							executable,
-							build,
-							bootstrapVerified: true,
-							independentProcessVerified: false,
-							nativePlugin,
-							probeRequestId: requestId,
-							testedAt: new Date().toISOString(),
-						},
-					],
-				};
-				passingEvidence = evidence;
 				const report = {
 					status: "transferred",
 					savedDocuments,
@@ -470,20 +417,13 @@ try {
 		}),
 	});
 	const adapters = createNativeActionAdapters(native, journal, registry);
-	documents = new DocumentGrantService(journal, tasks, adapters.documents);
+	documents = new DocumentActionService(journal, tasks, adapters.documents);
 	transfer = new GeometryTransferService(
 		journal,
 		tasks,
 		join(outputDirectory, "artifacts"),
 		adapters.transfer,
 	);
-	launches = await createLaunchCoordinator({
-		journal,
-		control,
-		registry,
-		documentActions: documents,
-		installations: [candidateInstallation],
-	});
 	ready = true;
 	await control.publish(discovery);
 	timer = setInterval(() => {
@@ -491,7 +431,6 @@ try {
 		refreshing = true;
 		refreshWork = native
 			.refresh()
-			.then(() => launches.refresh())
 			.catch((error) => console.error("Fixture refresh:", error.message))
 			.finally(() => {
 				refreshing = false;
@@ -501,13 +440,15 @@ try {
 		"transfer-fixture-conversation-" + Date.now(),
 		"Native geometry transfer acceptance fixture",
 	);
+	console.log("Open an empty Rhino document and run HopperCode to connect to the fixture host.");
+	const source = await wait(() => registry.list().find(item => item.admission === "ready")?.documents.find(binding => binding.kind === "rhino"), "manually connected Rhino document", 120000);
 	fixtureTask = tasks.submit({
 		...conversation,
 		requestId: "transfer-fixture-root-" + Date.now(),
 		kind: "prompt",
-		text: "Explicit deterministic native launch, New and geometry transfer fixture. No model API is called.",
+		text: "Explicit deterministic native New and geometry transfer fixture. No model API is called.",
 		diagnosticFixture: "shared-host-native-smoke",
-		bindings: [],
+		bindings: [source],
 		attachments: [],
 	});
 	console.log(
@@ -544,11 +485,6 @@ try {
 		},
 		"native transfer fixture",
 		240000,
-	);
-	writeFileSync(
-		join(outputDirectory, "launch-capabilities.json"),
-		JSON.stringify(passingEvidence, null, 2),
-		{ mode: 0o600, flag: "wx" },
 	);
 	writeFileSync(reportPath, JSON.stringify(passingReport, null, 2), {
 		mode: 0o600,

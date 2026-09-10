@@ -26,13 +26,6 @@ export type SharedSnapshot = {
 	questions: Row[];
 	inputs?: Row[];
 	targets: SharedTarget[];
-	installations?: {
-		id: string;
-		platform?: string;
-		build: string;
-		bootstrapVerified: boolean;
-		unavailableReason?: string;
-	}[];
 	runtime: HostSnapshot;
 	eventCursor: number;
 };

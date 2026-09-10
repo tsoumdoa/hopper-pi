@@ -39,15 +39,15 @@ export function validateExecutionOwner(input: unknown): ValidationResult<Executi
  return { ok: true, value: Object.freeze({ taskId: input.taskId, turnId: input.turnId, binding: binding.value, attachmentGeneration: input.attachmentGeneration }) };
 }
 
-// document-action requires a separately validated bounded grant and affected
-// document preconditions; it cannot be authorized by an edit binding alone.
+// Create/open uses host-managed action ownership and affected-document preconditions.
+// Ordinary edits retain their captured document binding.
 export type BindingRequirement = "lifecycle" | "rhino" | "grasshopper" | "associated-pair" | "either-document" | "document-action";
 export type OperationPolicy = Readonly<{
  operationClass: "query" | "control" | "mutation";
  binding: BindingRequirement;
  dispatchJournal: "none" | "host-only" | "wire-mutation";
  recovery: "revalidate-read" | "retained-mutation-result" | "runtime-postcondition" | "cancelled-mutation-result" | "authenticated-attachment";
- // Native adapters validate captured active contexts; managed document actions also require grants.
+ // Native adapters validate captured active contexts; managed document actions also carry host-created dispatch receipts.
  sharedDispatch: "native-context-guarded";
 }>;
 function policy(operationClass: OperationPolicy["operationClass"], binding: BindingRequirement,

@@ -211,15 +211,15 @@ export class EmbeddedPiHost {
 		})).sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)) };
 	}
 
-	async getToolSettings() {
+	async getToolSettings(backendPreview?: boolean) {
 		this.assertUsable();
-		return this.currentPolicy ? this.currentPolicy().getToolSettings() : this.listTools();
+		return this.runtimeSession.run(() => this.currentPolicy ? this.currentPolicy().getToolSettings(backendPreview) : this.listTools());
 	}
 
 	async updateToolSettings(action: ToolSettingsAction) {
 		this.assertUsable();
 		if (!this.currentPolicy) throw new Error("Tool settings are unavailable");
-		return this.currentPolicy().updateToolSettings(action);
+		return this.runtimeSession.run(() => this.currentPolicy!().updateToolSettings(action));
 	}
 
 	async listSkills() {

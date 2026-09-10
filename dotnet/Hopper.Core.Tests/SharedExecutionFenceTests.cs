@@ -135,7 +135,7 @@ public class SharedExecutionFenceTests
         var request = Request(generation, operation: RpcOperation.manageRhinoDocument) with {
             Args = JsonSerializer.SerializeToElement(new { action = "save", documentId = "doc", expectedDestinations = Array.Empty<object>() }) };
         fence.Execute(Request(generation, operation: RpcOperation.beginRhinoAgentTransaction), "client", Completed);
-        Assert.Contains("DOCUMENT_GRANT_REQUIRED", fence.Execute(request with { Args = JsonSerializer.SerializeToElement(new { action = "new" }) }, "client", Completed).Message);
+        Assert.Contains("DOCUMENT_ACTION_REQUIRED", fence.Execute(request with { Args = JsonSerializer.SerializeToElement(new { action = "new" }) }, "client", Completed).Message);
         Assert.Contains("TRANSACTION_OWNER_MISMATCH", fence.Execute(request with { ExecutionOwner = Request(generation, "other").ExecutionOwner }, "client", Completed).Message);
         Assert.Equal(RpcResultClass.completed, fence.Execute(request, "client", () => new() { Class = RpcResultClass.completed, ReasonCode = RpcReasonCode.OK,
             Data = JsonSerializer.SerializeToElement(new { ok = false, transaction = new { state = "idle" } }) }).Class);

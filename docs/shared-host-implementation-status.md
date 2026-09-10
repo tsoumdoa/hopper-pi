@@ -1,6 +1,6 @@
 # Shared host operation and status
 
-The shared host is the normal HopperCode runtime. It supports persistent conversations, multiple Rhino documents and processes, delegated agents, managed document actions, process launch, and geometry transfer. [Architecture and invariants](shared-host-multi-rhino-plan.md) describe the ownership and recovery rules.
+The shared host is the normal HopperCode runtime. It supports persistent conversations, multiple Rhino documents and processes, delegated agents, direct document create/open tools and geometry transfer. [Architecture and invariants](shared-host-multi-rhino-plan.md) describe the ownership and recovery rules.
 
 ## Start and reconnect
 
@@ -20,12 +20,12 @@ The SQLite journal uses foreign keys and FULL synchronous commits. Storage schem
 
 The defaults allow four bound workers and four ownerless coordinators. `HOPPER_SHARED_MAX_WORKERS` and `HOPPER_SHARED_MAX_COORDINATORS` accept positive integer overrides. Waiting parents release their worker slot. A process queue serializes native tools and managed actions while agents continue model work concurrently.
 
-`HOPPER_SHARED_MAX_TOKENS` defaults to 1,000,000 recorded tokens across the journal. Admission and delegation stop at that total; already-running provider responses can exceed it. Changing the limit requires a host restart. Launch grants do not raise it. Workers share the host's tool settings profile, and tool changes preserve their task instructions.
+`HOPPER_SHARED_MAX_TOKENS` defaults to 1,000,000 recorded tokens per root request, including its continuations and delegated tasks. Admission and delegation stop at that total; already-running provider responses can exceed it. Earlier requests do not consume a new request’s budget. Changing the limit requires a host restart. Workers share the host's tool settings profile, and tool changes preserve their task instructions.
 
 ## Native acceptance and remaining checks
 
-The packaged Mac fixture passed authenticated first-process bootstrap, New in one process, captured activation, a 1000 mm to 1 m geometry transfer with new identities and provenance, and managed saves. Separate checks verified host survival after Rhino exits. See [platform probes](shared-host-platform-probes.md) for exact build identities and results, and [the operation audit](shared-host-native-operation-audit.md) for native routing and cleanup policies.
+The historical packaged Mac fixture passed first-process bootstrap, New in one process, captured activation, a 1000 mm to 1 m geometry transfer with new identities and provenance, and managed saves. Separate checks verified host survival after Rhino exits. See [platform probes](shared-host-platform-probes.md) for exact build identities and results, and [the operation audit](shared-host-native-operation-audit.md) for native routing and cleanup policies.
 
-Launch is unavailable for installations without matching build-specific bootstrap/readiness evidence. Windows ACLs, detached lifetime, process launch, and native transfer still require a Windows packaged acceptance run. Native sleep/wake and the full crash matrix remain acceptance work. Unit tests and injected adapters do not satisfy these checks. Historical packaged results do not establish behavior for newer host/plugin builds.
+Agent-managed process launch and `HopperBootstrap` are removed. Open Rhino manually and run `HopperCode`; use `rh_document` or `gh_document` to create/open files without a separate grant. Windows ACLs, detached lifetime, and native transfer still require a Windows packaged acceptance run. Native sleep/wake and the full crash matrix remain acceptance work. Unit tests and injected adapters do not satisfy these checks. Historical packaged results do not establish behavior for newer host/plugin builds.
 
 Current build and test results belong in the PR validation record. Run `pnpm build`, the Vitest suite, and the relevant native tests before updating that record.

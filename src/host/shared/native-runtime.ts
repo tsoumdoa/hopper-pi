@@ -314,6 +314,17 @@ export class SharedNativeRuntime {
 		);
 		return [rhino, grasshopper];
 	}
+	/** Probe only the selected attachment, without opening a document scope. */
+	async checkToolConnection(binding: TargetBinding): Promise<boolean> {
+		try {
+			const before = this.registry.resolveBinding(binding);
+			const instance = this.instances.get(binding.lifecycleInstanceId);
+			if (!instance) return false;
+			data(await instance.client.call("getRuntimeStatus", {}, inventoryTimeout));
+			const after = this.registry.resolveBinding(binding);
+			return before.attachmentGeneration === after.attachmentGeneration && this.instances.get(binding.lifecycleInstanceId) === instance;
+		} catch { return false; }
+	}
 	async geometry(context: DriverContext) {
 		if (!context.owner || !context.withNativeTool)
 			throw new Error("Geometry requires execution ownership and a native tool lease");
@@ -608,9 +619,9 @@ export class SharedNativeRuntime {
 		operation: "manageRhinoDocument" | "manageGrasshopperDocument",
 		input: DocumentRequest,
 	) {
-		if (!["save", "saveAs", "close"].includes(input.action))
+		if (!["save", "saveAs", "close", "activate"].includes(input.action))
 			throw new Error(
-				"Use a bounded document action through the coordinator for new/open/activation",
+				"Create/open must use the shared rh_document or gh_document tool; activation uses the captured target",
 			);
 		const kind = operation === "manageRhinoDocument" ? "rhino" : "grasshopper";
 		const id =
@@ -624,7 +635,7 @@ export class SharedNativeRuntime {
 		if (!id || input.documentId !== id)
 			throw new Error("Document action cannot override the captured binding");
 		if (!input.expectedStateToken)
-			throw new Error("Inspect the bound document before saving or closing it");
+			throw new Error("Inspect the bound document before activating, saving or closing it");
 		const inventoryOperation =
 			kind === "rhino" ? "listRhinoDocuments" : "listGrasshopperDocuments";
 		const inventory = data(
@@ -639,13 +650,13 @@ export class SharedNativeRuntime {
 		);
 		if (!document || document.stateToken !== input.expectedStateToken)
 			throw new Error("Bound document changed before action preflight");
-		const args: DocumentRequest = { ...input, expectedDestinations: [] };
+		const args: DocumentRequest = { ...input, expectedDestinations: [], ...(input.action === "activate" ? { expectedActiveDocument: inventory.activeDocumentId ?? null } : {}) };
 		const path =
 			input.action === "saveAs"
 				? input.path
 				: input.action === "save"
 					? document.path
-					: input.onUnsaved === "save" && document.isModified
+					: input.action === "close" && input.onUnsaved === "save" && document.isModified
 						? (input.savePath ?? document.path)
 						: null;
 		const reservations: { identity: string; baseline: unknown }[] = [];

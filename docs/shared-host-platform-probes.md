@@ -1,5 +1,7 @@
 # Shared host platform checks
 
+Current scope: agent-managed Rhino process launching and `HopperBootstrap` have been removed. Launch/bootstrap results below are historical evidence for an earlier build. The current fixture requires a manually opened empty Rhino document connected through `HopperCode`.
+
 Recorded on 2026-09-09, Asia/Hong_Kong. This records observed behavior separately from tests with injected adapters.
 
 ## Control and startup implementation
@@ -55,9 +57,9 @@ After a fresh inspection confirmed only those two unmodified test documents, nor
 
 The first readiness observation exposed another integration issue: sequential inventory polling used the generic 120-second RPC timeout on the exited attachment, delaying inventory of the new process. The new launch correctly remained awaiting document verification rather than receiving premature edit authority. Readiness polling now uses bounded per-attachment queries, skips verified exited processes, and progresses independently across attachments. The final first-launch fixture passed without the stale-process delay.
 
-## Reproduce the packaged Mac launch and transfer fixture
+## Reproduce the packaged Mac document and transfer fixture
 
-Build the release host and native package, install that package using the existing installer, and close Rhino normally after saving any work. Stop the shared Node host so the probe can acquire its existing endpoint. The probe refuses an occupied endpoint and refuses to launch while another Rhino process exists. It creates one new Rhino process and two test document windows, records real task/grant/operation state in the pinned SQLite journal, and makes no model API calls.
+Build the release host and native package, install that package using the existing installer, and close Rhino normally after saving any work. Stop the shared Node host so the probe can acquire its existing endpoint. The probe refuses an occupied endpoint. Once it prints its connection prompt, manually open Rhino with an empty document and run `HopperCode`. It uses that document and creates a second test document, records real task/action/operation state in the pinned SQLite journal, and makes no model API calls.
 
 ```sh
 pnpm exec tsc -p tsconfig.release.json
@@ -68,7 +70,7 @@ node scripts/shared-host-native-smoke.mjs \
   --hold
 ```
 
-The explicit fixture tests a candidate installation, so it does not require preexisting production capability evidence. Only after authenticated first-launch readiness, same-process New, managed source/destination activation, and the `.3dm` checks pass does it write `launch-capabilities.json` to the output directory. It records the exact installed Rhino/Core binary hashes. An operator can copy this result into the fixed shared control directory to enable production launch for those binaries. Changing or restoring either binary invalidates that evidence.
+The fixture checks the loaded Rhino/Core package paths and writes a transfer report after same-process New, managed source/destination activation, and the `.3dm` checks pass. It does not start Rhino or publish launch capability tickets.
 
 Use a new empty output directory for each run. The fixture checks a 1,000 mm sphere transferred into a meter document becomes a one-meter sphere, source geometry and document path remain intact, destination IDs are new, provenance points to the source ID, the imported object uses its dedicated layer, and published bytes match the manifest checksum. It then saves both documents through the production managed Save As path, including destination reservations and path/unmodified-state verification. It leaves those saved test documents open for inspection and never closes documents or discards modifications. `--hold` keeps the temporary host available until SIGTERM; omit it to release the endpoint when the checks finish. Restart the regular shared host after the probe exits. Retain the output report and artifact for review.
 

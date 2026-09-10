@@ -59,8 +59,6 @@ export interface Submission {
 	/** Starting document for the message; bindings capture all documents it may access. */
 	messageTarget?: TargetBinding;
 	attachments: readonly unknown[];
-	documentAction?: unknown;
-	launch?: unknown;
 	/** Internal acceptance scripts only; browser submissions cannot set this. */
 	diagnosticFixture?: "shared-host-native-smoke";
 }
@@ -392,17 +390,6 @@ PRAGMA user_version=5;`);
 			this.db
 				.prepare("INSERT INTO turns(id,task_id,state) VALUES (?,?,'queued')")
 				.run(turnId, taskId);
-			if (input.documentAction || input.launch)
-				this.db
-					.prepare("INSERT INTO records VALUES ('admission',?,?,?,'pending')")
-					.run(
-						taskId,
-						taskId,
-						canonical({
-							documentAction: input.documentAction ?? null,
-							launch: input.launch ?? null,
-						}),
-					);
 			return {
 				taskId,
 				turnId,
@@ -449,32 +436,7 @@ PRAGMA user_version=5;`);
 				.get(taskId);
 			if (task?.state !== "queued")
 				throw new Error("Task admission is no longer queued");
-			if (!error) {
-				const payload = JSON.parse(
-					String(
-						this.db.prepare("SELECT payload FROM tasks WHERE id=?").get(taskId)!
-							.payload,
-					),
-				) as Submission;
-				if (
-					payload.documentAction &&
-					!this.db
-						.prepare(
-							"SELECT id FROM records WHERE kind='document-action' AND task_id=? AND state='accepted'",
-						)
-						.get(taskId)
-				)
-					throw new Error("Document action grant has not committed");
-				if (
-					payload.launch &&
-					!this.db
-						.prepare(
-							"SELECT id FROM records WHERE kind='launch' AND task_id=? AND state='granted'",
-						)
-						.get(taskId)
-				)
-					throw new Error("Launch grant has not committed");
-			}
+			if (!error) error = "This pending request uses a retired authorization workflow. Submit the request again.";
 			this.db
 				.prepare(
 					"UPDATE records SET state=?,payload=? WHERE kind='admission' AND id=?",
@@ -856,6 +818,9 @@ PRAGMA user_version=5;`);
 	}
 	/** Never replay possibly-started work; ownership reconciliation must release it explicitly. */
 	recover(): void {
+		// Retired pre-issued permissions must never dispatch after an upgrade.
+		for (const row of this.db.prepare("SELECT r.task_id FROM records r JOIN tasks t ON t.id=r.task_id WHERE r.kind='admission' AND r.state='pending' AND t.state='queued'").all())
+			this.finishAdmission(String(row.task_id), "This pending request uses a retired authorization workflow. Submit the request again.");
 		this.transaction(() => {
 			for (const row of this.db
 				.prepare("SELECT id,task_id FROM turns WHERE state='running'")
@@ -1304,243 +1269,6 @@ PRAGMA user_version=5;`);
 			},
 		);
 	}
-	recordLaunchCandidate(
-		launchRequestId: string,
-		candidate: { pid: number; startIdentity?: string },
-	): void {
-		if (
-			!Number.isSafeInteger(candidate.pid) ||
-			candidate.pid < 1 ||
-			(candidate.startIdentity !== undefined &&
-				(typeof candidate.startIdentity !== "string" ||
-					!candidate.startIdentity))
-		)
-			throw new Error("Invalid observed launch candidate");
-		this.transaction(() => {
-			const row = this.db
-				.prepare("SELECT * FROM records WHERE kind='launch' AND id=?")
-				.get(launchRequestId);
-			if (!row) throw new Error("Unknown launch request");
-			const original = JSON.parse(
-				String(row.payload),
-			) as import("./launch.js").LaunchRecord;
-			if (!original.dispatchAttempted)
-				throw new Error("Launch was not dispatched");
-			if (original.spawnCandidate) {
-				if (canonical(original.spawnCandidate) !== canonical(candidate))
-					throw new Error("Observed launch candidate identity changed");
-				return;
-			}
-			// Late spawn evidence survives cancellation without changing its outcome,
-			// consumed grant, target authority, or any other recorded launch field.
-			this.db
-				.prepare("UPDATE records SET payload=? WHERE kind='launch' AND id=?")
-				.run(
-					canonical({ ...original, spawnCandidate: candidate }),
-					launchRequestId,
-				);
-			this.event(String(row.task_id), "launch_candidate_observed", {
-				launchRequestId,
-				candidate,
-			});
-		});
-	}
-	launchRecoveryDisposition(
-		input: {
-			requestId: string;
-			taskId: string;
-			launchRequestId: string;
-			acknowledgement: string;
-		},
-		evidence: {
-			platform: string;
-			candidates: unknown[];
-			observedAt: number;
-			exitedCandidate?: { pid: number; startIdentity?: string };
-		},
-	): { id: string } {
-		return this.request(
-			input.requestId,
-			{ kind: "recover_launch", ...input },
-			() => {
-				const row = this.db
-					.prepare(
-						"SELECT payload FROM records WHERE kind='launch' AND id=? AND task_id=?",
-					)
-					.get(input.launchRequestId, input.taskId);
-				const task = this.db
-					.prepare("SELECT state,cancellation_requested FROM tasks WHERE id=?")
-					.get(input.taskId);
-				const launch = row
-					? (JSON.parse(
-							String(row.payload),
-						) as import("./launch.js").LaunchRecord)
-					: null;
-				if (
-					!input.acknowledgement.trim() ||
-					!launch ||
-					!launch.dispatchAttempted ||
-					(evidence.platform === "darwin" &&
-						launch.request.independentProcess) ||
-					!["cancelled", "uncertain"].includes(launch.state)
-				)
-					throw new Error("Launch is not an unresolved dispatched launch");
-				if (
-					!task ||
-					(!task.cancellation_requested &&
-						![
-							"cancelled",
-							"failed",
-							"completed",
-							"interrupted",
-							"uncertain",
-						].includes(String(task.state)))
-				)
-					throw new Error(
-						"Cancel the launch task before releasing its unresolved launch",
-					);
-				if (
-					!["darwin", "win32"].includes(evidence.platform) ||
-					evidence.candidates.length !== 0 ||
-					!Number.isSafeInteger(evidence.observedAt)
-				)
-					throw new Error(
-						"Launch recovery requires an observed empty Rhino process list",
-					);
-				this.db
-					.prepare(
-						"INSERT INTO records VALUES ('launch_recovery',?,?,?,'confirmed')",
-					)
-					.run(
-						input.launchRequestId,
-						input.taskId,
-						canonical({ ...input, evidence }),
-					);
-				this.event(input.taskId, "launch_recovery_acknowledged", {
-					launchRequestId: input.launchRequestId,
-					acknowledgement: input.acknowledgement,
-					evidence,
-				});
-				return { id: input.launchRequestId };
-			},
-		);
-	}
-	persistLaunch(record: import("./launch.js").LaunchRecord): void {
-		const payload = JSON.parse(JSON.stringify(record)),
-			taskId = record.request.rootTaskId,
-			id = record.request.requestId;
-		const prior = this.db
-			.prepare("SELECT * FROM records WHERE kind='launch' AND id=?")
-			.get(id);
-		if (!prior) {
-			this.request(
-				"launch:" + id,
-				{ request: record.request, grant: record.grant },
-				() => {
-					const task = this.db
-						.prepare("SELECT * FROM tasks WHERE id=?")
-						.get(taskId);
-					if (
-						!task ||
-						task.parent_task_id !== null ||
-						task.cancellation_requested ||
-						!["queued", "running"].includes(String(task.state)) ||
-						record.state !== "granted"
-					)
-						throw new Error("Launch requires an active root task");
-					this.db
-						.prepare("INSERT INTO records VALUES ('grant',?,?,?,'accepted')")
-						.run(record.grant.grantId, taskId, canonical(record.grant));
-					this.db
-						.prepare("INSERT INTO records VALUES ('launch',?,?,?,'granted')")
-						.run(id, taskId, canonical(payload));
-					this.event(taskId, "launch_granted", {
-						id,
-						grantId: record.grant.grantId,
-					});
-					return { id };
-				},
-			);
-			return;
-		}
-		this.transaction(() => {
-			const old = JSON.parse(
-				String(prior.payload),
-			) as import("./launch.js").LaunchRecord;
-			if (
-				canonical(old.request) !== canonical(record.request) ||
-				canonical(old.grant) !== canonical(record.grant)
-			)
-				throw new Error("Launch request conflict");
-			if (canonical(old) === canonical(payload)) return;
-			if (["completed", "failed", "cancelled"].includes(String(prior.state)))
-				throw new Error("Launch is terminal");
-			const task = this.db
-				.prepare("SELECT * FROM tasks WHERE id=?")
-				.get(taskId)!;
-			if (record.state === "dispatching" || record.state === "completed") {
-				if (
-					task.cancellation_requested ||
-					!["queued", "running"].includes(String(task.state))
-				)
-					throw new Error("Launch task no longer active");
-			}
-			if (record.state === "dispatching") {
-				if (
-					prior.state !== "granted" ||
-					!this.db
-						.prepare(
-							"UPDATE records SET state='in_flight' WHERE kind='grant' AND id=? AND state='accepted'",
-						)
-						.run(record.grant.grantId).changes
-				)
-					throw new Error("Launch grant already dispatched");
-			}
-			if (record.state === "completed") {
-				if (
-					!["awaiting_document", "uncertain", "awaiting_user"].includes(
-						String(prior.state),
-					) ||
-					!old.lifecycleInstanceId ||
-					!old.process ||
-					old.lifecycleInstanceId !== record.lifecycleInstanceId ||
-					canonical(old.process) !== canonical(record.process ?? null) ||
-					!record.binding ||
-					!validateTargetBinding(record.binding).ok ||
-					record.binding.lifecycleInstanceId !== old.lifecycleInstanceId
-				)
-					throw new Error("Launch binding is not verified");
-				if (
-					!this.db
-						.prepare(
-							"UPDATE records SET state='consumed' WHERE kind='grant' AND id=? AND state='in_flight'",
-						)
-						.run(record.grant.grantId).changes
-				)
-					throw new Error("Launch grant is not in flight");
-				this.db
-					.prepare(
-						"INSERT INTO records VALUES ('authorization',?,?,?,'verified')",
-					)
-					.run(
-						id,
-						taskId,
-						canonical({
-							binding: record.binding,
-							grantId: record.grant.grantId,
-							launchId: id,
-						}),
-					);
-			}
-			this.db
-				.prepare(
-					"UPDATE records SET state=?,payload=? WHERE kind='launch' AND id=?",
-				)
-				.run(record.state, canonical(payload), id);
-			this.event(taskId, "launch_" + record.state, { id });
-		});
-	}
-
 	beginHandoff(taskId: string, turnId: string, grantId: string): string {
 		return this.transaction(() => {
 			this.expect(taskId, turnId, "running");
@@ -1630,7 +1358,7 @@ PRAGMA user_version=5;`);
 		taskId: string,
 		actionTurnId: string,
 		handoffId: string,
-		result: { binding: TargetBinding; result: unknown; actionId: string },
+		result: { binding: TargetBinding | null; result: unknown; actionId: string; failed?: boolean },
 	): Receipt {
 		return this.transaction(() => {
 			this.expect(taskId, actionTurnId, "running");
@@ -1648,9 +1376,9 @@ PRAGMA user_version=5;`);
 				handoff.state !== "action_running" ||
 				handoff.task_id !== taskId ||
 				JSON.parse(String(handoff.payload)).actionTurnId !== actionTurnId ||
-				!this.authorizationAdditions(taskId).some(
-					(b) => canonical(b) === canonical(result.binding),
-				)
+				(result.failed
+					? canonical(result.binding) !== canonical(JSON.parse(String(this.db.prepare("SELECT owner FROM turns WHERE id=?").get(JSON.parse(String(handoff.payload)).oldTurnId)?.owner ?? "null"))?.binding ?? null)
+					: !this.authorizationAdditions(taskId).some(b => canonical(b) === canonical(result.binding)))
 			)
 				throw new Error("Handoff action is not verified");
 			if (this.unresolvedTurn(actionTurnId))

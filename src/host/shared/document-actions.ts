@@ -6,9 +6,11 @@ import type {
 } from "../../protocol/shared-execution.js";
 import { TaskJournal } from "./journal.js";
 import { NativeActionError } from "./action-errors.js";
+import { withToolDispatchContext } from "../../services/tool-policy-context.js";
+import { validateDocumentRequest } from "../../services/document-management.js";
 import { SharedTaskService } from "./task-service.js";
 
-export interface DocumentGrant {
+export interface DocumentActionRequest {
 	requestId: string;
 	taskId: string;
 	lifecycleInstanceId: string;
@@ -20,30 +22,50 @@ export interface DocumentGrant {
 	modifiedPolicy: "refuse" | "save" | "discard";
 	savePath?: string;
 	overwrite?: boolean;
+	createDirectories?: boolean;
 }
 export interface DocumentActionAdapter {
 	/** Inspect every affected document and destination again while owning the queue. */
-	preflight(grant: DocumentGrant): Promise<{
+	preflight(grant: DocumentActionRequest): Promise<{
 		destinations: { identity: string; baseline: unknown }[];
 		arguments?: unknown;
 	}>;
 	execute(
 		owner: DocumentActionOwner,
-		grant: DocumentGrant,
+		grant: DocumentActionRequest,
 		operationId: string,
 	): Promise<{ binding: TargetBinding; result: unknown }>;
-	verify(binding: TargetBinding, grant: DocumentGrant): Promise<void>;
+	verify(binding: TargetBinding, grant: DocumentActionRequest): Promise<void>;
 }
 const stable = (prefix: string, id: string) =>
 	prefix + createHash("sha256").update(id).digest("hex").slice(0, 32);
-/** Grants are exact user-authorized actions; a worker cannot issue or enlarge one. */
-export class DocumentGrantService {
+/** Host-owned action tracking. Legacy journal/wire grant IDs are internal dispatch receipts. */
+export class DocumentActionService {
 	constructor(
 		private readonly journal: TaskJournal,
 		private readonly scheduler: SharedTaskService,
 		private readonly adapter: DocumentActionAdapter,
+		private readonly admit: (kind: "rhino" | "grasshopper") => Promise<void> = async () => {},
 	) {}
-	authorize(grant: DocumentGrant): { grantId: string; actionId: string } {
+	prepareForTask(context: Pick<import("./task-service.js").DriverContext, "taskId" | "binding" | "accessibleBindings">,
+		toolCallId: string, kind: "rhino" | "grasshopper", request: import("../../types/document-management.js").DocumentRequest): string {
+		const bindings = [...(context.accessibleBindings ?? []), ...(context.binding ? [context.binding] : []), ...this.journal.authorizationAdditions(context.taskId)];
+		const available = new Set(bindings.map(binding => binding.lifecycleInstanceId));
+		const lifecycleInstanceId = request.lifecycleInstanceId ?? context.binding?.lifecycleInstanceId
+			?? (available.size === 1 ? [...available][0] : undefined);
+		if (!lifecycleInstanceId) throw new Error(available.size ? "Choose a process from listRhinoTargets using lifecycleInstanceId." : "Open Rhino and run HopperCode, then select its target.");
+		if (!available.has(lifecycleInstanceId)) throw new Error("Choose a process accessible to this task.");
+		if (request.action !== "new" && request.action !== "open") throw new Error("Expected a create or open action.");
+		if (request.onUnsaved && !["fail", "save", "discard"].includes(request.onUnsaved)) throw new Error("Invalid onUnsaved policy.");
+		return this.prepare({ requestId: `${context.taskId}:${toolCallId}`, taskId: context.taskId,
+			lifecycleInstanceId, kind, action: request.action,
+			modifiedPolicy: request.onUnsaved === "save" || request.onUnsaved === "discard" ? request.onUnsaved : "refuse",
+			...(request.path !== undefined ? { path: request.path } : {}), ...(request.templatePath !== undefined ? { templatePath: request.templatePath } : {}),
+			...(request.savePath !== undefined ? { savePath: request.savePath } : {}), ...(request.overwrite !== undefined ? { overwrite: request.overwrite } : {}),
+			...(request.createDirectories !== undefined ? { createDirectories: request.createDirectories } : {}),
+		}).grantId;
+	}
+	prepare(grant: DocumentActionRequest): { grantId: string; actionId: string } {
 		const task = this.journal
 			.snapshot({ includeEvents: false })
 			.tasks.find((task) => task.id === grant.taskId);
@@ -53,7 +75,7 @@ export class DocumentGrantService {
 			task.cancellation_requested ||
 			!["running", "queued"].includes(String(task.state))
 		)
-			throw new Error("Only a live root task can receive a document grant");
+			throw new Error("Only a live root task can create or open a document");
 		if (
 			!["rhino", "grasshopper"].includes(grant.kind) ||
 			!["new", "open"].includes(grant.action) ||
@@ -62,7 +84,7 @@ export class DocumentGrantService {
 		)
 			throw new Error("Invalid bounded document action");
 		if (grant.action === "open" && (!grant.path || !isAbsolute(grant.path)))
-			throw new Error("Open grant requires an absolute path");
+			throw new Error("Open requires an absolute path");
 		if (grant.templatePath && !isAbsolute(grant.templatePath))
 			throw new Error("Template path must be absolute");
 		if (
@@ -71,6 +93,7 @@ export class DocumentGrantService {
 			!isAbsolute(grant.savePath)
 		)
 			throw new Error("Save path must be absolute");
+		validateDocumentRequest(grant.kind, { action: grant.action, path: grant.path, templatePath: grant.templatePath, savePath: grant.savePath, onUnsaved: grant.modifiedPolicy === "refuse" ? "fail" : grant.modifiedPolicy, expectedActiveDocument: null, affectedDocuments: [] });
 		const grantId = stable("grant-", grant.requestId),
 			actionId = stable("document-", grant.requestId);
 		this.journal.putRecord(
@@ -97,8 +120,8 @@ export class DocumentGrantService {
 			.records.find(
 				(record) => record.kind === "grant" && record.id === grantId,
 			);
-		if (!grantRecord) throw new Error("Unknown document grant");
-		const grant = JSON.parse(String(grantRecord.payload)) as DocumentGrant,
+		if (!grantRecord) throw new Error("Unknown document action");
+		const grant = JSON.parse(String(grantRecord.payload)) as DocumentActionRequest,
 			actionId = stable("document-", grant.requestId);
 		const action = this.journal
 			.snapshot({ includeEvents: false })
@@ -113,8 +136,11 @@ export class DocumentGrantService {
 		return this.scheduler.withLifecycle(
 			grant.taskId,
 			grant.lifecycleInstanceId,
-			async (target) => {
+			async (target) => withToolDispatchContext(() => this.admit(grant.kind), async () => {
+				await this.admit(grant.kind);
 				const preflight = await this.adapter.preflight(grant);
+				await this.admit(grant.kind);
+				if (this.journal.snapshot({ includeEvents: false }).tasks.find(task => task.id === grant.taskId)?.cancellation_requested) throw new Error("Task cancellation requested");
 				const owner: DocumentActionOwner = {
 					taskId: grant.taskId,
 					turnId: target.turnId,
@@ -195,7 +221,7 @@ export class DocumentGrantService {
 					);
 					throw error;
 				}
-			},
+			}),
 		);
 	}
 }

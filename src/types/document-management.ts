@@ -10,6 +10,8 @@ export type AffectedDocument = {
 	createDirectories?: boolean;
 };
 export type DocumentRequest = {
+	/** Shared host destination for new/open; otherwise the captured target is used. */
+	lifecycleInstanceId?: string;
  expectedDestinations?: {path:string;exists:boolean;byteLength?:number;sha256?:string}[];
 	action: DocumentAction;
 	documentId?: string;

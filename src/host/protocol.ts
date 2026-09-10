@@ -19,6 +19,7 @@ export type PluginCredentialSummary = { label: string; notice: string; status: "
 export type ToolGroupSummary = { id: string; name: string; enabled: boolean; description?: string; credential?: PluginCredentialSummary };
 
 export type AgentToolsSnapshot = {
+	context?: { kind: "task" | "target"; taskId?: string; label: string };
 	tools: AgentToolSummary[];
 	settings?: {
 		version: PolicyVersion | null;

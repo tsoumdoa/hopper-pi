@@ -56,6 +56,7 @@ export type HopperExtensionOptions = {
 	nativeTools?: boolean;
 	runtimeSession?: RuntimeSessionContext;
 	runTool?: ToolExecutionScope;
+	documentTools?: ReturnType<typeof import("./tools/document-tools.js").createDocumentTool>[];
 	scriptWorkspaceDir?: string;
 	scriptWorkspaceQuotaBytes?: number;
 	sessionId?: () => string;
@@ -138,14 +139,14 @@ function registerHopperPiExtension(
 		}
 		return scriptContext!;
 	};
-	const registeredCatalog = (options.nativeTools === false ? [] : HOPPER_REGISTERED_CATALOG).map((entry) => ({
+	const registeredCatalog = (options.nativeTools === false ? HOPPER_REGISTERED_CATALOG.filter(entry => options.documentTools?.some(tool => tool.name === entry.tool.name)) : HOPPER_REGISTERED_CATALOG).map((entry) => ({
 		...entry,
 		tool:
-			entry.tool.name === "rh_script"
+			options.documentTools?.find(tool => tool.name === entry.tool.name) ?? (entry.tool.name === "rh_script"
 				? createRhScriptTool(getScriptContext)
 				: entry.tool.name === "rh_run_script"
 					? createRhRunScriptTool(getScriptContext)
-					: entry.tool,
+					: entry.tool),
 	}));
 	pi.registerFlag(PROGRESSIVE_TOOLS_FLAG, {
 		type: "boolean",
@@ -189,7 +190,7 @@ function registerHopperPiExtension(
 		if (ctx.sessionManager) bindWorkspace(ctx.cwd, ctx.sessionManager.getSessionId());
 		policy.bind(pi, ctx, isProgressiveToolsEnabled(pi));
 		for (const entry of registeredCatalog) {
-			policy.register(pi, entry.tool, options.runTool);
+			policy.register(pi, entry.tool, options.documentTools?.some(tool => tool.name === entry.tool.name) ? undefined : options.runTool);
 		}
 		policy.register(pi, searchTool);
 		if (options.nativeTools !== false) policy.register(pi, RH_CAPTURE_VIEW_CATALOG_ENTRY.tool, options.runTool);

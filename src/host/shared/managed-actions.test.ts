@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, it, expect } from "vitest";
 import { TaskJournal } from "./journal.js";
 import { SharedTaskService, type DriverContext } from "./task-service.js";
-import { DocumentGrantService } from "./grants.js";
+import { DocumentActionService } from "./document-actions.js";
 import { GeometryTransferService, unitScale } from "./transfer.js";
 import type { TargetBinding } from "../../protocol/shared-execution.js";
 const binding = (document: string): TargetBinding => ({
@@ -22,7 +22,7 @@ describe("managed document and artifact actions", () => {
 	it("ends the old owner and action before a fresh bound continuation", async () => {
 		const journal = new TaskJournal(":memory:");
 		journal.registerSession("conversation", "session");
-		let grants: DocumentGrantService;
+		let grants: DocumentActionService;
 		const contexts: DriverContext[] = [];
 		const order: string[] = [];
 		const scheduler = new SharedTaskService(journal, {
@@ -41,7 +41,7 @@ describe("managed document and artifact actions", () => {
 					run: async () => {
 						order.push("run:" + context.binding?.kind + ":" + context.turnId);
 						if (contexts.length === 1) {
-							const grant = grants.authorize({
+							const grant = grants.prepare({
 								requestId: "new-document",
 								taskId: context.taskId,
 								lifecycleInstanceId: "rhino",
@@ -61,7 +61,7 @@ describe("managed document and artifact actions", () => {
 				};
 			},
 		});
-		grants = new DocumentGrantService(journal, scheduler, {
+		grants = new DocumentActionService(journal, scheduler, {
 			preflight: async () => ({ destinations: [] }),
 			execute: async (owner) => {
 				order.push("action");

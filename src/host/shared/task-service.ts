@@ -31,6 +31,7 @@ export interface DriverContext {
 	publish(payload: unknown): void;
 }
 export interface TaskDriver {
+	toolSettings?: Pick<import("../pi-runtime.js").HostRuntime, "getToolSettings" | "updateToolSettings">;
 	run(): Promise<{ usage?: number } | void>;
 	steer(payload: unknown, inputId?: number): Promise<void>;
 	cancel(): void | Promise<void>;
@@ -124,6 +125,10 @@ export class SharedTaskService {
 	subscribe(listener: () => void): () => void {
 		this.listeners.add(listener);
 		return () => this.listeners.delete(listener);
+	}
+	toolSettings(conversationId: string, taskId: string) {
+		const task = this.journal.snapshot({ includeEvents: false }).tasks.find(row => row.id === taskId && row.conversation_id === conversationId);
+		return task ? this.active.get(taskId)?.driver?.toolSettings : undefined;
 	}
 	private changed(): void {
 		for (const listener of this.listeners) {
@@ -387,7 +392,7 @@ export class SharedTaskService {
 					const owner = JSON.parse(String(op.owner ?? "null"));
 					return (owner?.binding?.lifecycleInstanceId ?? owner?.lifecycleInstanceId) === lifecycleId;
 				}) || snapshot.records.some((record) =>
-					record.kind === "scope" && record.task_id === taskId && record.state === "uncertain");
+					(record.kind === "scope" || record.kind === "document-action") && record.task_id === taskId && record.state === "uncertain");
 				if (!unknown && this.held.get(processKey) === taskId) this.held.delete(processKey);
 				active.nativeRecoveryRequired = unknown;
 				active.processKey = undefined;
@@ -774,6 +779,8 @@ export class SharedTaskService {
 						String(handoff.id),
 					);
 					active.turnId = actionTurnId;
+					// The model session was disposed during cleanup; settings now use the host profile.
+					active.driver = undefined;
 					this.changed();
 					this.pump();
 					try {
@@ -796,9 +803,8 @@ export class SharedTaskService {
 							) ||
 							snapshot.records.some(
 								(record) =>
-									record.kind === "scope" &&
-									record.state === "uncertain" &&
-									JSON.parse(String(record.payload)).turnId === actionTurnId,
+									(record.kind === "document-action" && record.task_id === taskId && record.state === "uncertain") ||
+									(record.kind === "scope" && record.state === "uncertain" && JSON.parse(String(record.payload)).turnId === actionTurnId),
 							);
 						if (unresolved)
 							this.journal.uncertain(taskId, actionTurnId, {
@@ -806,7 +812,7 @@ export class SharedTaskService {
 							});
 						else if (active.controller.signal.aborted)
 							this.journal.settle(taskId, actionTurnId, "cancelled");
-						else this.journal.failRunning(taskId, actionTurnId, String(error));
+						else this.journal.completeHandoff(taskId, actionTurnId, String(handoff.id), { binding: owner?.binding ?? null, actionId: String(handoff.id), failed: true, result: { ok: false, error: String(error) } });
 					}
 				}
 			} else if (failure)

@@ -130,7 +130,7 @@ HopperCode
 
 Rhino attaches to one private loopback host for your OS user, starting it if needed, and opens the authenticated browser UI. This is the default behavior when you launch Rhino normally. Provider login, model choice, conversations, and work in progress stay in that browser tab.
 
-When no Rhino document is connected, the composer remains available for host-only requests. You can ask the agent to "Launch Rhino." The agent may launch a verified local Rhino installation only when your root message explicitly requests it. The launch creates one task-bound process grant, authenticates the resulting Rhino process, and adds its initial document to that task. There is no separate launch control in the browser UI.
+When no Rhino document is connected, the composer remains available for discussion. To work on documents, open Rhino and run `HopperCode`. The agent can create or open files in accessible connected processes through the ordinary document tools. Agent-managed process launching is deferred.
 
 The sidebar lists connected **Hopper Code instances**, not every running Rhino process. Run `HopperCode` in each Rhino document you want in the picker. On Mac, those documents share one process connection. A document created manually with Rhino `New` stays out of the picker until you run `HopperCode` there. Documents created or opened through Hopper are initialized automatically.
 
@@ -299,12 +299,7 @@ Tool switches control named Hopper calls. An enabled general-purpose script tool
 
 ## Agent tools (overview)
 
-**Rhino process**
-
-| Tool | Role |
-| ---- | ---- |
-| `listRhinoLaunches` | Inspect verified local Rhino installations and this task's launch attempts |
-| `launchRhino` | Launch one verified Rhino process after an explicit root-user request |
+Open Rhino yourself and run `HopperCode` to connect it. Agents can create or open files in connected processes through `rh_document` and `gh_document`. No separate document grant is needed. Agent-managed Rhino process launching is deferred.
 
 **Rhino document**
 

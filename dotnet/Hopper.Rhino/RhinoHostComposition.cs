@@ -91,7 +91,6 @@ namespace rhino_zmq_poc
 
         private void Open(Uri ready)
         {
-            if (SharedNativeHost.SuppressBrowser) return;
             try
             {
                 if (SharedNativeHost.MessageDocumentSerialNumber is { } serial)

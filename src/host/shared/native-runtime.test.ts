@@ -358,7 +358,7 @@ it("reserves bound saves durably and rejects target changes or coordinator trans
 					action: "open",
 					path: join(root, "target.3dm"),
 				}),
-			).rejects.toThrow("coordinator");
+			).rejects.toThrow("shared rh_document");
 			await expect(
 				transport.call("manageRhinoDocument", {
 					action: "close",
@@ -786,4 +786,23 @@ it("keeps chat within a host and resets after host restart or every Rhino proces
 	expect(stored.conversationSession.afterConversationSequence).toBe(next.afterConversationSequence);
 	expect(journal.snapshot().conversations[0]!.id).toBe(conversation.conversationId);
 	await runtime.close();
+});
+
+it("checks the selected tool target without activating a document or borrowing another attachment", async () => {
+	const { registry, runtime } = await setup();
+	const binding = { kind: "rhino" as const, lifecycleInstanceId: "life", rhinoDocumentId: "doc" };
+	wire.call.mockClear();
+	expect(await runtime.checkToolConnection(binding)).toBe(true);
+	expect(wire.call.mock.calls.map(call => call[0])).toEqual(["getRuntimeStatus"]);
+	expect(wire.beginRuntime).not.toHaveBeenCalled();
+	wire.call.mockClear();
+	expect(await runtime.checkToolConnection({ ...binding, lifecycleInstanceId: "other" })).toBe(false);
+	expect(await runtime.checkToolConnection({ ...binding, rhinoDocumentId: "closed" })).toBe(false);
+	expect(wire.call).not.toHaveBeenCalled();
+	wire.call.mockRejectedValueOnce(new Error("Disconnected"));
+	expect(await runtime.checkToolConnection(binding)).toBe(false);
+	registry.detach("life");
+	wire.call.mockClear();
+	expect(await runtime.checkToolConnection(binding)).toBe(false);
+	expect(wire.call).not.toHaveBeenCalled();
 });
