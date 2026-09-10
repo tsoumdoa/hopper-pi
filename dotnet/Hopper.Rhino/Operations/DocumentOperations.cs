@@ -102,9 +102,8 @@ internal sealed class RhinoDocumentOperations : DocumentService<RhinoDoc>, IDisp
     private void ExternalBoundary()
     {
         if (_managed) return;
-        try { RhinoAgentTransaction.CommitActive(); }
+        try { DocumentSession.AbandonActiveSegment(Kind, RhinoAgentTransaction.IsActive, () => RhinoAgentTransaction.CommitActive()); }
         catch { /* A native close may already have invalidated the undo record. Never touch another document. */ }
-        finally { DocumentSession.Advance(Kind, null, "abandoned"); }
     }
     protected override string Kind => "rhino";
     protected override IEnumerable<RhinoDoc> Documents => RhinoDoc.OpenDocuments(false);

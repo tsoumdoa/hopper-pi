@@ -495,7 +495,7 @@ export class SharedTaskService {
 			return `${value.processId}:${value.processStartTime}`;
 		}
 	}
-	private unresolvedProcess(processKey: string): boolean {
+	private unresolvedProcess(processKey: string): string | undefined {
 		const snapshot = this.snapshot(),
 			unresolved = new Set(
 				snapshot.tasks
@@ -506,12 +506,13 @@ export class SharedTaskService {
 					)
 					.map((task) => task.id),
 			);
-		return [...snapshot.turns, ...snapshot.operations].some(
+		const record = [...snapshot.turns, ...snapshot.operations].find(
 			(record) =>
 				unresolved.has(record.task_id) &&
 				record.owner &&
 				this.processOfOwner(JSON.parse(String(record.owner))) === processKey,
 		);
+		return record ? String(record.task_id) : undefined;
 	}
 
 	private usage(): number {
@@ -603,8 +604,15 @@ export class SharedTaskService {
 					try {
 						const target = this.options.resolveBinding(binding);
 						processKey = target.processKey;
-						if (this.held.has(processKey)) continue;
-						if (this.unresolvedProcess(processKey)) continue;
+						const blockingTaskId = this.unresolvedProcess(processKey) ?? this.held.get(processKey);
+						if (blockingTaskId) {
+							const needsRecovery = snapshot.tasks.some((task) => task.id === blockingTaskId && task.state === "uncertain");
+							this.journal.setSchedulingBlock(String(task.id), needsRecovery
+								? "Waiting for recovery of an earlier task in this Rhino instance."
+								: "Waiting for an earlier task in this Rhino instance to finish.", blockingTaskId);
+							this.changed();
+							continue;
+						}
 						owner = Object.freeze({
 							taskId: String(task.id),
 							turnId: String(turn.id),

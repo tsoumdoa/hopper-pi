@@ -67,6 +67,14 @@ public static class DocumentSession
         return Segments[owner] = new(documentId, state == "active" ? Guid.NewGuid().ToString("N") : null,
             previous.Epoch + 1, state, LifecycleInstanceId);
     }
+    public static void AbandonActiveSegment(string owner, bool nativeTransactionActive, Action closeTransaction)
+    {
+        // Idle document changes must not manufacture an interrupted edit. Preserve
+        // an existing abandoned state until the normal recovery path resolves it.
+        if (!nativeTransactionActive && Segment(owner).State != "active") return;
+        try { closeTransaction(); }
+        finally { Advance(owner, null, "abandoned"); }
+    }
     public static void ValidateSegment(string owner, JsonElement args)
     {
         if (!args.TryGetProperty("expectedSegment", out var expected) || expected.ValueKind == JsonValueKind.Null) return;

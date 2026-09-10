@@ -232,11 +232,14 @@ function TaskReply({ task, snapshot, labelFor, commands }: {
 	const targets = (input.messageTarget ? [input.messageTarget] : input.bindings)?.map(labelFor) ?? [];
 
 	if (state === "queued") {
+		const block = (snapshot.records ?? []).find((record) =>
+			record.kind === "scheduling" && record.task_id === task.id && record.state === "blocked");
+		const reason = block ? decode<{ reason?: string }>(block.payload, {}).reason : undefined;
 		return (
 			<div className="flex items-center justify-between gap-3 text-[13px] text-muted" aria-label="Hopper's reply">
 				<p role="status" className="flex items-center gap-2">
 					<Loader2 className="size-3.5 animate-spin" />
-					Waiting to start…
+					{reason || "Waiting to start…"}
 				</p>
 			</div>
 		);

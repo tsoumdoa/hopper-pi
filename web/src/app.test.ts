@@ -407,6 +407,32 @@ it("shows captured tool images as visual child evidence", async () => {
 	expect(image.src).toContain("data:image/png;base64,aGk=");
 });
 
+it("shows the host's queue blocker and clears it when the block is removed", async () => {
+	const task = {
+		id: "queued",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "queued",
+		payload: JSON.stringify({ text: "model hello world", bindings: [binding] }),
+	};
+	const reason = "Waiting for recovery of an earlier task in this Rhino instance.";
+	await act(async () => socket.receive({
+		type: "shared_snapshot",
+		snapshot: { ...snapshot, tasks: [task], records: [{
+			kind: "scheduling", id: "queued", task_id: "queued", state: "blocked",
+			payload: JSON.stringify({ reason, blockingTaskId: "earlier" }),
+		}] },
+	}));
+	expect(container.textContent).toContain(reason);
+	expect(container.textContent).not.toContain("Waiting to start…");
+	await act(async () => socket.receive({
+		type: "shared_snapshot",
+		snapshot: { ...snapshot, tasks: [task], records: [] },
+	}));
+	expect(container.textContent).not.toContain(reason);
+	expect(container.textContent).toContain("Waiting to start…");
+});
+
 it("allows task recovery without a written note and waits for host confirmation", async () => {
 	const task = {
 		id: "root",

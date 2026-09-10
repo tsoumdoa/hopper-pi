@@ -407,7 +407,7 @@ PRAGMA user_version=5;`);
 			};
 		});
 	}
-	setSchedulingBlock(taskId: string, reason: string | null): void {
+	setSchedulingBlock(taskId: string, reason: string | null, blockingTaskId?: string): void {
 		this.transaction(() => {
 			const prior = this.db
 					.prepare(
@@ -415,7 +415,7 @@ PRAGMA user_version=5;`);
 					)
 					.get(taskId),
 				state = reason ? "blocked" : "ready",
-				payload = canonical({ reason });
+				payload = canonical({ reason, ...(blockingTaskId ? { blockingTaskId } : {}) });
 			if (
 				(prior?.state === state && prior.payload === payload) ||
 				(!prior && !reason)
@@ -429,7 +429,7 @@ PRAGMA user_version=5;`);
 			this.event(
 				taskId,
 				reason ? "task_waiting_for_target" : "task_target_ready",
-				{ reason },
+				{ reason, ...(blockingTaskId ? { blockingTaskId } : {}) },
 			);
 		});
 	}

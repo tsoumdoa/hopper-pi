@@ -16,7 +16,7 @@ function setup(maxWorkers?: number) {
 	const journal = new TaskJournal(":memory:");
 	const contexts: DriverContext[] = [],
 		finish = new Map<string, () => void>(),
-		clean = new Map<string, () => void>();
+		clean = new Map<string, (confirmed?: boolean) => void>();
 	const pause = vi.fn(async (_context: DriverContext) => ({ confirmed: true }));
 	const resume = vi.fn(async (_context: DriverContext) => {});
 	const service = new SharedTaskService(journal, {
@@ -39,7 +39,7 @@ function setup(maxWorkers?: number) {
 				},
 				cleanup: () =>
 					new Promise((resolve) =>
-						clean.set(context.taskId, () => resolve({ confirmed: true })),
+						clean.set(context.taskId, (confirmed = true) => resolve({ confirmed })),
 					),
 			} satisfies TaskDriver;
 		},
@@ -70,12 +70,58 @@ describe("shared scheduling", () => {
 			c = s.submit("c", "q");
 		await tick();
 		expect(s.contexts.map((c) => c.taskId)).toEqual([a.taskId, c.taskId]);
+		const waiting = s.journal.snapshot().records.find((record) => record.kind === "scheduling" && record.task_id === b.taskId)!;
+		expect(JSON.parse(String(waiting.payload))).toEqual({
+			reason: "Waiting for an earlier task in this Rhino instance to finish.",
+			blockingTaskId: a.taskId,
+		});
 		s.finish.get(a.taskId)!();
 		await tick();
 		expect(s.contexts).toHaveLength(2);
 		s.clean.get(a.taskId)!();
 		await tick();
 		expect(s.contexts.map((c) => c.taskId)).toContain(b.taskId);
+		expect(s.journal.snapshot().records.find((record) => record.kind === "scheduling" && record.task_id === b.taskId)?.state).toBe("ready");
+	});
+	it.each([true, false])("schedules a second document according to confirmed cleanup (%s), even after a greeting with no native calls", async (confirmed) => {
+		const s = setup();
+		const first = s.submit("first", "p");
+		await tick();
+		s.finish.get(first.taskId)!();
+		await tick();
+		s.clean.get(first.taskId)!(confirmed);
+		await tick();
+		s.journal.registerSession("second", "second");
+		const second = s.service.submit({
+			requestId: "second",
+			conversationId: "second",
+			sessionId: "second",
+			kind: "prompt",
+			text: "model hello world",
+			bindings: [{ kind: "rhino", lifecycleInstanceId: "p", rhinoDocumentId: "doc-2" }],
+			attachments: [],
+		});
+		await tick();
+		expect(s.journal.snapshot().operations).toHaveLength(0);
+		expect(s.journal.snapshot().tasks.find((task) => task.id === second.taskId)?.state).toBe(confirmed ? "running" : "queued");
+		if (!confirmed) {
+			const record = s.journal.snapshot().records.find((record) => record.kind === "scheduling" && record.task_id === second.taskId)!;
+			expect(JSON.parse(String(record.payload))).toEqual({
+				reason: "Waiting for recovery of an earlier task in this Rhino instance.",
+				blockingTaskId: first.taskId,
+			});
+			const events = s.journal.snapshot().events.filter((event) => event.task_id === second.taskId && event.kind === "task_waiting_for_target");
+			expect(JSON.parse(String(events[0]!.payload))).toMatchObject({ blockingTaskId: first.taskId });
+			s.service.pump();
+			expect(s.journal.snapshot().events.filter((event) => event.task_id === second.taskId && event.kind === "task_waiting_for_target")).toHaveLength(events.length);
+			await s.service.cancel(second.taskId);
+		} else {
+			s.finish.get(second.taskId)!();
+			await tick();
+			s.clean.get(second.taskId)!();
+			await tick();
+		}
+		s.journal.close();
 	});
 	it("persists question before cleanup and answers into one fresh turn", async () => {
 		const s = setup(),
