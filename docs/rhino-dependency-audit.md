@@ -1,6 +1,6 @@
 # Rhino dependency audit
 
-The subsequent [runtime dependency bundling](runtime-startup.md) change combines
+The subsequent runtime dependency bundling change combines
 TypeBox and Pi agent core modules to reduce startup file reads. The measurements
 below describe the preceding pruning pass.
 
