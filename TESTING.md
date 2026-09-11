@@ -28,9 +28,11 @@ dotnet test dotnet/Hopper.Core.Tests/Hopper.Core.Tests.csproj
 pnpm test:rpc-cross-language
 ```
 
-The tests in `grasshopper-plugin.Tests` need Rhino/Grasshopper for native
-execution. Build that project, then use `scripts/run-native-tests.mjs --help`
-to run selected methods in an explicitly selected Rhino instance. Plain
-`dotnet test` cannot run the graph rollback and solution tests without the
-Grasshopper runtime. Keep the native document and script checks for changes
-to those operations.
+For native document or script changes, check these manually in Rhino using a
+throwaway model:
+
+- Save, close, and reopen a `.3dm` and a `.gh` or `.ghx` file; verify their contents.
+- Run a Python or C# edit and undo it; verify that the original geometry returns.
+- Attempt a failing graph edit; verify that it leaves the existing canvas intact.
+
+The automated suite does not verify Rhino's native save callbacks or undo behavior.

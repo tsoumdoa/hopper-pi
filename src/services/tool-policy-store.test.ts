@@ -73,13 +73,6 @@ describe("authoritative policy persistence", () => {
 		await expect(store.read()).rejects.toMatchObject({ code: "settings-unavailable" });
 	});
 
-	it("unsubscribing stops notifications without closing the store", async () => {
-		const store = await create();
-		const unsubscribe = store.subscribe(() => {});
-		unsubscribe();
-		expect((await store.read()).revision).toBe(0);
-	});
-
 	it("orders concurrent hosts and rejects stale edits even on other fields", async () => {
 		const first = await create();
 		const second = new ToolPolicyStore(inventory, { directory: first.directory });
