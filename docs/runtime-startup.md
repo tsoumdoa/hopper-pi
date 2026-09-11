@@ -198,3 +198,13 @@ Windows/macOS Yak packaging passed unchanged budgets. New regressions verify
 that reading settings does not load Undici, unsupported source is rejected,
 dispatcher settings/error handling are preserved, and the real deferred client
 successfully completes a loopback HTTP request in an isolated child process.
+
+After installing this candidate through the normal Windows installer, an
+untraced first Rhino launch reached host readiness at 4,961 ms (1,047 ms CPU;
+the Node process was already 126 ms old at the first stage). Immediately closing
+and reopening the test Rhino instance reached readiness at 588 ms, with the
+runtime import stage taking 391 ms. Both used the installed package, the existing
+journal, and `/notemplate`, without tracing or a host-entry override. These
+observations confirm a substantial first-use versus repeat-launch difference on
+this machine. The first installed launch is still about five seconds; this change
+does not solve that remaining delay or establish reboot-cold/browser-render times.
