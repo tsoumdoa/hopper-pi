@@ -26,6 +26,9 @@ it("keeps interrupted child tasks reachable across host sessions and history pag
 		const fresh = journal.createConversation("fresh", "Fresh chat");
 		const overview = journal.browserSnapshot({ afterConversationSequence });
 		expect(overview.conversations.map(row => [row.id, row.recovery_required])).toEqual([[old.conversationId, 1], [fresh.conversationId, 0]]);
+		expect(JSON.parse(String(overview.conversations[0].instance_ids))).toContain("life");
+		expect(JSON.parse(String(overview.conversations[0].recovery_instance_ids))).toEqual(["life"]);
+		expect(JSON.parse(String(overview.conversations[1].recovery_instance_ids))).toEqual([]);
 		expect(overview.history.conversationId).toBe(fresh.conversationId);
 		const selected = journal.browserSnapshot({ afterConversationSequence, conversationId: old.conversationId });
 		expect(selected.tasks.find(row => row.id === child.taskId)?.state).toBe("uncertain");

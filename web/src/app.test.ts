@@ -879,6 +879,25 @@ it.each(["reload", "relaunch", "missing browser storage", "completed task", "pen
 	await act(async () => root.render(createElement(HopperStoreProvider, { children: createElement(App) })));
 	socket = Socket.sockets.at(-1)!;
 	await act(async () => { socket.onopen?.(); socket.receive({ type: "shared_snapshot", snapshot: persisted }); });
+	if (scenario === "another Rhino") {
+		expect(container.textContent).not.toContain("Build the persistent courtyard");
+		expect(container.textContent).not.toContain("The first stage is complete.");
+		const create = socket.sent.find(command => command.type === "create_conversation");
+		expect(create).toBeTruthy();
+		await act(async () => socket.receive({ type: "command_accepted", requestId: create.requestId, result: { conversationId: "fresh" } }));
+		const fresh = { ...persisted, conversations: [...persisted.conversations, { id: "fresh", title: "New chat", sequence: 3 }],
+			sessions: [...persisted.sessions, { id: "fresh-session", conversation_id: "fresh" }] };
+		await act(async () => socket.receive({ type: "shared_snapshot", snapshot: fresh }));
+		expect(container.querySelector('[aria-label="Message destination"]')?.textContent).toContain("Other.3dm");
+		await act(async () => root.unmount());
+		root = createRoot(container);
+		await act(async () => root.render(createElement(HopperStoreProvider, { children: createElement(App) })));
+		socket = Socket.sockets.at(-1)!;
+		await act(async () => { socket.onopen?.(); socket.receive({ type: "shared_snapshot", snapshot: fresh }); });
+		expect(socket.sent.some(command => command.type === "create_conversation")).toBe(false);
+		expect(socket.sent.at(-1)).toMatchObject({ type: "snapshot", conversationId: "fresh" });
+		return;
+	}
 	expect(container.textContent).toContain("Build the persistent courtyard");
 	expect(container.textContent).toContain("The first stage is complete.");
 	expect(container.querySelector("h1")!.textContent).toBe("First");
@@ -1265,12 +1284,26 @@ it("renders compact streaming history and applies row updates without duplicatin
 	expect(container.querySelectorAll(".animate-blink")).toHaveLength(0);
 });
 
+
+it("hides unrelated recoveries and shows only one notice for the selected instance", async () => {
+	const conversations = [...snapshot.conversations, ...Array.from({ length: 13 }, (_, i) => ({
+		id: `old-${i}`, title: "New chat", sequence: -i, recovery_required: 1, recovery_instance_ids: JSON.stringify(["old-life"]),
+	}))];
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, conversations } }));
+	expect(container.textContent).not.toContain("An interrupted task");
+	expect(container.textContent).not.toContain("Review interrupted task");
+	const relevant = conversations.map(chat => ({ ...chat, recovery_instance_ids: JSON.stringify(["life"]) }));
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, conversations: relevant } }));
+	expect(container.textContent!.split("An interrupted task")).toHaveLength(2);
+	expect(byText("Review interrupted task (1 of 13)")).toBeTruthy();
+});
+
 it("opens an interrupted chat from a previous host for recovery and returns to the current chat", async () => {
 	const journal = new TaskJournal(":memory:");
 	try {
 		const old = journal.createConversation("old", "Interrupted chat");
-		const task = journal.accept({ ...old, requestId: "old-task", kind: "prompt", text: "Old edit", bindings: [], attachments: [] });
-		journal.start(task.taskId, task.turnId);
+		const task = journal.accept({ ...old, requestId: "old-task", kind: "prompt", text: "Old edit", bindings: [{ ...binding, kind: "rhino" }], attachments: [] });
+		journal.start(task.taskId, task.turnId, { taskId: task.taskId, turnId: task.turnId, binding: { ...binding, kind: "rhino" }, attachmentGeneration: "old" });
 		journal.recover();
 		const afterConversationSequence = journal.lastConversationSequence;
 		journal.registerSession("conversation", "session");
@@ -1280,7 +1313,7 @@ it("opens an interrupted chat from a previous host for recovery and returns to t
 		} }));
 		await show("conversation");
 		expect(container.textContent).not.toContain("Old edit");
-		await act(async () => byText("Review Interrupted chat").click());
+		await act(async () => byText("Review interrupted task").click());
 		expect(socket.sent.at(-1)).toEqual({ type: "snapshot", conversationId: old.conversationId });
 		await show(old.conversationId);
 		expect(container.textContent).toContain("Old edit");
@@ -1292,7 +1325,7 @@ it("opens an interrupted chat from a previous host for recovery and returns to t
 		await act(async () => byText("Back to chat").click());
 		expect(socket.sent.at(-1)).toEqual({ type: "snapshot", conversationId: "conversation" });
 		await show("conversation");
-		expect(byText("Review Interrupted chat")).toBeUndefined();
+		expect(byText("Review interrupted task")).toBeUndefined();
 	} finally { journal.close(); }
 });
 
@@ -1529,7 +1562,9 @@ it("waits for the document that opened the browser when another instance registe
 	await act(async () => root.render(createElement(HopperStoreProvider, { children: createElement(App) })));
 	socket = Socket.sockets.at(-1)!;
 	await act(async () => { socket.onopen?.(); socket.receive({ type: "shared_snapshot", snapshot }); });
-	expect(socket.sent.some((command) => command.type === "create_conversation")).toBe(false);
+	const create = socket.sent.find(command => command.type === "create_conversation");
+	expect(create).toBeTruthy();
+	await act(async () => socket.receive({ type: "command_accepted", requestId: create.requestId, result: { conversationId: "conversation" } }));
 	await value("#composer-input", "Edit this model");
 	expect(sendButton().disabled).toBe(true);
 	const origin = { ...binding, lifecycleInstanceId: "origin", rhinoDocumentId: "origin-doc" };

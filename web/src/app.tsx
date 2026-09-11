@@ -45,7 +45,7 @@ function readCredential(): string {
 	const raw = new URLSearchParams(hash).get("token") || (hash.includes("=") ? "" : hash);
 	if (raw) {
 		sessionStorage.setItem("hopper.token", raw);
-		history.replaceState(null, "", location.pathname);
+		history.replaceState(null, "", location.pathname + location.search);
 	}
 	return raw || sessionStorage.getItem("hopper.token") || "";
 }
@@ -90,6 +90,7 @@ export function App() {
 	const selectionExplicit = useRef(false);
 	const initialInstance = useRef(new URLSearchParams(window.location.search).get("instance"));
 	const initialDocument = useRef(new URLSearchParams(window.location.search).get("document"));
+	const conversationStorageKey = useRef(initialInstance.current ? `${CONVERSATION_KEY}:${initialInstance.current}` : CONVERSATION_KEY);
 	const [onlyThisInstance, setOnlyThisInstance] = useState(false);
 	const selectTargets = (bindings: TargetBinding[]) => { selectionExplicit.current = true; setSelected(bindings); };
 	const [draft, setDraft] = useState("");
@@ -105,7 +106,7 @@ export function App() {
 		historyBefore.current = undefined;
 		currentConversation.current = id;
 		setConversationId(id);
-		try { window.localStorage.setItem(CONVERSATION_KEY, id); } catch { /* Restore from the journal if storage is unavailable. */ }
+		try { window.localStorage.setItem(conversationStorageKey.current, id); } catch { /* Restore from the journal if storage is unavailable. */ }
 	};
 
 	const socket = useRef<WebSocket>(undefined);
@@ -234,10 +235,11 @@ export function App() {
 						if (!startupRequested.current || sessionChanged) {
 							startupRequested.current = true;
 							let saved: string | null = null;
-							try { saved = window.localStorage.getItem(CONVERSATION_KEY); } catch { /* Use the journal fallback below. */ }
+							try { saved = window.localStorage.getItem(conversationStorageKey.current); } catch { /* Use the journal fallback below. */ }
 							const afterSequence = next.conversationSession?.afterConversationSequence ?? 0;
 							const conversations = next.conversations.filter((conversation) =>
-								Number(conversation.sequence ?? 1) > afterSequence && next.sessions.some((session) => session.conversation_id === conversation.id));
+								Number(conversation.sequence ?? 1) > afterSequence && next.sessions.some((session) => session.conversation_id === conversation.id) &&
+								(!initialInstance.current || conversation.id === saved || decode<string[]>(conversation.instance_ids, []).includes(initialInstance.current)));
 							const roots = next.tasks.filter((task) => task.parent_task_id === null && conversations.some((conversation) => conversation.id === task.conversation_id)).reverse();
 							const recentTask = roots.find((task) => [...ACTIVE_ROOT_STATES, "queued"].includes(String(task.state))) ?? roots[0];
 							const previous = conversations.find((conversation) => conversation.id === saved)
@@ -434,6 +436,10 @@ export function App() {
 	const needsTarget = sendMode !== "steer" && Boolean(
 		unavailableSelected || (documentBindings.length > 0 && !selected.length),
 	);
+	const recoveryInstance = selected[0]?.lifecycleInstanceId ?? initialInstance.current;
+	const recoveryChats = snapshot?.conversations.filter(chat => chat.recovery_required && chat.id !== conversationId &&
+		recoveryInstance && readyTargets(snapshot).some(target => target.lifecycleInstanceId === recoveryInstance) &&
+		decode<string[]>(chat.recovery_instance_ids, []).includes(recoveryInstance)) ?? [];
 	const title = String(snapshot?.conversations.find((conversation) => conversation.id === conversationId)?.title ?? "New chat");
 
 	useEffect(() => {
@@ -579,13 +585,13 @@ export function App() {
 					</Button>
 				</header>
 				<ConnectionBanner connection={connection} onReconnect={reconnect} />
-				{snapshot?.conversations.filter(chat => chat.recovery_required && chat.id !== conversationId).map(chat => (
+				{recoveryChats.slice(0, 1).map(chat => (
 					<div key={String(chat.id)} className="flex items-center justify-between gap-3 border-b border-warn/30 bg-warn-soft px-4 py-2 text-sm sm:px-6" role="status">
-						<span>An interrupted task needs your review before more work can use its Rhino instance.</span>
+						<span>An interrupted task needs your review before more work can use this Rhino instance.</span>
 						<Button size="sm" variant="secondary" disabled={!connected} onClick={() => {
 							setRecoveryReturnConversation(current => current || conversationId);
 							selectConversation(String(chat.id));
-						}}>Review {String(chat.title)}</Button>
+						}}>Review interrupted task{recoveryChats.length > 1 ? ` (1 of ${recoveryChats.length})` : ""}</Button>
 					</div>
 				))}
 				{!snapshot && (connection.status === "connecting" || connection.status === "authenticating") ? (
