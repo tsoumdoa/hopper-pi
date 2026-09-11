@@ -198,7 +198,6 @@ describe("shared task journal foundation", () => {
 it("commits a whole reservation set with dispatch and rolls all of it back on conflict", () => {
 	const j = new TaskJournal(":memory:");
 	j.registerSession("a", "a");
-	j.registerSession("b", "b");
 	const binding = {
 		kind: "rhino" as const,
 		lifecycleInstanceId: "rhino",
@@ -213,9 +212,11 @@ it("commits a whole reservation set with dispatch and rolls all of it back on co
 		bindings: [binding],
 		attachments: [],
 	});
-	const b = j.accept({
+	j.start(a.taskId, a.turnId);
+	const b = j.delegate({
+		parentTaskId: a.taskId, dependencies: [],
 		requestId: "b",
-		conversationId: "b",
+		conversationId: "a",
 		sessionId: "b",
 		kind: "prompt",
 		text: "save",
@@ -228,7 +229,6 @@ it("commits a whole reservation set with dispatch and rolls all of it back on co
 		binding,
 		attachmentGeneration: "generation",
 	});
-	j.start(a.taskId, a.turnId, owner(a));
 	j.start(b.taskId, b.turnId, owner(b));
 	j.operationIntent({
 		taskId: a.taskId,
@@ -277,4 +277,141 @@ it("retires old pending authorization submissions on restart while preserving th
  expect(snapshot.records.find(row => row.kind === "admission")!.state).toBe("failed");
  expect(snapshot.events.some(row => String(row.payload).includes("Submit the request again"))).toBe(true);
  expect(snapshot.operations).toHaveLength(0);
+});
+
+it("holds the global slot while awaiting an answer and keeps same-thread follow-ups queued", () => {
+	const { journal: j } = fixture();
+	const other = j.createConversation("other-chat", "Other");
+	const a = j.accept(submission());
+	expect(() => j.accept({ ...submission("blocked"), ...other })).toThrow(
+		expect.objectContaining({ code: "busy" }),
+	);
+	j.start(a.taskId, a.turnId);
+	const q = j.ask(a.taskId, a.turnId, "question", { text: "Continue?" });
+	j.confirmSuspension(a.taskId, a.turnId);
+	expect(() => j.accept({ ...submission("blocked"), ...other })).toThrow(
+		expect.objectContaining({ code: "busy" }),
+	);
+	const follow = j.accept(submission("follow"));
+	expect(() => j.start(follow.taskId, follow.turnId)).toThrow(/active/);
+	expect(
+		j.browserSnapshot().conversations.find((row) => row.id === "conversation")
+			?.live_state,
+	).toBe("awaiting_user");
+	const answer = j.answer("answer", q, "Yes");
+	j.start(a.taskId, answer.turnId);
+	j.settle(a.taskId, answer.turnId, "completed");
+	j.start(follow.taskId, follow.turnId);
+	j.settle(follow.taskId, follow.turnId, "completed");
+	expect(j.accept({ ...submission("blocked"), ...other }).taskId).toBeTruthy();
+});
+
+it("archives read-only history and restores it without changing its transcript", () => {
+	const f = fixture(),
+		j = f.journal;
+	const a = j.accept(submission());
+	expect(() =>
+		j.manageConversation("archive", "conversation", "archive_conversation"),
+	).toThrow(/running thread/);
+	j.start(a.taskId, a.turnId);
+	j.settle(a.taskId, a.turnId, "completed");
+	const events = j.snapshot().events;
+	j.manageConversation("archive", "conversation", "archive_conversation");
+	expect(j.browserSnapshot().history.conversationId).toBeNull();
+	expect(
+		j.browserSnapshot({ conversationId: "conversation" }).tasks,
+	).toHaveLength(1);
+	expect(() => j.accept(submission("new"))).toThrow(/Unarchive/);
+	f.reopen().manageConversation(
+		"restore",
+		"conversation",
+		"unarchive_conversation",
+	);
+	expect(f.journal.snapshot().events).toEqual(events);
+	expect(f.journal.browserSnapshot().history.conversationId).toBe(
+		"conversation",
+	);
+});
+
+it("deletes child logs and session files without deleting other threads or replaying requests", async () => {
+	const { mkdirSync, writeFileSync, existsSync } = await import("node:fs");
+	const f = fixture(),
+		j = f.journal;
+	const other = j.createConversation("other", "Other");
+	const input = {
+		...submission(),
+		bindings: [
+			{
+				kind: "rhino" as const,
+				lifecycleInstanceId: "life",
+				rhinoDocumentId: "doc",
+			},
+		],
+	};
+	const root = j.accept(input);
+	j.start(root.taskId, root.turnId);
+	const child = j.delegate({
+		...input,
+		requestId: "child",
+		parentTaskId: root.taskId,
+		sessionId: "worker",
+		dependencies: [],
+	});
+	j.start(child.taskId, child.turnId);
+	j.publish(child.taskId, {
+		type: "messages",
+		turnId: child.turnId,
+		messages: [{ text: "private transcript" }],
+	});
+	expect(() =>
+		j.manageConversation("delete", "conversation", "delete_conversation"),
+	).toThrow(/running thread/);
+	j.settle(child.taskId, child.turnId, "completed");
+	j.settle(root.taskId, root.turnId, "completed");
+	const folder = join(f.path, "..", "sessions", "conversation");
+	mkdirSync(folder, { recursive: true });
+	writeFileSync(join(folder, "session.jsonl"), "private transcript");
+	j.manageConversation("delete", "conversation", "delete_conversation");
+	expect(existsSync(folder)).toBe(false);
+	expect(j.snapshot().tasks).toEqual([]);
+	expect(j.snapshot().sessions.map((row) => row.conversation_id)).toEqual([
+		other.conversationId,
+	]);
+	expect(() => j.accept(input)).toThrow(/deleted/);
+	expect(
+		j.manageConversation("delete", "conversation", "delete_conversation"),
+	).toEqual({ conversationId: "conversation" });
+	expect(
+		f
+			.reopen()
+			.browserSnapshot()
+			.conversations.map((row) => row.id),
+	).toEqual([other.conversationId]);
+	expect(() =>
+		f.journal.manageConversation("bad", "../sessions", "delete_conversation"),
+	).toThrow(/Invalid thread/);
+});
+
+it("migrates version five without losing history and never reuses the epoch watermark after deletion", () => {
+	const f = fixture(),
+		j = f.journal;
+	const a = j.accept(submission());
+	j.start(a.taskId, a.turnId);
+	j.settle(a.taskId, a.turnId, "completed");
+	const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite");
+	const db = new DatabaseSync(f.path);
+	db.exec(
+		"DROP TRIGGER conversation_created; DROP TABLE conversation_sequence; DROP TABLE deleted_conversation_files; ALTER TABLE conversations DROP COLUMN archived_at; ALTER TABLE conversations DROP COLUMN document_label; PRAGMA user_version=5;",
+	);
+	db.close();
+	const migrated = f.reopen();
+	expect(migrated.snapshot().tasks[0]?.id).toBe(a.taskId);
+	const sequence = migrated.lastConversationSequence;
+	migrated.manageConversation("delete", "conversation", "delete_conversation");
+	expect(migrated.lastConversationSequence).toBe(sequence);
+	const next = migrated.createConversation("new-chat", "New chat");
+	expect(
+		migrated.browserSnapshot({ afterConversationSequence: sequence }).history
+			.conversationId,
+	).toBe(next.conversationId);
 });

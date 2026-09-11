@@ -1,6 +1,8 @@
 import { browserConversationsQuery, browserRecoveryTasksQuery } from "./conversation-snapshot.js";
 import { BrowserHistory } from "./browser-history.js";
 import { createHash, randomUUID } from "node:crypto";
+import { rmSync } from "node:fs";
+import { dirname, join, basename } from "node:path";
 import { createRequire } from "node:module";
 import { classifyOperation, type OperationName } from "../../protocol/v2.js";
 import {
@@ -72,10 +74,13 @@ export interface Receipt {
 
 /** SQLite is the authority for accepted work, dispatch intent, and recovery. */
 export class TaskJournal {
-	static readonly schemaVersion = 5;
+	static readonly schemaVersion = 6;
+	private readonly sessionDirectory: string | undefined;
+	conversationRevision = 0;
 	private readonly db: Database;
 	private readonly browserHistory: BrowserHistory;
 	constructor(path: string) {
+		this.sessionDirectory = path === ":memory:" ? undefined : join(dirname(path), "sessions");
 		const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as {
 			DatabaseSync: new (path: string) => Database;
 		};
@@ -213,7 +218,21 @@ CREATE TRIGGER operation_updated AFTER UPDATE OF state ON operations BEGIN UPDAT
 CREATE TRIGGER event_created AFTER INSERT ON events BEGIN UPDATE events SET created_at=CAST((julianday('now')-2440587.5)*86400000 AS INTEGER) WHERE id=NEW.id; END;
 PRAGMA user_version=5;`);
 			});
+			this.transaction(() => {
+				if (Number(this.db.prepare("PRAGMA user_version").get()!.user_version) < 6)
+					this.db.exec(`ALTER TABLE conversations ADD COLUMN archived_at INTEGER;
+ALTER TABLE conversations ADD COLUMN document_label TEXT;
+CREATE TABLE conversation_sequence (value INTEGER NOT NULL);
+INSERT INTO conversation_sequence SELECT COALESCE(MAX(rowid),0) FROM conversations;
+CREATE TRIGGER conversation_created AFTER INSERT ON conversations BEGIN
+ UPDATE conversations SET rowid=MAX(NEW.rowid,(SELECT value+1 FROM conversation_sequence)) WHERE id=NEW.id;
+ UPDATE conversation_sequence SET value=(SELECT MAX(rowid) FROM conversations);
+END;
+CREATE TABLE deleted_conversation_files (id TEXT PRIMARY KEY);
+PRAGMA user_version=6;`);
+			});
 			this.browserHistory = new BrowserHistory(this.db);
+			this.cleanupDeletedConversationFiles();
 		} catch (error) {
 			this.db.close();
 			throw error;
@@ -226,7 +245,7 @@ PRAGMA user_version=5;`);
 		return String(this.db.prepare("SELECT id FROM identity").get()!.id);
 	}
 	get lastConversationSequence(): number {
-		return Number(this.db.prepare("SELECT COALESCE(MAX(rowid), 0) AS sequence FROM conversations").get()!.sequence);
+		return Number(this.db.prepare("SELECT value AS sequence FROM conversation_sequence").get()!.sequence);
 	}
 	private transaction<T>(work: () => T): T {
 		this.db.exec("BEGIN IMMEDIATE");
@@ -296,7 +315,9 @@ PRAGMA user_version=5;`);
 			createHash("sha256").update(canonical(payload)).digest("hex")
 		)
 			throw new Error("Request ID conflicts with a different payload");
-		return JSON.parse(String(prior.receipt)) as T;
+		const receipt = JSON.parse(String(prior.receipt));
+		if (receipt?.deleted) throw new Error("Thread was deleted; this request cannot be replayed");
+		return receipt as T;
 	}
 
 	private request<T>(requestId: string, payload: unknown, work: () => T): T {
@@ -309,7 +330,9 @@ PRAGMA user_version=5;`);
 			if (prior) {
 				if (prior.hash !== hash)
 					throw new Error("Request ID conflicts with a different payload");
-				return JSON.parse(String(prior.receipt)) as T;
+				const receipt = JSON.parse(String(prior.receipt));
+				if (receipt?.deleted) throw new Error("Thread was deleted; this request cannot be replayed");
+				return receipt as T;
 			}
 			const receipt = work();
 			this.db
@@ -344,6 +367,144 @@ PRAGMA user_version=5;`);
 				return { conversationId, sessionId };
 			},
 		);
+	}
+
+	private cleanupDeletedConversationFiles(): void {
+		for (const row of this.db
+			.prepare("SELECT id FROM deleted_conversation_files")
+			.all()) {
+			if (this.sessionDirectory)
+				rmSync(join(this.sessionDirectory, String(row.id)), {
+					recursive: true,
+					force: true,
+				});
+			this.db
+				.prepare("DELETE FROM deleted_conversation_files WHERE id=?")
+				.run(row.id);
+		}
+	}
+
+	get liveConversationId(): string | undefined {
+		const row = this.db
+			.prepare(
+				"SELECT conversation_id FROM tasks WHERE parent_task_id IS NULL AND state IN ('queued','running','suspending','awaiting_user') ORDER BY CASE WHEN state='queued' THEN 1 ELSE 0 END,rowid LIMIT 1",
+			)
+			.get();
+		return row ? String(row.conversation_id) : undefined;
+	}
+	assertWritableConversation(id: string): void {
+		const row = this.db
+			.prepare("SELECT archived_at FROM conversations WHERE id=?")
+			.get(id);
+		if (!row) throw new Error("Thread no longer exists");
+		if (row.archived_at !== null)
+			throw new Error("Unarchive this thread to continue");
+		if (this.liveConversationId && this.liveConversationId !== id)
+			throw Object.assign(
+				new Error(
+					"Hopper is working in another thread. Stop it or jump back to continue.",
+				),
+				{ code: "busy" },
+			);
+	}
+	manageConversation(
+		requestId: string,
+		id: string,
+		action:
+			| "archive_conversation"
+			| "unarchive_conversation"
+			| "delete_conversation",
+	) {
+		// IDs are also directory names. Never let a client select a parent directory.
+		if (
+			!id ||
+			id === "." ||
+			id === ".." ||
+			basename(id) !== id ||
+			id.includes("\\")
+		)
+			throw new Error("Invalid thread ID");
+		const result = this.request(
+			requestId,
+			{ action, conversationId: id },
+			() => {
+				const row = this.db
+					.prepare("SELECT id FROM conversations WHERE id=?")
+					.get(id);
+				if (!row) throw new Error("Thread no longer exists");
+				if (
+					action !== "unarchive_conversation" &&
+					this.db
+						.prepare(
+							"SELECT 1 FROM tasks WHERE conversation_id=? AND state IN ('queued','running','suspending','awaiting_user') LIMIT 1",
+						)
+						.get(id)
+				)
+					throw Object.assign(new Error("Stop the running thread first"), {
+						code: "busy",
+					});
+				if (action === "delete_conversation") {
+					if (
+						this.db
+							.prepare(
+								`SELECT 1 FROM (${browserRecoveryTasksQuery}) WHERE conversation_id=? LIMIT 1`,
+							)
+							.get(id)
+					)
+						throw new Error(
+							"Review interrupted work before deleting this thread",
+						);
+					const tasks = "SELECT id FROM tasks WHERE conversation_id=?";
+					this.db
+						.prepare(
+							`DELETE FROM reservations WHERE operation_id IN (SELECT id FROM operations WHERE task_id IN (${tasks}))`,
+						)
+						.run(id);
+					this.db
+						.prepare(
+							`DELETE FROM dependencies WHERE task_id IN (${tasks}) OR dependency_id IN (${tasks})`,
+						)
+						.run(id, id);
+					for (const table of [
+						"questions",
+						"inputs",
+						"browser_events",
+						"events",
+						"operations",
+						"recovery_dispositions",
+						"records",
+						"turns",
+					])
+						this.db
+							.prepare(`DELETE FROM ${table} WHERE task_id IN (${tasks})`)
+							.run(id);
+					// Keep request tombstones so reconnect retries cannot replay deleted work.
+					this.db
+						.prepare(
+							`UPDATE requests SET receipt=? WHERE json_extract(receipt,'$.conversationId')=? OR json_extract(receipt,'$.taskId') IN (${tasks})`,
+						)
+						.run(JSON.stringify({ deleted: true, conversationId: id }), id, id);
+					this.db.prepare("DELETE FROM tasks WHERE conversation_id=?").run(id);
+					this.db
+						.prepare("DELETE FROM sessions WHERE conversation_id=?")
+						.run(id);
+					this.db.prepare("DELETE FROM conversations WHERE id=?").run(id);
+					this.db
+						.prepare(
+							"INSERT OR IGNORE INTO deleted_conversation_files VALUES (?)",
+						)
+						.run(id);
+				} else
+					this.db
+						.prepare("UPDATE conversations SET archived_at=? WHERE id=?")
+						.run(action === "archive_conversation" ? Date.now() : null, id);
+				return { conversationId: id };
+			},
+		);
+		this.conversationRevision++;
+		if (action === "delete_conversation")
+			this.cleanupDeletedConversationFiles();
+		return result;
 	}
 
 	registerSession(conversationId: string, sessionId: string): void {
@@ -384,6 +545,14 @@ PRAGMA user_version=5;`);
 		if (input.kind !== "prompt" && input.kind !== "follow_up")
 			throw new Error("Invalid submission kind");
 		return this.request(input.requestId, input, () => {
+			this.assertWritableConversation(input.conversationId);
+			const target = input.messageTarget ?? input.bindings[0];
+			if (target) {
+				const attachment = this.db.prepare("SELECT payload FROM attachments WHERE lifecycle_id=?").get(target.lifecycleInstanceId);
+				const labels = attachment ? JSON.parse(String(attachment.payload)).documentLabels : undefined;
+				const label = labels?.[target.kind === "rhino" ? target.rhinoDocumentId : target.grasshopperDocumentId];
+				if (typeof label === "string") this.db.prepare("UPDATE conversations SET document_label=COALESCE(document_label,?) WHERE id=?").run(label,input.conversationId);
+			}
 			const taskId = randomUUID(),
 				turnId = randomUUID();
 			this.db
@@ -519,7 +688,7 @@ PRAGMA user_version=5;`);
 			if (current.parent_task_id === null) {
 				const busy = this.db
 					.prepare(
-						"SELECT id FROM tasks WHERE conversation_id=? AND parent_task_id IS NULL AND (state IN ('running','suspending','awaiting_user') OR (state='uncertain' AND NOT EXISTS(SELECT 1 FROM recovery_dispositions r WHERE r.task_id=tasks.id)) OR (state='queued' AND rowid<(SELECT rowid FROM tasks WHERE id=?))) AND id<>?",
+						"SELECT id FROM tasks WHERE parent_task_id IS NULL AND (state IN ('running','suspending','awaiting_user') OR (conversation_id=? AND state='uncertain' AND NOT EXISTS(SELECT 1 FROM recovery_dispositions r WHERE r.task_id=tasks.id)) OR (state='queued' AND rowid<(SELECT rowid FROM tasks WHERE id=?))) AND id<>?",
 					)
 					.get(current.conversation_id, taskId, taskId);
 				if (busy) throw new Error("Conversation has active or unresolved work");
@@ -1564,12 +1733,15 @@ PRAGMA user_version=5;`);
 	/** Bounded display data, independent of the complete recovery/export journal. */
 	browserSnapshot(options: { conversationId?: string; before?: number; afterConversationSequence?: number } = {}) {
 		return this.transaction(() => {
-			const conversations = this.db.prepare(browserConversationsQuery)
-				.all(options.afterConversationSequence ?? 0, options.conversationId ?? null)
-				.map(({ has_fixture, first_user_text, ...row }) => has_fixture
-					? { ...row, title: typeof first_user_text === "string" && first_user_text.trim() ? first_user_text.trim().slice(0, 80) : "Conversation" }
-					: row);
-			const conversationId = conversations.find(row => row.id === options.conversationId)?.id ?? conversations.at(-1)?.id ?? null;
+			const conversations = this.db.prepare(browserConversationsQuery).all().map(({ has_fixture, ...row }): Row => {
+				const first = String(row.first_user_text ?? "").trim().replace(/\s+/g," ");
+				const custom = !has_fixture && row.title && row.title !== "New chat" ? String(row.title) : "";
+				const text = custom || first;
+				const short = text.split(" ").slice(0,8).join(" ").slice(0,60);
+				return { ...row, title: short ? short + (short.length < text.length ? "…" : "") : "New thread" };
+			});
+			const conversationId = conversations.find(row => row.id === options.conversationId)?.id
+				?? conversations.find(row => !row.archived_at && Number(row.sequence) > (options.afterConversationSequence ?? 0))?.id ?? null;
 			const roots = conversationId === null ? [] : this.db.prepare(`SELECT sequence,id FROM browser_roots
 WHERE conversation_id=? AND NOT fixture AND sequence<? ORDER BY sequence DESC LIMIT 21`)
 				.all(conversationId, options.before ?? Number.MAX_SAFE_INTEGER);

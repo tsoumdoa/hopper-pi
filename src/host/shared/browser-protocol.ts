@@ -7,6 +7,7 @@ import {
 export type SharedBrowserCommand =
 	| { type: "authenticate"; token: string }
 	| { type: "snapshot"; conversationId?: string; before?: number }
+	| { type: "archive_conversation" | "unarchive_conversation" | "delete_conversation"; requestId: string; conversationId: string }
 	| { type: "create_conversation"; requestId: string; title: string }
 	| {
 			type: "submit";
@@ -127,6 +128,7 @@ export function parseSharedBrowserCommand(raw: string): SharedBrowserCommand {
 	if (type === "create_conversation")
 		return { type, requestId, title: string(v, "title") };
 	const conversationId = string(v, "conversationId");
+	if (type === "archive_conversation" || type === "unarchive_conversation" || type === "delete_conversation") return { type, requestId, conversationId };
 	if (type === "answer")
 		return {
 			type,

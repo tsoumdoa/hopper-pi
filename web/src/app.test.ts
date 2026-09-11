@@ -181,7 +181,7 @@ it("late acceptance cannot erase a draft in a new session", async () => {
  await value("#composer-input", "First task");
  await act(async () => sendButton().click());
  const command = socket.sent.find((command) => command.type === "submit");
- await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="New session"]')!.click());
+ await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="New thread"]')!.click());
  const create = socket.sent.find((command) => command.type === "create_conversation");
  await act(async () => socket.receive({ type: "command_accepted", requestId: create.requestId, result: { conversationId: "other" } }));
  await value("#composer-input", "Second task");
@@ -320,4 +320,67 @@ it("retains a durable command when WebSocket.send throws and retries the same re
 	await act(async () => { replacement.onopen?.(); replacement.receive({ type: "shared_snapshot", snapshot }); });
 	expect(replacement.sent.filter((command) => command.type === "submit")).toEqual([command]);
 	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Keep the request");
+});
+
+it("keeps drafts in their thread when hopping to a globally live thread and back", async () => {
+	await value("#composer-input", "Draft for the first thread");
+	const next = {
+		...snapshot,
+		conversations: [
+			snapshot.conversations[0],
+			{ ...snapshot.conversations[1], live_state: "awaiting_user" },
+		],
+	};
+	await act(async () =>
+		socket.receive({ type: "shared_snapshot", snapshot: next }),
+	);
+	expect(container.querySelector("#composer-input")).toBeNull();
+	expect(container.textContent).toContain("This thread is read-only for now");
+	expect(
+		container.querySelector<HTMLButtonElement>(
+			'button[aria-label="New thread"]',
+		)!.disabled,
+	).toBe(true);
+	await act(async () => byText("Jump back").click());
+	expect(container.querySelector("h1")!.textContent).toBe("Second");
+	expect(
+		container.querySelector<HTMLTextAreaElement>("#composer-input")!.value,
+	).toBe("");
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot }));
+	const first = container.querySelector<HTMLButtonElement>(
+		'nav[aria-label="Thread history"] button[title="First"]',
+	)!;
+	await act(async () => first.click());
+	expect(
+		container.querySelector<HTMLTextAreaElement>("#composer-input")!.value,
+	).toBe("Draft for the first thread");
+});
+
+it("browses archived threads read-only and falls back after deleting the selection", async () => {
+	const next = {
+		...snapshot,
+		conversations: [
+			{ ...snapshot.conversations[0], archived_at: 1 },
+			snapshot.conversations[1],
+		],
+	};
+	await act(async () =>
+		socket.receive({ type: "shared_snapshot", snapshot: next }),
+	);
+	expect(container.querySelector("#composer-input")).toBeNull();
+	await act(async () => byText("Unarchive").click());
+	expect(
+		socket.sent.find((command) => command.type === "unarchive_conversation"),
+	).toMatchObject({ conversationId: "conversation" });
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: { ...snapshot, conversations: [snapshot.conversations[1]] },
+		}),
+	);
+	expect(container.querySelector("h1")!.textContent).toBe("Second");
+	expect(socket.sent.at(-1)).toMatchObject({
+		type: "snapshot",
+		conversationId: "other",
+	});
 });
