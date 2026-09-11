@@ -10,6 +10,7 @@ import { ExportSessionButton } from "./components/export-session-button";
 import { ModelControls, toolbarTriggerClass } from "./components/model-picker";
 import { ProviderDialog } from "./components/provider-dialog";
 import { RhinoInstancesPanel, summarizeInstances } from "./components/rhino-instances";
+import { ArchivedThreadsDialog } from "./components/archived-threads-dialog";
 import { ThreadList } from "./components/thread-list";
 import { Sidebar } from "./components/sidebar";
 import { SkillsDialog } from "./components/skills-dialog";
@@ -82,6 +83,7 @@ export function App() {
 	const [toolsOpen, setToolsOpen] = useState(false);
 	const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(readCollapsed);
+	const [archiveManagerOpen, setArchiveManagerOpen] = useState(false);
 	const [archiveUndo, setArchiveUndo] = useState<string | null>(null);
 	const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
@@ -295,6 +297,12 @@ export function App() {
 					}
 					if (accepted?.type === "archive_conversation") setArchiveUndo(accepted.conversationId);
 					if (accepted?.type === "unarchive_conversation") setArchiveUndo(null);
+					if (accepted?.type === "purge_archived_conversations") {
+						for (const id of accepted.conversationIds) drafts.current.delete(id);
+						setArchiveManagerOpen(false);
+						setArchiveUndo(null);
+						toast(`Deleted ${accepted.conversationIds.length} archived threads`, "info");
+					}
 					if (accepted?.type === "delete_conversation") {
 						drafts.current.delete(accepted.conversationId);
 						toast("Thread deleted", "info");
@@ -599,7 +607,7 @@ export function App() {
 				onMobileOpenChange={setMobileSettingsOpen}
 				onNewSession={newChat}
 				newThreadDisabled={Boolean(liveConversation)}
-				threads={<ThreadList snapshot={snapshot} connected={connected} selectedId={conversationId} onSelect={id => { selectConversation(id); setMobileSettingsOpen(false); }} onArchive={manageThread} onDelete={deleteThread} />}
+				threads={<ThreadList snapshot={snapshot} connected={connected} selectedId={conversationId} onSelect={id => { selectConversation(id); setMobileSettingsOpen(false); }} onArchive={manageThread} onDelete={deleteThread} onManageArchived={() => { setMobileSettingsOpen(false); setArchiveManagerOpen(true); }} />}
 				onManageProvider={openProvider}
 				onManageSkills={() => { setMobileSettingsOpen(false); setSkillsOpen(true); }}
 				onViewTools={() => { setMobileSettingsOpen(false); setToolsOpen(true); }}
@@ -698,6 +706,7 @@ export function App() {
 			{skillsOpen && <SkillsDialog token={credential.current ?? ""} connected={connected} streaming={Boolean(activeRoot)} onOpenChange={setSkillsOpen} />}
 			{toolsOpen && <ToolsDialog key={`${sessionId}:${toolsContextQuery}`} contextQuery={toolsContextQuery} token={credential.current ?? ""} connected={connected} onOpenChange={setToolsOpen} />}
 			<UiRequestDialog send={(message) => message.type === "ui_response" && send({ type: "auth_response", requestId: message.requestId, value: message.value })} />
+			{archiveManagerOpen && <ArchivedThreadsDialog snapshot={snapshot} connected={connected} busy={[...pending.current.values()].some(command => command.type === "purge_archived_conversations")} onClose={() => setArchiveManagerOpen(false)} onPurge={(conversationIds, before) => send({ type: "purge_archived_conversations", requestId: crypto.randomUUID(), conversationIds, before })} />}
 			<ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
 			{archiveUndo && <div role="status" className="fixed bottom-4 right-4 z-[60] flex items-center gap-4 rounded-md border border-line bg-surface p-3 text-sm shadow-pop">Thread archived<Button size="xs" variant="ghost" disabled={!connected} onClick={() => send({ type: "unarchive_conversation", requestId: crypto.randomUUID(), conversationId: archiveUndo })}>Undo</Button><button aria-label="Dismiss archive notification" onClick={() => setArchiveUndo(null)}>×</button></div>}
 			<ToastRegion />

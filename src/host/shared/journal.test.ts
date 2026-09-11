@@ -314,14 +314,23 @@ it("deletes child logs and session files without deleting other threads or repla
 	const folder = join(f.path, "..", "sessions", "conversation");
 	mkdirSync(folder, { recursive: true });
 	writeFileSync(join(folder, "session.jsonl"), "private transcript");
-	j.manageConversation("delete", "conversation", "delete_conversation");
+	j.manageConversation("archive", "conversation", "archive_conversation");
+	// A thread restored after the preview invalidates the entire batch.
+	j.manageConversation("archive-other", other.conversationId, "archive_conversation");
+	j.manageConversation("restore-other", other.conversationId, "unarchive_conversation");
+	expect(() => j.purgeArchivedConversations("stale", ["conversation", other.conversationId], null)).toThrow(/changed/);
+	expect(j.getTask(root.taskId)).toBeDefined();
+	expect(existsSync(folder)).toBe(true);
+	j.purgeArchivedConversations("delete", ["conversation"], null);
 	expect(existsSync(folder)).toBe(false);
 	expect(j.snapshot().tasks).toEqual([]);
 	expect(j.snapshot().sessions.map((row) => row.conversation_id)).toEqual([
 		other.conversationId,
 	]);
 	expect(() => j.accept(input)).toThrow(/deleted/);
-	j.manageConversation("delete", "conversation", "delete_conversation");
+	// Retrying the completed purge must not include a newly archived thread.
+	j.manageConversation("archive-other-again", other.conversationId, "archive_conversation");
+	j.purgeArchivedConversations("delete", ["conversation"], null);
 	expect(
 		f
 			.reopen()

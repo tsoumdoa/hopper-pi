@@ -1,4 +1,10 @@
-import { Archive, ArchiveRestore, ChevronDown, Trash2 } from "lucide-react";
+import {
+	Archive,
+	ArchiveRestore,
+	ChevronDown,
+	Ellipsis,
+	Trash2,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import type { TargetBinding } from "../../../src/protocol/shared-execution";
 import { cn } from "../lib/utils";
@@ -16,6 +22,7 @@ export function ThreadList({
 	onSelect,
 	onArchive,
 	onDelete,
+	onManageArchived,
 }: {
 	snapshot?: SharedSnapshot;
 	selectedId: string;
@@ -23,6 +30,7 @@ export function ThreadList({
 	onSelect(id: string): void;
 	onArchive(row: Row): void;
 	onDelete(row: Row): void;
+	onManageArchived(): void;
 }) {
 	const [now, setNow] = useState(Date.now);
 	const [expanded, setExpanded] = useState(false);
@@ -179,18 +187,29 @@ export function ThreadList({
 			})}
 			{archived.length > 0 && (
 				<section className="mt-2 border-t border-line pt-1">
-					<button
-						type="button"
-						onClick={() => setExpanded(!expanded)}
-						aria-expanded={expanded}
-						className="flex w-full items-center gap-2 rounded px-2 py-2 text-xs text-ink-soft"
-					>
-						<Archive className="size-3.5" />
-						Archived ({archived.length})
-						<ChevronDown
-							className={cn("ml-auto size-3.5", expanded && "rotate-180")}
-						/>
-					</button>
+					<div className="flex items-center">
+						<button
+							type="button"
+							onClick={() => setExpanded(!expanded)}
+							aria-expanded={expanded}
+							className="flex w-full items-center gap-2 rounded px-2 py-2 text-xs text-ink-soft"
+						>
+							<Archive className="size-3.5" />
+							Archived ({archived.length})
+							<ChevronDown
+								className={cn("ml-auto size-3.5", expanded && "rotate-180")}
+							/>
+						</button>
+						<button
+							type="button"
+							aria-label="Manage archived threads"
+							title="Manage archived threads"
+							onClick={onManageArchived}
+							className="shrink-0 rounded p-1.5 text-muted hover:bg-surface hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/40"
+						>
+							<Ellipsis className="size-4" />
+						</button>
+					</div>
 					{expanded && (
 						<>
 							<p className="px-2 pb-1 text-[10px] text-muted">

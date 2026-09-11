@@ -8,6 +8,7 @@ export type SharedBrowserCommand =
 	| { type: "authenticate"; token: string }
 	| { type: "snapshot"; conversationId?: string; before?: number }
 	| { type: "archive_conversation" | "unarchive_conversation" | "delete_conversation"; requestId: string; conversationId: string }
+	| { type: "purge_archived_conversations"; requestId: string; conversationIds: string[]; before: number | null }
 	| { type: "create_conversation"; requestId: string; title: string }
 	| {
 			type: "submit";
@@ -127,6 +128,13 @@ export function parseSharedBrowserCommand(raw: string): SharedBrowserCommand {
 		return { type, requestId, hostEpoch: string(v, "hostEpoch") };
 	if (type === "create_conversation")
 		return { type, requestId, title: string(v, "title") };
+	if (type === "purge_archived_conversations") {
+		if (!Array.isArray(v.conversationIds) || !v.conversationIds.length ||
+			v.conversationIds.some(id => typeof id !== "string" || !id.trim()) ||
+			new Set(v.conversationIds).size !== v.conversationIds.length ||
+			(v.before !== null && (!Number.isSafeInteger(v.before) || Number(v.before) <= 0))) throw new Error("Invalid archive cleanup selection");
+		return { type, requestId, conversationIds: v.conversationIds as string[], before: v.before as number | null };
+	}
 	const conversationId = string(v, "conversationId");
 	if (type === "archive_conversation" || type === "unarchive_conversation" || type === "delete_conversation") return { type, requestId, conversationId };
 	if (type === "answer")

@@ -58,6 +58,7 @@ export class SharedBackend implements SharedBrowserBackend {
 		}
 		return {
 			...this.history,
+			historyStorage: this.tasks.journal.historyStorage,
 			hostEpoch: this.hostEpoch,
 			conversationSession: this.registry.conversationSession,
 			targets: this.registry.list(),
@@ -147,6 +148,10 @@ export class SharedBackend implements SharedBrowserBackend {
 				this.view = { conversationId: receipt.conversationId };
 				this.publish();
 				return receipt;
+			}
+			case "purge_archived_conversations": {
+				try { return this.tasks.journal.purgeArchivedConversations(command.requestId, command.conversationIds, command.before); }
+				finally { this.historyKey = ""; this.publish(); }
 			}
 			case "archive_conversation":
 			case "unarchive_conversation":

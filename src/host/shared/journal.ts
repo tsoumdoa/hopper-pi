@@ -2,7 +2,7 @@ import { browserConversationsQuery, browserRecoveryTasksQuery } from "./conversa
 import { BrowserHistory } from "./browser-history.js";
 import { createHash, randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
-import { dirname, join, basename } from "node:path";
+import { dirname, join, basename, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { classifyOperation, type OperationName } from "../../protocol/v2.js";
 import {
@@ -79,7 +79,7 @@ export class TaskJournal {
 	conversationRevision = 0;
 	private readonly db: Database;
 	private readonly browserHistory: BrowserHistory;
-	constructor(path: string) {
+	constructor(private readonly path: string) {
 		this.sessionDirectory = path === ":memory:" ? undefined : join(dirname(path), "sessions");
 		const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as {
 			DatabaseSync: new (path: string) => Database;
@@ -444,56 +444,7 @@ PRAGMA user_version=6;`);
 						code: "busy",
 					});
 				if (action === "delete_conversation") {
-					if (
-						this.db
-							.prepare(
-								`SELECT 1 FROM (${browserRecoveryTasksQuery}) WHERE conversation_id=? LIMIT 1`,
-							)
-							.get(id)
-					)
-						throw new Error(
-							"Review interrupted work before deleting this thread",
-						);
-					const tasks = "SELECT id FROM tasks WHERE conversation_id=?";
-					this.db
-						.prepare(
-							`DELETE FROM reservations WHERE operation_id IN (SELECT id FROM operations WHERE task_id IN (${tasks}))`,
-						)
-						.run(id);
-					this.db
-						.prepare(
-							`DELETE FROM dependencies WHERE task_id IN (${tasks}) OR dependency_id IN (${tasks})`,
-						)
-						.run(id, id);
-					for (const table of [
-						"questions",
-						"inputs",
-						"browser_events",
-						"events",
-						"operations",
-						"recovery_dispositions",
-						"records",
-						"turns",
-					])
-						this.db
-							.prepare(`DELETE FROM ${table} WHERE task_id IN (${tasks})`)
-							.run(id);
-					// Keep request tombstones so reconnect retries cannot replay deleted work.
-					this.db
-						.prepare(
-							`UPDATE requests SET receipt=? WHERE json_extract(receipt,'$.conversationId')=? OR json_extract(receipt,'$.taskId') IN (${tasks})`,
-						)
-						.run(JSON.stringify({ deleted: true, conversationId: id }), id, id);
-					this.db.prepare("DELETE FROM tasks WHERE conversation_id=?").run(id);
-					this.db
-						.prepare("DELETE FROM sessions WHERE conversation_id=?")
-						.run(id);
-					this.db.prepare("DELETE FROM conversations WHERE id=?").run(id);
-					this.db
-						.prepare(
-							"INSERT OR IGNORE INTO deleted_conversation_files VALUES (?)",
-						)
-						.run(id);
+					this.deleteConversationRows(id);
 				} else
 					this.db
 						.prepare("UPDATE conversations SET archived_at=? WHERE id=?")
@@ -505,6 +456,117 @@ PRAGMA user_version=6;`);
 		if (action === "delete_conversation")
 			this.cleanupDeletedConversationFiles();
 		return result;
+	}
+
+	get historyStorage() {
+		return this.sessionDirectory
+			? {
+					journalPath: resolve(this.path),
+					sessionsPath: resolve(this.sessionDirectory),
+				}
+			: undefined;
+	}
+
+	purgeArchivedConversations(
+		requestId: string,
+		conversationIds: string[],
+		before: number | null,
+	) {
+		const result = this.request(
+			requestId,
+			{ action: "purge_archived_conversations", conversationIds, before },
+			() => {
+				const rows = new Map(
+					this.db
+						.prepare(browserConversationsQuery)
+						.all()
+						.map((row) => [row.id, row]),
+				);
+				// Check the exact previewed IDs again inside the deletion transaction.
+				// A restored thread or activity outside the chosen period invalidates the batch.
+				for (const id of conversationIds) {
+					const row = rows.get(id);
+					if (
+						!row?.archived_at ||
+						row.live_state ||
+						row.recovery_required ||
+						(before !== null && Number(row.last_activity_at) >= before)
+					)
+						throw new Error(
+							"These threads changed. Close this dialog and review the cleanup again.",
+						);
+				}
+				for (const id of conversationIds) this.deleteConversationRows(id);
+				return { conversationIds };
+			},
+		);
+		this.conversationRevision++;
+		this.cleanupDeletedConversationFiles();
+		return result;
+	}
+
+	/** Called only inside a request transaction. */
+	private deleteConversationRows(id: string): void {
+		if (
+			!id ||
+			id === "." ||
+			id === ".." ||
+			basename(id) !== id ||
+			id.includes("\\")
+		)
+			throw new Error("Invalid thread ID");
+		if (
+			this.db
+				.prepare(
+					"SELECT 1 FROM tasks WHERE conversation_id=? AND state IN ('queued','running','suspending','awaiting_user') LIMIT 1",
+				)
+				.get(id)
+		)
+			throw new Error("Stop the running thread first");
+		if (
+			this.db
+				.prepare(
+					`SELECT 1 FROM (${browserRecoveryTasksQuery}) WHERE conversation_id=? LIMIT 1`,
+				)
+				.get(id)
+		)
+			throw new Error("Review interrupted work before deleting this thread");
+		const tasks = "SELECT id FROM tasks WHERE conversation_id=?";
+		this.db
+			.prepare(
+				`DELETE FROM reservations WHERE operation_id IN (SELECT id FROM operations WHERE task_id IN (${tasks}))`,
+			)
+			.run(id);
+		this.db
+			.prepare(
+				`DELETE FROM dependencies WHERE task_id IN (${tasks}) OR dependency_id IN (${tasks})`,
+			)
+			.run(id, id);
+		for (const table of [
+			"questions",
+			"inputs",
+			"browser_events",
+			"events",
+			"operations",
+			"recovery_dispositions",
+			"records",
+			"turns",
+		])
+			this.db
+				.prepare(`DELETE FROM ${table} WHERE task_id IN (${tasks})`)
+				.run(id);
+		// Keep request tombstones so reconnect retries cannot replay deleted work.
+		this.db
+			.prepare(
+				`UPDATE requests SET receipt=? WHERE json_extract(receipt,'$.conversationId')=? OR json_extract(receipt,'$.taskId') IN (${tasks})`,
+			)
+			.run(JSON.stringify({ deleted: true, conversationId: id }), id, id);
+		this.db.prepare("DELETE FROM tasks WHERE conversation_id=?").run(id);
+		this.db.prepare("DELETE FROM sessions WHERE conversation_id=?").run(id);
+		this.db.prepare("DELETE FROM conversations WHERE id=?").run(id);
+		this.db
+			.prepare("INSERT OR IGNORE INTO deleted_conversation_files VALUES (?)")
+			.run(id);
 	}
 
 	registerSession(conversationId: string, sessionId: string): void {
