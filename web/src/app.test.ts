@@ -1265,6 +1265,37 @@ it("renders compact streaming history and applies row updates without duplicatin
 	expect(container.querySelectorAll(".animate-blink")).toHaveLength(0);
 });
 
+it("opens an interrupted chat from a previous host for recovery and returns to the current chat", async () => {
+	const journal = new TaskJournal(":memory:");
+	try {
+		const old = journal.createConversation("old", "Interrupted chat");
+		const task = journal.accept({ ...old, requestId: "old-task", kind: "prompt", text: "Old edit", bindings: [], attachments: [] });
+		journal.start(task.taskId, task.turnId);
+		journal.recover();
+		const afterConversationSequence = journal.lastConversationSequence;
+		journal.registerSession("conversation", "session");
+		const show = async (conversationId: string) => act(async () => socket.receive({ type: "shared_snapshot", snapshot: {
+			...snapshot, ...journal.browserSnapshot({ afterConversationSequence, conversationId }),
+			conversationSession: { id: "rhino-session", afterConversationSequence }, eventCursor: journal.eventCursor,
+		} }));
+		await show("conversation");
+		expect(container.textContent).not.toContain("Old edit");
+		await act(async () => byText("Review Interrupted chat").click());
+		expect(socket.sent.at(-1)).toEqual({ type: "snapshot", conversationId: old.conversationId });
+		await show(old.conversationId);
+		expect(container.textContent).toContain("Old edit");
+		await act(async () => byText("I've checked, continue").click());
+		expect(socket.sent.at(-1)).toMatchObject({ type: "recover", conversationId: old.conversationId, taskId: task.taskId });
+		journal.recoveryDisposition("recovery", task.taskId, { acknowledged: true, originalProcessExited: true, inspectedBaseline: {} });
+		await show(old.conversationId);
+		expect(byText("I've checked, continue")).toBeUndefined();
+		await act(async () => byText("Back to chat").click());
+		expect(socket.sent.at(-1)).toEqual({ type: "snapshot", conversationId: "conversation" });
+		await show("conversation");
+		expect(byText("Review Interrupted chat")).toBeUndefined();
+	} finally { journal.close(); }
+});
+
 it("requests bounded older/latest pages and preserves the page in heartbeat requests", async () => {
 	const latest = { ...snapshot, history: { conversationId: "conversation", before: null, hasOlder: true, oldestSequence: 25, pageTaskIds: [] } };
 	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: latest }));

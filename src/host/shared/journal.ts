@@ -1,4 +1,4 @@
-import { browserConversationsQuery } from "./conversation-snapshot.js";
+import { browserConversationsQuery, browserRecoveryTasksQuery } from "./conversation-snapshot.js";
 import { BrowserHistory } from "./browser-history.js";
 import { createHash, randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
@@ -1565,7 +1565,7 @@ PRAGMA user_version=5;`);
 	browserSnapshot(options: { conversationId?: string; before?: number; afterConversationSequence?: number } = {}) {
 		return this.transaction(() => {
 			const conversations = this.db.prepare(browserConversationsQuery)
-				.all(options.afterConversationSequence ?? 0)
+				.all(options.afterConversationSequence ?? 0, options.conversationId ?? null)
 				.map(({ has_fixture, first_user_text, ...row }) => has_fixture
 					? { ...row, title: typeof first_user_text === "string" && first_user_text.trim() ? first_user_text.trim().slice(0, 80) : "Conversation" }
 					: row);
@@ -1577,7 +1577,9 @@ WHERE conversation_id=? AND NOT fixture AND sequence<? ORDER BY sequence DESC LI
 			const active = conversationId === null ? [] : this.db.prepare(`SELECT sequence,id FROM browser_roots
 WHERE conversation_id=? AND NOT fixture AND state IN ('queued','running','suspending','awaiting_user') ORDER BY sequence`)
 				.all(conversationId);
-			const rootIds = [...new Set([...page, ...active].map(row => row.id))];
+			const recoveryRoots = this.db.prepare(`SELECT DISTINCT browser_root_id AS id FROM (${browserRecoveryTasksQuery}) WHERE conversation_id=?`).all(conversationId);
+			const visibleRoots = [...page, ...recoveryRoots];
+			const rootIds = [...new Set([...visibleRoots, ...active].map(row => row.id))];
 			const marks = rootIds.map(() => "?").join(",") || "NULL";
 			const tasks = this.db.prepare(`SELECT rowid AS sequence,* FROM tasks WHERE id IN (${marks}) OR root_task_id IN (${marks}) OR parent_task_id IN (${marks}) ORDER BY rowid`)
 				.all(...rootIds, ...rootIds, ...rootIds);
@@ -1594,7 +1596,7 @@ WHERE conversation_id=? AND NOT fixture AND state IN ('queued','running','suspen
 				events: this.db.prepare(`SELECT id,task_id,kind,payload,created_at FROM browser_events WHERE task_id IN (${selected}) ORDER BY id`).all(...ids),
 				operations: [] as Row[], reservations: [] as Row[], attachments: [] as Row[], dependencies: [] as Row[],
 				history: { conversationId, before: options.before ?? null, hasOlder: roots.length > 20,
-					oldestSequence: page[0]?.sequence ?? null, pageTaskIds: tasks.filter(row => page.some(root => root.id === row.id || root.id === row.root_task_id || root.id === row.parent_task_id)).map(row => row.id) },
+					oldestSequence: page[0]?.sequence ?? null, pageTaskIds: tasks.filter(row => visibleRoots.some(root => root.id === row.id || root.id === row.root_task_id || root.id === row.parent_task_id)).map(row => row.id) },
 			};
 		});
 	}

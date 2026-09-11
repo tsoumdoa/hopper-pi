@@ -19,17 +19,18 @@ afterEach(async () => {
 		await rm(directory, { recursive: true, force: true });
 });
 describe("managed document and artifact actions", () => {
-	it("ends the old owner and action before a fresh bound continuation", async () => {
+	it("hands off once and keeps the new document through repeated answers after the original closes", async () => {
 		const journal = new TaskJournal(":memory:");
 		journal.registerSession("conversation", "session");
 		let grants: DocumentActionService;
+		let question = "", generation = "gen", originalClosed = false;
 		const contexts: DriverContext[] = [];
 		const order: string[] = [];
 		const scheduler = new SharedTaskService(journal, {
-			resolveBinding: () => ({
-				processKey: "process",
-				attachmentGeneration: "gen",
-			}),
+			resolveBinding: target => {
+				if (originalClosed && target.kind === "rhino" && target.rhinoDocumentId === "old") throw new Error("Original document closed");
+				return { processKey: "process", attachmentGeneration: generation };
+			},
 			resolveLifecycle: () => ({
 				processKey: "process",
 				attachmentGeneration: "gen",
@@ -50,7 +51,7 @@ describe("managed document and artifact actions", () => {
 								modifiedPolicy: "refuse",
 							});
 							context.requestDocumentAction(grant.grantId);
-						}
+						} else if (contexts.length < 4) question = context.ask(`question-${contexts.length}`, { question: "What size?" });
 					},
 					steer: async () => {},
 					cancel: () => {},
@@ -65,6 +66,7 @@ describe("managed document and artifact actions", () => {
 			preflight: async () => ({ destinations: [] }),
 			execute: async (owner) => {
 				order.push("action");
+				originalClosed = true;
 				expect(owner.grantId).toMatch(/^grant-/);
 				return { binding: binding("new"), result: { created: true } };
 			},
@@ -80,30 +82,33 @@ describe("managed document and artifact actions", () => {
 			bindings: [binding("old")],
 			attachments: [],
 		});
-		for (
-			let i = 0;
-			i < 10 && journal.snapshot().tasks[0]?.state !== "completed";
-			i++
-		)
-			await tick();
-		const state = journal.snapshot();
-		expect(state.tasks[0]!.state).toBe("completed");
-		expect(state.turns.map((t) => t.state)).toEqual([
-			"suspended",
-			"completed",
-			"completed",
-		]);
-		expect(contexts).toHaveLength(2);
-		expect(contexts[0]!.owner?.binding).toEqual(binding("old"));
-		expect(contexts[1]!.owner?.binding).toEqual(binding("new"));
-		expect(contexts[1]!.turnId).not.toBe(receipt.turnId);
-		expect(order.indexOf("cleanup")).toBeLessThan(order.indexOf("action"));
-		expect(JSON.parse(String(state.tasks[0]!.payload)).bindings).toEqual([
-			binding("old"),
-		]);
-		expect(journal.authorizationAdditions(receipt.taskId)).toEqual([
-			binding("new"),
-		]);
+		try {
+			for (let index = 0; index < 2; index++) {
+				await expect.poll(() => journal.getTask(receipt.taskId)?.state).toBe("awaiting_user");
+				generation = `reattached-${index}`;
+				scheduler.answer(`answer-${index}`, question, "10 mm");
+			}
+			await expect.poll(() => journal.getTask(receipt.taskId)?.state).toBe("completed");
+			const state = journal.snapshot();
+			expect(state.tasks[0]!.state).toBe("completed");
+			expect(state.turns.map((t) => t.state)).toEqual([
+				"suspended",
+				"completed",
+				"suspended",
+				"suspended",
+				"completed",
+			]);
+			expect(contexts.map(context => context.binding)).toEqual([binding("old"), binding("new"), binding("new"), binding("new")]);
+			expect(contexts.at(-1)?.owner?.attachmentGeneration).toBe("reattached-1");
+			expect(contexts[1]!.turnId).not.toBe(receipt.turnId);
+			expect(order.indexOf("cleanup")).toBeLessThan(order.indexOf("action"));
+			expect(JSON.parse(String(state.tasks[0]!.payload)).bindings).toEqual([
+				binding("old"),
+			]);
+			expect(journal.authorizationAdditions(receipt.taskId)).toEqual([
+				binding("new"),
+			]);
+		} finally { await scheduler.stop(); journal.close(); }
 	});
 	it("publishes one retained artifact and never duplicates an import after loss of evidence", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "hopper-transfer-"));

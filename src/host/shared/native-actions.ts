@@ -51,10 +51,26 @@ function resultData(response: RpcCallResult): any {
 export async function inspectDestination(
 	path: string,
 ): Promise<{ identities: string[]; baseline: unknown; canonicalPath: string }> {
-	const canonicalPath = join(
-		await realpath(dirname(resolve(path))),
-		basename(path),
-	);
+	// Resolve existing aliases without creating directories before native save admission.
+	let parent = dirname(resolve(path));
+	const suffix = [basename(path)];
+	while (true) {
+		try {
+			parent = await realpath(parent);
+			break;
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+			const entry = await lstat(parent).catch(cause => {
+				if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
+				return null;
+			});
+			// A dangling link is not an absent directory that native code may create.
+			if (entry || dirname(parent) === parent) throw error;
+			suffix.unshift(basename(parent));
+			parent = dirname(parent);
+		}
+	}
+	const canonicalPath = join(parent, ...suffix);
 	const casePath =
 		process.platform === "win32" || process.platform === "darwin"
 			? canonicalPath.toLocaleLowerCase("en-US")

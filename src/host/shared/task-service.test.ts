@@ -59,6 +59,40 @@ function setup(maxWorkers?: number) {
 	return { journal, service, contexts, finish, clean, submit };
 }
 describe("shared scheduling", () => {
+	it.each([false, true])("retains steering during initialization and respects cancellation=%s", async (cancelled) => {
+		const journal = new TaskJournal(":memory:");
+		const chat = journal.createConversation("chat", "Chat");
+		let initialize!: (driver: TaskDriver) => void;
+		let finish!: () => void;
+		const steer = vi.fn(async (_payload: unknown, _inputId?: number) => {});
+		const service = new SharedTaskService(journal, {
+			resolveBinding: () => ({ processKey: "p", attachmentGeneration: "g" }), validateBinding: () => {},
+			createDriver: () => new Promise(resolve => { initialize = resolve; }),
+		});
+		const task = service.submit({ ...chat, requestId: "task", kind: "prompt", text: "Edit", bindings: [], attachments: [] });
+		try {
+			await tick();
+			const first = service.steer("first", task.taskId, chat.sessionId, task.turnId, { text: "10 mm" });
+			service.steer("second", task.taskId, chat.sessionId, task.turnId, { text: "Make it blue" });
+			await tick();
+			expect(steer).not.toHaveBeenCalled();
+			if (cancelled) await service.cancel(task.taskId);
+			initialize({ run: () => new Promise(resolve => { finish = resolve; }), steer, cancel: () => {}, cleanup: async () => ({ confirmed: true }) });
+			if (cancelled) {
+				await expect.poll(() => journal.getTask(task.taskId)?.state).toBe("cancelled");
+				expect(steer).not.toHaveBeenCalled();
+				expect(journal.snapshot().inputs.map(row => row.state)).toEqual(["not_applied", "not_applied"]);
+			} else {
+				await expect.poll(() => journal.snapshot().inputs.map(row => row.state)).toEqual(["applied", "applied"]);
+				expect(steer.mock.calls.map(call => call[0])).toEqual([{ text: "10 mm" }, { text: "Make it blue" }]);
+				expect(service.steer("first", task.taskId, chat.sessionId, task.turnId, { text: "10 mm" })).toEqual(first);
+				await tick();
+				expect(steer).toHaveBeenCalledTimes(2);
+				finish();
+				await expect.poll(() => journal.getTask(task.taskId)?.state).toBe("completed");
+			}
+		} finally { finish?.(); await service.stop(); journal.close(); }
+	});
 	it("lets native tools in separate Rhino processes execute concurrently", async () => {
 		const s = setup(4);
 		const a = s.submit("a", "p"), b = s.submit("b", "q");

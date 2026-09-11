@@ -8,6 +8,37 @@ import { TaskJournal } from "./journal.js";
 const submit = (journal: TaskJournal, conversation: { conversationId: string; sessionId: string }, requestId: string) =>
 	journal.accept({ ...conversation, requestId, kind: "prompt", text: requestId, bindings: [], attachments: [] });
 
+it("keeps interrupted child tasks reachable across host sessions and history pages until recovery", () => {
+	const journal = new TaskJournal(":memory:");
+	try {
+		const old = journal.createConversation("old", "Interrupted chat");
+		journal.createConversation("finished", "Finished chat");
+		const binding = { kind: "rhino" as const, lifecycleInstanceId: "life", rhinoDocumentId: "doc" };
+		const input = { ...old, kind: "prompt" as const, text: "Edit", bindings: [binding], attachments: [] };
+		const root = journal.accept({ ...input, requestId: "root" });
+		journal.start(root.taskId, root.turnId);
+		const child = journal.delegate({ ...input, requestId: "child", sessionId: "worker-child", parentTaskId: root.taskId, dependencies: [] });
+		journal.start(child.taskId, child.turnId, { taskId: child.taskId, turnId: child.turnId, binding, attachmentGeneration: "old" });
+		journal.settle(root.taskId, root.turnId, "completed");
+		journal.recover();
+		for (let index = 0; index < 25; index++) submit(journal, old, `queued-${index}`);
+		const afterConversationSequence = journal.lastConversationSequence;
+		const fresh = journal.createConversation("fresh", "Fresh chat");
+		const overview = journal.browserSnapshot({ afterConversationSequence });
+		expect(overview.conversations.map(row => [row.id, row.recovery_required])).toEqual([[old.conversationId, 1], [fresh.conversationId, 0]]);
+		expect(overview.history.conversationId).toBe(fresh.conversationId);
+		const selected = journal.browserSnapshot({ afterConversationSequence, conversationId: old.conversationId });
+		expect(selected.tasks.find(row => row.id === child.taskId)?.state).toBe("uncertain");
+		expect(selected.history.pageTaskIds).toContain(child.taskId);
+		expect(selected.history.pageTaskIds).toContain(root.taskId);
+		journal.recoveryDisposition("recover", child.taskId, { acknowledged: true, originalProcessExited: true, inspectedBaseline: {} });
+		const recovered = journal.browserSnapshot({ afterConversationSequence, conversationId: old.conversationId });
+		expect(recovered.history.conversationId).toBe(old.conversationId);
+		expect(recovered.conversations.find(row => row.id === old.conversationId)?.recovery_required).toBe(0);
+		expect(journal.browserSnapshot({ afterConversationSequence }).conversations.map(row => row.id)).toEqual([fresh.conversationId]);
+	} finally { journal.close(); }
+});
+
 it("compacts a long live stream and tool output, then replaces it with final messages without losing durable evidence", () => {
 	const journal = new TaskJournal(":memory:");
 	try {

@@ -274,7 +274,7 @@ it("serializes duplicate registration so retries retain one native DEALER route"
 	expect(registry.list()[0]!.admission).toBe("ready");
 });
 
-it("reserves bound saves durably and rejects target changes or coordinator transitions", async () => {
+it("reserves bound saves in missing folders durably and rejects target changes", async () => {
 	const root = await mkdtemp(join(tmpdir(), "bound-save-"));
 	try {
 		const { journal, runtime } = await setup();
@@ -378,7 +378,8 @@ it("reserves bound saves durably and rejects target changes or coordinator trans
 				action: "saveAs",
 				documentId: "doc",
 				expectedStateToken: "observed",
-				path: join(root, "target.3dm"),
+				path: join(root, "new-project", "models", "target.3dm"),
+				createDirectories: true,
 			});
 			expect(journal.snapshot().operations).toMatchObject([
 				{ state: "uncertain" },

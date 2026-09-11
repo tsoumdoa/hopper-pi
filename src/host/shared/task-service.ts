@@ -203,7 +203,11 @@ export class SharedTaskService {
 				.inputs.find((row) => row.id === inputId)?.state;
 			if (state !== "accepted") return;
 			const active = this.active.get(taskId);
-			if (!active?.driver || active.controller.signal.aborted) return;
+			if (!active) return;
+			while (!active.driver && this.active.get(taskId) === active && !active.controller.signal.aborted)
+				await this.waitForChange(active);
+			if (!active.driver || this.active.get(taskId) !== active || active.controller.signal.aborted ||
+				this.journal.snapshot({ includeEvents: false }).inputs.find(row => row.id === inputId)?.state !== "accepted") return;
 			try {
 				this.journal.markInput(inputId, "delivering");
 				await active.driver.steer(payload, inputId);
@@ -568,9 +572,15 @@ export class SharedTaskService {
 						r.state === "completed" &&
 						JSON.parse(String(r.payload)).continuationId === turn.id,
 				);
+				const question = snapshot.questions.find(q => q.continuation_id === turn.id);
+				const questionOwner = question
+					? JSON.parse(String(snapshot.turns.find(t => t.id === question.turn_id)?.owner ?? "null")) as ExecutionOwner | null
+					: null;
+				// Answers keep the document that asked, including a prior create/open handoff.
 				const binding = handoff
 					? (JSON.parse(String(handoff.payload)).binding as TargetBinding)
-					: input.messageTarget ?? (input.bindings.length === 1 ? input.bindings[0]! : null);
+					: question ? questionOwner?.binding ?? null
+						: input.messageTarget ?? (input.bindings.length === 1 ? input.bindings[0]! : null);
 				if (
 					!binding &&
 					[...this.active.values()].filter(
@@ -713,6 +723,7 @@ export class SharedTaskService {
 				await active.driver.cancel();
 				throw new Error("Cancelled before model start");
 			}
+			this.changed();
 			const result = await active.driver.run();
 			if (result?.usage !== undefined)
 				this.journal.recordUsage(taskId, turnId, result.usage);

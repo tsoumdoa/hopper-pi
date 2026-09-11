@@ -85,6 +85,7 @@ export function App() {
 
 	const [snapshot, setSnapshot] = useState<SharedSnapshot>();
 	const [conversationId, setConversationId] = useState("");
+	const [recoveryReturnConversation, setRecoveryReturnConversation] = useState("");
 	const [selected, setSelected] = useState<TargetBinding[]>([]);
 	const selectionExplicit = useRef(false);
 	const initialInstance = useRef(new URLSearchParams(window.location.search).get("instance"));
@@ -218,6 +219,7 @@ export function App() {
 					if (sessionChanged) {
 						pending.current.clear();
 						setConversationId("");
+						setRecoveryReturnConversation("");
 						currentConversation.current = "";
 						setDraft("");
 						setImages([]);
@@ -271,6 +273,7 @@ export function App() {
 						if (message.result?.admissionError) toast(String(message.result.admissionError), "warning");
 					}
 					if (accepted?.type === "create_conversation") {
+						setRecoveryReturnConversation("");
 						selectConversation(message.result.conversationId);
 						selectionExplicit.current = false;
 						setSelected([]);
@@ -565,6 +568,10 @@ export function App() {
 			<main className="flex min-h-0 min-w-0 flex-1 flex-col">
 				<header className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-4 sm:px-6">
 					<h1 className="min-w-0 flex-1 truncate text-[13px] font-medium tracking-tight">{title}</h1>
+					{recoveryReturnConversation && recoveryReturnConversation !== conversationId && <Button size="sm" variant="ghost" disabled={!connected} onClick={() => {
+						selectConversation(recoveryReturnConversation);
+						setRecoveryReturnConversation("");
+					}}>Back to chat</Button>}
 					<ExportSessionButton token={credential.current ?? ""} conversationId={conversationId} disabled={!connected || !conversationId} />
 					<StatusPill status={connection.status} activeRoot={activeRoot} turns={snapshot?.turns ?? []} />
 					<Button size="icon-sm" variant="ghost" className="-mr-1.5" disabled={!connected || !snapshot} onClick={shutdown} aria-label="Shut down the Hopper host" title="Shut down the Hopper host">
@@ -572,6 +579,15 @@ export function App() {
 					</Button>
 				</header>
 				<ConnectionBanner connection={connection} onReconnect={reconnect} />
+				{snapshot?.conversations.filter(chat => chat.recovery_required && chat.id !== conversationId).map(chat => (
+					<div key={String(chat.id)} className="flex items-center justify-between gap-3 border-b border-warn/30 bg-warn-soft px-4 py-2 text-sm sm:px-6" role="status">
+						<span>An interrupted task needs your review before more work can use its Rhino instance.</span>
+						<Button size="sm" variant="secondary" disabled={!connected} onClick={() => {
+							setRecoveryReturnConversation(current => current || conversationId);
+							selectConversation(String(chat.id));
+						}}>Review {String(chat.title)}</Button>
+					</div>
+				))}
 				{!snapshot && (connection.status === "connecting" || connection.status === "authenticating") ? (
 					<div role="status" className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted">
 						<Loader2 className="size-5 animate-spin" />
