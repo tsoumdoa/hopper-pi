@@ -286,3 +286,54 @@ staged smoke passed with the archive active for sessions, typed extensions,
 providers, native bindings, credential fixtures, image workers/WASM, SQLite,
 and esbuild. Clean Windows and macOS Yak builds passed verification and existing
 budgets; native macOS execution was not available.
+
+## Defer the TypeScript extension compiler
+
+A follow-up investigation found that Pi's extension loader statically imports
+`jiti/static`, which evaluates about 1.7 MB of compiler code. Hopper supplies
+compiled extension factories with `noExtensions: true`, so its normal startup
+does not need that compiler. The staged SDK bundler now moves the Jiti import
+into the existing asynchronous extension-file loader, after its factory-cache
+check. A SHA-256 check against the audited Pi 0.85.1 source rejects upstream
+changes before rewriting the SDK. Loading a TypeScript extension still uses
+the same Jiti implementation, aliases, options, and error handling.
+
+Jiti remains installed and is omitted from the startup archive. The Windows
+archive falls from 2,224,035 to **1,801,111 bytes**, with 947 source files. This
+reduces both compiler evaluation and archive preparation during startup.
+
+The investigation compared the preceding archive with an equivalent lazy-Jiti
+prototype in isolated Node 22.22.3 children. Host tests used three fresh-path
+pairs, alternating order, with one immediate repeat per path. Import-only tests
+used eight alternating pairs after discarding an initial warmup pair.
+
+| Median measurement | Source archive | With lazy Jiti |
+| --- | ---: | ---: |
+| Warm import probe, including archive preparation | 442 ms | 355 ms |
+| Direct host readiness, fresh package path | 1,385 ms | 1,312 ms |
+| Direct host runtime-module stage, fresh path | 803 ms | 717 ms |
+| Direct host readiness, immediate repeat | 809 ms | 731 ms |
+| Direct host runtime-module stage, repeat | 431 ms | 348 ms |
+
+These are direct host measurements with empty isolated data and uncontrolled
+OS caches, not new installed Rhino measurements. The 1,647 / 650 ms installed
+Rhino pair above belongs to the preceding source-archive implementation.
+Alternative compression with Brotli showed no meaningful timing improvement.
+Pruning the archive to the import probe's observed modules saved about 25 ms,
+but was not adopted because the probe does not cover every initialization path.
+
+The regression test imports the real bundled SDK in an isolated Node process,
+checks that SDK imports and inline extension factories leave Jiti unloaded,
+then loads a real TypeScript extension through the SDK's public
+`discoverAndLoadExtensions()` API. It checks shared schema identity, repeated
+loads, and missing-file errors. Staged smoke now checks this public bundled
+path as well as the original deep extension loader.
+
+Validation of the final implementation: 429 Vitest tests passed / one skipped
+with two workers, and host/web TypeScript checks passed. The first concurrent
+build/test run hit an existing five-second bundler-test timeout and a shutdown
+test's exit-event race; the bounded-worker suite passed without changing those
+tests. Windows staged smoke passed, including the on-demand compiler checks.
+Clean Windows and macOS arm64 Yak builds passed unchanged size budgets at
+87,658,528 and 84,498,262 staged bytes respectively. Native macOS execution of
+this follow-up remains untested.

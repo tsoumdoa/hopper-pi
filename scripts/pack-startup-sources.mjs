@@ -12,7 +12,7 @@ export const STARTUP_SOURCE_PACKAGES = Object.freeze([
 	"@earendil-works/pi-tui", "@earendil-works/pi-telemetry", "@earendil-works/chord",
 	"typebox", "yaml", "semver", "highlight.js", "diff", "grok-mermaid", "cross-spawn",
 	"minimatch", "chalk", "proper-lockfile", "hosted-git-info", "get-east-asian-width",
-	"graceful-fs", "jiti", "retry", "partial-json", "isexe", "signal-exit", "ignore", "marked",
+	"graceful-fs", "retry", "partial-json", "isexe", "signal-exit", "ignore", "marked",
 	"brace-expansion", "balanced-match", "which", "path-key", "shebang-command", "shebang-regex",
 	"lru-cache", "@mariozechner/clipboard", "@lickle/lock", "@napi-rs/keyring", "zeromq",
 	"cmake-ts", "ws", "fast-xml-parser",

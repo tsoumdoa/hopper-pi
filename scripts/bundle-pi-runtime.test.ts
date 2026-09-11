@@ -1,11 +1,11 @@
-import { link, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { access, cp, link, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { afterEach, expect, it } from "vitest";
-import { bundlePiRuntime, deferUndiciImport } from "./bundle-pi-runtime.mjs";
+import { bundlePiRuntime, deferJitiImport, deferUndiciImport } from "./bundle-pi-runtime.mjs";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -140,3 +140,84 @@ it("loads real Undici on demand and completes an HTTP request through its dispat
 	expect(child.error).toBeUndefined();
 	expect(child.status, child.stderr).toBe(0);
 });
+
+it("rejects a changed extension loader before replacing the SDK", async () => {
+	const { root, pkg } = await fixture();
+	const source = await readFile(new URL("./core/extensions/loader.js", import.meta.resolve("@earendil-works/pi-coding-agent")), "utf8");
+	expect(() => deferJitiImport(source + "\n")).toThrow("Review changed Pi extension loader");
+	await mkdir(join(pkg, "dist/core/extensions"));
+	await writeFile(join(pkg, "dist/core/extensions/loader.js"), source + "\n");
+	const entry = 'export * from "./core/extensions/loader.js";';
+	await writeFile(join(pkg, "dist/index.js"), entry);
+	await expect(bundlePiRuntime(root)).rejects.toThrow("Review changed Pi extension loader");
+	expect(await readFile(join(pkg, "dist/index.js"), "utf8")).toBe(entry);
+});
+
+it("keeps Jiti unloaded for the SDK and inline factories, then loads real typed extensions on demand", async () => {
+	const { root, pkg } = await fixture();
+	const originalDist = await realpath(fileURLToPath(new URL("./", import.meta.resolve("@earendil-works/pi-coding-agent"))));
+	await cp(originalDist, join(pkg, "dist"), {
+		recursive: true,
+		filter: path => path !== join(originalDist, "bundle") && !/\.map$|\.d\.[cm]?ts$/.test(path),
+	});
+	// Share real external dependencies without modifying them. The SDK itself is
+	// copied so its audited bundler can replace only this fixture's entry files.
+	const originalRequire = createRequire(join(originalDist, "index.js"));
+	const manifest = JSON.parse(await readFile(join(originalDist, "../package.json"), "utf8"));
+	for (const name of Object.keys({ ...manifest.dependencies, ...manifest.optionalDependencies })) {
+		let target: string | undefined;
+		for (const parent of originalRequire.resolve.paths(name) ?? []) {
+			const path = join(parent, name);
+			if (await access(path).then(() => true, () => false)) { target = await realpath(path); break; }
+		}
+		if (!target && name in manifest.optionalDependencies) continue;
+		if (!target) throw new Error(`Missing SDK fixture dependency: ${name}`);
+		const linkPath = join(root, "node_modules", name);
+		await mkdir(dirname(linkPath), { recursive: true });
+		await symlink(target, linkPath, "junction");
+	}
+	await bundlePiRuntime(root);
+	const extension = join(root, "extension.ts");
+	await writeFile(extension, `
+		import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+		import { Type } from "typebox";
+		import { Type as PiType } from "@earendil-works/pi-ai";
+		if (Type.Object !== PiType.Object) throw new Error("duplicate schema state");
+		const label: string = "typed-on-demand";
+		export default (pi: ExtensionAPI) => { pi.registerTool({ name: label, label, description: label,
+			parameters: Type.Object({}), execute: async () => ({content: [{type: "text", text: label}], details: {}}) }); };
+	`);
+	const child = spawnSync(process.execPath, ["--input-type=module", "--eval", `
+		import assert from 'node:assert/strict';
+		import { createRequire } from 'node:module';
+		import { fileURLToPath } from 'node:url';
+		import { join } from 'node:path';
+		const url = ${JSON.stringify(pathToFileURL(join(pkg, "dist/index.js")).href)};
+		const require = createRequire(url);
+		const jitiRoot = new URL('../', import.meta.resolve('jiti/static'));
+		const babelPath = require.resolve(fileURLToPath(new URL('dist/babel.cjs', jitiRoot)));
+		const hasJiti = () => Object.keys(require.cache).some(path => /[\\\\/]jiti[\\\\/]dist[\\\\/]/.test(path));
+		const pi = await import(url);
+		assert.equal(hasJiti(), false);
+		const cwd = process.cwd(), agentDir = join(cwd, 'agent');
+		const empty = await pi.discoverAndLoadExtensions([], cwd, agentDir);
+		assert.deepEqual(empty.errors, []);
+		const loader = new pi.DefaultResourceLoader({cwd, agentDir, noExtensions: true, noSkills: true,
+			noPromptTemplates: true, noThemes: true, noContextFiles: true,
+			extensionFactories: [{name: 'inline', factory: api => api.registerCommand('inline-test', {description: 'test', handler: async () => {}})}]});
+		await loader.reload();
+		assert.equal(loader.getExtensions().extensions.length, 1);
+		assert.equal(hasJiti(), false);
+		const loaded = await pi.discoverAndLoadExtensions([${JSON.stringify(extension)}], cwd, agentDir);
+		assert.deepEqual(loaded.errors, []);
+		assert.ok(loaded.extensions[0].tools.has('typed-on-demand'));
+		assert.ok(require.cache[babelPath]);
+		const again = await pi.discoverAndLoadExtensions([${JSON.stringify(extension)}], cwd, agentDir);
+		assert.deepEqual(again.errors, []);
+		const missing = await pi.discoverAndLoadExtensions([join(cwd,'missing.ts')], cwd, agentDir);
+		assert.equal(missing.errors.length, 1);
+	`], { cwd: root, encoding: "utf8", timeout: 20000, windowsHide: true,
+		env: { ...process.env, PI_CODING_AGENT_DIR: join(root, "global-agent"), PI_OFFLINE: "1", PI_TELEMETRY: "0" } });
+	expect(child.error).toBeUndefined();
+	expect(child.status, child.stderr).toBe(0);
+}, 30000);
