@@ -52,7 +52,7 @@ import { MAX_IMAGES } from "../protocol.js";
 
 /** Give the coordinator actual image blocks; JSON text alone is not visual evidence. */
 export function collectDelegationResults(
-	snapshot: ReturnType<TaskJournal["snapshot"]>,
+	snapshot: ReturnType<TaskJournal["delegationSnapshot"]>,
 	rootTaskId: string,
 ): {
 	content: ({ type: "text"; text: string } | ImageAttachment)[];

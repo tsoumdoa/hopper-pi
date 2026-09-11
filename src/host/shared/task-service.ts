@@ -102,7 +102,7 @@ export class SharedTaskService {
 		)
 			throw new Error("Invalid usage budget");
 		// Restore process fences for interrupted tasks and managed actions.
-		const snapshot = journal.snapshot({ includeEvents: false }),
+		const snapshot = journal.schedulingSnapshot(),
 			unresolved = new Set(
 				snapshot.tasks
 					.filter(
@@ -127,8 +127,8 @@ export class SharedTaskService {
 		return () => this.listeners.delete(listener);
 	}
 	toolSettings(conversationId: string, taskId: string) {
-		const task = this.journal.snapshot({ includeEvents: false }).tasks.find(row => row.id === taskId && row.conversation_id === conversationId);
-		return task ? this.active.get(taskId)?.driver?.toolSettings : undefined;
+		const task = this.journal.getTask(taskId);
+		return task?.conversation_id === conversationId ? this.active.get(taskId)?.driver?.toolSettings : undefined;
 	}
 	private changed(): void {
 		for (const listener of this.listeners) {
@@ -142,8 +142,8 @@ export class SharedTaskService {
 	snapshot() {
 		return this.journal.snapshot();
 	}
-	private schedulingSnapshot() {
-		return this.journal.snapshot({ includeEvents: false });
+	private schedulingSnapshot(taskIds: string[] = []) {
+		return this.journal.schedulingSnapshot([...this.active.keys(), ...this.held.values(), ...taskIds]);
 	}
 	private workerCount(): number {
 		return [...this.active.values()].filter((active) => active.worker && !active.waitingForChildren).length;
@@ -198,16 +198,14 @@ export class SharedTaskService {
 	): Promise<void> {
 		const previous = this.delivery.get(taskId) ?? Promise.resolve();
 		const pending = previous.then(async () => {
-			const state = this.journal
-				.snapshot({ includeEvents: false })
-				.inputs.find((row) => row.id === inputId)?.state;
+			const state = this.journal.getInputState(inputId);
 			if (state !== "accepted") return;
 			const active = this.active.get(taskId);
 			if (!active) return;
 			while (!active.driver && this.active.get(taskId) === active && !active.controller.signal.aborted)
 				await this.waitForChange(active);
 			if (!active.driver || this.active.get(taskId) !== active || active.controller.signal.aborted ||
-				this.journal.snapshot({ includeEvents: false }).inputs.find(row => row.id === inputId)?.state !== "accepted") return;
+				this.journal.getInputState(inputId) !== "accepted") return;
 			try {
 				this.journal.markInput(inputId, "delivering");
 				await active.driver.steer(payload, inputId);
@@ -236,7 +234,7 @@ export class SharedTaskService {
 					/* cleanup decides certainty */
 				}
 			} else {
-				const snapshot = this.journal.snapshot({ includeEvents: false }),
+				const snapshot = this.schedulingSnapshot([id]),
 					task = snapshot.tasks.find((t) => t.id === id);
 				const turn = snapshot.turns.filter((t) => t.task_id === id).at(-1);
 				if (turn && ["queued", "awaiting_user"].includes(String(task?.state)))
@@ -248,17 +246,14 @@ export class SharedTaskService {
 	}
 	async stop(): Promise<void> {
 		this.stopped = true;
-		for (const task of this.schedulingSnapshot().tasks)
-			if (
-				["queued", "running", "suspending", "awaiting_user"].includes(
-					String(task.state),
-				)
-			)
-				await this.cancel(String(task.id));
+		// Request cancellation for every root even if one driver never acknowledges it.
+		await Promise.all(this.schedulingSnapshot().tasks
+			.filter(task => ["queued", "running", "suspending", "awaiting_user"].includes(String(task.state)))
+			.map(task => this.cancel(String(task.id))));
 		await Promise.allSettled([...this.executions]);
 	}
 	releaseRecovered(taskId: string): void {
-		if (!this.schedulingSnapshot().recoveries.some((row) => row.task_id === taskId))
+		if (!this.schedulingSnapshot([taskId]).recoveries.some((row) => row.task_id === taskId))
 			throw new Error("No durable recovery disposition");
 		for (const [key, id] of this.held) if (id === taskId) this.held.delete(key);
 		this.changed();
@@ -418,7 +413,7 @@ export class SharedTaskService {
 		if (active.processKey || [...this.held.values()].includes(taskId))
 			throw new Error("Direct edit scope must finish a durable handoff before a document or transfer action");
 		const input = JSON.parse(
-			String(this.schedulingSnapshot().tasks.find((t) => t.id === taskId)!.payload),
+			String(this.journal.getTask(taskId)!.payload),
 		) as Submission;
 		const normalized = (b: TargetBinding) => b.kind === "rhino"
 			? [b.kind, b.lifecycleInstanceId, b.rhinoDocumentId].join("|")
@@ -494,14 +489,14 @@ export class SharedTaskService {
 		);
 		return record ? String(record.task_id) : undefined;
 	}
-	private recoveryWaitReason(taskId: string, snapshot: ReturnType<TaskJournal["snapshot"]>): string {
+	private recoveryWaitReason(taskId: string, snapshot: ReturnType<TaskJournal["schedulingSnapshot"]>): string {
 		const task = snapshot.tasks.find((task) => task.id === taskId);
 		const conversation = snapshot.conversations.find((conversation) => conversation.id === task?.conversation_id);
 		return "Waiting for recovery of an earlier task in this Rhino instance." +
 			(conversation ? ` Open conversation ${JSON.stringify(conversation.title)}. Stop or wait for the affected task, then check your model and saved files and select "I've checked, continue".` : "");
 	}
 
-	private usage(taskId: string, snapshot = this.schedulingSnapshot()): number {
+	private usage(taskId: string, snapshot = this.schedulingSnapshot([taskId])): number {
 		const task = snapshot.tasks.find((task) => task.id === taskId);
 		const rootId = task?.root_task_id ?? taskId;
 		const ids = new Set(snapshot.tasks
@@ -514,7 +509,7 @@ export class SharedTaskService {
 		if (this.pumping || this.stopped || !this.journal.hasQueuedTasks) return;
 		this.pumping = true;
 		try {
-			const snapshot = this.journal.snapshot({ includeEvents: false });
+			const snapshot = this.schedulingSnapshot();
 			for (const task of snapshot.tasks) {
 				if (
 					task.state !== "queued" ||
@@ -564,7 +559,7 @@ export class SharedTaskService {
 					this.changed();
 					continue;
 				}
-				const input = JSON.parse(String(task.payload)) as Submission;
+				const input = JSON.parse(String(task.payload)) as Pick<Submission, "bindings" | "messageTarget">;
 				// Access to other documents never removes the selected document owner.
 				const handoff = snapshot.records.find(
 					(r) =>
@@ -639,7 +634,8 @@ export class SharedTaskService {
 				};
 				this.active.set(String(task.id), active);
 				this.changed();
-				const execution = this.execute(task, turn, input, owner, active);
+				const submission = JSON.parse(String(this.journal.getTask(String(task.id))!.payload)) as Submission;
+				const execution = this.execute(task, turn, submission, owner, active);
 				this.executions.add(execution);
 				void execution.then(
 					() => this.executions.delete(execution),
@@ -667,9 +663,8 @@ export class SharedTaskService {
 			if (active.controller.signal.aborted)
 				throw new Error("Cancelled before driver start");
 			const snapshot = this.schedulingSnapshot();
-			const continuation = snapshot.questions.find(
-				(q) => q.continuation_id === turn.id,
-			);
+			const continuationId = snapshot.questions.find(q => q.continuation_id === turn.id)?.id;
+			const continuation = continuationId ? this.journal.getQuestion(String(continuationId)) : undefined;
 			const handoff = snapshot.records.find(
 				(r) =>
 					r.kind === "handoff" &&
@@ -695,7 +690,7 @@ export class SharedTaskService {
 							answer: JSON.parse(String(continuation.answer)),
 						}
 					: handoff
-						? { documentAction: JSON.parse(String(handoff.payload)) }
+						? { documentAction: JSON.parse(String(this.journal.getRecord("handoff", String(handoff.id))!.payload)) }
 						: null,
 				signal: active.controller.signal,
 				...(owner
