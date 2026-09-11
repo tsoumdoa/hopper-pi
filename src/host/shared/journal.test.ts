@@ -2,8 +2,13 @@ import { createRequire } from "node:module";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TaskJournal, type Submission } from "./journal.js";
+
+vi.mock("node:fs", async (original) => {
+	const fs = await original<typeof import("node:fs")>();
+	return { ...fs, rmSync: vi.fn(fs.rmSync) };
+});
 
 const cleanup: (() => void)[] = [];
 afterEach(() => {
@@ -321,16 +326,26 @@ it("deletes child logs and session files without deleting other threads or repla
 	expect(() => j.purgeArchivedConversations("stale", ["conversation", other.conversationId], null)).toThrow(/changed/);
 	expect(j.getTask(root.taskId)).toBeDefined();
 	expect(existsSync(folder)).toBe(true);
-	j.purgeArchivedConversations("delete", ["conversation"], null);
+	const remove = vi.mocked(rmSync), original = remove.getMockImplementation()!;
+	remove.mockImplementation((path, options) => {
+		if (path === folder) throw Object.assign(new Error("Directory locked"), { code: "EACCES" });
+		return original(path, options);
+	});
+	try {
+		expect(j.purgeArchivedConversations("delete", ["conversation"], null).cleanupPending).toBe(1);
+		expect(f.reopen().getTask(root.taskId)).toBeUndefined();
+		expect(existsSync(folder)).toBe(true);
+	} finally { remove.mockImplementation(original); }
+	const reopened = f.reopen();
 	expect(existsSync(folder)).toBe(false);
-	expect(j.snapshot().tasks).toEqual([]);
-	expect(j.snapshot().sessions.map((row) => row.conversation_id)).toEqual([
+	expect(reopened.snapshot().tasks).toEqual([]);
+	expect(reopened.snapshot().sessions.map((row) => row.conversation_id)).toEqual([
 		other.conversationId,
 	]);
-	expect(() => j.accept(input)).toThrow(/deleted/);
+	expect(() => reopened.accept(input)).toThrow(/deleted/);
 	// Retrying the completed purge must not include a newly archived thread.
-	j.manageConversation("archive-other-again", other.conversationId, "archive_conversation");
-	j.purgeArchivedConversations("delete", ["conversation"], null);
+	reopened.manageConversation("archive-other-again", other.conversationId, "archive_conversation");
+	reopened.purgeArchivedConversations("delete", ["conversation"], null);
 	expect(
 		f
 			.reopen()

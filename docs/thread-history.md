@@ -2,7 +2,9 @@
 
 The sidebar lists saved threads by last activity, grouped into Today, Yesterday,
 This week, and Older. Select a thread to revisit its transcript. Titles come from
-the first user message, limited to eight words or 60 characters. New threads keep
+the first user message, limited to eight words or 60 characters. Drafts retain
+their document target and instance-access setting when switching threads. A
+disconnected target must be reselected before sending. New threads keep
 the target document's name even after that document closes.
 
 One thread can hold the host's work slot. Queued work and questions awaiting an
@@ -18,7 +20,8 @@ Delete asks for confirmation, then removes the transcript, task records, and Pi
 session files. Export the thread first to keep a copy. Threads with unresolved
 native recovery must be reviewed before deletion. Request tombstones remain so
 reconnecting clients cannot replay deleted work. File cleanup survives a restart
-if interrupted.
+if interrupted. Locked or inaccessible files stay queued for cleanup without
+blocking host startup. Deletion reports pending file cleanup separately.
 
 History remains visible across host restarts. Automatic selection still observes
 the host session boundary. Missing or archived saved selections fall back to an

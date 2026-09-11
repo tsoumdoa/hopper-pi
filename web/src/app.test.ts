@@ -324,11 +324,13 @@ it("retains a durable command when WebSocket.send throws and retries the same re
 
 it("keeps drafts in their thread when hopping to a globally live thread and back", async () => {
 	await value("#composer-input", "Draft for the first thread");
+	const secondBinding = { ...binding, rhinoDocumentId: "second-model" };
 	const next = {
 		...snapshot,
+		targets: [{ ...snapshot.targets[0], documents: [binding, secondBinding] }],
 		conversations: [
 			snapshot.conversations[0],
-			{ ...snapshot.conversations[1], live_state: "awaiting_user" },
+			{ ...snapshot.conversations[1], live_state: "awaiting_user", last_message_target: JSON.stringify(secondBinding) },
 		],
 	};
 	await act(async () =>
@@ -338,7 +340,11 @@ it("keeps drafts in their thread when hopping to a globally live thread and back
 	expect(
 		container.querySelector<HTMLTextAreaElement>("#composer-input")!.value,
 	).toBe("");
-	await act(async () => socket.receive({ type: "shared_snapshot", snapshot }));
+	await value("#composer-input", "Draft for the second thread");
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...next, conversations: next.conversations.map(row => ({ ...row, live_state: null })) } }));
+	await act(async () => sendButton().click());
+	expect(socket.sent.find(command => command.type === "submit")).toMatchObject({ text: "Draft for the second thread", messageTarget: secondBinding });
+	socket.sent = [];
 	const first = container.querySelector<HTMLButtonElement>(
 		'nav[aria-label="Thread history"] button[title="First"]',
 	)!;
@@ -346,4 +352,10 @@ it("keeps drafts in their thread when hopping to a globally live thread and back
 	expect(
 		container.querySelector<HTMLTextAreaElement>("#composer-input")!.value,
 	).toBe("Draft for the first thread");
+	// Losing A must not silently redirect its draft to the remaining document B.
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [{ ...snapshot.targets[0], documents: [secondBinding] }] } }));
+	expect(sendButton().disabled).toBe(true);
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot }));
+	await act(async () => sendButton().click());
+	expect(socket.sent.find(command => command.type === "submit")).toMatchObject({ text: "Draft for the first thread", messageTarget: binding });
 });

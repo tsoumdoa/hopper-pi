@@ -369,19 +369,24 @@ PRAGMA user_version=6;`);
 		);
 	}
 
-	private cleanupDeletedConversationFiles(): void {
+	private cleanupDeletedConversationFiles(): number {
+		let pending = 0;
 		for (const row of this.db
 			.prepare("SELECT id FROM deleted_conversation_files")
 			.all()) {
-			if (this.sessionDirectory)
-				rmSync(join(this.sessionDirectory, String(row.id)), {
-					recursive: true,
-					force: true,
-				});
+			try {
+				if (this.sessionDirectory) rmSync(join(this.sessionDirectory, String(row.id)), { recursive: true, force: true });
+			} catch {
+				// History deletion already committed. Keep this entry for retry,
+				// but do not let a locked directory prevent the host from starting.
+				pending++;
+				continue;
+			}
 			this.db
 				.prepare("DELETE FROM deleted_conversation_files WHERE id=?")
 				.run(row.id);
 		}
+		return pending;
 	}
 
 	get liveConversationId(): string | undefined {
@@ -453,9 +458,7 @@ PRAGMA user_version=6;`);
 			},
 		);
 		this.conversationRevision++;
-		if (action === "delete_conversation")
-			this.cleanupDeletedConversationFiles();
-		return result;
+		return { ...result, cleanupPending: action === "delete_conversation" ? this.cleanupDeletedConversationFiles() : 0 };
 	}
 
 	get historyStorage() {
@@ -501,8 +504,7 @@ PRAGMA user_version=6;`);
 			},
 		);
 		this.conversationRevision++;
-		this.cleanupDeletedConversationFiles();
-		return result;
+		return { ...result, cleanupPending: this.cleanupDeletedConversationFiles() };
 	}
 
 	/** Called only inside a request transaction. */

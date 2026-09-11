@@ -88,6 +88,8 @@ export function App() {
 	const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
 	const [snapshot, setSnapshot] = useState<SharedSnapshot>();
+	const snapshotRef = useRef(snapshot);
+	snapshotRef.current = snapshot;
 	const [conversationId, setConversationId] = useState("");
 	const [recoveryReturnConversation, setRecoveryReturnConversation] = useState("");
 	const [selected, setSelected] = useState<TargetBinding[]>([]);
@@ -106,14 +108,19 @@ export function App() {
 	const historyBefore = useRef<number | undefined>(undefined);
 	const currentConversation = useRef(conversationId);
 	currentConversation.current = conversationId;
-	const drafts = useRef(new Map<string, { text: string; images: DraftImage[] }>());
-	const draftRef = useRef({ text: draft, images });
-	draftRef.current = { text: draft, images };
+	const draftRef = useRef({ text: draft, images, selected, onlyThisInstance });
+	draftRef.current = { text: draft, images, selected, onlyThisInstance };
+	const drafts = useRef(new Map<string, typeof draftRef.current>());
 	const selectConversation = (id: string) => {
 		if (id !== currentConversation.current) {
 			drafts.current.set(currentConversation.current, draftRef.current);
 			const saved = drafts.current.get(id);
 			setDraft(saved?.text ?? ""); setImages(saved?.images ?? []);
+			const row = snapshotRef.current?.conversations.find(row => row.id === id);
+			const target = decode<TargetBinding | null>(row?.last_message_target === undefined ? row?.document_target : row.last_message_target, null);
+			selectionExplicit.current = true;
+			setSelected(saved?.selected ?? (target ? [target] : []));
+			setOnlyThisInstance(saved?.onlyThisInstance ?? false);
 			setModeOverride(null);
 		}
 		historyBefore.current = undefined;
@@ -208,6 +215,7 @@ export function App() {
 					if (deadline) clearTimeout(deadline);
 					deadline = undefined;
 					const next = message.snapshot as SharedSnapshot;
+					snapshotRef.current = next;
 					// An early browser can connect before its Rhino registers. Do not
 					// restore a previous session or create a chat until that registration arrives.
 					if (awaitingInitialRegistration.current && initialInstance.current &&
@@ -288,7 +296,7 @@ export function App() {
 					refreshPending((value) => value + 1);
 					if ((accepted?.type === "submit" || accepted?.type === "steer") && accepted.conversationId !== currentConversation.current) {
 						const saved = drafts.current.get(accepted.conversationId);
-						if (saved) drafts.current.set(accepted.conversationId, { text: saved.text === accepted.text ? "" : saved.text, images: saved.images.filter(image => !accepted.attachments.some(attachment => JSON.stringify(attachment) === JSON.stringify(image.image))) });
+						if (saved) drafts.current.set(accepted.conversationId, { ...saved, text: saved.text === accepted.text ? "" : saved.text, images: saved.images.filter(image => !accepted.attachments.some(attachment => JSON.stringify(attachment) === JSON.stringify(image.image))) });
 					}
 					if ((accepted?.type === "submit" || accepted?.type === "steer") && accepted.conversationId === currentConversation.current) {
 						setDraft((current) => (current === accepted.text ? "" : current));
@@ -306,6 +314,9 @@ export function App() {
 					if (accepted?.type === "delete_conversation") {
 						drafts.current.delete(accepted.conversationId);
 						toast("Thread deleted", "info");
+					}
+					if ((accepted?.type === "delete_conversation" || accepted?.type === "purge_archived_conversations") && message.result?.cleanupPending) {
+						toast("Thread history deleted. Some session files could not be removed. Hopper will retry file cleanup on its next start or deletion.", "warning");
 					}
 					if (accepted?.type === "create_conversation") {
 						setRecoveryReturnConversation("");

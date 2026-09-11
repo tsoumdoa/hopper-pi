@@ -32,6 +32,7 @@ SELECT c.sequence, c.id, c.created_at, c.title, c.archived_at, c.document_label,
  COALESCE((SELECT MAX(r.updated_at) FROM browser_roots r WHERE r.conversation_id=c.id AND NOT r.fixture),c.created_at) AS last_activity_at,
  (SELECT r.state FROM browser_roots r WHERE r.conversation_id=c.id AND NOT r.fixture AND r.state IN ('queued','running','suspending','awaiting_user') ORDER BY CASE WHEN r.state='queued' THEN 1 ELSE 0 END,r.sequence LIMIT 1) AS live_state,
  (SELECT COALESCE(json_extract(r.payload,'$.messageTarget'),json_extract(r.payload,'$.bindings[0]')) FROM browser_roots r WHERE r.conversation_id=c.id AND NOT r.fixture ORDER BY r.sequence LIMIT 1) AS document_target,
+ (SELECT COALESCE(json_extract(r.payload,'$.messageTarget'),json_extract(r.payload,'$.bindings[0]')) FROM browser_roots r WHERE r.conversation_id=c.id AND NOT r.fixture ORDER BY r.sequence DESC LIMIT 1) AS last_message_target,
  EXISTS(SELECT 1 FROM recovery WHERE conversation_id=c.id) AS recovery_required,
  (SELECT json_group_array(DISTINCT COALESCE(json_extract(r.payload,'$.messageTarget.lifecycleInstanceId'),
    json_extract(r.payload,'$.bindings[0].lifecycleInstanceId')))
