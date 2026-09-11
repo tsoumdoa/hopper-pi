@@ -9,6 +9,7 @@ import {
 } from "./browser-protocol.js";
 
 import type { HostRuntime } from "../pi-runtime.js";
+import { snapshotPatch } from "./snapshot-patch.js";
 import { createSnapshotSender } from "./snapshot-sender.js";
 
 export interface SharedBrowserBackend {
@@ -127,9 +128,16 @@ export function createSharedBrowserServer(options: {
 		);
 	});
 	sockets.on("connection", (socket: WebSocket) => {
+		let previous: Parameters<typeof snapshotPatch>[0] | undefined;
 		const snapshots = createSnapshotSender((event, done) => {
 			if (socket.readyState !== WebSocket.OPEN) return done(new Error("Browser disconnected"));
-			socket.send(JSON.stringify(event), done);
+			const next = (event as { snapshot: Parameters<typeof snapshotPatch>[0] }).snapshot;
+			const output = previous && typeof next?.eventCursor === "number"
+				? { type: "shared_patch", patch: snapshotPatch(previous, next) } : event;
+			socket.send(JSON.stringify(output), error => {
+				if (!error && socket.readyState === WebSocket.OPEN) previous = next;
+				done(error);
+			});
 		});
 		snapshotSenders.set(socket, snapshots);
 		let authenticated = false;
@@ -140,6 +148,7 @@ export function createSharedBrowserServer(options: {
 		timeout.unref();
 		socket.on("close", () => {
 			snapshots.close();
+			previous = undefined;
 			clearTimeout(timeout);
 			if (controller === socket) {
 				controller = undefined;

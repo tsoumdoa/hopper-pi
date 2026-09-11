@@ -71,6 +71,28 @@ function setup() {
 		createDriver,
 	};
 }
+
+it("reuses bounded history on idle refresh and sends only status until the journal or page changes", async () => {
+	vi.useFakeTimers();
+	const s = setup();
+	try {
+		const read = vi.spyOn(s.journal, "browserSnapshot");
+		const full = vi.spyOn(s.journal, "snapshot");
+		const receive = vi.fn();
+		s.backend.subscribe(receive);
+		s.backend.publish(); vi.advanceTimersByTime(50);
+		expect(receive.mock.calls.at(-1)![0].type).toBe("shared_snapshot");
+		for (let i = 0; i < 30; i++) { s.backend.publish(); vi.advanceTimersByTime(50); }
+		expect(read).toHaveBeenCalledTimes(1);
+		expect(full).not.toHaveBeenCalled();
+		expect(receive.mock.calls.at(-1)![0].type).toBe("shared_status");
+		expect(receive.mock.calls.at(-1)![0]).not.toHaveProperty("snapshot");
+		await s.backend.command({ type: "snapshot", conversationId: s.command.conversationId, before: 10 });
+		vi.advanceTimersByTime(50);
+		expect(receive.mock.calls.at(-1)![0].type).toBe("shared_snapshot");
+		expect(read).toHaveBeenCalledTimes(2);
+	} finally { s.backend.dispose(); s.journal.close(); vi.useRealTimers(); }
+});
 it("omits fixture-only conversations from the browser while preserving export and event cursor", () => {
 	const s = setup();
 	try {

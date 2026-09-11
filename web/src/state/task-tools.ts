@@ -37,16 +37,17 @@ export function taskTools(events: Row[]): ToolCall[] {
 				status: partial ? "running" : isError ? "error" : "complete",
 			});
 		};
-		const message = (item: any) => {
+		const message = (item: any, running = false) => {
 			if (item?.role === "assistant" && Array.isArray(item.content)) {
 				for (const part of item.content) if (part.type === "toolCall")
-					start(part.id ?? part.toolCallId, part.name, part.arguments, false);
+					start(part.id ?? part.toolCallId, part.name, part.arguments, running);
 			}
 			if (item?.role === "toolResult") {
 				// Preserve textual content even when the tool also returns empty or internal details.
 				result(item.toolCallId, item.toolName, { content: item.content, details: item.details }, Boolean(item.isError));
 			}
 		};
+		if (payload.type === "assistant_message") message(payload.message, Boolean(payload.streaming));
 		if (payload.type === "messages") for (const item of payload.messages ?? []) message(item);
 		const event = payload.event;
 		if (payload.type === "agent_event" && event) {

@@ -1,3 +1,4 @@
+import { applySnapshotPatch } from "../../src/host/shared/snapshot-patch.js";
 import { Box, Loader2, Power } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SharedBrowserCommand } from "../../src/host/shared/browser-protocol.js";
@@ -96,9 +97,11 @@ export function App() {
 	const [modeOverride, setModeOverride] = useState<SendMode | null>(null);
 	const [nonce, setNonce] = useState(0);
 	const composer = useRef<ComposerHandle>(null);
+	const historyBefore = useRef<number | undefined>(undefined);
 	const currentConversation = useRef(conversationId);
 	currentConversation.current = conversationId;
 	const selectConversation = (id: string) => {
+		historyBefore.current = undefined;
 		currentConversation.current = id;
 		setConversationId(id);
 		try { window.localStorage.setItem(CONVERSATION_KEY, id); } catch { /* Restore from the journal if storage is unavailable. */ }
@@ -166,12 +169,25 @@ export function App() {
 			actions.setConnection("authenticating", "Confirming the Rhino session");
 			try { ws.send(JSON.stringify({ type: "authenticate", token: credential.current })); } catch { retry(); }
 		};
+		let receivedSnapshot: SharedSnapshot | undefined;
 		ws.onmessage = (event) => {
 			if (!isCurrent()) return;
 			let message;
 			try { message = JSON.parse(String(event.data)); }
 			catch { toast("Hopper sent an unreadable message."); return; }
 			if (!message || typeof message !== "object") return;
+			if (message.type === "shared_patch") {
+				try {
+					if (!receivedSnapshot) throw new Error("Missing initial history");
+					message = { type: "shared_snapshot", snapshot: applySnapshotPatch(receivedSnapshot, message.patch) };
+				} catch { retry(); return; }
+			}
+			if (message.type === "shared_status") {
+				if (!receivedSnapshot) { retry(); return; }
+				const { runtime, targets, hostEpoch, conversationSession } = message;
+				message = { type: "shared_snapshot", snapshot: { ...receivedSnapshot, runtime, targets, hostEpoch, conversationSession } };
+			}
+			if (message.type === "shared_snapshot") receivedSnapshot = message.snapshot;
 			switch (message.type) {
 				case "shared_snapshot": {
 					if (deadline) clearTimeout(deadline);
@@ -240,7 +256,7 @@ export function App() {
 						}
 						try {
 							for (const command of pending.current.values()) ws.send(JSON.stringify(command));
-							ws.send(JSON.stringify({ type: "snapshot" }));
+							ws.send(JSON.stringify({ type: "snapshot", conversationId: currentConversation.current || undefined, before: historyBefore.current }));
 						} catch { retry(); }
 					}
 					break;
@@ -302,7 +318,7 @@ export function App() {
 		const probe = () => {
 			if (!isCurrent() || !ready.current || deadline) return;
 			armDeadline();
-			try { ws.send(JSON.stringify({ type: "snapshot" })); } catch { retry(); }
+			try { ws.send(JSON.stringify({ type: "snapshot", conversationId: currentConversation.current || undefined, before: historyBefore.current })); } catch { retry(); }
 		};
 		const wake = () => {
 			if (disposed || blocked.current) return;
@@ -324,6 +340,8 @@ export function App() {
 			window.removeEventListener("online", wake);
 			window.removeEventListener("pageshow", wake);
 			document.removeEventListener("visibilitychange", visible);
+			receivedSnapshot = undefined;
+			ws.onmessage = null;
 			ws.close();
 		};
 	}, [nonce, store, toast]);
@@ -353,13 +371,25 @@ export function App() {
 		setNonce((n) => n + 1);
 	};
 
+	useEffect(() => {
+		if (connected && conversationId && socket.current?.readyState === WebSocket.OPEN)
+			socket.current.send(JSON.stringify({ type: "snapshot", conversationId, before: historyBefore.current }));
+	}, [connected, conversationId]);
+	const loadHistory = (before?: number) => {
+		if (!ready.current || socket.current?.readyState !== WebSocket.OPEN) return;
+		historyBefore.current = before;
+		send({ type: "snapshot", conversationId, ...(before !== undefined ? { before } : {}) });
+	};
+
 	const tasks = snapshot?.tasks.filter((task) => task.conversation_id === conversationId) ?? [];
-	const orderedTasks = tasks
+	const pageTasks = snapshot?.history ? tasks.filter(task => snapshot.history!.pageTaskIds.includes(String(task.id))) : tasks;
+	const orderedTasks = pageTasks
 		.filter((task) => task.parent_task_id === null)
-		.flatMap((root) => [root, ...tasks.filter((task) => task.parent_task_id === root.id)]);
+		.flatMap((root) => [root, ...pageTasks.filter((task) => task.parent_task_id === root.id)]);
 	const sessionId = String(snapshot?.sessions.find((session) => session.conversation_id === conversationId && !String(session.id).startsWith("worker-"))?.id ?? "");
 	const selectedModel = snapshot?.runtime.models.find((model) => model.provider === snapshot.runtime.model?.provider && model.id === snapshot.runtime.model?.id);
 	const imagesSupported = selectedModel?.input?.includes("image") !== false;
+	const historyReady = !snapshot?.history || snapshot.history.conversationId === conversationId;
 	const submitting = [...pending.current.values()].some((command) => (command.type === "submit" || command.type === "steer") && command.conversationId === conversationId);
 	const activeRoot = tasks.find((task) => task.parent_task_id === null && ACTIVE_ROOT_STATES.includes(String(task.state)));
 	const cancellableRoot = activeRoot ?? tasks.find((task) => task.parent_task_id === null && task.state === "queued");
@@ -412,6 +442,7 @@ export function App() {
 	}, [connected, conversationId, sessionId]);
 
 	const submit = () => {
+		if (!historyReady) return;
 		if (needsTarget) {
 			toast("Choose a connected document first.", "warning");
 			return;
@@ -553,6 +584,8 @@ export function App() {
 					conversationId={conversationId}
 					labelFor={labelFor}
 					commands={commands}
+					onHistoryPage={loadHistory}
+					controlTasks={tasks}
 					onSuggestion={useSuggestion}
 				/>}
 				<Composer
@@ -565,7 +598,7 @@ export function App() {
 					imagesSupported={imagesSupported}
 					mode={sendMode}
 					onModeChange={setModeOverride}
-					disabled={!sessionId || !connected || submitting || taskBlocksComposer}
+					disabled={!sessionId || !connected || !historyReady || submitting || taskBlocksComposer}
 					placeholder={activeRoot?.state === "awaiting_user" ? "Answer the question above to continue" : activeRoot?.state === "suspending" ? "Finishing the current operation…" : undefined}
 					submitDisabled={needsTarget}
 					alert={unavailableSelected && sendMode !== "steer" ? "Selected document disconnected. Choose another document." : undefined}

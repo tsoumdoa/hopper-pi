@@ -6,7 +6,7 @@ import {
 
 export type SharedBrowserCommand =
 	| { type: "authenticate"; token: string }
-	| { type: "snapshot" }
+	| { type: "snapshot"; conversationId?: string; before?: number }
 	| { type: "create_conversation"; requestId: string; title: string }
 	| {
 			type: "submit";
@@ -88,7 +88,12 @@ export function parseSharedBrowserCommand(raw: string): SharedBrowserCommand {
 	const v = object(JSON.parse(raw));
 	const type = string(v, "type");
 	if (type === "authenticate") return { type, token: string(v, "token") };
-	if (type === "snapshot") return { type };
+	if (type === "snapshot") {
+		if (v.before !== undefined && (!Number.isSafeInteger(v.before) || Number(v.before) <= 0 || v.conversationId === undefined))
+			throw new Error("Invalid history cursor");
+		return { type, ...(v.conversationId !== undefined ? { conversationId: string(v, "conversationId") } : {}),
+			...(v.before !== undefined ? { before: Number(v.before) } : {}) };
+	}
 	if (type === "set_model")
 		return {
 			type,

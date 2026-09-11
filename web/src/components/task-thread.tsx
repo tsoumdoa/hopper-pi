@@ -39,6 +39,13 @@ function liveAssistantMessages(events: Row[], completedTurns: Set<string>): Live
 	const current = new Map<string, LiveAssistantMessage>();
 	for (const row of events) {
 		const payload = decode<any>(row.payload, {});
+		if (payload.type === "assistant_message") {
+			const content = (payload.message?.content ?? []).filter(Boolean);
+			messages.push({ id: payload.messageId, turnId: String(payload.turnId), streaming: Boolean(payload.streaming),
+				text: content.filter((part: any) => part.type === "text").map((part: any) => part.text).join("\n"),
+				thinking: content.filter((part: any) => part.type === "thinking").map((part: any) => part.thinking ?? part.text).join("\n") });
+			continue;
+		}
 		if (payload.type !== "agent_event" || !payload.turnId) continue;
 		const event = payload.event ?? {};
 		const turnId = String(payload.turnId);
@@ -174,26 +181,29 @@ function TaskReply({ task, snapshot, labelFor, commands }: {
 }) {
 	const state = String(task.state);
 	const input = decode<TaskInput>(task.payload, { text: "", bindings: [] });
-	const events = snapshot.events.filter((event) => event.task_id === task.id && event.kind === "progress");
-	const turnMessages = new Map<string, any[]>();
-	for (const event of events) {
-		const payload = decode<any>(event.payload, {});
-		if (payload.type === "messages") turnMessages.set(String(payload.turnId), payload.messages ?? []);
-	}
-	const messages = [...turnMessages.values()].flat();
-	const liveMessages = liveAssistantMessages(events, new Set(turnMessages.keys()));
-	const tools = taskTools(events);
+	const { messages, liveMessages, tools } = useMemo(() => {
+		const events = snapshot.events.filter((event) => event.task_id === task.id && event.kind === "progress");
+		const turnMessages = new Map<string, any[]>();
+		for (const event of events) {
+			const payload = decode<any>(event.payload, {});
+			if (payload.type === "messages") turnMessages.set(String(payload.turnId), payload.messages ?? []);
+		}
+		const messages = [...turnMessages.values()].flat();
+		const liveMessages = liveAssistantMessages(events, new Set(turnMessages.keys()));
+		const tools = taskTools(events);
+		return { messages, liveMessages, tools };
+	}, [snapshot.events, task.id]);
 	const running = state === "running" || state === "suspending";
 	const questions = snapshot.questions.filter((question) => question.task_id === task.id);
 	const recovered = snapshot.recoveries?.some((record) => record.task_id === task.id) ?? false;
-	const captures = messages
+	const captures = useMemo(() => messages
 		.filter((message) => message.role === "toolResult" && Array.isArray(message.content))
 		.flatMap((message, i) =>
 			message.content
 				.filter((part: any) => part.type === "image")
 				.map((part: any, j: number) => ({ key: `capture-${i}-${j}`, image: safeImages([part])[0], tool: String(message.toolName ?? "Rhino") }))
 				.filter((capture: { image?: ImageAttachment }) => capture.image),
-		);
+		), [messages]);
 	const assistantMessages = messages.filter((message: any) => message.role === "assistant");
 	const idle = running && !assistantMessages.length && !liveMessages.length && !tools.length;
 	const targets = (input.messageTarget ? [input.messageTarget] : input.bindings)?.map(labelFor) ?? [];
@@ -353,7 +363,7 @@ function ChildTask({ task, snapshot, labelFor, commands }: {
 	);
 }
 
-export function TaskThread({ snapshot, tasks, connected, conversationId, labelFor, commands, onSuggestion }: {
+export function TaskThread({ snapshot, tasks, connected, conversationId, labelFor, commands, onSuggestion, onHistoryPage, controlTasks = tasks }: {
 	snapshot: SharedSnapshot | undefined;
 	/** Root tasks in order, each followed by its child tasks. */
 	tasks: Row[];
@@ -362,13 +372,15 @@ export function TaskThread({ snapshot, tasks, connected, conversationId, labelFo
 	labelFor(binding: TargetBinding): string;
 	commands: TaskThreadCommands;
 	onSuggestion(prompt: string): void;
+	onHistoryPage?(before?: number): void;
+	controlTasks?: Row[];
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
 	const stickToBottom = useRef(true);
 	const [showJump, setShowJump] = useState(false);
 	const [focusedQuestionId, setFocusedQuestionId] = useState<string>();
 	// Show one answerable question at a time, including questions from workers.
-	const waitingTasks = new Map(tasks.filter((task) => task.state === "awaiting_user").map((task) => [task.id, task]));
+	const waitingTasks = new Map(controlTasks.filter((task) => task.state === "awaiting_user").map((task) => [task.id, task]));
 	const pendingQuestions = snapshot?.questions.filter((question) => question.answer === null && waitingTasks.has(question.task_id)) ?? [];
 	const activeQuestion = pendingQuestions.find((question) => question.id === focusedQuestionId) ?? pendingQuestions[0];
 	const activeQuestionId = activeQuestion?.id;
@@ -398,8 +410,17 @@ export function TaskThread({ snapshot, tasks, connected, conversationId, labelFo
 	// A question always reveals itself; otherwise follow only while the reader is near the bottom.
 	useLayoutEffect(() => {
 		if (activeQuestionId) stickToBottom.current = true;
-		if (stickToBottom.current) scrollToLatest("auto");
+		if (stickToBottom.current && snapshot?.history?.before == null) scrollToLatest("auto");
 	}, [activeQuestionId, conversationId, snapshot?.eventCursor, tasks.length]);
+	useLayoutEffect(() => {
+		if (snapshot?.history?.before != null) {
+			stickToBottom.current = false;
+			if (scroller.current) scroller.current.scrollTop = 0;
+		} else {
+			stickToBottom.current = true;
+			scrollToLatest("auto");
+		}
+	}, [snapshot?.history?.before]);
 
 	return (
 		<div className="relative min-h-0 flex-1">
@@ -414,6 +435,10 @@ export function TaskThread({ snapshot, tasks, connected, conversationId, labelFo
 			/>}
 			<div ref={scroller} onScroll={onScroll} className="h-full overflow-y-auto px-4 py-6 sm:px-6" aria-label="Conversation" aria-live="polite">
 				<div className="mx-auto flex w-full max-w-[760px] flex-col gap-6 pb-4">
+					{snapshot?.history && onHistoryPage && <div className="flex justify-center gap-2">
+						{snapshot.history.hasOlder && <Button variant="ghost" size="sm" disabled={!connected} onClick={() => onHistoryPage(Number(snapshot.history!.oldestSequence))}>Older messages</Button>}
+						{snapshot.history.before !== null && <Button variant="ghost" size="sm" disabled={!connected} onClick={() => onHistoryPage()}>Latest messages</Button>}
+					</div>}
 					{!snapshot || tasks.length === 0 ? (
 						<Welcome connected={connected} onSuggestion={onSuggestion} />
 					) : (

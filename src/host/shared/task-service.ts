@@ -507,7 +507,7 @@ export class SharedTaskService {
 			total + (ids.has(turn.task_id) ? Number(turn.usage) : 0), 0);
 	}
 	pump(): void {
-		if (this.pumping || this.stopped) return;
+		if (this.pumping || this.stopped || !this.journal.hasQueuedTasks) return;
 		this.pumping = true;
 		try {
 			const snapshot = this.journal.snapshot({ includeEvents: false });

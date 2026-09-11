@@ -1,3 +1,5 @@
+import { browserConversationsQuery } from "./conversation-snapshot.js";
+import { BrowserHistory } from "./browser-history.js";
 import { createHash, randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { classifyOperation, type OperationName } from "../../protocol/v2.js";
@@ -72,6 +74,7 @@ export interface Receipt {
 export class TaskJournal {
 	static readonly schemaVersion = 5;
 	private readonly db: Database;
+	private readonly browserHistory: BrowserHistory;
 	constructor(path: string) {
 		const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as {
 			DatabaseSync: new (path: string) => Database;
@@ -210,6 +213,7 @@ CREATE TRIGGER operation_updated AFTER UPDATE OF state ON operations BEGIN UPDAT
 CREATE TRIGGER event_created AFTER INSERT ON events BEGIN UPDATE events SET created_at=CAST((julianday('now')-2440587.5)*86400000 AS INTEGER) WHERE id=NEW.id; END;
 PRAGMA user_version=5;`);
 			});
+			this.browserHistory = new BrowserHistory(this.db);
 		} catch (error) {
 			this.db.close();
 			throw error;
@@ -273,9 +277,9 @@ PRAGMA user_version=5;`);
 		this.db
 			.prepare("INSERT INTO events(task_id,kind,payload) VALUES (?,?,?)")
 			.run(taskId, kind, canonical(attributed));
-		return Number(
-			this.db.prepare("SELECT last_insert_rowid() AS id").get()!.id,
-		);
+		const id = Number(this.db.prepare("SELECT last_insert_rowid() AS id").get()!.id);
+		this.browserHistory.append(this.db.prepare("SELECT * FROM events WHERE id=?").get(id)!);
+		return id;
 	}
 	lookupRequest<T>(requestId: string, payload: unknown): T | undefined {
 		return this.findRequest<T>(requestId, payload);
@@ -1525,6 +1529,58 @@ PRAGMA user_version=5;`);
 				.prepare("UPDATE records SET state=?,payload=? WHERE kind=? AND id=?")
 				.run(state, canonical(payload), kind, id);
 			this.event(String(row.task_id), kind + "_" + state, { id });
+		});
+	}
+
+	getTask(taskId: string): Row | undefined {
+		return this.db.prepare("SELECT * FROM tasks WHERE id=?").get(taskId);
+	}
+	getQuestion(questionId: string): Row | undefined {
+		return this.db.prepare("SELECT * FROM questions WHERE id=?").get(questionId);
+	}
+	get hasQueuedTasks(): boolean {
+		return Boolean(this.db.prepare("SELECT 1 FROM tasks WHERE state='queued' AND cancellation_requested=0 LIMIT 1").get());
+	}
+
+	get eventCursor(): number {
+		return Number(this.db.prepare("SELECT COALESCE(MAX(id),0) AS id FROM events").get()!.id);
+	}
+
+	/** Bounded display data, independent of the complete recovery/export journal. */
+	browserSnapshot(options: { conversationId?: string; before?: number; afterConversationSequence?: number } = {}) {
+		return this.transaction(() => {
+			const conversations = this.db.prepare(browserConversationsQuery)
+				.all(options.afterConversationSequence ?? 0)
+				.map(({ has_fixture, first_user_text, ...row }) => has_fixture
+					? { ...row, title: typeof first_user_text === "string" && first_user_text.trim() ? first_user_text.trim().slice(0, 80) : "Conversation" }
+					: row);
+			const conversationId = conversations.find(row => row.id === options.conversationId)?.id ?? conversations.at(-1)?.id ?? null;
+			const roots = conversationId === null ? [] : this.db.prepare(`SELECT sequence,id FROM browser_roots
+WHERE conversation_id=? AND NOT fixture AND sequence<? ORDER BY sequence DESC LIMIT 21`)
+				.all(conversationId, options.before ?? Number.MAX_SAFE_INTEGER);
+			const page = roots.slice(0, 20).reverse();
+			const active = conversationId === null ? [] : this.db.prepare(`SELECT sequence,id FROM browser_roots
+WHERE conversation_id=? AND NOT fixture AND state IN ('queued','running','suspending','awaiting_user') ORDER BY sequence`)
+				.all(conversationId);
+			const rootIds = [...new Set([...page, ...active].map(row => row.id))];
+			const marks = rootIds.map(() => "?").join(",") || "NULL";
+			const tasks = this.db.prepare(`SELECT rowid AS sequence,* FROM tasks WHERE id IN (${marks}) OR root_task_id IN (${marks}) OR parent_task_id IN (${marks}) ORDER BY rowid`)
+				.all(...rootIds, ...rootIds, ...rootIds);
+			const ids = tasks.map(row => row.id);
+			const selected = ids.map(() => "?").join(",") || "NULL";
+			const rows = (table: string) => this.db.prepare(`SELECT * FROM ${table} WHERE task_id IN (${selected}) ORDER BY rowid`).all(...ids);
+			const conversationIds = conversations.map(row => row.id);
+			return {
+				conversations,
+				sessions: this.db.prepare(`SELECT * FROM sessions WHERE conversation_id IN (${conversationIds.map(() => "?").join(",") || "NULL"}) AND id NOT LIKE 'worker-%' ORDER BY rowid`).all(...conversationIds),
+				tasks, turns: rows("turns"), questions: rows("questions"), inputs: rows("inputs"),
+				recoveries: rows("recovery_dispositions"),
+				records: this.db.prepare(`SELECT * FROM records WHERE task_id IN (${selected}) AND kind='scheduling' ORDER BY rowid`).all(...ids),
+				events: this.db.prepare(`SELECT id,task_id,kind,payload,created_at FROM browser_events WHERE task_id IN (${selected}) ORDER BY id`).all(...ids),
+				operations: [] as Row[], reservations: [] as Row[], attachments: [] as Row[], dependencies: [] as Row[],
+				history: { conversationId, before: options.before ?? null, hasOlder: roots.length > 20,
+					oldestSequence: page[0]?.sequence ?? null, pageTaskIds: tasks.filter(row => page.some(root => root.id === row.id || root.id === row.root_task_id || root.id === row.parent_task_id)).map(row => row.id) },
+			};
 		});
 	}
 

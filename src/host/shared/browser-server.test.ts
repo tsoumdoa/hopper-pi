@@ -9,6 +9,7 @@ import { TaskJournal } from "./journal.js";
 import { SharedRegistry } from "./registry.js";
 import { SharedTaskService } from "./task-service.js";
 import type { HostRuntime } from "../pi-runtime.js";
+import { applySnapshotPatch } from "./snapshot-patch.js";
 const cleanup: (() => Promise<void> | void)[] = [];
 afterEach(async () => {
 	for (const fn of cleanup.splice(0).reverse()) await fn();
@@ -46,6 +47,30 @@ const next = (socket: WebSocket) =>
 	new Promise<any>((resolve) =>
 		socket.once("message", (raw) => resolve(JSON.parse(raw.toString()))),
 	);
+it("sends row patches after the initial snapshot and starts a replacement connection with a full snapshot", async () => {
+	let state = { eventCursor: 1, tasks: [], events: [{ id: 1, kind: "progress", payload: "capture".repeat(10000) }] };
+	let publish: ((event: unknown) => void) | undefined;
+	const backend = { snapshot: () => state, command: async () => null,
+		subscribe: (listener: (event: unknown) => void) => { publish = listener; return () => { publish = undefined; }; } };
+	// The fixture's backend can be replaced through its normal server options.
+	const f = await fixture(() => state, { backend });
+	const socket = await f.connect();
+	const initial = next(socket);
+	socket.send(JSON.stringify({ type: "authenticate", token: "secret" }));
+	const received = await initial;
+	expect(received.type).toBe("shared_snapshot");
+	state = { ...state, eventCursor: 2, events: [...state.events, { id: 2, kind: "progress", payload: "new text" }] };
+	const update = next(socket);
+	publish!({ type: "shared_snapshot", snapshot: state });
+	const patch = await update;
+	expect(patch.type).toBe("shared_patch");
+	expect(JSON.stringify(patch)).not.toContain("capture");
+	expect(applySnapshotPatch(received.snapshot, patch.patch)).toEqual(state);
+	const replacement = await f.connect();
+	const restored = next(replacement);
+	replacement.send(JSON.stringify({ type: "authenticate", token: "secret" }));
+	expect(await restored).toEqual({ type: "shared_snapshot", snapshot: state });
+});
 it("sends a fresh durable snapshot before accepting authenticated commands", async () => {
 	const f = await fixture();
 	const socket = await f.connect();

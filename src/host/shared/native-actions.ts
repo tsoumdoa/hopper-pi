@@ -91,10 +91,6 @@ export function createNativeActionAdapters(
 	journal: TaskJournal,
 	registry: SharedRegistry,
 ): { documents: DocumentActionAdapter; transfer: TransferAdapter } {
-	const prepared = new Map<
-		string,
-		{ args: DocumentRequest; baselines: { path: string; baseline: unknown }[] }
-	>();
 	const inventory = async (grant: DocumentActionRequest) =>
 		resultData(
 			await native
@@ -267,64 +263,57 @@ export function createNativeActionAdapters(
 						createDirectories: grant.createDirectories ?? false,
 					});
 				}
-				prepared.set(grant.requestId, { args, baselines });
-				return { destinations, arguments: args };
+				return { destinations, arguments: args, baselines };
 			},
-			execute: async (owner, grant, operationId) => {
-				const preparation = prepared.get(grant.requestId);
-				if (!preparation)
-					throw new Error("Document action was not preflighted");
-				try {
-					for (const baseline of preparation.baselines)
-						if (
-							JSON.stringify(
-								(await inspectDestination(baseline.path)).baseline,
-							) !== JSON.stringify(baseline.baseline)
-						)
-							throw new NativeActionError(
-								"Save destination changed after reservation",
-								"failed",
-								{ path: baseline.path },
-							);
-					const response = await native
-						.getClient(grant.lifecycleInstanceId)
-						.call(
-							grant.kind === "rhino"
-								? "manageRhinoDocument"
-								: "manageGrasshopperDocument",
-							preparation.args,
-							{ documentActionOwner: owner, operationId },
-						);
-					const data = resultData(response),
-						document = data?.document as DocumentMetadata | undefined;
+			execute: async (owner, grant, operationId, preparation) => {
+				if (!preparation.arguments) throw new Error("Document action was not preflighted");
+				for (const baseline of preparation.baselines ?? [])
 					if (
-						!document ||
-						document.lifecycleInstanceId !== grant.lifecycleInstanceId
+						JSON.stringify(
+							(await inspectDestination(baseline.path)).baseline,
+						) !== JSON.stringify(baseline.baseline)
 					)
 						throw new NativeActionError(
-							"Document action did not return a verified document",
-							"uncertain",
-							data,
+							"Save destination changed after reservation",
+							"failed",
+							{ path: baseline.path },
 						);
-					const binding: TargetBinding =
+				const response = await native
+					.getClient(grant.lifecycleInstanceId)
+					.call(
 						grant.kind === "rhino"
-							? {
-									kind: "rhino",
-									lifecycleInstanceId: grant.lifecycleInstanceId,
-									rhinoDocumentId: document.documentId,
-								}
-							: {
-									kind: "grasshopper",
-									lifecycleInstanceId: grant.lifecycleInstanceId,
-									grasshopperDocumentId: document.documentId,
-									associatedRhinoDocumentId:
-										document.settings?.associatedRhinoDocumentId ?? null,
-								};
-					await native.refresh();
-					return { binding, result: data };
-				} finally {
-					prepared.delete(grant.requestId);
-				}
+							? "manageRhinoDocument"
+							: "manageGrasshopperDocument",
+						preparation.arguments,
+						{ documentActionOwner: owner, operationId },
+					);
+				const data = resultData(response),
+					document = data?.document as DocumentMetadata | undefined;
+				if (
+					!document ||
+					document.lifecycleInstanceId !== grant.lifecycleInstanceId
+				)
+					throw new NativeActionError(
+						"Document action did not return a verified document",
+						"uncertain",
+						data,
+					);
+				const binding: TargetBinding =
+					grant.kind === "rhino"
+						? {
+								kind: "rhino",
+								lifecycleInstanceId: grant.lifecycleInstanceId,
+								rhinoDocumentId: document.documentId,
+							}
+						: {
+								kind: "grasshopper",
+								lifecycleInstanceId: grant.lifecycleInstanceId,
+								grasshopperDocumentId: document.documentId,
+								associatedRhinoDocumentId:
+									document.settings?.associatedRhinoDocumentId ?? null,
+							};
+				await native.refresh();
+				return { binding, result: data };
 			},
 			verify: async (binding, grant) => {
 				registry.resolveBinding(binding);

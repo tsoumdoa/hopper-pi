@@ -1,6 +1,5 @@
 import { expect, it } from "vitest";
 import { TaskJournal } from "./journal.js";
-import { conversationSnapshot } from "./conversation-snapshot.js";
 
 const fixtureText = "Explicit deterministic native launch, New and geometry transfer fixture. No model API is called.";
 
@@ -20,8 +19,11 @@ it("hides marked fixtures atomically while retaining mixed-conversation user mes
 		// Neither a diagnostic-looking title nor identical text is sufficient.
 		const sameText = submit(ordinary, "ordinary-uuid", fixtureText);
 		const snapshot = journal.snapshot();
-		const visible = conversationSnapshot(snapshot);
-		expect(visible.tasks.map((row) => row.id)).toEqual([user.taskId, sameText.taskId]);
+		const visible = journal.browserSnapshot({ conversationId: mixed.conversationId });
+		const other = journal.browserSnapshot({ conversationId: ordinary.conversationId });
+		expect(visible.tasks.map((row) => row.id)).toEqual([user.taskId]);
+		expect(other.tasks.map((row) => row.id)).toEqual([sameText.taskId]);
+		expect(other.conversations).toEqual(visible.conversations);
 		expect(visible.conversations.map((row) => row.id)).toEqual([mixed.conversationId, ordinary.conversationId]);
 		expect(visible.conversations[0].title).toBe("hey");
 		expect(visible.sessions.some((row) => row.conversation_id === empty.conversationId)).toBe(false);
@@ -42,8 +44,34 @@ it("recognizes only exact historical fixture request and text signatures", () =>
 		submit("transfer-fixture-root-1788886874025", fixtureText);
 		submit("native-launch-probe-root-1788886874025", "Explicit native launch acceptance fixture. No model driver is started for this test.");
 		const user = submit("transfer-fixture-root-1788886874026", "Please create a sphere");
-		const visible = conversationSnapshot(journal.snapshot());
-		expect(visible.tasks.map((row) => row.id)).toEqual([user.taskId]);
+		const similar = submit("transfer-fixture-root-123x", fixtureText);
+		const visible = journal.browserSnapshot();
+		expect(visible.tasks.map((row) => row.id)).toEqual([user.taskId, similar.taskId]);
 		expect(visible.conversations[0].title).toBe("Please create a sphere");
+	} finally { journal.close(); }
+});
+
+it("filters fixture roots before paging and uses the first real prompt as the mixed chat title", () => {
+	const journal = new TaskJournal(":memory:");
+	try {
+		const conversation = journal.createConversation("mixed", "Fixture");
+		const ids: string[] = [];
+		for (let index = 0; index < 52; index++) {
+			const fixture = index % 2 === 0;
+			const { taskId, turnId } = journal.accept({ ...conversation, requestId: `request-${index}`, kind: "prompt",
+				text: fixture ? "Diagnostic" : index === 1 ? "\n\tA real chat\t\n" : `Message ${index}`,
+				bindings: [], attachments: [], ...(fixture ? { diagnosticFixture: "shared-host-native-smoke" as const } : {}) });
+			journal.start(taskId, turnId); journal.settle(taskId, turnId, "completed");
+			if (!fixture) ids.push(taskId);
+		}
+		const latest = journal.browserSnapshot();
+		expect(latest.conversations[0].title).toBe("A real chat");
+		expect(latest.history.hasOlder).toBe(true);
+		expect(latest.history.pageTaskIds).toEqual(ids.slice(-20));
+		const older = journal.browserSnapshot({ conversationId: conversation.conversationId, before: Number(latest.history.oldestSequence) });
+		expect(older.conversations).toEqual(latest.conversations);
+		expect(older.history.hasOlder).toBe(false);
+		expect(older.history.pageTaskIds).toEqual(ids.slice(0, 6));
+		expect(journal.snapshot().tasks).toHaveLength(52);
 	} finally { journal.close(); }
 });

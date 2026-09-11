@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "./app";
 import { HopperStoreProvider } from "./state/hopper-store-context";
 import { TaskJournal } from "../../src/host/shared/journal.js";
+import { snapshotPatch } from "../../src/host/shared/snapshot-patch.js";
 vi.mock("./hooks/use-runtime-status", () => ({
 	useRuntimeStatus: () => ({ refresh: async () => {}, refreshing: false }),
 }));
@@ -1246,6 +1247,51 @@ it("keeps earlier assistant responses visible through tool turns and final messa
 	expect(container.querySelectorAll(".animate-blink")).toHaveLength(0);
 });
 
+it("renders compact streaming history and applies row updates without duplicating replies", async () => {
+	const task = { id: "compact-task", session_id: "session", conversation_id: "conversation", parent_task_id: null, state: "running", payload: JSON.stringify({ text: "Inspect", bindings: [binding] }) };
+	const event = (text: string) => ({ id: 10, task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "assistant_message", turnId: "turn", messageId: "message", streaming: true,
+		message: { role: "assistant", content: [{ type: "thinking", thinking: "Checking the model" }, { type: "text", text }] } }) });
+	const first = { ...snapshot, tasks: [task], eventCursor: 10, events: [event("Partial response")] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: first }));
+	expect(container.textContent).toContain("Partial response");
+	const second = { ...first, eventCursor: 11, events: [event("Updated response")] };
+	await act(async () => socket.receive({ type: "shared_patch", patch: snapshotPatch(first, second) }));
+	expect(container.textContent).not.toContain("Partial response");
+	expect(container.textContent!.split("Updated response")).toHaveLength(2);
+	const final = { ...second, eventCursor: 12, tasks: [{ ...task, state: "completed" }], events: [{ id: 12, task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "messages", turnId: "turn", messages: [{ role: "assistant", content: [{ type: "text", text: "Final response" }] }] }) }] };
+	await act(async () => socket.receive({ type: "shared_patch", patch: snapshotPatch(second, final) }));
+	expect(container.textContent).not.toContain("Updated response");
+	expect(container.textContent!.split("Final response")).toHaveLength(2);
+	expect(container.querySelectorAll(".animate-blink")).toHaveLength(0);
+});
+
+it("requests bounded older/latest pages and preserves the page in heartbeat requests", async () => {
+	const latest = { ...snapshot, history: { conversationId: "conversation", before: null, hasOlder: true, oldestSequence: 25, pageTaskIds: [] } };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: latest }));
+	await act(async () => byText("Older messages").click());
+	expect(socket.sent.at(-1)).toEqual({ type: "snapshot", conversationId: "conversation", before: 25 });
+	const older = { ...latest, history: { ...latest.history, before: 25, oldestSequence: 5, hasOlder: false } };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: older }));
+	expect(byText("Older messages")).toBeUndefined();
+	await act(async () => window.dispatchEvent(new Event("pageshow")));
+	expect(socket.sent.at(-1)).toEqual({ type: "snapshot", conversationId: "conversation", before: 25 });
+	await act(async () => socket.receive({ type: "shared_status", runtime: snapshot.runtime, targets: snapshot.targets, hostEpoch: snapshot.hostEpoch, conversationSession: snapshot.conversationSession }));
+	expect(byText("Latest messages")).toBeTruthy();
+	await act(async () => byText("Latest messages").click());
+	expect(socket.sent.at(-1)).toEqual({ type: "snapshot", conversationId: "conversation" });
+});
+
+it("accepts lightweight heartbeat responses without reconnecting or losing a draft", async () => {
+	vi.useFakeTimers();
+	await value("#composer-input", "Keep this draft");
+	await act(async () => window.dispatchEvent(new Event("pageshow")));
+	await act(async () => socket.receive({ type: "shared_status", runtime: snapshot.runtime, targets: snapshot.targets, hostEpoch: snapshot.hostEpoch, conversationSession: snapshot.conversationSession }));
+	await act(async () => vi.advanceTimersByTimeAsync(11_000));
+	expect(Socket.sockets).toHaveLength(1);
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Keep this draft");
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.disabled).toBe(false);
+});
+
 it("expands live tool cards with input and partial output before the final messages arrive", async () => {
 	const task = { id: "live-tools", session_id: "session", conversation_id: "conversation", parent_task_id: null, state: "running", payload: JSON.stringify({ text: "Run script", bindings: [binding] }) };
 	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [task], events: [
@@ -1307,11 +1353,11 @@ it("shows startup progress and waits for its Rhino before restoring or creating 
 	expect(container.querySelector("h1")!.textContent).toBe("New chat");
 	expect(early.sent.map((command) => command.type)).toEqual(["authenticate"]);
 	expect(sendButton().disabled).toBe(true);
-	await act(async () => early.receive({ type: "shared_snapshot", snapshot: {
-		...snapshot,
+	await act(async () => early.receive({ type: "shared_status",
+		runtime: snapshot.runtime, hostEpoch: snapshot.hostEpoch,
 		conversationSession: { id: "new-session", afterConversationSequence: 2 },
 		targets: [{ ...snapshot.targets[0], lifecycleInstanceId: "new-rhino" }],
-	} }));
+	}));
 	expect(container.textContent).not.toContain("Starting Hopper…");
 	expect(new URLSearchParams(location.search).has("starting")).toBe(false);
 	expect(early.sent.filter((command) => command.type === "create_conversation")).toHaveLength(1);
@@ -1359,7 +1405,7 @@ it("recovers a silently dead connection after wake and keeps the draft", async (
 	await value("#composer-input", "Preserved after sleep");
 	replacement.sent = [];
 	await act(async () => window.dispatchEvent(new Event("pageshow")));
-	expect(replacement.sent).toEqual([{ type: "snapshot" }]);
+	expect(replacement.sent).toEqual([{ type: "snapshot", conversationId: "conversation" }]);
 	await act(async () => vi.advanceTimersByTimeAsync(10_000));
 	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.disabled).toBe(true);
 	await act(async () => vi.advanceTimersByTimeAsync(1500));

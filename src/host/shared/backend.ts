@@ -3,13 +3,16 @@ import type { SharedBrowserBackend } from "./browser-server.js";
 import type { SharedBrowserCommand } from "./browser-protocol.js";
 import { SharedTaskService } from "./task-service.js";
 import { SharedRegistry } from "./registry.js";
-import { conversationSnapshot } from "./conversation-snapshot.js";
 
 /** Authenticated browser commands enter here; no model or native work starts before journal commit. */
 export class SharedBackend implements SharedBrowserBackend {
 	private readonly listeners = new Set<(event: unknown) => void>();
 	private readonly unsubscribe: (() => void)[];
 	private stopping = false;
+	private view: { conversationId?: string; before?: number } = {};
+	private historyKey = "";
+	private publishedHistoryKey = "";
+	private history?: ReturnType<SharedTaskService["journal"]["browserSnapshot"]>;
 	private publishTimer?: ReturnType<typeof setTimeout>;
 	stopAdmission(): void {
 		this.stopping = true;
@@ -46,14 +49,20 @@ export class SharedBackend implements SharedBrowserBackend {
 		];
 	}
 	snapshot() {
-		const journal = this.tasks.snapshot();
+		const cursor = this.tasks.journal.eventCursor;
+		const session = this.registry.conversationSession;
+		const key = JSON.stringify([cursor, this.tasks.journal.lastConversationSequence, session, this.view]);
+		if (key !== this.historyKey || !this.history) {
+			this.history = this.tasks.journal.browserSnapshot({ ...this.view, afterConversationSequence: session.afterConversationSequence });
+			this.historyKey = key;
+		}
 		return {
-			...conversationSnapshot(journal),
+			...this.history,
 			hostEpoch: this.hostEpoch,
 			conversationSession: this.registry.conversationSession,
 			targets: this.registry.list(),
 			runtime: this.admin.snapshot(),
-			eventCursor: Number(journal.events.at(-1)?.id ?? 0),
+			eventCursor: cursor,
 		};
 	}
 	exportConversation(conversationId: string | null) {
@@ -93,20 +102,21 @@ export class SharedBackend implements SharedBrowserBackend {
 		if (!this.listeners.size || this.publishTimer) return;
 		this.publishTimer = setTimeout(() => {
 			this.publishTimer = undefined;
-			if (this.listeners.size)
-				this.emit({ type: "shared_snapshot", snapshot: this.snapshot() });
+			if (this.listeners.size) {
+				const snapshot = this.snapshot();
+				if (this.publishedHistoryKey !== this.historyKey) {
+					this.publishedHistoryKey = this.historyKey;
+					this.emit({ type: "shared_snapshot", snapshot });
+				} else {
+					const { runtime, targets, hostEpoch, conversationSession } = snapshot;
+					this.emit({ type: "shared_status", runtime, targets, hostEpoch, conversationSession });
+				}
+			}
 		}, 50);
 		this.publishTimer.unref();
 	}
 	private taskInConversation(taskId: string, conversationId: string): void {
-		if (
-			!this.tasks
-				.snapshot()
-				.tasks.some(
-					(task) =>
-						task.id === taskId && task.conversation_id === conversationId,
-				)
-		)
+		if (this.tasks.journal.getTask(taskId)?.conversation_id !== conversationId)
 			throw new Error("Task is not in this conversation");
 	}
 	private async configure<T>(work: () => Promise<T>): Promise<T> {
@@ -125,6 +135,7 @@ export class SharedBackend implements SharedBrowserBackend {
 			throw new Error("Host is stopping; new commands are not accepted");
 		switch (command.type) {
 			case "snapshot":
+				if (command.conversationId) this.view = { conversationId: command.conversationId, before: command.before };
 				this.publish();
 				this.admin.ui.replayPending();
 				return null;
@@ -133,6 +144,7 @@ export class SharedBackend implements SharedBrowserBackend {
 					command.requestId,
 					command.title,
 				);
+				this.view = { conversationId: receipt.conversationId };
 				this.publish();
 				return receipt;
 			}
@@ -164,9 +176,7 @@ export class SharedBackend implements SharedBrowserBackend {
 					{ text: command.text, attachments: command.attachments },
 				);
 			case "answer": {
-				const question = this.tasks
-					.snapshot()
-					.questions.find((question) => question.id === command.questionId);
+				const question = this.tasks.journal.getQuestion(command.questionId);
 				if (!question) throw new Error("Question no longer exists");
 				this.taskInConversation(
 					String(question.task_id),
@@ -235,5 +245,6 @@ export class SharedBackend implements SharedBrowserBackend {
 		clearTimeout(this.publishTimer);
 		for (const unsubscribe of this.unsubscribe) unsubscribe();
 		this.listeners.clear();
+		this.history = undefined;
 	}
 }

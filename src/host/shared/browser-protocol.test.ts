@@ -10,6 +10,13 @@ const submit = {
 	bindings: [],
 	attachments: [],
 };
+it("validates conversation history cursors without allowing unbounded page sizes", () => {
+	expect(parseSharedBrowserCommand(JSON.stringify({ type: "snapshot", conversationId: "chat", before: 25, limit: 100000 })))
+		.toEqual({ type: "snapshot", conversationId: "chat", before: 25 });
+	for (const before of [0, -1, 1.5, "25", Number.MAX_SAFE_INTEGER + 1])
+		expect(() => parseSharedBrowserCommand(JSON.stringify({ type: "snapshot", conversationId: "chat", before }))).toThrow(/cursor/);
+	expect(() => parseSharedBrowserCommand(JSON.stringify({ type: "snapshot", before: 25 }))).toThrow(/cursor/);
+});
 it("requires stable identity and exact captured target shapes", () => {
 	expect(parseSharedBrowserCommand(JSON.stringify(submit))).toEqual(submit);
 	expect(() =>

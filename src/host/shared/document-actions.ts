@@ -7,6 +7,7 @@ import type {
 import { TaskJournal } from "./journal.js";
 import { NativeActionError } from "./action-errors.js";
 import { withToolDispatchContext } from "../../services/tool-policy-context.js";
+import type { DocumentRequest } from "../../types/document-management.js";
 import { validateDocumentRequest } from "../../services/document-management.js";
 import { SharedTaskService } from "./task-service.js";
 
@@ -24,16 +25,19 @@ export interface DocumentActionRequest {
 	overwrite?: boolean;
 	createDirectories?: boolean;
 }
+export interface DocumentActionPreflight {
+	destinations: { identity: string; baseline: unknown }[];
+	arguments?: DocumentRequest;
+	baselines?: { path: string; baseline: unknown }[];
+}
 export interface DocumentActionAdapter {
 	/** Inspect every affected document and destination again while owning the queue. */
-	preflight(grant: DocumentActionRequest): Promise<{
-		destinations: { identity: string; baseline: unknown }[];
-		arguments?: unknown;
-	}>;
+	preflight(grant: DocumentActionRequest): Promise<DocumentActionPreflight>;
 	execute(
 		owner: DocumentActionOwner,
 		grant: DocumentActionRequest,
 		operationId: string,
+		preflight: DocumentActionPreflight,
 	): Promise<{ binding: TargetBinding; result: unknown }>;
 	verify(binding: TargetBinding, grant: DocumentActionRequest): Promise<void>;
 }
@@ -174,6 +178,7 @@ export class DocumentActionService {
 						owner,
 						grant,
 						operation.operationId!,
+						preflight,
 					);
 					this.journal.operationResult(operation.id, "completed", result);
 					if (
