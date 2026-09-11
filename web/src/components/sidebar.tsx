@@ -82,6 +82,8 @@ function ProviderCard({ state, connected, onManageProvider }: { state: SidebarSt
 
 export type SidebarProps = {
 	token: string;
+	threads?: ReactNode;
+	newThreadDisabled?: boolean;
 	connected: boolean;
 	collapsed: boolean;
 	onCollapsedChange(collapsed: boolean): void;
@@ -101,6 +103,8 @@ export type SidebarProps = {
 
 export function Sidebar({
 	token,
+	threads,
+	newThreadDisabled,
 	connected,
 	collapsed,
 	onCollapsedChange,
@@ -168,9 +172,9 @@ export function Sidebar({
 			<div className="flex items-center gap-2 px-3 py-2 lg:hidden">
 				<BrandMark />
 				<span className="flex-1 text-[13px] font-semibold tracking-tight">Hopper</span>
-				<Button size="sm" variant="secondary" disabled={!connected} onClick={onNewSession} aria-label="New session">
+				<Button size="sm" variant="secondary" disabled={!connected || newThreadDisabled} title={newThreadDisabled ? "Stop the running thread first" : "New thread"} onClick={onNewSession} aria-label="New thread">
 					<Plus className="size-3.5" />
-					<span className="max-sm:hidden">New session</span>
+					<span className="max-sm:hidden">New thread</span>
 				</Button>
 				<Button
 					size="icon-sm"
@@ -192,6 +196,7 @@ export function Sidebar({
 						: "hidden",
 				)}
 			>
+				{threads}
 				{panels}
 			</div>
 
@@ -201,7 +206,7 @@ export function Sidebar({
 					<Button size="icon-sm" variant="ghost" onClick={() => onCollapsedChange(false)} aria-label="Expand sidebar" title="Expand sidebar">
 						<PanelLeftOpen className="size-4" />
 					</Button>
-					<Button size="icon-sm" variant="ghost" disabled={!connected} onClick={onNewSession} aria-label="New session" title="New session">
+					<Button size="icon-sm" variant="ghost" disabled={!connected || newThreadDisabled} title={newThreadDisabled ? "Stop the running thread first" : "New thread"} onClick={onNewSession} aria-label="New thread">
 						<Plus className="size-4" />
 					</Button>
 					<Button size="icon-sm" variant="ghost" disabled={!connected} onClick={onManageProvider} aria-label="Manage provider" title="Manage provider">
@@ -228,12 +233,13 @@ export function Sidebar({
 						</Button>
 					</div>
 					<div className="px-3">
-						<Button className="w-full justify-start" variant="secondary" size="sm" disabled={!connected} onClick={onNewSession}>
+						<Button className="w-full justify-start" variant="secondary" size="sm" disabled={!connected || newThreadDisabled} title={newThreadDisabled ? "Stop the running thread first" : "New thread"} onClick={onNewSession}>
 							<Plus className="size-3.5" />
-							New session
+							New thread
 						</Button>
 					</div>
-					<div className="mt-auto grid gap-2 overflow-y-auto p-3">{panels}</div>
+					{threads}
+					<div className="grid max-h-[45%] shrink-0 gap-2 overflow-y-auto p-3">{panels}</div>
 				</div>
 			)}
 		</aside>

@@ -95,7 +95,9 @@ describe("shared scheduling", () => {
 	});
 	it("lets native tools in separate Rhino processes execute concurrently", async () => {
 		const s = setup(4);
-		const a = s.submit("a", "p"), b = s.submit("b", "q");
+		s.journal.registerSession("a", "a");
+		const a = s.service.submit({ requestId: "a", conversationId: "a", sessionId: "a", kind: "prompt", text: "edit", bindings: [binding("p"), binding("q")], messageTarget: binding("p"), attachments: [] });
+		const b = s.service.delegate({ requestId: "b", conversationId: "a", sessionId: "worker-b", parentTaskId: a.taskId, dependencies: [], kind: "prompt", text: "edit", bindings: [binding("q")], attachments: [] });
 		await tick();
 		const started: string[] = [];
 		const release: (() => void)[] = [];
@@ -107,7 +109,7 @@ describe("shared scheduling", () => {
 		expect(started).toEqual([a.taskId, b.taskId]);
 		for (const resolve of release) resolve();
 		await Promise.all(tools);
-		for (const task of [a, b]) { s.finish.get(task.taskId)!(); await tick(); s.clean.get(task.taskId)!(); await tick(); }
+		for (const task of [b, a]) { s.finish.get(task.taskId)!(); await tick(); s.clean.get(task.taskId)!(); await tick(); }
 		s.journal.close();
 	});
 	it.each([true, false])("schedules a second document according to confirmed cleanup (%s), even after a greeting with no native calls", async (confirmed) => {
@@ -428,7 +430,7 @@ it("terminalizes a queued child whose dependency becomes uncertain", async () =>
 		false,
 	);
 });
-it("bounds coordinator sessions without starving geometry workers", async () => {
+it("queues root follow-ups without starving delegated geometry workers", async () => {
 	const journal = new TaskJournal(":memory:"),
 		started: string[] = [];
 	const service = new SharedTaskService(journal, {
@@ -450,20 +452,20 @@ it("bounds coordinator sessions without starving geometry workers", async () => 
 		},
 	});
 	const submit = (id: string, bindings: TargetBinding[]) => {
-		journal.registerSession(id, id);
+		journal.registerSession("a", "a");
 		return service.submit({
 			requestId: id,
-			conversationId: id,
-			sessionId: id,
+			conversationId: "a",
+			sessionId: "a",
 			kind: "prompt",
 			text: "Work",
 			bindings,
 			attachments: [],
 		});
 	};
-	const a = submit("a", []),
+	const a = submit("a", [binding("p"), binding("q")]),
 		b = submit("b", []),
-		c = submit("c", [binding("p")]);
+		c = service.delegate({ requestId: "c", conversationId: "a", sessionId: "worker-c", parentTaskId: a.taskId, dependencies: [], kind: "prompt", text: "Work", bindings: [binding("p")], attachments: [] });
 	await tick();
 	expect(started).toEqual([a.taskId, c.taskId]);
 	expect(

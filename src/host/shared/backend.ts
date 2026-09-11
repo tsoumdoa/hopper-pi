@@ -51,13 +51,14 @@ export class SharedBackend implements SharedBrowserBackend {
 	snapshot() {
 		const cursor = this.tasks.journal.eventCursor;
 		const session = this.registry.conversationSession;
-		const key = JSON.stringify([cursor, this.tasks.journal.lastConversationSequence, session, this.view]);
+		const key = JSON.stringify([cursor, this.tasks.journal.conversationRevision, this.tasks.journal.lastConversationSequence, session, this.view]);
 		if (key !== this.historyKey || !this.history) {
 			this.history = this.tasks.journal.browserSnapshot({ ...this.view, afterConversationSequence: session.afterConversationSequence });
 			this.historyKey = key;
 		}
 		return {
 			...this.history,
+			historyStorage: this.tasks.journal.historyStorage,
 			hostEpoch: this.hostEpoch,
 			conversationSession: this.registry.conversationSession,
 			targets: this.registry.list(),
@@ -147,6 +148,17 @@ export class SharedBackend implements SharedBrowserBackend {
 				this.view = { conversationId: receipt.conversationId };
 				this.publish();
 				return receipt;
+			}
+			case "purge_archived_conversations": {
+				try { return this.tasks.journal.purgeArchivedConversations(command.requestId, command.conversationIds, command.before); }
+				finally { this.historyKey = ""; this.publish(); }
+			}
+			case "archive_conversation":
+			case "unarchive_conversation":
+			case "delete_conversation": {
+				try {
+					return this.tasks.journal.manageConversation(command.requestId, command.conversationId, command.type);
+				} finally { this.historyKey = ""; this.publish(); }
 			}
 			case "submit": {
 				const input = {

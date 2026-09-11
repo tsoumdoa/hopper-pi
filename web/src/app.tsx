@@ -10,6 +10,8 @@ import { ExportSessionButton } from "./components/export-session-button";
 import { ModelControls, toolbarTriggerClass } from "./components/model-picker";
 import { ProviderDialog } from "./components/provider-dialog";
 import { RhinoInstancesPanel, summarizeInstances } from "./components/rhino-instances";
+import { ArchivedThreadsDialog } from "./components/archived-threads-dialog";
+import { ThreadList } from "./components/thread-list";
 import { Sidebar } from "./components/sidebar";
 import { SkillsDialog } from "./components/skills-dialog";
 import { TaskThread, TaskWorkingTime } from "./components/task-thread";
@@ -81,9 +83,13 @@ export function App() {
 	const [toolsOpen, setToolsOpen] = useState(false);
 	const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(readCollapsed);
+	const [archiveManagerOpen, setArchiveManagerOpen] = useState(false);
+	const [archiveUndo, setArchiveUndo] = useState<string | null>(null);
 	const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
 	const [snapshot, setSnapshot] = useState<SharedSnapshot>();
+	const snapshotRef = useRef(snapshot);
+	snapshotRef.current = snapshot;
 	const [conversationId, setConversationId] = useState("");
 	const [recoveryReturnConversation, setRecoveryReturnConversation] = useState("");
 	const [selected, setSelected] = useState<TargetBinding[]>([]);
@@ -102,7 +108,21 @@ export function App() {
 	const historyBefore = useRef<number | undefined>(undefined);
 	const currentConversation = useRef(conversationId);
 	currentConversation.current = conversationId;
+	const draftRef = useRef({ text: draft, images, selected, onlyThisInstance });
+	draftRef.current = { text: draft, images, selected, onlyThisInstance };
+	const drafts = useRef(new Map<string, typeof draftRef.current>());
 	const selectConversation = (id: string) => {
+		if (id !== currentConversation.current) {
+			drafts.current.set(currentConversation.current, draftRef.current);
+			const saved = drafts.current.get(id);
+			setDraft(saved?.text ?? ""); setImages(saved?.images ?? []);
+			const row = snapshotRef.current?.conversations.find(row => row.id === id);
+			const target = decode<TargetBinding | null>(row?.last_message_target === undefined ? row?.document_target : row.last_message_target, null);
+			selectionExplicit.current = true;
+			setSelected(saved?.selected ?? (target ? [target] : []));
+			setOnlyThisInstance(saved?.onlyThisInstance ?? false);
+			setModeOverride(null);
+		}
 		historyBefore.current = undefined;
 		currentConversation.current = id;
 		setConversationId(id);
@@ -195,6 +215,7 @@ export function App() {
 					if (deadline) clearTimeout(deadline);
 					deadline = undefined;
 					const next = message.snapshot as SharedSnapshot;
+					snapshotRef.current = next;
 					// An early browser can connect before its Rhino registers. Do not
 					// restore a previous session or create a chat until that registration arrives.
 					if (awaitingInitialRegistration.current && initialInstance.current &&
@@ -208,6 +229,9 @@ export function App() {
 						const url = new URL(window.location.href);
 						url.searchParams.delete("starting");
 						window.history.replaceState(window.history.state, "", url);
+					}
+					if (ready.current && currentConversation.current && !next.conversations.some(row => row.id === currentConversation.current)) {
+						selectConversation(String(next.conversations.find(row => !row.archived_at)?.id ?? ""));
 					}
 					setSnapshot(next);
 					actions.applySnapshot(next.runtime);
@@ -238,13 +262,14 @@ export function App() {
 							try { saved = window.localStorage.getItem(conversationStorageKey.current); } catch { /* Use the journal fallback below. */ }
 							const afterSequence = next.conversationSession?.afterConversationSequence ?? 0;
 							const conversations = next.conversations.filter((conversation) =>
-								Number(conversation.sequence ?? 1) > afterSequence && next.sessions.some((session) => session.conversation_id === conversation.id) &&
+								!conversation.archived_at && Number(conversation.sequence ?? 1) > afterSequence && next.sessions.some((session) => session.conversation_id === conversation.id) &&
 								(!initialInstance.current || conversation.id === saved || decode<string[]>(conversation.instance_ids, []).includes(initialInstance.current)));
 							const roots = next.tasks.filter((task) => task.parent_task_id === null && conversations.some((conversation) => conversation.id === task.conversation_id)).reverse();
 							const recentTask = roots.find((task) => [...ACTIVE_ROOT_STATES, "queued"].includes(String(task.state))) ?? roots[0];
 							const previous = conversations.find((conversation) => conversation.id === saved)
 								?? conversations.find((conversation) => conversation.id === recentTask?.conversation_id)
-								?? conversations.at(-1);
+								?? conversations[0]
+								?? next.conversations.find(conversation => conversation.live_state);
 							if (previous) {
 								selectConversation(String(previous.id));
 								if (!initialInstance.current) {
@@ -269,10 +294,29 @@ export function App() {
 					const accepted = pending.current.get(message.requestId);
 					pending.current.delete(message.requestId);
 					refreshPending((value) => value + 1);
+					if ((accepted?.type === "submit" || accepted?.type === "steer") && accepted.conversationId !== currentConversation.current) {
+						const saved = drafts.current.get(accepted.conversationId);
+						if (saved) drafts.current.set(accepted.conversationId, { ...saved, text: saved.text === accepted.text ? "" : saved.text, images: saved.images.filter(image => !accepted.attachments.some(attachment => JSON.stringify(attachment) === JSON.stringify(image.image))) });
+					}
 					if ((accepted?.type === "submit" || accepted?.type === "steer") && accepted.conversationId === currentConversation.current) {
 						setDraft((current) => (current === accepted.text ? "" : current));
 						setImages((current) => current.filter((image) => !accepted.attachments.some((attachment) => JSON.stringify(attachment) === JSON.stringify(image.image))));
 						if (message.result?.admissionError) toast(String(message.result.admissionError), "warning");
+					}
+					if (accepted?.type === "archive_conversation") setArchiveUndo(accepted.conversationId);
+					if (accepted?.type === "unarchive_conversation") setArchiveUndo(null);
+					if (accepted?.type === "purge_archived_conversations") {
+						for (const id of accepted.conversationIds) drafts.current.delete(id);
+						setArchiveManagerOpen(false);
+						setArchiveUndo(null);
+						toast(`Deleted ${accepted.conversationIds.length} archived threads`, "info");
+					}
+					if (accepted?.type === "delete_conversation") {
+						drafts.current.delete(accepted.conversationId);
+						toast("Thread deleted", "info");
+					}
+					if ((accepted?.type === "delete_conversation" || accepted?.type === "purge_archived_conversations") && message.result?.cleanupPending) {
+						toast("Thread history deleted. Some session files could not be removed. Hopper will retry file cleanup on its next start or deletion.", "warning");
 					}
 					if (accepted?.type === "create_conversation") {
 						setRecoveryReturnConversation("");
@@ -398,6 +442,16 @@ export function App() {
 	const submitting = [...pending.current.values()].some((command) => (command.type === "submit" || command.type === "steer") && command.conversationId === conversationId);
 	const activeRoot = tasks.find((task) => task.parent_task_id === null && ACTIVE_ROOT_STATES.includes(String(task.state)));
 	const cancellableRoot = activeRoot ?? tasks.find((task) => task.parent_task_id === null && task.state === "queued");
+	const selectedConversation = snapshot?.conversations.find(row => row.id === conversationId);
+	const liveConversation = snapshot?.conversations.find(row => row.live_state) ?? (cancellableRoot ? selectedConversation : undefined);
+	const away = Boolean(liveConversation && liveConversation.id !== conversationId);
+	const archived = Boolean(selectedConversation?.archived_at);
+	const readOnly = away || archived;
+	useEffect(() => {
+		if (!archiveUndo) return;
+		const timer = setTimeout(() => setArchiveUndo(null), 8000);
+		return () => clearTimeout(timer);
+	}, [archiveUndo]);
 	const taskIsRunning = activeRoot?.state === "running";
 	const taskBlocksComposer = activeRoot?.state === "suspending" || activeRoot?.state === "awaiting_user";
 	// While a task runs, new text becomes a follow-up unless the user picks otherwise.
@@ -451,7 +505,7 @@ export function App() {
 	}, [connected, conversationId, sessionId]);
 
 	const submit = () => {
-		if (!historyReady) return;
+		if (!historyReady || readOnly) return;
 		if (needsTarget) {
 			toast("Choose a connected document first.", "warning");
 			return;
@@ -478,22 +532,21 @@ export function App() {
 
 	const cancelTask = (taskId: string) => send({ type: "cancel", requestId: crypto.randomUUID(), conversationId, taskId });
 	const commands = {
-		answer: (questionId: string, answer: string | null) => send({ type: "answer", requestId: crypto.randomUUID(), conversationId, questionId, answer }),
-		recover: (taskId: string, acknowledgement: string) => send({ type: "recover", requestId: crypto.randomUUID(), conversationId, taskId, acknowledgement }),
+		enabled: connected && !readOnly,
+		recoveryEnabled: connected && !archived,
+		answer: (questionId: string, answer: string | null) => connected && !readOnly && send({ type: "answer", requestId: crypto.randomUUID(), conversationId, questionId, answer }),
+		recover: (taskId: string, acknowledgement: string) => connected && !archived && send({ type: "recover", requestId: crypto.randomUUID(), conversationId, taskId, acknowledgement }),
 	};
 
+	const manageThread = (row: Row) => send({ type: row.archived_at ? "unarchive_conversation" : "archive_conversation", requestId: crypto.randomUUID(), conversationId: String(row.id) });
+	const deleteThread = (row: Row) => setConfirm({
+		title: `Delete '${row.title}'?`,
+		description: "This permanently removes the thread's saved log. Export first if you want a copy.",
+		confirmLabel: "Delete thread", destructive: true,
+		action: () => send({ type: "delete_conversation", requestId: crypto.randomUUID(), conversationId: String(row.id) }),
+	});
 	const newChat = () => {
-		const start = () => send({ type: "create_conversation", requestId: crypto.randomUUID(), title: "New chat" });
-		if (activeRoot) {
-			setConfirm({
-				title: "Start a new chat?",
-				description: "Hopper is still working in this chat. The work keeps running in Rhino, but you cannot return to this chat afterwards.",
-				confirmLabel: "New chat",
-				action: start,
-			});
-			return;
-		}
-		start();
+		if (!liveConversation) send({ type: "create_conversation", requestId: crypto.randomUUID(), title: "New chat" });
 	};
 	const shutdown = () =>
 		setConfirm({
@@ -565,6 +618,8 @@ export function App() {
 				mobileOpen={mobileSettingsOpen}
 				onMobileOpenChange={setMobileSettingsOpen}
 				onNewSession={newChat}
+				newThreadDisabled={Boolean(liveConversation)}
+				threads={<ThreadList snapshot={snapshot} connected={connected} selectedId={conversationId} onSelect={id => { selectConversation(id); setMobileSettingsOpen(false); }} onArchive={manageThread} onDelete={deleteThread} onManageArchived={() => { setMobileSettingsOpen(false); setArchiveManagerOpen(true); }} />}
 				onManageProvider={openProvider}
 				onManageSkills={() => { setMobileSettingsOpen(false); setSkillsOpen(true); }}
 				onViewTools={() => { setMobileSettingsOpen(false); setToolsOpen(true); }}
@@ -579,7 +634,7 @@ export function App() {
 						setRecoveryReturnConversation("");
 					}}>Back to chat</Button>}
 					<ExportSessionButton token={credential.current ?? ""} conversationId={conversationId} disabled={!connected || !conversationId} />
-					<StatusPill status={connection.status} activeRoot={activeRoot} turns={snapshot?.turns ?? []} />
+					{away ? <button type="button" onClick={() => selectConversation(String(liveConversation!.id))} title={String(liveConversation!.title)}><Badge variant={liveConversation!.live_state === "awaiting_user" ? "warn" : "accent"} dot pulse>{liveConversation!.live_state === "awaiting_user" ? "Answer needed" : "Working in another thread"}</Badge></button> : <StatusPill status={connection.status} activeRoot={cancellableRoot} turns={snapshot?.turns ?? []} />}
 					<Button size="icon-sm" variant="ghost" className="-mr-1.5" disabled={!connected || !snapshot} onClick={shutdown} aria-label="Shut down the Hopper host" title="Shut down the Hopper host">
 						<Power className="size-3.5" />
 					</Button>
@@ -610,7 +665,10 @@ export function App() {
 					controlTasks={tasks}
 					onSuggestion={useSuggestion}
 				/>}
-				<Composer
+				{readOnly ? <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-panel px-6 py-4 text-xs" role="status">
+					<span>{away ? `Hopper is working in '${liveConversation!.title}'. This thread is read-only for now.` : "This thread is archived. Unarchive to continue."}</span>
+					<Button size="sm" variant="secondary" disabled={!connected} onClick={() => away ? selectConversation(String(liveConversation!.id)) : manageThread(selectedConversation!)}>{away ? "Jump back" : "Unarchive"}</Button>
+				</div> : <Composer
 					key={conversationId}
 					ref={composer}
 					draft={draft}
@@ -643,7 +701,7 @@ export function App() {
 							{rhinoPicker}
 						</>
 					}
-				/>
+				/>}
 			</main>
 
 
@@ -660,7 +718,9 @@ export function App() {
 			{skillsOpen && <SkillsDialog token={credential.current ?? ""} connected={connected} streaming={Boolean(activeRoot)} onOpenChange={setSkillsOpen} />}
 			{toolsOpen && <ToolsDialog key={`${sessionId}:${toolsContextQuery}`} contextQuery={toolsContextQuery} token={credential.current ?? ""} connected={connected} onOpenChange={setToolsOpen} />}
 			<UiRequestDialog send={(message) => message.type === "ui_response" && send({ type: "auth_response", requestId: message.requestId, value: message.value })} />
+			{archiveManagerOpen && <ArchivedThreadsDialog snapshot={snapshot} connected={connected} busy={[...pending.current.values()].some(command => command.type === "purge_archived_conversations")} onClose={() => setArchiveManagerOpen(false)} onPurge={(conversationIds, before) => send({ type: "purge_archived_conversations", requestId: crypto.randomUUID(), conversationIds, before })} />}
 			<ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
+			{archiveUndo && <div role="status" className="fixed bottom-4 right-4 z-[60] flex items-center gap-4 rounded-md border border-line bg-surface p-3 text-sm shadow-pop">Thread archived<Button size="xs" variant="ghost" disabled={!connected} onClick={() => send({ type: "unarchive_conversation", requestId: crypto.randomUUID(), conversationId: archiveUndo })}>Undo</Button><button aria-label="Dismiss archive notification" onClick={() => setArchiveUndo(null)}>×</button></div>}
 			<ToastRegion />
 		</div>
 	);

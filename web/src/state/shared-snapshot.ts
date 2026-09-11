@@ -14,6 +14,7 @@ export type SharedTarget = {
 };
 
 export type SharedSnapshot = {
+	historyStorage?: { journalPath: string; sessionsPath: string };
 	history?: { conversationId: string | null; before: number | null; hasOlder: boolean; oldestSequence: number | null; pageTaskIds: string[] };
 	hostEpoch: string;
 	conversationSession?: { id: string; afterConversationSequence: number };

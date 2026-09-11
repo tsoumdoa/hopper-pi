@@ -12,7 +12,7 @@ it("keeps interrupted child tasks reachable across host sessions and history pag
 	const journal = new TaskJournal(":memory:");
 	try {
 		const old = journal.createConversation("old", "Interrupted chat");
-		journal.createConversation("finished", "Finished chat");
+		const finished = journal.createConversation("finished", "Finished chat");
 		const binding = { kind: "rhino" as const, lifecycleInstanceId: "life", rhinoDocumentId: "doc" };
 		const input = { ...old, kind: "prompt" as const, text: "Edit", bindings: [binding], attachments: [] };
 		const root = journal.accept({ ...input, requestId: "root" });
@@ -25,10 +25,10 @@ it("keeps interrupted child tasks reachable across host sessions and history pag
 		const afterConversationSequence = journal.lastConversationSequence;
 		const fresh = journal.createConversation("fresh", "Fresh chat");
 		const overview = journal.browserSnapshot({ afterConversationSequence });
-		expect(overview.conversations.map(row => [row.id, row.recovery_required])).toEqual([[old.conversationId, 1], [fresh.conversationId, 0]]);
-		expect(JSON.parse(String(overview.conversations[0].instance_ids))).toContain("life");
-		expect(JSON.parse(String(overview.conversations[0].recovery_instance_ids))).toEqual(["life"]);
-		expect(JSON.parse(String(overview.conversations[1].recovery_instance_ids))).toEqual([]);
+		expect(overview.conversations.map(row => [row.id, row.recovery_required])).toEqual(expect.arrayContaining([[old.conversationId, 1], [fresh.conversationId, 0], [finished.conversationId, 0]]));
+		expect(JSON.parse(String(overview.conversations.find(row => row.id === old.conversationId)!.instance_ids))).toContain("life");
+		expect(JSON.parse(String(overview.conversations.find(row => row.id === old.conversationId)!.recovery_instance_ids))).toEqual(["life"]);
+		expect(JSON.parse(String(overview.conversations.find(row => row.id === fresh.conversationId)!.recovery_instance_ids))).toEqual([]);
 		expect(overview.history.conversationId).toBe(fresh.conversationId);
 		const selected = journal.browserSnapshot({ afterConversationSequence, conversationId: old.conversationId });
 		expect(selected.tasks.find(row => row.id === child.taskId)?.state).toBe("uncertain");
@@ -38,7 +38,7 @@ it("keeps interrupted child tasks reachable across host sessions and history pag
 		const recovered = journal.browserSnapshot({ afterConversationSequence, conversationId: old.conversationId });
 		expect(recovered.history.conversationId).toBe(old.conversationId);
 		expect(recovered.conversations.find(row => row.id === old.conversationId)?.recovery_required).toBe(0);
-		expect(journal.browserSnapshot({ afterConversationSequence }).conversations.map(row => row.id)).toEqual([fresh.conversationId]);
+		expect(journal.browserSnapshot({ afterConversationSequence }).conversations.map(row => row.id)).toEqual(expect.arrayContaining([old.conversationId, fresh.conversationId, finished.conversationId]));
 	} finally { journal.close(); }
 });
 
@@ -102,11 +102,13 @@ it("pages completed roots, retains active tasks for controls, and excludes other
 			journal.publish(taskId, { type: "messages", turnId, messages: [{ text: `message-${i}` }] });
 			journal.settle(taskId, turnId, "completed"); ids.push(taskId);
 		}
-		const active = submit(journal, conversation, "active");
-		journal.start(active.taskId, active.turnId);
 		const other = journal.createConversation("other", "Other");
 		const hidden = submit(journal, other, "other-request");
+		journal.start(hidden.taskId, hidden.turnId);
 		journal.publish(hidden.taskId, { type: "messages", turnId: hidden.turnId, messages: [{ text: "hidden-content" }] });
+		journal.settle(hidden.taskId, hidden.turnId, "completed");
+		const active = submit(journal, conversation, "active");
+		journal.start(active.taskId, active.turnId);
 		const latest = journal.browserSnapshot({ conversationId: conversation.conversationId });
 		expect(latest.history.hasOlder).toBe(true);
 		expect(latest.history.pageTaskIds).toHaveLength(20);

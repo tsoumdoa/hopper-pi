@@ -181,7 +181,7 @@ it("late acceptance cannot erase a draft in a new session", async () => {
  await value("#composer-input", "First task");
  await act(async () => sendButton().click());
  const command = socket.sent.find((command) => command.type === "submit");
- await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="New session"]')!.click());
+ await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="New thread"]')!.click());
  const create = socket.sent.find((command) => command.type === "create_conversation");
  await act(async () => socket.receive({ type: "command_accepted", requestId: create.requestId, result: { conversationId: "other" } }));
  await value("#composer-input", "Second task");
@@ -320,4 +320,42 @@ it("retains a durable command when WebSocket.send throws and retries the same re
 	await act(async () => { replacement.onopen?.(); replacement.receive({ type: "shared_snapshot", snapshot }); });
 	expect(replacement.sent.filter((command) => command.type === "submit")).toEqual([command]);
 	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Keep the request");
+});
+
+it("keeps drafts in their thread when hopping to a globally live thread and back", async () => {
+	await value("#composer-input", "Draft for the first thread");
+	const secondBinding = { ...binding, rhinoDocumentId: "second-model" };
+	const next = {
+		...snapshot,
+		targets: [{ ...snapshot.targets[0], documents: [binding, secondBinding] }],
+		conversations: [
+			snapshot.conversations[0],
+			{ ...snapshot.conversations[1], live_state: "awaiting_user", last_message_target: JSON.stringify(secondBinding) },
+		],
+	};
+	await act(async () =>
+		socket.receive({ type: "shared_snapshot", snapshot: next }),
+	);
+	await act(async () => byText("Jump back").click());
+	expect(
+		container.querySelector<HTMLTextAreaElement>("#composer-input")!.value,
+	).toBe("");
+	await value("#composer-input", "Draft for the second thread");
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...next, conversations: next.conversations.map(row => ({ ...row, live_state: null })) } }));
+	await act(async () => sendButton().click());
+	expect(socket.sent.find(command => command.type === "submit")).toMatchObject({ text: "Draft for the second thread", messageTarget: secondBinding });
+	socket.sent = [];
+	const first = container.querySelector<HTMLButtonElement>(
+		'nav[aria-label="Thread history"] button[title="First"]',
+	)!;
+	await act(async () => first.click());
+	expect(
+		container.querySelector<HTMLTextAreaElement>("#composer-input")!.value,
+	).toBe("Draft for the first thread");
+	// Losing A must not silently redirect its draft to the remaining document B.
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [{ ...snapshot.targets[0], documents: [secondBinding] }] } }));
+	expect(sendButton().disabled).toBe(true);
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot }));
+	await act(async () => sendButton().click());
+	expect(socket.sent.find(command => command.type === "submit")).toMatchObject({ text: "Draft for the first thread", messageTarget: binding });
 });
