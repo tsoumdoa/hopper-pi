@@ -4,6 +4,10 @@ Document management and editable script assets shipped together in PR #89. Their
 
 The agent can manage `.3dm`, `.gh`, and `.ghx` documents with `rh_document` and `gh_document`, including inspecting units and tolerances with `getSettings`. It can keep Python/C# source in `rh_script`, edit selected lines against a revision, and execute a pinned revision through `rh_run_script`. Existing inline scripts and command macros remain supported. Editing saved source does not replace geometry produced by earlier runs.
 
+The native test project and its runner have been removed. The results here
+record earlier verification, not runnable checks in the current checkout.
+See [Testing](../TESTING.md) for current automated and manual checks.
+
 ## Checks completed on 2026-09-06
 
 | Check | Result |
@@ -26,7 +30,7 @@ New Node regressions cover editable blank lines, continuation after long source 
 
 Storage, pinned asset execution, replay, concurrency, restart recovery, and uncertain-result handling have automated Node coverage. The native script test invokes the shared executor directly; it does not constitute an end-to-end UI test of asset creation through execution.
 
-## Running the native checks
+## Historical native verification
 
 ### Language warmup regression, 2026-09-07
 
@@ -39,21 +43,6 @@ All 18 focused warmup, diagnostics, and adapter tests passed, including language
 The review follow-up adds runtime bootstrap through `PlugIn.LoadPlugIn` before type resolution, shared by preload and script execution. Readiness now checks `ILanguage.Status.IsReady` and rejects errored status before caching a mode. Initialization failures include Rhino's progress message and diagnostics. The installed Rhino implementation exposes `Status` explicitly through `ILanguage`; the regression fixture uses the same interface pattern.
 
 All 23 focused .NET warmup, diagnostics, and adapter tests passed after these fixes. They cover missing runtime types, plugin-load failure, post-load type revalidation, completed-but-errored initialization, retry after failure, and a cached language becoming errored. Both production targets, `net7.0` and `net7.0-windows`, built without warnings. `RhinoScriptNativeTests.RunAll` passed again on macOS Rhino 8.34.26223.11002 with isolated assemblies and a disposable document. Fully cold Rhino startup remains unverified; bootstrap unit tests simulate absent assemblies, and the native launcher itself uses C#.
-
-Build `grasshopper-plugin.Tests/grasshopper-plugin.Tests.csproj`, then obtain an explicit running instance ID with RhinoCode's `list --json` command. Run each entry point with the helper, for example:
-
-```sh
-node scripts/run-native-tests.mjs \
-  --rhino <instance-id> \
-  --assembly <absolute-path>/grasshopper-plugin.Tests/bin/Debug/net8.0/rhino-zmq-poc.Tests.dll \
-  --type grasshopper_plugin.Tests.RhinoScriptNativeTests \
-  --method RunAll \
-  --timeout-ms 60000
-```
-
-Use `grasshopper_plugin.Tests.DocumentManagementNativeTests` for document checks. Use `grasshopper_plugin.Tests.ApplyGraphContractTests` with methods `Invalid_port_after_creation_rolls_back_to_byte_equal_snapshot` and `Multi_wire_graph_runs_one_solution` for the two graph checks.
-
-The helper copies assemblies to a unique temporary directory and loads them in an isolated context. A one-shot Rhino Idle callback runs the tests after RhinoCode releases its own script context. A CLI acknowledgement alone is not a pass. The helper waits for the native result file and retains diagnostic artifacts. A timeout must not trigger an automatic retry because execution may still be running.
 
 The macOS verification above did not install a built plugin or validate Windows. Its restart, host-crash durability, and broader native cases listed in [document management implementation](document-management-implementation.md) were left as release checks; the focused Windows results below are not full release certification.
 
@@ -71,7 +60,7 @@ Use a controlled Rhino profile with Grasshopper configured to load on demand. Re
 
 ## Windows loading regression fixes
 
-On Rhino 8.33.26188.13001 for Windows, `DocumentLoadingNativeTests` passed open and template rejection checks for a text-only `.3dm` fixture and a GHX fixture containing one unknown top-level component GUID. Valid `.gh` and `.ghx` lifecycle round trips also passed. Completion establishes that these fixtures did not block on a modal dialog; the tests do not inspect dialogs or cover all corrupt files, nested missing components, or third-party deserializers. Invoke `RejectInvalidRhinoFiles`, `RejectMissingGrasshopperComponents`, and `ValidGrasshopperRoundTrips` with the native runner, which selects `RhinoCode.exe` on Windows (`--rhino-code` overrides it). Rhino must have Grasshopper loaded and an idle command line.
+On Rhino 8.33.26188.13001 for Windows, `DocumentLoadingNativeTests` passed open and template rejection checks for a text-only `.3dm` fixture and a GHX fixture containing one unknown top-level component GUID. Valid `.gh` and `.ghx` lifecycle round trips also passed. Completion establishes that these fixtures did not block on a modal dialog; the tests do not inspect dialogs or cover all corrupt files, nested missing components, or third-party deserializers. These checks used the former native runner with Grasshopper loaded and an idle Rhino command line.
 
 The script-execution regression passes saved revisions through the production backend and validates the actual RPC envelope, ensuring omitted `echo` values remain omitted instead of becoming `undefined` JSON properties. This fix is platform-independent. The Grasshopper archive loader is shared by both platforms; macOS runtime revalidation is still required. The invalid-Rhino-file preflight applies to the Windows replacement path; the existing macOS document-window implementation is unchanged.
 

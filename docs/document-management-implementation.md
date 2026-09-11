@@ -63,7 +63,7 @@ For a 2-meter request in a millimeter model, geometry receives 2000 model units.
 - Cross-language RPC smoke tests passed with the added operations.
 - Core tests cover stale dirty replacement, live SaveAs collisions and symlink aliases, same-size external replacement, partial pre-save success with close failure, native-save baseline refresh, parent creation, and bounded browsing.
 - Both native production projects build for their pinned macOS-compatible and Windows target frameworks.
-- `DocumentManagementNativeTests.RunAll` is an explicit native smoke entry point. It uses disposable documents; it is not an automatically executed xUnit test.
+- The former native smoke harness used disposable documents. It has been removed; see [Testing](../TESTING.md) for current manual checks.
 - Two existing graph contract tests cannot load Grasshopper in the ordinary standalone dotnet test host. They require the installed Rhino runtime.
 
 Native verification passed on Rhino 8.34.26223.11002 for macOS on 2026-09-06. `DocumentManagementNativeTests.RunAll` exercised `.3dm`, `.gh`, and `.ghx` save/open/close round trips, Unicode paths, visible new documents, templates, stale dirty-state checks, tolerance revisions, live destination collisions, solver-disabled edits, and preserving current GH content after an external save. It also verified that a save callback changing a panel reports a conflict and leaves the definition modified. The save comparison ignores only GH's derived filename metadata; the inspection token still includes it.

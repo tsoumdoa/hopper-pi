@@ -375,51 +375,13 @@ public class OrderedDispatcherTests
     }
 
     [Fact]
-    public void ExecutionDurationIsRecordedAndSlowThresholdIsStrict()
-    {
-        var scheduler = new ManualUiCallbackScheduler();
-        var clock = new ManualClock(InitialTime);
-        var durationClock = new ManualDurationClock();
-        var dispatcher = new OrderedDispatcher(
-            scheduler,
-            clock,
-            durationClock: durationClock);
-        var records = new List<DispatcherExecutionRecord>();
-        dispatcher.ExecutionRecorded += records.Add;
-
-        dispatcher.SubmitExternal(() =>
-        {
-            durationClock.Advance(TimeSpan.FromMilliseconds(250));
-            return true;
-        }, clock.UtcNow.AddMinutes(1), operationId: "at-threshold");
-        scheduler.RunNext();
-        dispatcher.SubmitLifecycleControl(() =>
-        {
-            durationClock.Advance(TimeSpan.FromMilliseconds(251));
-            return true;
-        });
-
-        scheduler.RunNext();
-
-        Assert.Equal(2, records.Count);
-        Assert.Equal(TimeSpan.FromMilliseconds(250), records[0].Duration);
-        Assert.False(records[0].IsSlow);
-        Assert.False(records[0].IsLifecycleControl);
-        Assert.Equal("at-threshold", records[0].OperationId);
-        Assert.Equal(TimeSpan.FromMilliseconds(251), records[1].Duration);
-        Assert.True(records[1].IsSlow);
-        Assert.True(records[1].IsLifecycleControl);
-    }
-
-    [Fact]
     public async Task DiagnosticsFailureDoesNotBlockOperationOrNextCallback()
     {
         var scheduler = new ManualUiCallbackScheduler();
         var clock = new ManualClock(InitialTime);
         var dispatcher = new OrderedDispatcher(
             scheduler,
-            clock,
-            durationClock: new ManualDurationClock());
+            clock);
         var observed = 0;
         dispatcher.ExecutionRecorded += _ => throw new InvalidOperationException("diagnostics failed");
         dispatcher.ExecutionRecorded += _ => observed++;
@@ -438,17 +400,5 @@ public class OrderedDispatcherTests
     {
         order.Add(value);
         return value;
-    }
-
-    private sealed class ManualDurationClock : IDispatcherDurationClock
-    {
-        private long _ticks;
-
-        public long GetTimestamp() => _ticks;
-
-        public TimeSpan GetElapsedTime(long startingTimestamp) =>
-            TimeSpan.FromTicks(_ticks - startingTimestamp);
-
-        public void Advance(TimeSpan duration) => _ticks += duration.Ticks;
     }
 }

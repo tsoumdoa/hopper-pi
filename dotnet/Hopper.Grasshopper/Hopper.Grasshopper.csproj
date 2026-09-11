@@ -25,10 +25,6 @@
     <ProjectReference Include="../Hopper.Core/Hopper.Core.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <InternalsVisibleTo Include="rhino-zmq-poc.Tests" />
-  </ItemGroup>
-
   <PropertyGroup Condition="$(TargetFramework.Contains('-windows')) or $(TargetFramework.StartsWith('net4'))">
     <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>

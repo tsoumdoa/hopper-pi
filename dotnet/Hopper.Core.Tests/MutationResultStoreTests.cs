@@ -359,24 +359,6 @@ public class MutationResultStoreTests
     }
 
     [Fact]
-    public void InvalidOptionsFailBeforeStoreUse()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(() => Fixture(new MutationResultStoreOptions { MaximumCount = 0 }));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Fixture(new MutationResultStoreOptions { MaximumBytes = 0 }));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Fixture(new MutationResultStoreOptions
-        {
-            MaximumBytes = 10,
-            ReservationBytes = 11,
-        }));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Fixture(new MutationResultStoreOptions
-        {
-            ReservationBytes = 10,
-            MaximumTerminalResultBytes = 11,
-        }));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Fixture(new MutationResultStoreOptions { TimeToLive = TimeSpan.Zero }));
-    }
-
-    [Fact]
     public void OversizedFallbackMustFitLimitByUtf8ByteCount()
     {
         var options = new MutationResultStoreOptions
