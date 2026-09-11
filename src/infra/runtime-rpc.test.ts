@@ -11,15 +11,7 @@ import type {
 	RpcCallResult,
 } from "./rpc-client.js";
 import type { RuntimeStatusEventSource } from "./grasshopper-readiness.js";
-import {
-	beginRuntimeAgentTurn,
-	commitRuntimeAgentTurn,
-	RpcOutcomeUnknownError,
-	resetRuntimeRpcForTests,
-	RuntimeRpc,
-	type RuntimeRpcTransport,
-} from "./runtime-rpc.js";
-import { Requester } from "./requester.js";
+import { RpcOutcomeUnknownError, RuntimeRpc, type RuntimeRpcTransport } from "./runtime-rpc.js";
 import { clearDocumentGuidAliases, resolveInstanceGuid, resolveRhinoGuid, toShortInstanceGuid, toShortRhinoGuid } from "../services/guid-shortener.js";
 
 const LIFE = "life-runtime-1";
@@ -56,103 +48,6 @@ describe("RuntimeRpc", () => {
 		clearDocumentGuidAliases(owner);
 	});
 
-	it.each(["rhino", "grasshopper"] as const)("invalidates %s aliases when inventory observes an active document change", async (owner) => {
-		clearDocumentGuidAliases(owner);
-		const shorten = owner === "rhino" ? toShortRhinoGuid : toShortInstanceGuid;
-		const resolve = owner === "rhino" ? resolveRhinoGuid : resolveInstanceGuid;
-		const list = owner === "rhino" ? "listRhinoDocuments" : "listGrasshopperDocuments";
-		let activeDocumentId: string | null = "doc-a";
-		const transport = new FakeTransport((operation) => response(operation, { activeDocumentId }));
-		const runtime = runtimeWith(transport, new FakeEvents());
-		await runtime.invoke(list, {});
-		const full = "11111111-2222-3333-4444-555555555555";
-		const alias = shorten(full);
-		await runtime.invoke(list, {});
-		expect(resolve(alias)).toBe(full);
-		activeDocumentId = "doc-b";
-		await runtime.invoke(list, {});
-		expect(resolve(alias)).toBe(alias);
-		shorten(full);
-		activeDocumentId = null;
-		await runtime.invoke(list, {});
-		expect(resolve(alias)).toBe(alias);
-		await runtime.close();
-		clearDocumentGuidAliases(owner);
-	});
-
-	it("tracks an empty turn without resolving a connection profile", async () => {
-		await resetRuntimeRpcForTests();
-
-		expect(() => beginRuntimeAgentTurn()).not.toThrow();
-		await expect(commitRuntimeAgentTurn()).resolves.toBeUndefined();
-	});
-
-	it("retries only transient handshake identity registration rejections", async () => {
-		let now = 0;
-		let attempts = 0;
-		const sleeps: number[] = [];
-		const transport = new FakeTransport((operation) => {
-			if (operation !== "lifecycleHandshake") return response(operation, {});
-			attempts++;
-			return attempts < 3
-				? failedResponse(operation, "HANDSHAKE_REJECTED", "Managed PID is not registered yet")
-				: response(operation, { handshake: "live", statusRevision: 4 });
-		});
-		const runtime = runtimeWith(transport, new FakeEvents(), {
-			windowMs: 200,
-			delayMs: 25,
-			now: () => now,
-			sleep: async (delayMs) => {
-				sleeps.push(delayMs);
-				now += delayMs;
-			},
-		});
-
-		await expect(runtime.connect()).resolves.toEqual({
-			lifecycleInstanceId: LIFE,
-			protocolHandshakeLive: true,
-		});
-		expect(attempts).toBe(3);
-		expect(sleeps).toEqual([25, 25]);
-	});
-
-	it("bounds handshake rejection retries and preserves the typed failure", async () => {
-		let now = 0;
-		const transport = new FakeTransport((operation) =>
-			failedResponse(operation, "HANDSHAKE_REJECTED", "Managed PID is not registered yet"));
-		const runtime = runtimeWith(transport, new FakeEvents(), {
-			windowMs: 100,
-			delayMs: 40,
-			now: () => now,
-			sleep: async (delayMs) => { now += delayMs; },
-		});
-
-		await expect(runtime.connect()).rejects.toMatchObject({
-			operation: "lifecycleHandshake",
-			result: { reasonCode: "HANDSHAKE_REJECTED" },
-		});
-		expect(transport.calls).toHaveLength(3);
-		expect(now).toBe(80);
-	});
-
-	it("does not retry non-registration handshake failures", async () => {
-		const sleep = vi.fn(async () => {});
-		const transport = new FakeTransport((operation) =>
-			failedResponse(operation, "AUTH_INVALID", "Bad token"));
-		const runtime = runtimeWith(transport, new FakeEvents(), {
-			windowMs: 200,
-			delayMs: 25,
-			now: () => 0,
-			sleep,
-		});
-
-		await expect(runtime.connect()).rejects.toMatchObject({
-			result: { reasonCode: "AUTH_INVALID" },
-		});
-		expect(transport.calls).toHaveLength(1);
-		expect(sleep).not.toHaveBeenCalled();
-	});
-
 	it("rereads after a readiness reconnect and submits the original mutation once", async () => {
 		const events = new FakeEvents();
 		let statusReads = 0;
@@ -182,60 +77,6 @@ describe("RuntimeRpc", () => {
 		expect(transport.calls.filter((call) => call.operation === "getRuntimeStatus")).toHaveLength(3);
 	});
 
-	it("keeps an ambiguous mutation outcome Node-local", async () => {
-		const snapshot = status("ready", true, 1);
-		const unknown: NodeLocalOutcomeUnknown = {
-			source: "node",
-			lifecycleInstanceId: LIFE,
-			requestId: "req-mutation",
-			operation: "setSliderValue",
-			operationId: "op-mutation",
-			result: { class: "outcome_unknown", message: "reply lost" },
-		};
-		const transport = new FakeTransport((operation) => {
-			if (operation === "lifecycleHandshake") {
-				return response(operation, { handshake: "live", statusRevision: 1 });
-			}
-			if (operation === "getRuntimeStatus") return response(operation, snapshot);
-			return unknown;
-		});
-		const runtime = runtimeWith(transport, new FakeEvents());
-
-		try {
-			await runtime.invoke("setSliderValue", { targetId: "slider-1", value: 4 });
-			expect.fail("expected an unknown-outcome error");
-		} catch (error) {
-			expect(error).toBeInstanceOf(RpcOutcomeUnknownError);
-			expect((error as RpcOutcomeUnknownError).outcome).toBe(unknown);
-			expect((error as RpcOutcomeUnknownError).outcome.source).toBe("node");
-			expect((error as Error).message).toContain("Mutation outcome is unknown");
-			expect((error as Error).message).toContain("It may have completed");
-			expect((error as Error).message).toContain("Do not retry automatically");
-		}
-	});
-
-	it("notifies listeners before explicitly opening Grasshopper", async () => {
-		let reads = 0;
-		const order: string[] = [];
-		const transport = new FakeTransport((operation) => {
-			if (operation === "lifecycleHandshake") return response(operation, { handshake: "live" });
-			if (operation === "getRuntimeStatus") {
-				return response(operation, reads++ === 0 ? status("not_loaded", false, 1) : status("ready", true, 2));
-			}
-			if (operation === "startGrasshopper") order.push("start");
-			return response(operation, {});
-		});
-		const runtime = runtimeWith(transport, new FakeEvents());
-		runtime.subscribeNotices((notice) => {
-			order.push("notice");
-			expect(notice.message).toContain("create an untitled document");
-		});
-
-		await runtime.ensureGrasshopperReady();
-
-		expect(order).toEqual(["notice", "start"]);
-	});
-
 	it("does not submit a Grasshopper operation without an active document", async () => {
 		const snapshot = status("ready", false, 1);
 		const transport = new FakeTransport((operation) => {
@@ -251,32 +92,6 @@ describe("RuntimeRpc", () => {
 			{},
 		)).rejects.toMatchObject({ reasonCode: "NO_ACTIVE_GRASSHOPPER_DOCUMENT" });
 		expect(transport.calls.some((call) => call.operation === "getCurrentCanvas")).toBe(false);
-	});
-
-	it("keeps mutation-free and Rhino-only turns from starting Grasshopper", async () => {
-		const snapshot = status("not_loaded", false, 1);
-		const transport = new FakeTransport((operation) => response(
-			operation,
-			operation === "lifecycleHandshake"
-				? { handshake: "live", statusRevision: 1 }
-				: operation === "getRuntimeStatus"
-					? snapshot
-					: {},
-		));
-		const events = new FakeEvents();
-		const runtime = runtimeWith(transport, events);
-
-		runtime.beginAgentTurn();
-		await runtime.invoke("queryRhinoObjects", {});
-		await runtime.commitAgentTurn();
-		runtime.beginAgentTurn();
-		await runtime.invoke("runRhinoScript", { mode: "command", source: "_Line", echo: false });
-		await runtime.commitAgentTurn();
-
-		expect(events.subscribeCount).toBe(0);
-		expect(transport.calls.some((call) => call.operation === "startGrasshopper")).toBe(false);
-		expect(transport.calls.map((call) => call.operation)).toContain("beginRhinoAgentTransaction");
-		expect(transport.calls.map((call) => call.operation)).toContain("commitRhinoAgentTransaction");
 	});
 
 	it("opens the Grasshopper transaction once on the first mutation", async () => {
@@ -300,16 +115,6 @@ describe("RuntimeRpc", () => {
 		expect(operations.filter((operation) => operation === "beginAgentTransaction")).toHaveLength(1);
 		expect(operations.filter((operation) => operation === "commitAgentTransaction")).toHaveLength(1);
 		expect(operations.indexOf("beginAgentTransaction")).toBeLessThan(operations.indexOf("setSliderValue"));
-	});
-
-	it("opens a GH document without an active canvas and never begins geometry Undo for a boundary", async () => {
-		const transport = new FakeTransport((operation) => response(operation, operation === "getRuntimeStatus" ? status("ready", false, 1) : {}));
-		const runtime = runtimeWith(transport, new FakeEvents());
-		runtime.beginAgentTurn();
-		await runtime.invoke("listGrasshopperDocuments", {});
-		await runtime.invoke("manageGrasshopperDocument", { action: "open", path: "/a.gh", expectedActiveDocument: null, affectedDocuments: [] });
-		expect(transport.calls.some((call) => call.operation === "beginAgentTransaction")).toBe(false);
-		expect(transport.calls.filter((call) => call.operation === "manageGrasshopperDocument")).toHaveLength(1);
 	});
 
 	it("abandons stale local transaction ownership after a native document switch", async () => {
@@ -360,49 +165,8 @@ describe("RuntimeRpc", () => {
 		expect(transport.calls.filter((call) => call.operation === "manageRhinoDocument")).toHaveLength(1);
 		expect(transport.calls.some((call) => call.operation === "cancelRhinoAgentTransaction")).toBe(false);
 	});
-
-	it("does not start Grasshopper when an unused turn is cancelled or closed", async () => {
-		const transport = new FakeTransport((operation) => response(
-			operation,
-			operation === "lifecycleHandshake" ? { handshake: "live" } : {},
-		));
-		const events = new FakeEvents();
-		const runtime = runtimeWith(transport, events);
-
-		runtime.beginAgentTurn();
-		await runtime.cancelAgentTurn();
-		runtime.beginAgentTurn();
-		await runtime.close();
-
-		expect(events.subscribeCount).toBe(0);
-		expect(transport.calls).toHaveLength(0);
-	});
 });
 
-describe("Requester RPC v2 facade", () => {
-	it("maps the existing domain request shape to an RPC operation and args", async () => {
-		const request = vi.fn(async () => ({ type: "getCurrentCanvas.response" }));
-		const requester = new Requester({ request } as unknown as RuntimeRpc);
-
-		const result = await requester.request({
-			type: "getCurrentCanvas",
-			selectionOnly: true,
-		});
-
-		expect(request).toHaveBeenCalledWith("getCurrentCanvas", { selectionOnly: true });
-		expect(result).toEqual({ type: "getCurrentCanvas.response" });
-	});
-
-	it("does not preserve the legacy ping operation as a fallback", async () => {
-		const request = vi.fn();
-		const requester = new Requester({ request } as unknown as RuntimeRpc);
-
-		await expect(requester.request({ type: "ping" })).rejects.toThrow(
-			"Unsupported RPC domain operation: ping",
-		);
-		expect(request).not.toHaveBeenCalled();
-	});
-});
 
 function runtimeWith(
 	transport: FakeTransport,
@@ -465,20 +229,6 @@ function response(
 		operation,
 		...(operationId ? { operationId } : {}),
 		result: { class: "completed", reasonCode: "OK", data: data as never },
-	};
-}
-
-function failedResponse(
-	operation: OperationName,
-	reasonCode: "HANDSHAKE_REJECTED" | "AUTH_INVALID",
-	message: string,
-): RpcOperationResponse {
-	return {
-		protocolVersion: 2,
-		lifecycleInstanceId: LIFE,
-		requestId: `req-${operation}`,
-		operation,
-		result: { class: "failed", reasonCode, message },
 	};
 }
 

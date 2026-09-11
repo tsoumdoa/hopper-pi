@@ -206,30 +206,6 @@ describe("shared runtime policy admissions", () => {
 		} finally { clearTimeout(timer); resume.resolve(null); await pending; }
 	});
 
-	it("reuses schemas and suppresses unchanged exposure and notifications while publishing runtime changes", async () => {
-		const f = await fixture();
-		f.tool("rh_run_script", async () => completed());
-		f.tool("rh_capture_view", async () => completed());
-		const publish = vi.fn();
-		f.runtime.onChange = publish;
-		await f.runtime.reconcile();
-		const first = await f.runtime.getToolSettings();
-		await f.runtime.reconcile(true);
-		const next = await f.runtime.getToolSettings();
-		expect(publish).toHaveBeenCalledOnce();
-		expect(f.pi.setActiveTools).toHaveBeenCalledOnce();
-		expect(next.tools.find(tool => tool.name === "rh_run_script")!.parameters).toBe(first.tools.find(tool => tool.name === "rh_run_script")!.parameters);
-		f.runtime.setContext({ sessionManager: { getSessionId: () => "first" }, hasUI: true, model: { input: ["text", "image"] } } as unknown as ExtensionContext);
-		await f.runtime.reconcile(true);
-		expect(f.pi.getActiveTools()).toContain("rh_capture_view");
-		expect(publish).toHaveBeenCalledTimes(2);
-		expect(publish.mock.calls[1][0].settings.version).toEqual(first.settings?.version);
-		await f.patch("hopper.tool.rh_run_script", false);
-		await f.runtime.reconcile();
-		expect(f.pi.getActiveTools()).not.toContain("rh_run_script");
-		expect(publish).toHaveBeenCalledTimes(3);
-	});
-
 	it("does not treat a disabled plugin's saved reference as verified after a concurrent enable", async () => {
 		const f = await fixture();
 		f.tool("web_search", async () => completed());

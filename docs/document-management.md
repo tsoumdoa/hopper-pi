@@ -56,21 +56,6 @@ For a 2-meter request in a millimeter model, geometry receives 2000 model units.
 
 ## Native testing
 
-Build `grasshopper-plugin.Tests/grasshopper-plugin.Tests.csproj`, then obtain an explicit running instance ID with RhinoCode's `list --json` command. Run each entry point with the helper, for example:
-
-```sh
-node scripts/run-native-tests.mjs \
-  --rhino <instance-id> \
-  --assembly <absolute-path>/grasshopper-plugin.Tests/bin/Debug/net8.0/rhino-zmq-poc.Tests.dll \
-  --type grasshopper_plugin.Tests.RhinoScriptNativeTests \
-  --method RunAll \
-  --timeout-ms 60000
-```
-
-Use `grasshopper_plugin.Tests.DocumentManagementNativeTests` for document checks. Use `grasshopper_plugin.Tests.ApplyGraphContractTests` with methods `Invalid_port_after_creation_rolls_back_to_byte_equal_snapshot` and `Multi_wire_graph_runs_one_solution` for the two graph checks.
-
-On Windows, the runner selects `RhinoCode.exe`; use `--rhino-code` to override it. With Grasshopper loaded and Rhino idle, run `grasshopper_plugin.Tests.DocumentLoadingNativeTests` with `RejectInvalidRhinoFiles`, `RejectMissingGrasshopperComponents`, and `ValidGrasshopperRoundTrips` to check loading failures and round trips.
-
-The helper copies assemblies to a unique temporary directory and loads them in an isolated context. A one-shot Rhino Idle callback runs the tests after RhinoCode releases its own script context. A CLI acknowledgement alone is not a pass. The helper waits for the native result file and retains diagnostic artifacts. A timeout must not trigger an automatic retry because execution may still be running.
+See [Testing](../TESTING.md) for automated checks and the manual Rhino save/reopen, undo, and rollback checklist. The former native test project and runner have been removed.
 
 Validate Windows close/replacement and close-last behavior, event ordering, custom units and layouts, file locks, missing-component warnings, and concurrent external writers on the target platform. Script checks must also cover host restart, asset creation through native execution, and crash durability. Record results with the build and platform in the PR.
