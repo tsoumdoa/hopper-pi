@@ -14,6 +14,7 @@ export async function buildRhinoHost(outputDirectory, reportPath) {
 			index: "src/host/index.ts",
 			"shared/journal": "src/host/shared/journal.ts",
 			"runtime-paths": "src/host/runtime-paths.ts",
+			"startup-sources": "src/host/startup-sources.ts",
 		},
 		outdir: resolve(outputDirectory, "host"),
 		bundle: true,

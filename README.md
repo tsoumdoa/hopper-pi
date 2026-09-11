@@ -125,6 +125,8 @@ pnpm package:rhino -- --target mac-arm64
 
 Rhino packaging uses a separate minified host build with tree shaking and code splitting. Pi session modules remain lazy. Pi dependencies keep their original runtime asset paths; packaging removes declaration files and shares Pi's duplicate SDK bundle through its unbundled implementation. Pi upgrades must pass the version/layout check in `scripts/prune-rhino-host.mjs`. The standalone Pi extension keeps its existing TypeScript build.
 
+Packaged hosts read startup dependency sources from one compressed archive to reduce first-launch filesystem overhead. The loading UI starts first; the temporary source loader is released after agent initialization. Original files remain available for later imports and as a fallback. See [startup measurements and reproduction](docs/runtime-startup.md).
+
 Packaging writes `<stage>-host-metafile.json`, `<stage>-web-manifest.json`, and `<stage>-size-report.json` beside the stage. Reports stay out of the installer. The verifier enforces total and category size limits in `scripts/rhino-package-rules.mjs`; inspect clean before/after reports and record measurements in the PR before changing a limit.
 
 ```bash

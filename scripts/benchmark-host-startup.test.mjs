@@ -28,7 +28,7 @@ assert.equal(process.env.HOPPER_PI_AUTH_PATH, undefined);
 const options = process.argv.slice(2);
 const auth = options[options.indexOf("--auth-path") + 1];
 assert.equal(relative(homedir(), auth), "auth.json");
-writeFileSync(${JSON.stringify(observed)}, JSON.stringify({ home: homedir(), pid: process.pid }));
+writeFileSync(${JSON.stringify(observed)}, JSON.stringify({ home: homedir(), pid: process.pid, entry: import.meta.url }));
 const control = join(homedir(), ".hopper", "shared-control");
 mkdirSync(control, { recursive: true });
 let discovery;
@@ -43,11 +43,12 @@ server.listen(0, "127.0.0.1", () => {
 	return { root, entry, observed };
 }
 
-for (const ready of [true, false]) {
-	test(`isolates paths and credentials and cleans up after ${ready ? "readiness" : "timeout"}`, async () => {
+for (const [ready, copy] of [[true, false], [false, false], [true, true]]) {
+	test(`isolates paths and credentials and cleans up after ${ready ? "readiness" : "timeout"}${copy ? " from a fresh package path" : ""}`, async () => {
 		const f = await fixture(ready);
 		try {
-			const child = spawnSync(process.execPath, [benchmark, "--entry", f.entry, "--runs", "1", "--timeout-ms", "1500"], {
+			const child = spawnSync(process.execPath, [benchmark, "--entry", f.entry, "--runs", "1", "--timeout-ms", "1500",
+				...(copy ? ["--copy-root", f.root] : [])], {
 				encoding: "utf8", timeout: 10000, windowsHide: true,
 				env: { ...process.env, ANTHROPIC_API_KEY: "must-not-reach-host", HOPPER_PI_AUTH_PATH: "must-not-reach-host" },
 			});
@@ -63,6 +64,10 @@ for (const ready of [true, false]) {
 				assert.match(child.stderr, /did not become ready/);
 			}
 			const observed = JSON.parse(await readFile(f.observed, "utf8"));
+			if (copy) {
+				assert.match(observed.entry, /hopper-startup-benchmark-.*\/package\/index.mjs$/);
+				assert.ok(existsSync(f.entry), "original package must remain intact");
+			}
 			assert.equal(existsSync(observed.home), false, "isolated home must be removed");
 			assert.throws(() => process.kill(observed.pid, 0), { code: "ESRCH" }, "benchmark child must be stopped");
 		} finally {

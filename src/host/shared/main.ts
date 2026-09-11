@@ -17,6 +17,8 @@ import type { RhinoLaunchService } from "./rhino-launch.js";
 import { GeometryTransferService } from "./transfer.js";
 import { createNativeActionAdapters } from "./native-actions.js";
 import { validateTargetBinding } from "../../protocol/shared-execution.js";
+import { loadStartupSources } from "../startup-sources.js";
+import { hostProjectRoot } from "../runtime-paths.js";
 
 function sharedLimit(name: string, fallback: number): number {
 	const value =
@@ -151,10 +153,12 @@ export async function startSharedHost(
 		closing = true;
 		return shutdown();
 	};
+	let releaseStartupSources = () => {};
 	try {
 		await control.acquireOwnership(browser.server, state.revision);
 		await control.publish(discovery);
 		startupStage("browser listening; loading runtime modules");
+		releaseStartupSources = await loadStartupSources(hostProjectRoot());
 		// Serve the loading UI before importing and initializing the AI runtime.
 		// The short-lived --ensure-host launcher never loads these modules.
 		const [{ EmbeddedPiHost }, { createPiTaskDriver }, { Type },
@@ -191,6 +195,7 @@ export async function startSharedHost(
 				scriptWorkspaceDir: join(state.dataDirectory, "admin", "scripts"),
 			},
 		});
+		releaseStartupSources();
 		startupStage("restoring task service");
 		tasks = new SharedTaskService(journal, {
 			resolveBinding: (binding) => registry.resolveBinding(binding),
@@ -438,5 +443,7 @@ export async function startSharedHost(
 		process.exitCode = 1;
 		await close();
 		throw error;
+	} finally {
+		releaseStartupSources();
 	}
 }

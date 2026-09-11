@@ -208,3 +208,81 @@ journal, and `/notemplate`, without tracing or a host-entry override. These
 observations confirm a substantial first-use versus repeat-launch difference on
 this machine. The first installed launch is still about five seconds; this change
 does not solve that remaining delay or establish reboot-cold/browser-render times.
+
+## Startup source archive: reducing first-use reads
+
+The packaged host now reads selected startup dependency sources from one gzip
+archive, `node_modules/.hopper-startup-sources.json.gz`. This addresses the file
+reads left after bundling. It contains the original JavaScript sources and their
+module formats; it does not combine their execution or change the import graph.
+
+The host opens its browser server before asynchronously reading and decompressing
+the archive. A temporary [Node synchronous load hook](https://nodejs.org/api/module.html#moduleregisterhooksoptions)
+supplies those sources at their original file URLs. Node still resolves imports
+and maintains its ESM/CommonJS caches. Native binaries, JSON, assets, workers,
+and any source outside the archive use the normal filesystem loader. The hook
+is removed and its source table cleared after agent initialization, including on
+startup failure. Missing or invalid archives fall back to ordinary file loads.
+Development installs do not contain an archive.
+
+`scripts/pack-startup-sources.mjs` runs after all staged dependency rewrites and
+pruning. Its package list follows the observed startup graph and controls size;
+unlisted dependencies remain importable. The Windows archive contains 956 source
+files in 2,224,035 compressed bytes. Original dependency files remain installed,
+so extensions and later imports keep their existing paths. This is a deliberate
+2.2 MB package-size tradeoff for fewer startup reads. Existing size limits stay
+unchanged: the Windows stage is 88,081,453 bytes and macOS arm64 is 84,920,398.
+
+Measured on the same Windows x64 / Node 22.22.3 machine on 2026-09-11. The initial
+comparison launched Rhino in baseline/candidate/candidate/baseline order, each
+from a newly copied package path with `/notemplate` and the existing journal.
+The installed native plugin launched each candidate using `HOPPER_HOST_ENTRY`.
+No import tracing, geometry, or model requests were added.
+
+| Real Rhino launch measurement | Previous #104 package | Source archive |
+| --- | ---: | ---: |
+| Host readiness, fresh path run 1 | 5,162 ms | 1,152 ms |
+| Host readiness, fresh path run 2 | 3,009 ms | 1,138 ms |
+| Process age before the host stage timer | 124 / 102 ms | 110 / 101 ms |
+| Runtime-module stage | 4,812 / 2,693 ms | 896 / 894 ms |
+| CPU consumed by readiness | 875 / 953 ms | 860 / 938 ms |
+
+These are small-sample first-use measurements with uncontrolled OS caches, not
+reboot-cold percentiles or browser-render times. One further baseline attempt
+never reached Hopper's startup log and timed out; it provides no host-startup
+timing. A subsequent pair reached 3,296 / 1,222 ms, but overlapped an isolated
+benchmark and is excluded from the comparison above.
+
+The normal Windows installer then built, verified, smoke-tested, and installed
+the candidate through Yak. The first untraced Rhino launch, with no host-entry
+override, reached readiness in **1,647 ms**, versus the previously recorded
+**4,961 ms** first installed launch. Including the Node process age before the
+stage timer gives 1,774 ms for the new launch. This is a measured improvement of
+about 67% in the reported host-readiness interval, not a guarantee for every
+future first launch.
+
+The immediate installed repeat reached readiness in **650 ms**, versus the
+earlier **588 ms** repeat. The archive adds a decompression and parsing cost even
+with warm filesystem caches; the observed repeat was 62 ms slower. The primary
+benefit is reducing the multi-second first-use delay. Neither pair measures a
+reboot-cold launch or the complete Rhino/browser startup.
+
+The direct host benchmark now accepts `--copy-root` to copy the complete host
+tree to a new temporary path before **each** launch. Copying is excluded from
+timing. Home, credentials, control state, data, and workspace remain isolated.
+This reproduces first-use package paths without replacing the live installation:
+
+```sh
+node scripts/benchmark-host-startup.mjs --entry artifacts/pr104-source-pack-win/runtime/host/dist/host/index.js --copy-root artifacts/pr104-source-pack-win/runtime/host --runs 3 --output artifacts/fresh-startup-report.json
+```
+
+Validation: 427 Vitest tests passed / one skipped, all three benchmark tests
+passed, and host/web TypeScript checks passed. Source-archive regressions use
+real child Node processes to verify ESM live bindings and identity, CJS cycles,
+`require.cache`, asset reads, workers, Windows short paths, relocation through
+spaces and Unicode, cleanup, and missing/corrupt archive fallback. Packaging
+rejects linked inputs and refuses to overwrite an existing archive. Windows
+staged smoke passed with the archive active for sessions, typed extensions,
+providers, native bindings, credential fixtures, image workers/WASM, SQLite,
+and esbuild. Clean Windows and macOS Yak builds passed verification and existing
+budgets; native macOS execution was not available.

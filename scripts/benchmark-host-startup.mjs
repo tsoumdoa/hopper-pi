@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -16,18 +16,24 @@ const option = (name, fallback) => {
 	return args[index + 1];
 };
 if (args.includes("--help")) {
-	console.log("Usage: node scripts/benchmark-host-startup.mjs --entry <packaged host/index.js> [--node <node executable>] [--runs 3] [--timeout-ms 60000] [--output report.json]");
+	console.log("Usage: node scripts/benchmark-host-startup.mjs --entry <packaged host/index.js> [--copy-root <runtime/host directory>] [--node <node executable>] [--runs 3] [--timeout-ms 60000] [--output report.json]");
 	console.log("Each run uses a fresh process and isolated temporary home/data. Filesystem caches are NOT cleared; this is not a cold-boot benchmark.");
+	console.log("--copy-root copies that tree to a fresh path before each timed launch; it must contain the entry and its dependencies.");
 	process.exit(0);
 }
 for (let index = 0; index < args.length; index++) {
-	if (!["--entry", "--node", "--runs", "--timeout-ms", "--output"].includes(args[index])) throw new Error(`Unknown option: ${args[index]}`);
+	if (!["--entry", "--copy-root", "--node", "--runs", "--timeout-ms", "--output"].includes(args[index])) throw new Error(`Unknown option: ${args[index]}`);
 	option(args[index]);
 	index++;
 }
 const entryOption = option("--entry");
 if (!entryOption) throw new Error("--entry is required; point it at the packaged host/index.js");
 const entry = resolve(entryOption);
+const copyRootOption = option("--copy-root");
+const copyRoot = copyRootOption ? await realpath(resolve(copyRootOption)) : null;
+const copiedEntry = copyRoot ? relative(copyRoot, await realpath(entry)) : null;
+const inside = path => path !== "" && path !== ".." && !path.startsWith("../") && !path.startsWith("..\\") && !isAbsolute(path);
+if (copyRoot && !inside(copiedEntry)) throw new Error("--copy-root must contain --entry");
 const executable = option("--node", process.execPath);
 const runs = Number(option("--runs", "3"));
 const timeout = Number(option("--timeout-ms", "60000"));
@@ -61,6 +67,14 @@ async function benchmark(run) {
 	process.once("SIGINT", interrupt);
 	process.once("SIGTERM", interrupt);
 	try {
+		let runEntry = entry;
+		if (copyRoot) {
+			const temporaryPath = relative(copyRoot, await realpath(root));
+			if (!temporaryPath || inside(temporaryPath))
+				throw new Error("--copy-root must not contain the benchmark temporary directory");
+			await cp(copyRoot, join(root, "package"), { recursive: true, errorOnExist: true, force: false });
+			runEntry = join(root, "package", copiedEntry);
+		}
 		const home = join(root, "home");
 		const data = join(root, "data");
 		const workspace = join(root, "workspace");
@@ -92,7 +106,7 @@ syncBuiltinESMExports();
 		let stderr = "";
 		let pending = "";
 		let exitCode;
-		child = spawn(executable, ["--import", pathToFileURL(preload).href, entry, "--explicit-start", "--data-dir", data,
+		child = spawn(executable, ["--import", pathToFileURL(preload).href, runEntry, "--explicit-start", "--data-dir", data,
 			"--auth-path", join(home, "auth.json"), "--tool-config-dir", join(root, "tools"), "--script-workspace", workspace],
 			{ cwd: workspace, env, windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
 		exited = new Promise(resolveExit => {
@@ -158,8 +172,10 @@ for (let run = 1; run <= runs; run++) {
 	results.push(result);
 	console.error(`Run ${run}: listening ${result.listeningMs} ms; first health ${result.firstHealthMs} ms; ready ${result.readyMs} ms; runtime modules ${result.runtimeModulesMs} ms`);
 }
-const report = { entry, executable, platform: process.platform, recordedAt: new Date().toISOString(),
-	cacheCondition: "Fresh processes and empty isolated data; OS filesystem cache uncontrolled. First run is not necessarily cold.",
+const report = { entry, copyRoot, executable, platform: process.platform, recordedAt: new Date().toISOString(),
+	cacheCondition: copyRoot
+		? "Fresh package path, process and empty isolated data for every run; copying excluded from timing. OS filesystem cache uncontrolled; not reboot-cold."
+		: "Fresh processes and empty isolated data; OS filesystem cache uncontrolled. First run is not necessarily cold.",
 	pollIntervalMs: 25, requestTimeoutMs: 250, results };
 const json = `${JSON.stringify(report, null, 2)}\n`;
 const output = option("--output");

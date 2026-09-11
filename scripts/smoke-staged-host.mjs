@@ -34,6 +34,8 @@ async function hostModules(directory) {
 const moduleUrls = await hostModules(dirname(hostEntry));
 const smokeDirectory = await mkdtemp(join(tmpdir(), "hopper-staged-smoke-"));
 const smokeSource = [
+	`const { loadStartupSources } = await import(${JSON.stringify(pathToFileURL(join(dirname(hostEntry), "startup-sources.js")).href)});`,
+	`const releaseStartupSources = await loadStartupSources(${JSON.stringify(hostDirectory)});`,
 	`await import(${JSON.stringify(pathToFileURL(hostEntry).href)});`,
 	`const hostModules = await Promise.all(${JSON.stringify(moduleUrls)}.map(url => import(url)));`,
 	`const EmbeddedPiHost = hostModules.find(module => module.EmbeddedPiHost)?.EmbeddedPiHost;`,
@@ -119,6 +121,7 @@ const smokeSource = [
 	`journal.close();`,
 	`const esbuild = await import("esbuild");`,
 	`await esbuild.transform("const value: number = 1", { loader: "ts" });`,
+	`releaseStartupSources();`,
 	`process.stdout.write(process.version);`,
 ].join("\n");
 let nodeVersion;
