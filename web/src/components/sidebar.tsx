@@ -9,14 +9,6 @@ import { RuntimeStatusPanel, summarizeRuntimeStatus } from "./runtime-status";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 
-function BrandMark({ className }: { className?: string }) {
-	return (
-		<span aria-hidden="true" className={cn("grid size-6 shrink-0 place-items-center rounded-sm bg-accent text-[13px] font-bold leading-none text-white", className)}>
-			H
-		</span>
-	);
-}
-
 export type Tone = "ok" | "warn" | "danger" | "muted";
 
 function toneClass(tone: Tone) {
@@ -162,7 +154,7 @@ export function Sidebar({
 	return (
 		<aside
 			ref={container}
-			aria-label="Hopper controls"
+			aria-label="HopperCode controls"
 			className={cn(
 				"relative z-20 flex shrink-0 flex-col border-b border-line bg-panel lg:h-full lg:border-b-0 lg:border-r lg:transition-[width] lg:duration-200",
 				collapsed ? "lg:w-12" : "lg:w-[248px]",
@@ -170,8 +162,7 @@ export function Sidebar({
 		>
 			{/* Mobile top bar */}
 			<div className="flex items-center gap-2 px-3 py-2 lg:hidden">
-				<BrandMark />
-				<span className="flex-1 text-[13px] font-semibold tracking-tight">Hopper</span>
+				<span className="flex-1 text-[13px] font-semibold tracking-tight">HopperCode</span>
 				<Button size="sm" variant="secondary" disabled={!connected || newThreadDisabled} title={newThreadDisabled ? "Stop the running thread first" : "New thread"} onClick={onNewSession} aria-label="New thread">
 					<Plus className="size-3.5" />
 					<span className="max-sm:hidden">New thread</span>
@@ -226,8 +217,7 @@ export function Sidebar({
 			) : (
 				<div className="hidden min-h-0 flex-1 flex-col lg:flex">
 					<div className="flex items-center gap-2 px-3 pb-2 pt-2.5">
-						<BrandMark />
-						<span className="flex-1 text-[13px] font-semibold tracking-tight">Hopper</span>
+						<span className="flex-1 text-[13px] font-semibold tracking-tight">HopperCode</span>
 						<Button size="icon-sm" variant="ghost" className="-mr-1.5" onClick={() => onCollapsedChange(true)} aria-label="Collapse sidebar" title="Collapse sidebar">
 							<PanelLeftClose className="size-4" />
 						</Button>

@@ -77,9 +77,8 @@ export function ThinkingBlock({ text, streaming }: { text: string; streaming: bo
 export function Welcome({ connected, onSuggestion }: { connected: boolean; onSuggestion(prompt: string): void }) {
 	return (
 		<section className="mx-auto mt-[max(14vh,2rem)] w-full max-w-[560px] animate-slide-up" aria-labelledby="welcome-title">
-			<span aria-hidden="true" className="grid size-7 place-items-center rounded-sm bg-accent text-[14px] font-bold leading-none text-white">H</span>
-			<h2 id="welcome-title" className="mt-4 text-[22px] font-semibold leading-tight tracking-[-.02em]">
-				What should Hopper build?
+			<h2 id="welcome-title" className="text-[22px] font-semibold leading-tight tracking-[-.02em]">
+				HopperCode
 			</h2>
 			<p className="mt-1.5 text-[13px] text-muted">
 				{connected ? "Describe a change to the active Grasshopper canvas or Rhino document." : "Connecting to the local Hopper host…"}
