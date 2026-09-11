@@ -1,6 +1,6 @@
 # Editable Rhino script workspace
 
-This document describes the implemented Rhino script workspace. Test results and remaining native checks are in [integration verification](document-script-integration-verification.md).
+Use `rh_script` to maintain source and `rh_run_script` to execute a saved revision. See [native testing](document-management.md#native-testing) for the test runner.
 
 ## Agent workflow
 
@@ -50,5 +50,5 @@ Native script failure may leave geometry changes. Journal-write failure after ex
 
 - No synchronization with Rhino Script Editor, source editor UI, import/export, persistent kernel variables, partial-function execution, or automatic generated-object replacement.
 - Source/error references identify the executed revision. Native diagnostics remain raw when reliable user-source line locations are unavailable.
-- Actual `HopperCodeRestart`, end-to-end asset creation through native execution, and platform crash durability remain checks described in the verification record.
+- Actual `HopperCodeRestart`, end-to-end asset creation through native execution, and platform crash durability require native validation on the target platform.
 - Workspace-wide mutation lookup currently scans retained script histories. Changing replay identity scope or introducing an index is a separate storage-contract decision.

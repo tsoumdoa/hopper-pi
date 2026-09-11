@@ -364,8 +364,10 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 | `dotnet/Hopper.Grasshopper/` | Lazy Grasshopper operation adapter and passive GHZMQ compatibility component |
 | `dotnet/Hopper.Core/` | Rhino/Grasshopper-free protocol, lifecycle, dispatch, and transport policies |
 | `scripts/package-rhino.mjs` | Stage and verify a `mac-arm64` or `win-x64` package |
-| `docs/` | Implementation references, native verification, cookbook benchmarks, and package baselines |
+| `docs/` | Current runtime and tool references, plus reusable cookbook QA prompts |
 | `mds/` | Skills and progressive reference docs for the agent |
+
+Docs cover [shared host architecture and operation](docs/shared-host.md), [document management and native testing](docs/document-management.md), [script workspaces](docs/rhino-script-workspace.md), [tool controls](docs/tool-controls.md), and [plugin development](docs/plugins.md). Keep completed implementation plans, review notes, and dated test results in PRs rather than adding them to `docs/`.
 
 ## Environment variables
 

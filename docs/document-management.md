@@ -1,4 +1,4 @@
-# Document management implementation
+# Document management
 
 The `rh_document` and `gh_document` tools support native document inventory, settings inspection, directory browsing, new/open/activate/save/saveAs/close. Each tool performs one lifecycle action. Rhino script calls can bind execution to a specific document and settings revision through `expectedDocument`.
 
@@ -57,15 +57,23 @@ Unitless or unavailable conversions return no meters-per-unit conversion. Grassh
 
 For a 2-meter request in a millimeter model, geometry receives 2000 model units. Counts and other dimensionless inputs are unchanged. The tools inspect settings; they do not change units or loosen tolerances to make geometry operations succeed.
 
-## Verification
+## Native testing
 
-- TypeScript compilation and the complete Vitest suite passed, including document validation, discovery, readiness, segment boundaries, and uncertain-result reconciliation.
-- Cross-language RPC smoke tests passed with the added operations.
-- Core tests cover stale dirty replacement, live SaveAs collisions and symlink aliases, same-size external replacement, partial pre-save success with close failure, native-save baseline refresh, parent creation, and bounded browsing.
-- Both native production projects build for their pinned macOS-compatible and Windows target frameworks.
-- `DocumentManagementNativeTests.RunAll` is an explicit native smoke entry point. It uses disposable documents; it is not an automatically executed xUnit test.
-- Two existing graph contract tests cannot load Grasshopper in the ordinary standalone dotnet test host. They require the installed Rhino runtime.
+Build `grasshopper-plugin.Tests/grasshopper-plugin.Tests.csproj`, then obtain an explicit running instance ID with RhinoCode's `list --json` command. Run each entry point with the helper, for example:
 
-Native verification passed on Rhino 8.34.26223.11002 for macOS on 2026-09-06. `DocumentManagementNativeTests.RunAll` exercised `.3dm`, `.gh`, and `.ghx` save/open/close round trips, Unicode paths, visible new documents, templates, stale dirty-state checks, tolerance revisions, live destination collisions, solver-disabled edits, and preserving current GH content after an external save. It also verified that a save callback changing a panel reports a conflict and leaves the definition modified. The save comparison ignores only GH's derived filename metadata; the inspection token still includes it.
+```sh
+node scripts/run-native-tests.mjs \
+  --rhino <instance-id> \
+  --assembly <absolute-path>/grasshopper-plugin.Tests/bin/Debug/net8.0/rhino-zmq-poc.Tests.dll \
+  --type grasshopper_plugin.Tests.RhinoScriptNativeTests \
+  --method RunAll \
+  --timeout-ms 60000
+```
 
-Windows close/replacement, close-last behavior, full event ordering, custom-unit and layout combinations, file locks, missing-component load warnings, and concurrent external writers need additional native platform testing. Both Windows target frameworks compile; Windows runtime behavior was not tested on this Mac.
+Use `grasshopper_plugin.Tests.DocumentManagementNativeTests` for document checks. Use `grasshopper_plugin.Tests.ApplyGraphContractTests` with methods `Invalid_port_after_creation_rolls_back_to_byte_equal_snapshot` and `Multi_wire_graph_runs_one_solution` for the two graph checks.
+
+On Windows, the runner selects `RhinoCode.exe`; use `--rhino-code` to override it. With Grasshopper loaded and Rhino idle, run `grasshopper_plugin.Tests.DocumentLoadingNativeTests` with `RejectInvalidRhinoFiles`, `RejectMissingGrasshopperComponents`, and `ValidGrasshopperRoundTrips` to check loading failures and round trips.
+
+The helper copies assemblies to a unique temporary directory and loads them in an isolated context. A one-shot Rhino Idle callback runs the tests after RhinoCode releases its own script context. A CLI acknowledgement alone is not a pass. The helper waits for the native result file and retains diagnostic artifacts. A timeout must not trigger an automatic retry because execution may still be running.
+
+Validate Windows close/replacement and close-last behavior, event ordering, custom units and layouts, file locks, missing-component warnings, and concurrent external writers on the target platform. Script checks must also cover host restart, asset creation through native execution, and crash durability. Record results with the build and platform in the PR.

@@ -1,4 +1,4 @@
-# Tool controls implementation
+# Tool controls
 
 Tool controls use a shared policy store, guarded runtime registration, Agent tools controls, external Pi menus, and a registry of bundled plugins. See [adding and removing plugins](plugins.md).
 
@@ -25,9 +25,3 @@ The authenticated, bounded `/api/tools` configuration endpoint transports valida
 Firecrawl starts disabled. The parent switch controls enablement independently of key setup. Use "Manage API key" to save or replace a key without changing the switch. Tools that require a key remain unavailable until it is configured; credential-free tools can run without setup. Removal commits a tombstone before attempting deletion. No Firecrawl credential appears in ordinary settings or session history.
 
 See [storage and recovery](tool-policy-storage.md) for platform backends and profile paths, and [Firecrawl](firecrawl.md) for payloads, limits, billing references, and destination-validation limits. The normal Rhino package build includes and verifies the target native lock and keyring dependencies.
-
-## Verification limits
-
-Offline tests cover policy transitions, authoritative cross-host admission, native owner death on the development Mac, credential races, backend-await and per-script revocation, session replacement, real Pi registration and continuation refresh, settings API validation, UI saves and conflicts, catalog migration across mixed inventories, discovery beyond ten active or unavailable matches, unchanged snapshot suppression, disabled credential-store stalls, adapter payloads and limits, and native package inventories.
-
-TypeScript, the release TypeScript build, and the production UI build are checked. No live Firecrawl, model, or Rhino integration call is required by these tests. Live Firecrawl verification is deferred until a test key is configured. Browser visual QA was unavailable because no browser connection was exposed. Windows/Linux native execution and real OS credential writes remain platform smoke checks.
