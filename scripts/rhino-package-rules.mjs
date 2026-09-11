@@ -1,7 +1,8 @@
 import { extname } from "node:path";
 
 export const RHINO_PACKAGE_TARGETS = Object.freeze({
-	// Measured with Pi 0.85.1 and Excalidraw; see docs/rhino-package-baselines.md.
+	// Measured with Pi 0.85.1 and Excalidraw. Inspect a clean package manifest
+	// and record its size in the PR before changing these ceilings.
 	"mac-arm64": Object.freeze({ os: "darwin", cpu: "arm64", maxStagedBytes: 128 * 1024 * 1024 }),
 	"win-x64": Object.freeze({ os: "win32", cpu: "x64", maxStagedBytes: 128 * 1024 * 1024 }),
 });

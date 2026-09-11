@@ -269,7 +269,7 @@ These test whether the agent handles underspecified requests gracefully.
 
 ### Running a benchmark session
 
-Compare a baseline commit with the compact-tool-surface commit using the same model, reasoning level, and blank-canvas setup. Randomize prompt order and run each prompt at least five times.
+Compare a baseline commit with the candidate commit using the same model, reasoning level, tool-loading mode, and blank-canvas setup. Randomize prompt order and run each prompt at least five times.
 
 For every run record:
 
@@ -280,15 +280,7 @@ For every run record:
 - tool argument/result characters;
 - runtime errors, overlaps, undo behavior, and correctness.
 
-Targets:
-
-- Tier 1–2 new builds normally use one `gh_apply_graph` call and no canvas reread;
-- at least 30% fewer median assistant turns;
-- at least 25% fewer median output tokens;
-- default active Hopper schemas at most 12,000 characters;
-- no regression in correctness, runtime messages, overlaps, undo, or surgical edits.
-
-Latency and token targets are reports, not flaky CI gates. Schema budgets and correctness are hard gates.
+Tier 1–2 new builds normally use one `gh_apply_graph` call and no canvas reread. Compare latency, turns, tokens, and schema size with the baseline, and investigate correctness, runtime-message, overlap, Undo, or surgical-edit regressions. Record measurements in the PR; this checklist does not impose a fixed schema budget or percentage improvement target.
 
 Before signing off a release, also run these manual Rhino/Grasshopper checks:
 
@@ -296,7 +288,7 @@ Before signing off a release, also run these manual Rhino/Grasshopper checks:
 - an exact plugin-qualified component type;
 - C# and Python nodes with custom ports;
 - a deliberately invalid mid-graph port, confirming byte-equivalent rollback;
-- one Grasshopper Undo after a successful build, confirming the build is restored (standalone applies record one undo step; applies inside a turn share the turn's single undo step — Undo must not require multiple steps and must not duplicate records).
+- one Grasshopper Undo after a successful `gh_apply_graph`, confirming the canvas returns to its pre-call state. The shared host completes transactions per tool call. Later repair calls have separate Undo steps; a single graph call must not create duplicate records.
 
 1. **Clear the canvas** (or start fresh).
 2. **Paste one randomized prompt.**

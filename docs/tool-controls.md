@@ -1,4 +1,4 @@
-# Tool controls implementation
+# Tool controls
 
 Tool controls use a shared policy store, guarded runtime registration, Agent tools controls, external Pi menus, and a registry of bundled plugins. See [adding and removing plugins](plugins.md).
 
@@ -8,7 +8,7 @@ Tool controls use a shared policy store, guarded runtime registration, Agent too
 
 `policy-inventory.ts` includes the main catalog, viewport capture, discovery, both choice tools, embedded skill reading, and Firecrawl. Each tool has a namespaced preference ID and one parent gate. Each registered plugin supplies its own inventory and factory. Registrations happen after Pi binds the registry so existing tool-name conflicts can be detected without replacement. Foreign Pi tools remain unmanaged.
 
-`tool-policy-runtime.ts` applies the policy to definitions and execution. The registration wrapper checks policy once before execution and rechecks if backend recovery was needed. Async-local dispatch context carries the originating session and cancellation state into backend calls. The socket send path obtains fresh admission after asynchronous prerequisites; the separate backend wrapper and intermediate runtime RPC check have been removed. Script batches retain their own admission before each backend invocation so denied runs are recorded as not started. Firecrawl reads a protected key outside the policy lock, then validates the current epoch, generation, reference, permissions, and session under that lock before the request.
+`tool-policy-runtime.ts` applies the policy to definitions and execution. The registration wrapper checks policy once before execution and rechecks if backend recovery was needed. Async-local dispatch context carries the originating session and cancellation state into backend calls. The socket send path obtains fresh admission after asynchronous prerequisites. Script batches retain their own admission before each backend invocation so denied runs are recorded as not started. Firecrawl reads a protected key outside the policy lock, then validates the current epoch, generation, reference, permissions, and session under that lock before the request.
 
 Disables block new admissions once committed. Watcher updates provide UI refresh and best-effort Firecrawl cancellation, but never authorize execution. Already admitted calls may finish. Enable revisions prevent a disable-and-enable cycle from reviving an old definition. Manual activations are tied to a session generation and discarded on replacement, repair, or a later disable.
 
@@ -25,9 +25,3 @@ The authenticated, bounded `/api/tools` configuration endpoint transports valida
 Firecrawl starts disabled. The parent switch controls enablement independently of key setup. Use "Manage API key" to save or replace a key without changing the switch. Tools that require a key remain unavailable until it is configured; credential-free tools can run without setup. Removal commits a tombstone before attempting deletion. No Firecrawl credential appears in ordinary settings or session history.
 
 See [storage and recovery](tool-policy-storage.md) for platform backends and profile paths, and [Firecrawl](firecrawl.md) for payloads, limits, billing references, and destination-validation limits. The normal Rhino package build includes and verifies the target native lock and keyring dependencies.
-
-## Verification limits
-
-Offline tests cover policy transitions, authoritative cross-host admission, native owner death on the development Mac, credential races, backend-await and per-script revocation, session replacement, real Pi registration and continuation refresh, settings API validation, UI saves and conflicts, catalog migration across mixed inventories, discovery beyond ten active or unavailable matches, unchanged snapshot suppression, disabled credential-store stalls, adapter payloads and limits, and native package inventories.
-
-TypeScript, the release TypeScript build, and the production UI build are checked. No live Firecrawl, model, or Rhino integration call is required by these tests. Live Firecrawl verification is deferred until a test key is configured. Browser visual QA was unavailable because no browser connection was exposed. Windows/Linux native execution and real OS credential writes remain platform smoke checks.
