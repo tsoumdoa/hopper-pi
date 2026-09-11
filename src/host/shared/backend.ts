@@ -66,7 +66,7 @@ export class SharedBackend implements SharedBrowserBackend {
 		};
 	}
 	exportConversation(conversationId: string | null) {
-		const snapshot = this.tasks.snapshot();
+		const snapshot = this.tasks.journal.conversationSnapshot(conversationId);
 		const conversation = snapshot.conversations.find((row) => row.id === conversationId);
 		if (!conversation) throw new Error("Select a conversation to export");
 		const tasks = snapshot.tasks.filter((row) => row.conversation_id === conversationId);

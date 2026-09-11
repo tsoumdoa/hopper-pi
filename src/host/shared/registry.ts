@@ -48,7 +48,7 @@ export class SharedRegistry {
 		// Durable tasks survive a restart for recovery and export. Chat selection
 		// starts after those conversations, even when the same Rhino reconnects.
 		this.hostSession = { id: randomUUID(), afterConversationSequence: journal.lastConversationSequence };
-		for (const row of journal.snapshot({ includeEvents: false }).attachments) {
+		for (const row of journal.getAttachments()) {
 			const attachment = JSON.parse(String(row.payload)) as SharedAttachment;
 			this.attachments.set(attachment.lifecycleInstanceId, {
 				...attachment,

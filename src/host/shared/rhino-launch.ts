@@ -30,11 +30,11 @@ export class RhinoLaunchService {
 	get available() { return (this.options.platform ?? process.platform) === "win32"; }
 	get pending() { return this.active.size > 0; }
 	private records(taskId: string) {
-		return this.journal.snapshot({ includeEvents: false }).records.filter(row => row.kind === "launch" && row.task_id === taskId &&
+		return this.journal.getTaskRecords(taskId, "launch").filter(row =>
 			JSON.parse(String(row.payload)).mechanism === "windows-hopper-code");
 	}
 	private assertActive(context: Context) {
-		const task = this.journal.snapshot({ includeEvents: false }).tasks.find(row => row.id === context.taskId);
+		const task = this.journal.getTask(context.taskId);
 		if (context.signal.aborted || task?.cancellation_requested) throw new RhinoLaunchCancelledError("Rhino launch cancelled; an already started Rhino is left open");
 		if (!task || task.parent_task_id !== null || context.parentTaskId !== null || task.state !== "running")
 			throw new Error("Only a running root task can launch Rhino");
@@ -98,7 +98,7 @@ export class RhinoLaunchService {
 		return promise;
 	}
 	private update(id: string, state: string, payload: LaunchPayload) {
-		const row = this.journal.snapshot({ includeEvents: false }).records.find(row => row.kind === "launch" && row.id === id)!;
+		const row = this.journal.getRecord("launch", id)!;
 		this.journal.transitionRecord("launch", id, String(row.state), state, payload);
 	}
 	private async waitForReady(context: Context, id: string, payload: LaunchPayload): Promise<LaunchPayload> {

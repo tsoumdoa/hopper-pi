@@ -70,9 +70,7 @@ export class DocumentActionService {
 		}).grantId;
 	}
 	prepare(grant: DocumentActionRequest): { grantId: string; actionId: string } {
-		const task = this.journal
-			.snapshot({ includeEvents: false })
-			.tasks.find((task) => task.id === grant.taskId);
+		const task = this.journal.getTask(grant.taskId);
 		if (
 			!task ||
 			task.parent_task_id !== null ||
@@ -119,19 +117,11 @@ export class DocumentActionService {
 	async execute(
 		grantId: string,
 	): Promise<{ binding: TargetBinding; result: unknown; actionId: string }> {
-		const grantRecord = this.journal
-			.snapshot({ includeEvents: false })
-			.records.find(
-				(record) => record.kind === "grant" && record.id === grantId,
-			);
+		const grantRecord = this.journal.getRecord("grant", grantId);
 		if (!grantRecord) throw new Error("Unknown document action");
 		const grant = JSON.parse(String(grantRecord.payload)) as DocumentActionRequest,
 			actionId = stable("document-", grant.requestId);
-		const action = this.journal
-			.snapshot({ includeEvents: false })
-			.records.find(
-				(record) => record.kind === "document-action" && record.id === actionId,
-			)!;
+		const action = this.journal.getRecord("document-action", actionId)!;
 		if (action.state === "completed") return JSON.parse(String(action.payload));
 		if (grantRecord.state !== "accepted" || action.state !== "accepted")
 			throw new Error(
@@ -144,7 +134,7 @@ export class DocumentActionService {
 				await this.admit(grant.kind);
 				const preflight = await this.adapter.preflight(grant);
 				await this.admit(grant.kind);
-				if (this.journal.snapshot({ includeEvents: false }).tasks.find(task => task.id === grant.taskId)?.cancellation_requested) throw new Error("Task cancellation requested");
+				if (this.journal.getTask(grant.taskId)?.cancellation_requested) throw new Error("Task cancellation requested");
 				const owner: DocumentActionOwner = {
 					taskId: grant.taskId,
 					turnId: target.turnId,
@@ -200,9 +190,7 @@ export class DocumentActionService {
 					return receipt;
 				} catch (error) {
 					if (
-						this.journal
-							.snapshot({ includeEvents: false })
-							.operations.find((op) => op.id === operation.id)?.state ===
+						this.journal.getOperation(operation.id)?.state ===
 						"dispatched"
 					)
 						this.journal.operationResult(
