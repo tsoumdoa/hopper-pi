@@ -35,6 +35,7 @@ export async function startSharedHost(
 		`[shared-host] ${new Date().toISOString()} startup: ${stage} (${Math.round(performance.now() - startupStartedAt)} ms elapsed)\n`,
 	);
 	startupStage("initializing control");
+	process.stderr.write(`[shared-host] Runtime ${process.version} (${process.execPath}); process age ${Math.round(process.uptime() * 1000)} ms\n`);
 	const control = new SharedHostControl();
 	const dataDirectory = args.includes("--data-dir")
 		? join(config.paths.dataDir, "shared-host")

@@ -24,12 +24,10 @@ remain in place. Development installs and standalone builds are unchanged.
 | TypeBox | 662 | 19 | 660 → 13 |
 | Pi agent core | 87 | 16 | 76 → 9 |
 
-Pi coding-agent and pi-ai remain in their original layouts. Their extension
-loader, image worker, themes, exporter, and lazy provider imports depend on
-package-relative paths. Native bindings also remain separate. Bundling those
-packages requires a separate audit of those paths and module identity.
+The follow-up below also consolidates Pi coding-agent's public SDK entry.
+Pi AI, native bindings, and original worker/asset files retain their layouts.
 
-## Measurements
+## Initial dependency-bundling measurements
 
 Measured on macOS arm64 on 2026-09-11, comparing the installed 0.1.90 release
 with the new clean macOS stage. Times below are medians of seven fresh Node
@@ -90,3 +88,70 @@ includes instrumentation overhead and should not be used for comparisons.
 - Windows native execution and manual in-Rhino testing were not available on
   this Mac. Run `node scripts/smoke-staged-host.mjs <stage>` on Windows before
   release acceptance.
+
+## Windows follow-up: consolidate the Pi SDK
+
+The packaging pipeline now bundles Pi coding-agent 0.85.1's 193-module SDK
+graph into one file before pruning, in addition to the TypeBox and agent-core
+bundles above. The original public entry re-exports that bundle. Source-relative
+`import.meta.url` values are reconstructed relative to the relocated bundle,
+preserving extension resolution, workers, themes, and assets. Original Pi files
+remain for CLI/RPC compatibility. No browser startup gate or delay is introduced.
+
+Packaging replaces staged entry files instead of writing through pnpm hardlinks,
+including the pre-existing SDK deduplication wrappers. Version/layout checks
+reject unsupported packages. Relocation and shared-file regression tests cover
+these changes. A comparison of the real original and bundled SDK found all 151
+public exports unchanged; the staged smoke also exercises `pi.resizeImage`
+through the consolidated SDK, in addition to the original worker path.
+
+Measured on Windows x64 / Node 22.22.3 on 2026-09-11. The baseline is PR #104 at
+`5230a6c`, not the original unoptimized release. Each host measurement uses five
+fresh direct-start processes with isolated empty home/data directories and
+uncontrolled warm filesystem caches. No launcher/browser handshake is simulated.
+
+| Median measurement | #104 baseline | With SDK bundling |
+| --- | ---: | ---: |
+| Host runtime-module stage | 553 ms | 446 ms |
+| First health response | 833 ms | 730 ms |
+| Host ready, including process startup | 945 ms | 825 ms |
+| Standalone SDK import | 538 ms | 444 ms |
+| SDK files loaded | 763 | 572 |
+| SDK resolution calls | 2,486 | 1,612 |
+
+Host timings are from the clean Windows package. Standalone import timings and
+counts are from a copy of the baseline stage with only the SDK bundler applied.
+The experiment's first host launch took 4,190 ms, while subsequent runs took
+798–801 ms. Do not interpret warmed medians as a cold-launch guarantee.
+
+Real Rhino host logs on this machine show recent runtime import stages of
+6,355–9,940 ms, followed by about 310–362 ms of agent initialization. Even the
+installed package benchmarks below one second with isolated warm launches. That
+gap remains unexplained: these measurements do not establish a new in-Rhino
+launch time. Startup logs now include the Node executable, version, and process
+age to help compare the real launch environment with the benchmark. Further work
+should reproduce the slow Rhino launch and correlate import timing with process
+and filesystem activity before choosing another optimization.
+
+Reproduce using the exact Node executable reported in the real host log:
+
+```sh
+node scripts/benchmark-host-startup.mjs --entry artifacts/pr104-sdk-win/runtime/host/dist/host/index.js --runs 5 --output artifacts/startup-report.json
+node scripts/profile-runtime-imports.mjs artifacts/pr104-sdk-win/runtime/host --runs 5
+```
+
+The benchmark supports `--node <absolute executable>` and records stage times,
+first health response, and readiness. It verifies child ownership and isolates
+home, control, credentials, data, and workspace; it never uses the live journal.
+It does not launch Rhino or measure browser rendering or model response time.
+
+Validation on Windows: 419 Vitest tests passed / one skipped, two benchmark
+tests passed, host/web TypeScript checks passed, 142 .NET tests passed, and the
+cross-language RPC smoke passed. Existing asset-path and shutdown-handler tests
+were made portable on Windows. Clean Windows and macOS arm64 Yak packages passed
+verification and unchanged size budgets. Payloads are 85,855,616 and 82,698,009
+bytes respectively; retaining the original Pi files adds approximately 0.8 MiB
+over the initial #104 packages. Windows native runtime smoke passed sessions,
+typed extensions, shared SDK/schema/agent identity, providers, native bindings,
+image workers/WASM, SQLite, and esbuild. This follow-up has not been executed
+natively on macOS or accepted manually in Rhino/browser.

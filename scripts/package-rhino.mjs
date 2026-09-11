@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { buildRhinoHost } from "./build-rhino-host.mjs";
 import { bundleRhinoDependencies } from "./bundle-rhino-dependencies.mjs";
+import { bundlePiRuntime } from "./bundle-pi-runtime.mjs";
 import { deduplicatePiBundle, pruneAuditedDependencies } from "./prune-rhino-host.mjs";
 import {
 	cpSync,
@@ -266,6 +267,9 @@ run("pnpm", ["install", "--prod", "--frozen-lockfile"], {
 });
 
 const nodeModules = join(hostDirectory, "node_modules");
+// Consolidate SDK imports while original module paths are still available.
+const piBundle = await bundlePiRuntime(nodeModules);
+console.log(`[hopper-pi] Bundled Pi SDK: ${piBundle.inputs} modules -> ${piBundle.outputs} files`);
 removeBinDirectories(nodeModules);
 removeDependencyDevelopmentFiles(nodeModules);
 pruneNativeDependencies(nodeModules, targetConfig);

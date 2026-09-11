@@ -108,6 +108,8 @@ const smokeSource = [
 	` } finally { await worker.terminate(); }`,
 	` const resized = await resizeImage(png, "image/png", { maxWidth: 1, maxHeight: 1 });`,
 	` if (!resized || resized.width !== 1 || resized.height !== 1) throw new Error("Pi image worker/WASM failed");`,
+	` const sdkResized = await pi.resizeImage(png, "image/png", { maxWidth: 1, maxHeight: 1 });`,
+	` if (!sdkResized || sdkResized.width !== 1 || sdkResized.height !== 1) throw new Error("Bundled SDK image worker/WASM failed");`,
 	`const { TaskJournal } = await import(${JSON.stringify(pathToFileURL(join(dirname(hostEntry), "shared", "journal.js")).href)});`,
 	`const journal = new TaskJournal(":memory:");`,
 	`journal.registerSession("smoke-conversation", "smoke-session");`,
