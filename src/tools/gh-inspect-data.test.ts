@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest";
+import { validateToolArguments } from "@earendil-works/pi-ai";
 
 const request = vi.hoisted(() => vi.fn());
 vi.mock("../infra/request-helpers.js", () => ({
@@ -19,4 +20,24 @@ test("inspection resolves IDs, returns one page without document metadata, and c
 	await ghInspectDataTool.execute("next", { cursor: "cursor-value", limit: 2 }, undefined, undefined, {} as never);
 	expect(request).toHaveBeenCalledTimes(2);
 	expect(request).toHaveBeenLastCalledWith({ type: "getData", cursor: "cursor-value", limit: 2 });
+});
+
+function validate(arguments_: Record<string, unknown>) {
+	return validateToolArguments(ghInspectDataTool, {
+		type: "toolCall", id: "schema", name: ghInspectDataTool.name, arguments: arguments_,
+	});
+}
+
+test("items requires exactly one branch selector", () => {
+	const params = { targetId: "port", mode: "items" };
+	expect(() => validate(params)).toThrow();
+	expect(() => validate({ ...params, branchIndex: 0 })).not.toThrow();
+	expect(() => validate({ ...params, path: "{0;2}" })).not.toThrow();
+	expect(() => validate({ ...params, branchIndex: 0, path: "{0;2}" })).toThrow();
+});
+
+test("cursor accepts an optional limit but excludes new inspection inputs", () => {
+	expect(() => validate({ cursor: "next-page" })).not.toThrow();
+	expect(() => validate({ cursor: "next-page", limit: 2 })).not.toThrow();
+	expect(() => validate({ cursor: "next-page", targetId: "port" })).toThrow();
 });
