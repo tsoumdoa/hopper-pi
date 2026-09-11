@@ -68,6 +68,7 @@ public static class SharedExecutionContract
         RpcOperation.listAllComponents => new("lifecycle", "none", "revalidate-read"),
         RpcOperation.getCurrentCanvas => new("grasshopper", "none", "revalidate-read"),
         RpcOperation.getCanvasErrors => new("grasshopper", "none", "revalidate-read"),
+        RpcOperation.getData => new("grasshopper", "none", "revalidate-read"),
         RpcOperation.listScriptParams => new("grasshopper", "none", "revalidate-read"),
         RpcOperation.getScriptCode => new("grasshopper", "none", "revalidate-read"),
         RpcOperation.queryRhinoObjects => new("rhino", "none", "revalidate-read"),

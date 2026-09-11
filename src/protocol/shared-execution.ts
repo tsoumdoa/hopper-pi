@@ -68,6 +68,7 @@ export const SHARED_OPERATION_POLICY = Object.freeze({
  listAllComponents: policy("query", "lifecycle", "none", "revalidate-read"),
  getCurrentCanvas: policy("query", "grasshopper", "none", "revalidate-read"),
  getCanvasErrors: policy("query", "grasshopper", "none", "revalidate-read"),
+ getData: policy("query", "grasshopper", "none", "revalidate-read"),
  listScriptParams: policy("query", "grasshopper", "none", "revalidate-read"),
  getScriptCode: policy("query", "grasshopper", "none", "revalidate-read"),
  queryRhinoObjects: policy("query", "rhino", "none", "revalidate-read"),
