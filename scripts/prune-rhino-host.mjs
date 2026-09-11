@@ -1,4 +1,5 @@
-import { readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { lstat, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { DEPENDENCY_PRUNE_RULES } from "./rhino-dependency-pruning.mjs";
 import { join } from "node:path";
 
 // Pi publishes a complete bundled SDK alongside the unbundled SDK Hopper imports.
@@ -25,4 +26,19 @@ export async function deduplicatePiBundle(nodeModules) {
 	}
 	await writeFile(join(bundle, "index.js"), 'export * from "../index.js";\n');
 	await rm(join(bundle, "chunks"), { recursive: true });
+}
+
+export async function pruneAuditedDependencies(nodeModules) {
+	// Validate every package and path before deleting anything. Upgrades fail closed.
+	for (const rule of DEPENDENCY_PRUNE_RULES) {
+		const root = join(nodeModules, rule.name);
+		const manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+		if (manifest.version !== rule.version) {
+			throw new Error(`Review dependency pruning for ${rule.name} ${manifest.version}; audited ${rule.version}`);
+		}
+		for (const path of rule.paths) await lstat(join(root, path));
+	}
+	for (const rule of DEPENDENCY_PRUNE_RULES) {
+		for (const path of rule.paths) await rm(join(nodeModules, rule.name, path), { recursive: true });
+	}
 }

@@ -210,10 +210,10 @@ describe("Rhino package verifier", () => {
 	});
 
 	it("enforces the documented per-target size ceilings", () => {
-		expect(validateStagedSize("mac-arm64", 90 * 1024 * 1024)).toBeNull();
-		expect(validateStagedSize("mac-arm64", 90 * 1024 * 1024 + 1)).toContain("above");
-		expect(validateStagedSize("win-x64", 94 * 1024 * 1024)).toBeNull();
-		expect(validateStagedSize("win-x64", 94 * 1024 * 1024 + 1)).toContain("above");
+		expect(validateStagedSize("mac-arm64", 83 * 1024 * 1024)).toBeNull();
+		expect(validateStagedSize("mac-arm64", 83 * 1024 * 1024 + 1)).toContain("above");
+		expect(validateStagedSize("win-x64", 86 * 1024 * 1024)).toBeNull();
+		expect(validateStagedSize("win-x64", 86 * 1024 * 1024 + 1)).toContain("above");
 	});
 
 	it.each(["mac-arm64", "win-x64"] as const)("enforces every category ceiling exactly for %s", (target) => {

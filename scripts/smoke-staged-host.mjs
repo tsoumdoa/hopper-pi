@@ -51,6 +51,29 @@ const smokeSource = [
 	`const duplicateEntry = await import(new URL("bundle/index.js", piRoot));`,
 	`if (duplicateEntry.ModelRuntime !== pi.ModelRuntime) throw new Error("Pi SDK bundle still duplicates module state");`,
 	`const temporary = ${JSON.stringify(smokeDirectory)};`,
+	`const { readdir } = await import("node:fs/promises");`,
+	`const providerRoot = new URL("providers/", import.meta.resolve("@earendil-works/pi-ai"));`,
+	`async function importProviders(root) { for (const entry of await readdir(root, { withFileTypes: true })) { const url = new URL(entry.name + (entry.isDirectory() ? "/" : ""), root); if (entry.isDirectory()) await importProviders(url); else if (entry.name.endsWith(".js")) await import(url); } }`,
+	`await importProviders(providerRoot);`,
+	`await importProviders(new URL("../api/", providerRoot));`,
+	`await importProviders(new URL("../auth/", providerRoot));`,
+	`const { createRequire } = await import("node:module");`,
+	`const require = createRequire(join(process.cwd(), "package.json"));`,
+	`for (const name of ["openai", "@anthropic-ai/sdk", "zod", "zod/v3", "zod/v4"]) { await import(name); require(name); }`,
+	`const { AuthStorage } = await import(new URL("core/auth-storage.js", piRoot));`,
+	`const auth = AuthStorage.create(join(temporary, "fixture-auth.json"));`,
+	`await auth.modify("openai", () => ({ type: "api_key", key: "staged-fixture-key" }));`,
+	`if ((await auth.read("openai"))?.key !== "staged-fixture-key") throw new Error("Pi credential storage failed");`,
+	`await auth.delete("openai");`,
+	`if (await auth.read("openai") !== undefined) throw new Error("Pi credential deletion failed");`,
+	`const tokenPath = join(temporary, "fixture-token");`,
+	`await writeFile(tokenPath, " staged-fixture-token\\n");`,
+	`const { k8sServiceAccountTokenProvider } = await import("openai/auth/subject-token-providers");`,
+	`const { identityTokenFromFile } = await import("@anthropic-ai/sdk/lib/credentials/identity-token");`,
+	`if (await k8sServiceAccountTokenProvider(tokenPath).getToken() !== "staged-fixture-token" || await identityTokenFromFile(tokenPath)() !== "staged-fixture-token") throw new Error("SDK credential file reads failed");`,
+	`const { Pair } = await import("zeromq");`,
+	`const sender = new Pair(), receiver = new Pair();`,
+	`try { await sender.bind("inproc://hopper-staged-smoke"); receiver.connect("inproc://hopper-staged-smoke"); await sender.send("staged-message"); const [message] = await receiver.receive(); if (message.toString() !== "staged-message") throw new Error("ZeroMQ round trip failed"); } finally { sender.close(); receiver.close(); }`,
 	`const embedded = await EmbeddedPiHost.create({ probeBackend: false, paths: { dataDir: join(temporary, "host"), agentDir: join(temporary, "host/agent"), authPath: join(temporary, "host/auth.json"), sessionsDir: join(temporary, "host/sessions"), workspaceDir: join(temporary, "host/workspace"), toolConfigDir: join(temporary, "tools"), staticDir: join(hostProjectRoot(), "dist/host/static") } });`,
 	`try {`,
 	` const skills = await embedded.listSkills();`,
@@ -139,4 +162,4 @@ try {
 // Starting the HTTP host without Rhino would fabricate lifecycle health. The
 // cross-language RPC smoke covers the authenticated handshake; native release
 // verification starts this staged host through HopperCode inside Rhino.
-console.log(`[hopper-pi] All staged host chunks, Hopper and Pi sessions, TS extension, image processing, native bindings, SQLite journal, and esbuild loaded with external Node ${nodeVersion}`);
+console.log(`[hopper-pi] All staged host chunks, Hopper and Pi sessions, TS extension, provider modules, SDK credential reads, ZeroMQ round trip, image processing, native bindings, SQLite journal, and esbuild loaded with external Node ${nodeVersion}`);
