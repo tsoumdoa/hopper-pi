@@ -1521,7 +1521,7 @@ it("restricts access to the chosen instance, including its other documents", asy
 	await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Instance access"]')!.click());
 	await value("#composer-input", "Use only this instance");
 	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: two }));
-	expect(container.querySelector('[aria-label="Instance access"]')!.textContent).toBe("Only this instance");
+	expect(container.querySelector('[aria-label="Instance access"]')!.textContent).toBe("This instance");
 	await act(async () => sendButton().click());
 	expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({ bindings: [binding, sibling], messageTarget: binding });
 });

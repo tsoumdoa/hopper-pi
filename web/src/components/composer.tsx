@@ -18,6 +18,13 @@ const MODE_LABELS: Record<SendMode, string> = {
 	prompt: "New turn",
 };
 
+/** Compact labels for the toolbar trigger; MODE_LABELS stay in the dropdown for clarity. */
+const MODE_TRIGGER_LABELS: Record<SendMode, string> = {
+	follow_up: "Follow up",
+	steer: "Steer",
+	prompt: "New turn",
+};
+
 export type ComposerHandle = { focus(): void };
 
 export type ComposerProps = {
@@ -108,7 +115,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 				onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
 				onDrop={(event) => { if (event.dataTransfer.files.length) { event.preventDefault(); void addImages(Array.from(event.dataTransfer.files)); } }}
 				className={cn(
-					"mx-auto w-full max-w-[760px] rounded-md border border-line bg-surface transition-colors focus-within:border-accent/60",
+					"relative mx-auto w-full max-w-[760px] rounded-md border border-line bg-surface transition-colors focus-within:border-accent/60",
 					disabled && "opacity-70",
 				)}
 			>
@@ -143,16 +150,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 					onKeyDown={onKeyDown}
 					onPaste={(event) => { const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/")); if (files.length) { event.preventDefault(); void addImages(files); } }}
 					placeholder={disabled ? placeholder ?? "Waiting for the Hopper host…" : "Ask Hopper…"}
-					className="block min-h-[88px] max-h-[220px] w-full resize-none bg-transparent px-3.5 pb-1 pt-3 text-[14px] leading-6 outline-none placeholder:text-muted disabled:cursor-not-allowed"
+					className="block min-h-[88px] max-h-[220px] w-full resize-none bg-transparent pb-1 pl-3.5 pr-11 pt-3 text-[14px] leading-6 outline-none placeholder:text-muted disabled:cursor-not-allowed"
 				/>
-				<div className="flex flex-wrap items-center gap-1 px-1.5 pb-1.5 pt-0.5">
+				<div className="flex flex-wrap items-center gap-1 px-1.5 pb-1.5 pr-11 pt-0.5">
 					<Button type="button" variant="ghost" size="icon-sm" disabled={disabled || loading || images.length >= MAX_IMAGES} aria-label="Attach images" title="Attach images, or paste a screenshot" onClick={() => { replaceId.current = null; if (fileInput.current) { fileInput.current.multiple = true; fileInput.current.click(); } }}><ImagePlus className="size-4" /></Button>
 					<Button type="button" variant="ghost" size="icon-sm" disabled={disabled || loading || images.length >= MAX_IMAGES} aria-label="New drawing" title="Draw on a blank canvas" onClick={() => { setImageError(null); setEditor({ kind: "new" }); }}><Pencil className="size-4" /></Button>
 					{controls}
 					{streaming && (
 						<Select value={mode} onValueChange={(value) => onModeChange(value as SendMode)}>
 							<SelectTrigger aria-label="Message delivery" className={toolbarTriggerClass}>
-								<SelectValue>{MODE_LABELS[mode]}</SelectValue>
+								<SelectValue>{MODE_TRIGGER_LABELS[mode]}</SelectValue>
 							</SelectTrigger>
 							<SelectContent align="start">
 								{(Object.keys(MODE_LABELS) as SendMode[]).map((value) => (
@@ -161,18 +168,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 							</SelectContent>
 						</Select>
 					)}
-					<span className="flex-1" />
-					<Button
-						type={showStop ? "button" : "submit"}
-						size="icon-sm"
-						disabled={showStop ? abortDisabled : !canSend}
-						onClick={showStop ? onAbort : undefined}
-						aria-label={showStop ? "Stop" : "Send message"}
-						title={showStop ? "Stop" : "Send (Enter)"}
-					>
-						{showStop ? <Square className="size-3 fill-current" /> : <ArrowUp className="size-4" />}
-					</Button>
 				</div>
+				<Button
+					className="absolute bottom-1.5 right-1.5 shadow-sm"
+					type={showStop ? "button" : "submit"}
+					size="icon-sm"
+					disabled={showStop ? abortDisabled : !canSend}
+					onClick={showStop ? onAbort : undefined}
+					aria-label={showStop ? "Stop" : "Send message"}
+					title={showStop ? "Stop" : "Send (Enter)"}
+				>
+					{showStop ? <Square className="size-3 fill-current" /> : <ArrowUp className="size-4" />}
+				</Button>
 			</form>
 			{(editing || newDrawing) && <ImageAnnotationDialog key={editing?.id ?? "new-drawing"} attachment={editing}
 				onClose={() => setEditor(null)}
