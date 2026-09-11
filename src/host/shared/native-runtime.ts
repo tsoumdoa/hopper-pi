@@ -39,6 +39,7 @@ import type {
 } from "../../types/document-management.js";
 
 const inventoryTimeout = { completionTimeoutMs: 3000 };
+const scopeIdle = (scope: any): boolean => scope?.state === "idle" && scope.scopeOwner == null && scope.recoveryRequired !== true;
 const processExists = (pid: number): boolean => {
 	try {
 		process.kill(pid, 0);
@@ -480,11 +481,13 @@ export class SharedNativeRuntime {
 						await runtimeSession.run(context.signal.aborted ? cancelRuntimeAgentTurn : commitRuntimeAgentTurn);
 						await runtimeSession.run(closeRuntimeRpc);
 						const scopes = await this.scopes(instance);
-						toolCleanupConfirmed = scopes.every((scope) => scope?.state === "idle");
+						toolCleanupConfirmed = scopes.every(scopeIdle);
+						this.journal.publish(context.taskId, { type: "native_cleanup", turnId: context.turnId, owner, scopes, confirmed: toolCleanupConfirmed });
 						if (!toolCleanupConfirmed) throw new Error("Native tool cleanup did not confirm idle scopes");
 					} catch (error) {
 						toolCleanupConfirmed = false;
-						this.journal.markScopeUncertain(owner, context.taskId, context.turnId, { error: String(error) });
+						const scopes = await this.scopes(instance).catch((inspectionError) => ({ error: String(inspectionError) }));
+						this.journal.markScopeUncertain(owner, context.taskId, context.turnId, { error: String(error), scopes });
 						throw error;
 					} finally {
 						toolActive = false;
@@ -535,7 +538,7 @@ export class SharedNativeRuntime {
 			if (!document?.stateToken)
 				throw new Error("Captured target is unavailable for activation");
 			if (
-				(await this.scopes(instance)).some((scope) => scope?.state !== "idle")
+				!(await this.scopes(instance)).every(scopeIdle)
 			)
 				throw new Error(
 					"Both native scopes must close before captured document activation",
@@ -568,6 +571,12 @@ export class SharedNativeRuntime {
 					operationId: operation.operationId,
 				});
 				const response = await (admit ? withToolDispatchContext(admit, activate) : activate());
+				// Preserve a terminal native rejection before data() turns it into an Error.
+				if (response.result.class !== "completed") {
+					this.journal.operationResult(operation.id,
+						response.result.class === "outcome_unknown" ? "uncertain"
+							: response.result.class === "cancelled_before_start" ? "cancelled" : "failed", response);
+				}
 				const result = data(response);
 				if (result?.ok === false) {
 					this.journal.operationResult(
@@ -779,7 +788,7 @@ export class SharedNativeRuntime {
 									}
 								})(),
 						);
-						if (!unresolved && scopes.every((scope) => scope?.state === "idle"))
+						if (!unresolved && scopes.every(scopeIdle))
 							this.registry.markReady(id, {
 								authenticated: true,
 								generation: instance.generation,
@@ -855,7 +864,7 @@ export class SharedNativeRuntime {
 			if (result?.state === "pending" && result.phase === "running")
 				operationsIdle = false;
 		}
-		if (!operationsIdle || scopes.some((scope) => scope?.state !== "idle"))
+		if (!operationsIdle || !scopes.every(scopeIdle))
 			this.registry.register({
 				...attachment,
 				attachmentGeneration: current.generation,
@@ -864,8 +873,8 @@ export class SharedNativeRuntime {
 		return {
 			attachmentGeneration: current.generation,
 			operationsIdle,
-			rhinoScopeIdle: scopes[0]?.state === "idle",
-			grasshopperScopeIdle: scopes[1]?.state === "idle",
+			rhinoScopeIdle: scopeIdle(scopes[0]),
+			grasshopperScopeIdle: scopeIdle(scopes[1]),
 			evidence: {
 				previousGeneration: previous.generation,
 				generation: current.generation,

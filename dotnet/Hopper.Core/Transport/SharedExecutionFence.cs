@@ -1,4 +1,5 @@
 using Hopper.Core.Protocol;
+using System.Text.Json;
 
 namespace Hopper.Core.Transport;
 
@@ -98,8 +99,34 @@ public sealed class SharedExecutionFence
                 if (request.Operation == RpcOperation.manageRhinoDocument && _rhinoScope == owner) _rhinoScope = null;
                 if (request.Operation == RpcOperation.manageGrasshopperDocument && _grasshopperScope == owner) _grasshopperScope = null;
             }
-            return result;
+            return WithScopeState(request, result);
         }
+    }
+
+    // Read under _gate, after ownership transitions. Segment state alone cannot
+    // distinguish an idle document from a reserved, failed transaction begin.
+    private OperationResultV2 WithScopeState(RpcRequestV2 request, OperationResultV2 result)
+    {
+        if (result.Data is not { ValueKind: JsonValueKind.Object } data) return result;
+        var query = request.Operation == RpcOperation.getDocumentTransactionState;
+        if (!query && (!data.TryGetProperty("transaction", out var transaction) || transaction.ValueKind != JsonValueKind.Object)) return result;
+        var kind = query ? request.Args.GetProperty("owner").GetString()
+            : request.Operation is RpcOperation.beginRhinoAgentTransaction or RpcOperation.commitRhinoAgentTransaction
+                or RpcOperation.cancelRhinoAgentTransaction or RpcOperation.manageRhinoDocument or RpcOperation.runRhinoScript ? "rhino"
+                : SharedExecutionContract.Policy(request.Operation).Binding == "rhino" ? "rhino" : "grasshopper";
+        var fields = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(data.GetRawText())!;
+        var segment = query ? fields : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(fields["transaction"].GetRawText())!;
+        var scope = kind == "rhino" ? _rhinoScope : _grasshopperScope;
+        object? binding = scope?.Binding switch {
+            RhinoTargetBinding rhino => new { kind = "rhino", rhino.LifecycleInstanceId, rhino.RhinoDocumentId },
+            GrasshopperTargetBinding gh => new { kind = "grasshopper", gh.LifecycleInstanceId, gh.GrasshopperDocumentId, gh.AssociatedRhinoDocumentId },
+            _ => null
+        };
+        segment["scopeOwner"] = JsonSerializer.SerializeToElement(scope is null ? null
+            : new { scope.TaskId, scope.TurnId, scope.AttachmentGeneration, binding }, RpcV2Contract.JsonOptions);
+        segment["recoveryRequired"] = JsonSerializer.SerializeToElement(_recoveryRequired);
+        if (!query) fields["transaction"] = JsonSerializer.SerializeToElement(segment);
+        return result with { Data = JsonSerializer.SerializeToElement(fields) };
     }
 
     private OperationResultV2? Validate(RpcRequestV2 request, string client, bool documents)

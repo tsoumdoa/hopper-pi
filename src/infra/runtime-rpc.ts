@@ -105,6 +105,8 @@ export class RuntimeRpc {
 	private turnAcceptingMutations = false;
 	private turnId = 0;
 	private readonly transactionOpen = { rhino: false, grasshopper: false };
+	// A failed begin can reserve native ownership without opening an undo segment.
+	private readonly cleanupOwed = { rhino: false, grasshopper: false };
 	private readonly segments: Partial<Record<TransactionOwner, DocumentTransactionState>> = {};
 	private readonly aliasDocuments: Partial<Record<TransactionOwner, string>> = {};
 	private readonly mutationQueue: Partial<Record<TransactionOwner, Promise<unknown>>> = {};
@@ -359,8 +361,8 @@ export class RuntimeRpc {
 		await Promise.all(Object.values(this.transactionOpening));
 		await this.reconcileTransaction("grasshopper");
 		await this.reconcileTransaction("rhino");
-		const grasshopperOpen = this.transactionOpen.grasshopper;
-		const rhinoOpen = this.transactionOpen.rhino;
+		const grasshopperOpen = this.transactionOpen.grasshopper || this.cleanupOwed.grasshopper;
+		const rhinoOpen = this.transactionOpen.rhino || this.cleanupOwed.rhino;
 		this.transactionOpen.grasshopper = false;
 		this.transactionOpen.rhino = false;
 
@@ -390,6 +392,7 @@ export class RuntimeRpc {
 			if (segment.documentId) this.observeAliasDocument(owner, segment.documentId);
 			this.segments[owner] = segment;
 			this.transactionOpen[owner] = segment.state === "active";
+			if ("scopeOwner" in segment) this.cleanupOwed[owner] = segment.scopeOwner != null;
 		}
 		if (data && typeof data === "object" && "activeDocumentId" in data) {
 			if (typeof data.activeDocumentId === "string") this.observeAliasDocument(owner, data.activeDocumentId);
@@ -414,7 +417,7 @@ export class RuntimeRpc {
 			if (!data || typeof data !== "object" || !("state" in data) || data.state !== "terminal")
 				throw new Error(`Operation ${operationId} remains uncertain. Dependent edits and cancellation are blocked.`);
 		}
-		if (operationId || this.segments[owner]) {
+		if (operationId || this.segments[owner] || this.cleanupOwed[owner]) {
 			const response = await this.invokeDirect("getDocumentTransactionState", { owner });
 			const data = response.result.data;
 			if (!data || typeof data !== "object" || !("segmentId" in data)) throw new Error("Transaction reconciliation returned no segment state.");
@@ -427,7 +430,7 @@ export class RuntimeRpc {
 		const owner = RPC_OPERATION_OWNERS[operation] as TransactionOwner;
 		if (!operation.startsWith("begin")) await this.reconcileTransaction(owner);
 		const segment = this.segments[owner];
-		if (!operation.startsWith("begin") && segment && segment.state !== "active") return true;
+		if (!operation.startsWith("begin") && segment && segment.state !== "active" && !this.cleanupOwed[owner]) return true;
 		try {
 			const response = await this.invokeDirect(operation, segment?.state === "active" ? { ...args, expectedSegment: segment } : args);
 			this.observeTransaction(owner, response.result.data);
@@ -445,11 +448,21 @@ export class RuntimeRpc {
 		args: RequestArgsFor<O>,
 		options: RpcCallOptions = {},
 	): Promise<RpcOperationResponse<O>> {
+		const owner: RpcOperationOwner = RPC_OPERATION_OWNERS[operation];
+		const begins = operation === "beginRhinoAgentTransaction" || operation === "beginAgentTransaction";
+		const finishes = operation === "commitRhinoAgentTransaction" || operation === "cancelRhinoAgentTransaction"
+			|| operation === "commitAgentTransaction" || operation === "cancelAgentTransaction";
+		if (begins && owner !== "core") this.cleanupOwed[owner] = true;
 		const response = await this.transport.call(operation, args, options);
 		if ("source" in response) throw new RpcOutcomeUnknownError(response);
 		if (response.result.class !== "completed") {
 			throw new RpcOperationError(operation, response.result);
 		}
+		const resultData = response.result.data;
+		// Successful begins use normal segment tracking. Failed/partial begins
+		// retain cleanup debt until an ownership probe or cleanup resolves it.
+		if ((begins || finishes) && owner !== "core" && !(resultData && typeof resultData === "object" && "ok" in resultData && resultData.ok === false))
+			this.cleanupOwed[owner] = false;
 		return response as RpcOperationResponse<O>;
 	}
 }

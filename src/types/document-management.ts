@@ -75,4 +75,6 @@ export type DocumentTransactionState = {
 	epoch: number;
 	state: "idle" | "active" | "abandoned";
 	lifecycleInstanceId: string;
+	scopeOwner?: import("../protocol/shared-execution.js").ExecutionOwner | null;
+	recoveryRequired?: boolean;
 };

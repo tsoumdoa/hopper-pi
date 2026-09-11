@@ -29,6 +29,10 @@ All component, wire, group, value and script operations retain the current execu
 
 Before starting geometry or transferring an artifact, the host can activate the captured document under its process lease after confirming both native scopes idle. It records the activation intent, supplies observed state/current-focus tokens, and verifies the selected context afterward. Later active-document drift fails at native dispatch. Switching browser selection cannot change a running owner.
 
+Transaction replies and scope queries include `scopeOwner` and `recoveryRequired` from the native execution fence. A failed begin can retain ownership while the document segment is idle. The host keeps cleanup responsibility until it reconciles ownership and completes any owned cleanup under the same process lease. Cleanup requires an idle segment, no fence owner, and no native recovery requirement. A rejected `EndUndoRecord` retains the Rhino transaction for recovery. Debug exports include cleanup observations and undo-state diagnostics on failed begins.
+
+An explicit native activation rejection is recorded as failed, with its original result and reason. An unknown outcome remains uncertain. Unconfirmed scope cleanup independently blocks the process against the task that owned the scope.
+
 ## Script and transfer limits
 
 Rhino scripts receive the validated active Rhino document as their default context. Grasshopper scripts execute in the validated canvas and associated Rhino context. These are trusted in-process programs; they can access other documents and external files through native APIs. RPC binding and managed-save reservations do not sandbox arbitrary script side effects.
