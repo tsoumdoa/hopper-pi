@@ -24,6 +24,7 @@ namespace rhino_zmq_poc
             RpcOperation.listScriptParams,
             RpcOperation.getScriptCode,
             RpcOperation.getParamRhinoGeometry,
+            RpcOperation.getData,
             RpcOperation.listGrasshopperDocuments,
             RpcOperation.getGrasshopperDocument,
             RpcOperation.getGrasshopperDocumentSettings,
@@ -221,6 +222,7 @@ namespace rhino_zmq_poc
             dispatcher.Register("listScriptParams", new ListScriptParamsHandler());
             dispatcher.Register("getScriptCode", new GetScriptCodeHandler());
             dispatcher.Register("getParamRhinoGeometry", new GetParamRhinoGeometryHandler());
+            dispatcher.Register("getData", new GetDataHandler());
             return dispatcher;
         }
 

@@ -29,6 +29,7 @@ public enum RpcOperation
     queryRhinoObjects,
     captureRhinoView,
     getParamRhinoGeometry,
+    getData,
     lifecycleHandshake,
     startGrasshopper,
     cancelOperation,
@@ -377,6 +378,7 @@ public static class RpcV2Operations
         RpcOperation.queryRhinoObjects,
         RpcOperation.captureRhinoView,
         RpcOperation.getParamRhinoGeometry,
+        RpcOperation.getData,
     };
 
     public static readonly RpcOperation[] Control =
