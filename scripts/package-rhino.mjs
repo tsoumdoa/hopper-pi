@@ -2,6 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import { buildRhinoHost } from "./build-rhino-host.mjs";
+import { bundleRhinoDependencies } from "./bundle-rhino-dependencies.mjs";
 import { deduplicatePiBundle, pruneAuditedDependencies } from "./prune-rhino-host.mjs";
 import {
 	cpSync,
@@ -270,6 +271,9 @@ removeDependencyDevelopmentFiles(nodeModules);
 pruneNativeDependencies(nodeModules, targetConfig);
 await deduplicatePiBundle(nodeModules);
 await pruneAuditedDependencies(nodeModules);
+for (const bundle of await bundleRhinoDependencies(nodeModules)) {
+	console.log(`[hopper-pi] Bundled ${bundle.name}: ${bundle.inputFiles} modules -> ${bundle.outputFiles} files`);
+}
 const dependencyLink = findSymbolicLink(nodeModules);
 if (dependencyLink) fail(`Production dependencies contain a non-portable link: ${dependencyLink}`);
 rmSync(join(hostDirectory, "pnpm-lock.yaml"), { force: true });

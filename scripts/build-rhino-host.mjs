@@ -23,6 +23,7 @@ export async function buildRhinoHost(outputDirectory, reportPath) {
 		format: "esm",
 		// Pi's extension loader exposes entire module namespaces and loads workers,
 		// native bindings and assets relative to the original package locations.
+		// Audited dependency trees are bundled in place by bundle-rhino-dependencies.
 		packages: "external",
 		minify: true,
 		keepNames: true,
