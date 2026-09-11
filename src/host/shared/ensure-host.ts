@@ -91,7 +91,7 @@ export async function ensureSharedHost(
 			await new Promise<void>((resolve, reject) => {
 				const child = spawn(
 					process.execPath,
-					[options.entrypoint, ...(options.hostArguments ?? [])],
+					[options.entrypoint, ...(options.hostArguments ?? []), ...(options.onBrowserReady ? ["--wait-for-browser"] : [])],
 					{
 						detached: true,
 						stdio: ["ignore", log, log],
@@ -154,9 +154,21 @@ async function healthyDiscovery(
 		const verified = health.hostEpoch === discovery.hostEpoch &&
 			health.protocolVersion === discovery.protocolVersion &&
 			health.schemaVersion === discovery.schemaVersion &&
+			health.revision === state.revision &&
+			health.endpointPort === state.endpointPort &&
 			health.journalIdentity === state.journalIdentity &&
 			health.dataDirectory === state.dataDirectory;
-		if (verified && (health.listening || health.ready)) onBrowserReady?.(discovery);
+		if (verified && (health.listening || health.ready) && onBrowserReady) {
+			onBrowserReady(discovery);
+			if (!health.ready) {
+				// Acknowledge only after verifying discovery and announcing it to Rhino.
+				// Older hosts may not expose the handshake endpoint.
+				await fetch(`http://127.0.0.1:${state.endpointPort}/api/shared/browser-ready`, {
+					method: "POST", redirect: "error", signal: AbortSignal.timeout(750),
+					headers: { Authorization: `Bearer ${discovery.registrationToken}`, "X-Hopper-Host-Epoch": discovery.hostEpoch },
+				}).then(response => response.body?.cancel()).catch(() => {});
+			}
+		}
 		return verified && health.ready === true ? discovery : null;
 	} catch {
 		return null;

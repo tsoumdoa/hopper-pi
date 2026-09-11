@@ -28,6 +28,7 @@ export function createSharedBrowserServer(options: {
 	registrationCredential?: string;
 	onRegistrationError?: (error: unknown) => void;
 	health?: () => unknown;
+	startup?: { hostEpoch: string; launcherReady(): void; browserReady(): void };
 	uiRuntime?: () => HostRuntime | undefined;
 	tools?: (query: URLSearchParams) => Pick<HostRuntime, "getToolSettings" | "updateToolSettings">;
 	exportConversation?: (conversationId: string | null) => unknown;
@@ -38,6 +39,18 @@ export function createSharedBrowserServer(options: {
 		timingSafeEqual(Buffer.from(a), Buffer.from(b));
 	const server = createServer((request, response) => {
 		const pathname = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+		if (pathname === "/api/shared/browser-ready") {
+			const token = request.headers.authorization?.replace(/^Bearer /, "") ?? "";
+			if (request.method !== "POST" || !options.startup ||
+				!options.registrationCredential || !equal(token, options.registrationCredential) ||
+				request.headers["x-hopper-host-epoch"] !== options.startup.hostEpoch) {
+				response.writeHead(403).end();
+				return;
+			}
+			response.once("finish", () => options.startup!.launcherReady());
+			response.writeHead(204).end();
+			return;
+		}
 		if (pathname === "/health" || pathname === "/api/shared/health") {
 			response.writeHead(200, {
 				"Content-Type": "application/json",
@@ -183,6 +196,7 @@ export function createSharedBrowserServer(options: {
 					return;
 				}
 				let snapshot: unknown;
+				options.startup?.browserReady();
 				try {
 					snapshot = options.backend.snapshot();
 				} catch {

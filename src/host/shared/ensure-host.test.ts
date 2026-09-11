@@ -27,6 +27,39 @@ function setup() {
 	};
 }
 describe("detached shared host launcher", () => {
+	it("announces verified browser readiness before acknowledging runtime startup", async () => {
+		const options = setup();
+		const onBrowserReady = vi.fn();
+		let acknowledged = false;
+		await ensureSharedHost({
+			...options, onBrowserReady,
+			spawnHost: async state => {
+				const discovery: HostDiscovery = {
+					endpointPort: state.endpointPort, dataDirectory: state.dataDirectory,
+					journalIdentity: state.journalIdentity, revision: state.revision,
+					hostEpoch: "handshake", pid: 123, processStartIdentity: "start",
+					protocolVersion: 2, schemaVersion: 2, registrationToken: "private",
+				};
+				const server = createServer((request, response) => {
+					if (request.url === "/api/shared/browser-ready") {
+						expect(onBrowserReady).toHaveBeenCalledOnce();
+						expect(request.method).toBe("POST");
+						expect(request.headers.authorization).toBe("Bearer private");
+						expect(request.headers["x-hopper-host-epoch"]).toBe("handshake");
+						acknowledged = true;
+						response.writeHead(204).end();
+						return;
+					}
+					response.end(JSON.stringify({ ...discovery, listening: true, ready: acknowledged }));
+				});
+				servers.push(server);
+				await options.control.acquireOwnership(server, state.revision);
+				await options.control.publish(discovery);
+			},
+		});
+		expect(acknowledged).toBe(true);
+		expect(onBrowserReady).toHaveBeenCalledOnce();
+	});
 	it.each([21_000, Infinity])("bounds cold startup while allowing readiness after 15 seconds: %s", async readyAfter => {
 		const options = setup();
 		const startedAt = Date.now();

@@ -1,9 +1,23 @@
-import { lstat, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { lstat, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { DEPENDENCY_PRUNE_RULES } from "./rhino-dependency-pruning.mjs";
 import { join } from "node:path";
 
-// Pi publishes a complete bundled SDK alongside the unbundled SDK Hopper imports.
-// Retain the public entry paths, but share the unbundled implementation. Keep the
+async function replaceStagedFile(path, contents) {
+	// pnpm may hardlink staged files to its store and the development install.
+	// Replace the directory entry instead of overwriting the shared inode.
+	const temporary = `${path}.${randomUUID()}.tmp`;
+	const { mode } = await lstat(path);
+	try {
+		await writeFile(temporary, contents, { flag: "wx", mode });
+		await rename(temporary, path);
+	} finally {
+		await rm(temporary, { force: true });
+	}
+}
+
+// Pi publishes a complete bundled SDK alongside its ordinary SDK entry.
+// Retain the public entry paths, but share Hopper's consolidated SDK. Keep the
 // original SDK, native binaries, image worker, WASM, themes, docs and templates.
 export async function deduplicatePiBundle(nodeModules) {
 	const root = join(nodeModules, "@earendil-works/pi-coding-agent");
@@ -22,9 +36,9 @@ export async function deduplicatePiBundle(nodeModules) {
 		await readFile(join(root, "dist", name), "utf8");
 	}
 	for (const name of ["cli.js", "rpc-entry.js"]) {
-		await writeFile(join(bundle, name), `#!/usr/bin/env node\nimport "../${name}";\n`);
+		await replaceStagedFile(join(bundle, name), `#!/usr/bin/env node\nimport "../${name}";\n`);
 	}
-	await writeFile(join(bundle, "index.js"), 'export * from "../index.js";\n');
+	await replaceStagedFile(join(bundle, "index.js"), 'export * from "../index.js";\n');
 	await rm(join(bundle, "chunks"), { recursive: true });
 }
 

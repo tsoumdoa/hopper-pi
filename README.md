@@ -123,9 +123,11 @@ HOPPER_SKIP_GH_PLUGIN=1 pnpm install
 pnpm package:rhino -- --target mac-arm64
 ```
 
-Rhino packaging uses a separate minified host build with tree shaking and code splitting. Pi session modules remain lazy. Pi dependencies keep their original runtime asset paths; packaging removes declaration files and shares Pi's duplicate SDK bundle through its unbundled implementation. Pi upgrades must pass the version/layout check in `scripts/prune-rhino-host.mjs`. The standalone Pi extension keeps its existing TypeScript build.
+Rhino packaging uses a separate minified host build with tree shaking and code splitting. Pi session modules remain lazy. Packaging consolidates Pi's SDK JavaScript into one runtime entry and bundles TypeBox's public entries together, reducing startup file reads while preserving shared registries. Pi's workers and assets keep their original paths; the public SDK and extension aliases share the same bundled implementation. Dependency upgrades must pass the version/layout checks in the packaging scripts. The standalone Pi extension keeps its existing TypeScript build.
 
-Packaging writes `<stage>-host-metafile.json`, `<stage>-web-manifest.json`, and `<stage>-size-report.json` beside the stage. Reports stay out of the installer. The verifier enforces total and category size limits in `scripts/rhino-package-rules.mjs`; inspect clean before/after reports and record measurements in the PR before changing a limit.
+On a new host launch, the launcher and loading browser acknowledge readiness before synchronous runtime imports begin. A bounded fallback allows startup to continue if the browser cannot connect. See [startup measurement](docs/startup-performance.md) for isolated benchmarks and the distinction between warm measurements and first launch after reboot.
+
+Packaging writes `<stage>-host-metafile.json`, `<stage>-runtime-bundles.json`, `<stage>-web-manifest.json`, and `<stage>-size-report.json` beside the stage. Reports stay out of the installer. The verifier enforces total and category size limits in `scripts/rhino-package-rules.mjs`; inspect clean before/after reports and record measurements in the PR before changing a limit.
 
 ```bash
 pnpm ui:analyze --output artifacts/web-bundle-report.json

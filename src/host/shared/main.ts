@@ -17,6 +17,7 @@ import type { RhinoLaunchService } from "./rhino-launch.js";
 import { GeometryTransferService } from "./transfer.js";
 import { createNativeActionAdapters } from "./native-actions.js";
 import { validateTargetBinding } from "../../protocol/shared-execution.js";
+import { createStartupGate } from "./startup-gate.js";
 
 function sharedLimit(name: string, fallback: number): number {
 	const value =
@@ -80,7 +81,9 @@ export async function startSharedHost(
 		revision: state.revision,
 	};
 	const listeners = new Set<(event: unknown) => void>();
+	const startupGate = args.includes("--wait-for-browser") ? createStartupGate() : undefined;
 	const browser = createSharedBrowserServer({
+		startup: startupGate && { hostEpoch: epoch, ...startupGate },
 		backend: {
 			snapshot: () => {
 				if (!backend) throw new Error("Host is initializing");
@@ -130,6 +133,7 @@ export async function startSharedHost(
 	});
 	const close = () =>
 		(closing ??= (async () => {
+			startupGate?.close();
 			backend?.stopAdmission();
 			stopLifetimeMonitor?.();
 			if (refresh) clearInterval(refresh);
@@ -144,6 +148,13 @@ export async function startSharedHost(
 	try {
 		await control.acquireOwnership(browser.server, state.revision);
 		await control.publish(discovery);
+		if (startupGate) {
+			startupStage("browser listening; waiting for launcher and browser");
+			await startupGate.wait();
+			const intent = await control.snapshot();
+			if (!intent || intent.desiredState !== "running" || intent.revision !== state.revision)
+				throw new Error("Shared startup was superseded by newer host intent");
+		}
 		startupStage("browser listening; loading runtime modules");
 		// Serve the loading UI before importing and initializing the AI runtime.
 		// The short-lived --ensure-host launcher never loads these modules.

@@ -47,6 +47,31 @@ const next = (socket: WebSocket) =>
 	new Promise<any>((resolve) =>
 		socket.once("message", (raw) => resolve(JSON.parse(raw.toString()))),
 	);
+it("requires the private launcher credential and current epoch for startup acknowledgement", async () => {
+	const startup = { hostEpoch: "current", launcherReady: vi.fn(), browserReady: vi.fn() };
+	const f = await fixture(undefined, { startup, registrationCredential: "private" });
+	const url = `http://127.0.0.1:${f.port}/api/shared/browser-ready`;
+	for (const [token, epoch] of [["wrong", "current"], ["private", "stale"]]) {
+		expect((await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}`, "X-Hopper-Host-Epoch": epoch! } })).status).toBe(403);
+	}
+	expect(startup.launcherReady).not.toHaveBeenCalled();
+	expect((await fetch(url, { method: "POST", headers: { Authorization: "Bearer private", "X-Hopper-Host-Epoch": "current" } })).status).toBe(204);
+	expect(startup.launcherReady).toHaveBeenCalledOnce();
+});
+it("acknowledges a loaded browser only after authentication, even while runtime is initializing", async () => {
+	const startup = { hostEpoch: "current", launcherReady: vi.fn(), browserReady: vi.fn() };
+	const f = await fixture(() => { throw new Error("initializing"); }, { startup });
+	const invalid = await f.connect();
+	const rejected = new Promise(resolve => invalid.once("close", resolve));
+	invalid.send(JSON.stringify({ type: "authenticate", token: "wrong" }));
+	await rejected;
+	expect(startup.browserReady).not.toHaveBeenCalled();
+	const valid = await f.connect();
+	const retry = new Promise(resolve => valid.once("close", resolve));
+	valid.send(JSON.stringify({ type: "authenticate", token: "secret" }));
+	await retry;
+	expect(startup.browserReady).toHaveBeenCalledOnce();
+});
 it("sends row patches after the initial snapshot and starts a replacement connection with a full snapshot", async () => {
 	let state = { eventCursor: 1, tasks: [], events: [{ id: 1, kind: "progress", payload: "capture".repeat(10000) }] };
 	let publish: ((event: unknown) => void) | undefined;

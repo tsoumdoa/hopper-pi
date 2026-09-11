@@ -34,6 +34,13 @@ async function hostModules(directory) {
 const moduleUrls = await hostModules(dirname(hostEntry));
 const smokeDirectory = await mkdtemp(join(tmpdir(), "hopper-staged-smoke-"));
 const smokeSource = [
+	`const nodeModule = await import("node:module");`,
+	`const workerThreads = nodeModule.createRequire(import.meta.url)("node:worker_threads");`,
+	`const OriginalWorker = workerThreads.Worker; const workerResults = [];`,
+	// The eval harness uses --input-type, which a real file-based host does not.
+	// Remove that inherited flag and observe completion so Pi's fallback cannot hide a broken worker URL.
+	`workerThreads.Worker = class extends OriginalWorker { constructor(url, options) { super(url, { ...options, execArgv: [] }); this.once("message", result => workerResults.push({ url: String(url), result })); } };`,
+	`nodeModule.syncBuiltinESMExports();`,
 	`await import(${JSON.stringify(pathToFileURL(hostEntry).href)});`,
 	`const hostModules = await Promise.all(${JSON.stringify(moduleUrls)}.map(url => import(url)));`,
 	`const EmbeddedPiHost = hostModules.find(module => module.EmbeddedPiHost)?.EmbeddedPiHost;`,
@@ -48,6 +55,7 @@ const smokeSource = [
 	`await access(join(hostProjectRoot(), "mds/skills"));`,
 	`const piRoot = new URL("./", import.meta.resolve("@earendil-works/pi-coding-agent"));`,
 	`const pi = await import("@earendil-works/pi-coding-agent");`,
+	`if (realpathSync(pi.getPackageDir()) !== realpathSync(new URL("../", piRoot))) throw new Error("Bundled Pi package root is incorrect");`,
 	`const duplicateEntry = await import(new URL("bundle/index.js", piRoot));`,
 	`if (duplicateEntry.ModelRuntime !== pi.ModelRuntime) throw new Error("Pi SDK bundle still duplicates module state");`,
 	`const temporary = ${JSON.stringify(smokeDirectory)};`,
@@ -86,6 +94,11 @@ const smokeSource = [
 	` const { loadExtensions } = await import(new URL("core/extensions/loader.js", piRoot));`,
 	` const loaded = await loadExtensions([extension], temporary);`,
 	` if (loaded.errors.length || !loaded.extensions[0]?.tools.has("staged_smoke")) throw new Error("Dynamic TypeScript extension failed: " + JSON.stringify(loaded.errors));`,
+	` const identityExtension = join(temporary, "identity-extension.ts");`,
+	` await writeFile(identityExtension, 'import { SessionManager } from "@earendil-works/pi-coding-agent"; export default () => { globalThis.__hopperSmokeSessionManager = SessionManager; };');`,
+	` const publicLoaded = await pi.discoverAndLoadExtensions([identityExtension], temporary, join(temporary, "empty-agent"));`,
+	` if (publicLoaded.errors.length || globalThis.__hopperSmokeSessionManager !== pi.SessionManager) throw new Error("Bundled extension SDK identity differs from the host");`,
+	` delete globalThis.__hopperSmokeSessionManager;`,
 	` const services = await pi.createAgentSessionServices({ cwd: temporary, agentDir: join(temporary, "agent"), resourceLoaderOptions: { noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true } });`,
 	` const { session } = await pi.createAgentSessionFromServices({ services, sessionManager: pi.SessionManager.inMemory(temporary), noTools: true });`,
 	` if (!session.agent) throw new Error("Pi session creation failed");`,
@@ -100,8 +113,11 @@ const smokeSource = [
 	`  const response = await message;`,
 	`  if (response.error || response.result?.width !== 1) throw new Error("Direct image worker failed: " + JSON.stringify(response));`,
 	` } finally { await worker.terminate(); }`,
-	` const resized = await resizeImage(png, "image/png", { maxWidth: 1, maxHeight: 1 });`,
+	` workerResults.length = 0;`,
+	` const resized = await pi.resizeImage(png, "image/png", { maxWidth: 1, maxHeight: 1 });`,
 	` if (!resized || resized.width !== 1 || resized.height !== 1) throw new Error("Pi image worker/WASM failed");`,
+	` if (!workerResults.some(({ url, result }) => url === new URL("utils/image-resize-worker.js", piRoot).href && result.result?.width === 1)) throw new Error("Bundled Pi image worker did not complete at its original asset path");`,
+	` workerThreads.Worker = OriginalWorker; nodeModule.syncBuiltinESMExports();`,
 	`const { TaskJournal } = await import(${JSON.stringify(pathToFileURL(join(dirname(hostEntry), "shared", "journal.js")).href)});`,
 	`const journal = new TaskJournal(":memory:");`,
 	`journal.registerSession("smoke-conversation", "smoke-session");`,
