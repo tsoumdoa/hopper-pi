@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { buildRhinoHost } from "./build-rhino-host.mjs";
+import { deduplicatePiBundle, pruneAuditedDependencies } from "./prune-rhino-host.mjs";
 import {
 	cpSync,
 	existsSync,
@@ -20,6 +22,7 @@ const packageRoot = resolve(scriptDirectory, "..");
 const packageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
 const installer = join(scriptDirectory, "install-grasshopper-plugin.mjs");
 const verifier = join(scriptDirectory, "verify-rhino-package.mjs");
+const sizeReporter = join(scriptDirectory, "report-rhino-package-size.mjs");
 const args = process.argv.slice(2);
 const targets = Object.freeze({
 	"mac-arm64": Object.freeze({
@@ -117,6 +120,7 @@ function removeDependencyDevelopmentFiles(directory) {
 			|| entry.name === ".modules.yaml"
 			|| entry.name === ".pnpm-workspace-state-v1.json"
 			|| /\.(test|spec)\.[cm]?[jt]sx?$/i.test(entry.name)
+			|| /\.d\.[cm]?ts$/i.test(entry.name)
 			|| entry.name.endsWith(".map")) {
 			rmSync(path, { force: true });
 		}
@@ -218,7 +222,12 @@ rmSync(join(output, ".hopper-install.json"), { force: true });
 const runtimeDirectory = join(output, "runtime");
 const hostDirectory = join(runtimeDirectory, "host");
 mkdirSync(hostDirectory, { recursive: true });
-cpSync(join(packageRoot, "dist"), join(hostDirectory, "dist"), { recursive: true });
+await buildRhinoHost(join(hostDirectory, "dist"), join(output, "..", `${basename(output)}-host-metafile.json`));
+cpSync(join(packageRoot, "dist/host/static"), join(hostDirectory, "dist/host/static"), { recursive: true });
+const webManifest = join(output, "..", `${basename(output)}-web-manifest.json`);
+cpSync(join(packageRoot, "dist/host/static/.vite/manifest.json"), webManifest);
+// Vite's build graph is for reports, not runtime delivery.
+rmSync(join(hostDirectory, "dist/host/static/.vite"), { recursive: true, force: true });
 cpSync(join(packageRoot, "mds"), join(hostDirectory, "mds"), { recursive: true });
 for (const name of ["pnpm-lock.yaml", "pnpm-workspace.yaml", "LICENSE"]) {
 	cpSync(join(packageRoot, name), join(hostDirectory, name));
@@ -259,6 +268,8 @@ const nodeModules = join(hostDirectory, "node_modules");
 removeBinDirectories(nodeModules);
 removeDependencyDevelopmentFiles(nodeModules);
 pruneNativeDependencies(nodeModules, targetConfig);
+await deduplicatePiBundle(nodeModules);
+await pruneAuditedDependencies(nodeModules);
 const dependencyLink = findSymbolicLink(nodeModules);
 if (dependencyLink) fail(`Production dependencies contain a non-portable link: ${dependencyLink}`);
 rmSync(join(hostDirectory, "pnpm-lock.yaml"), { force: true });
@@ -290,5 +301,6 @@ if (args.includes("--yak")) {
 	run(yak, ["build", "--platform", targetConfig.yakPlatform], { cwd: output });
 }
 
-run(process.execPath, [verifier, "--target", target, output]);
+run(process.execPath, [verifier, "--target", target, "--web-manifest", webManifest, output]);
+run(process.execPath, [sizeReporter, "--target", target, "--web-manifest", webManifest, "--output", join(output, "..", `${basename(output)}-size-report.json`), output]);
 console.log(`[hopper-pi] Staged ${target} Rhino package at ${output}`);

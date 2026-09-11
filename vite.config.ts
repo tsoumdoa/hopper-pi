@@ -1,6 +1,7 @@
 import { createReadStream, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import { excalidrawEnglishUi } from "./scripts/excalidraw-assets";
 import { sharedHostProxy } from "./scripts/ui-host-proxy";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
@@ -21,10 +22,19 @@ function excalidrawFonts(): Plugin {
 				stream.pipe(response);
 			});
 		},
-		generateBundle() {
+		generateBundle(_options, bundle) {
+			// CSS imports already emit Assistant under assets/. Only copy fonts
+			// whose relative URLs survive in Excalidraw's JavaScript registry.
+			const referencedFonts = new Set<string>();
+			for (const output of Object.values(bundle)) {
+				if (output.type !== "chunk") continue;
+				for (const match of output.code.matchAll(/\.\/fonts\/([^"'`]+\.woff2)/g)) referencedFonts.add(match[1]);
+			}
+			if (!referencedFonts.size) this.error("Excalidraw's font registry changed; review local font packaging.");
 			for (const file of readdirSync(fonts, { recursive: true, withFileTypes: true })) {
 				if (!file.isFile() || !file.name.endsWith(".woff2")) continue;
 				const path = join(file.parentPath, file.name);
+				if (!referencedFonts.has(relative(fonts, path).split(sep).join("/"))) continue;
 				this.emitFile({ type: "asset", fileName: `excalidraw/fonts/${relative(fonts, path).split(sep).join("/")}`, source: readFileSync(path) });
 			}
 		},
@@ -32,7 +42,7 @@ function excalidrawFonts(): Plugin {
 }
 
 export default defineConfig({
-	plugins: [react(), tailwindcss(), excalidrawFonts()],
+	plugins: [excalidrawEnglishUi(), react(), tailwindcss(), excalidrawFonts()],
 	root: "web",
 	base: "/",
 	build: {
@@ -40,6 +50,7 @@ export default defineConfig({
 		emptyOutDir: true,
 		assetsDir: "assets",
 		sourcemap: false,
+		manifest: true,
 	},
 	server: {
 		proxy: {

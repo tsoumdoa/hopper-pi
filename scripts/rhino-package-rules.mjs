@@ -1,10 +1,23 @@
+import { prunedDependencyPath } from "./rhino-dependency-pruning.mjs";
 import { extname } from "node:path";
+
+const WEB_SIZE_BUDGETS = Object.freeze({
+	webJavaScript: 7 * 1024 * 1024,
+	webFonts: 13 * 1024 * 1024,
+	webCss: 192 * 1024,
+});
 
 export const RHINO_PACKAGE_TARGETS = Object.freeze({
 	// Measured with Pi 0.85.1 and Excalidraw. Inspect a clean package manifest
 	// and record its size in the PR before changing these ceilings.
-	"mac-arm64": Object.freeze({ os: "darwin", cpu: "arm64", maxStagedBytes: 128 * 1024 * 1024 }),
-	"win-x64": Object.freeze({ os: "win32", cpu: "x64", maxStagedBytes: 128 * 1024 * 1024 }),
+	"mac-arm64": Object.freeze({
+		os: "darwin", cpu: "arm64", maxStagedBytes: 83 * 1024 * 1024,
+		sizeBudgets: Object.freeze({ ...WEB_SIZE_BUDGETS, nodeCode: 512 * 1024, nodeDependencies: 57 * 1024 * 1024 }),
+	}),
+	"win-x64": Object.freeze({
+		os: "win32", cpu: "x64", maxStagedBytes: 86 * 1024 * 1024,
+		sizeBudgets: Object.freeze({ ...WEB_SIZE_BUDGETS, nodeCode: 512 * 1024, nodeDependencies: 60 * 1024 * 1024 }),
+	}),
 });
 
 export const PACKAGE_MANIFEST_NAME = "rhino-package-manifest.json";
@@ -36,6 +49,17 @@ const ROOT_RUNTIME_FILES = new Set([
 ]);
 
 export const PACKAGE_DENY_RULES = Object.freeze([
+	{ id: "audited-dependency-development-file", description: "version-audited dependency source and build tooling is not runtime content", test: prunedDependencyPath },
+	{
+		id: "dependency-type-declaration",
+		description: "TypeScript declarations are not needed by the packaged JavaScript runtime",
+		test: (path) => path.startsWith("runtime/host/node_modules/") && /\.d\.[cm]?ts$/i.test(path),
+	},
+	{
+		id: "build-report",
+		description: "bundle graphs are build reports, not runtime content",
+		test: (path) => path.startsWith("runtime/host/dist/") && (path.split("/").includes(".vite") || /(?:^|[/-])metafile\.json$/i.test(path)),
+	},
 	{
 		id: "unsafe-path",
 		description: "absolute paths and parent traversal are forbidden",

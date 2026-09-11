@@ -23,8 +23,10 @@
 		"dev": "tsx src/index.ts",
 		"ui:dev": "vite",
 		"ui:build": "tsc -p tsconfig.web.json && vite build",
+		"ui:analyze": "node scripts/analyze-web-bundle.mjs",
 		"build": "tsc -p tsconfig.json && pnpm ui:build",
 		"build:release": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.release.json && pnpm ui:build",
+		"build:rhino-host": "node scripts/build-rhino-host.mjs",
 		"test": "vitest run",
 		"test:rpc-cross-language": "tsx scripts/cross-language-rpc-smoke.ts",
 		"pi": "pi -e .",
@@ -37,6 +39,7 @@
 		"install:rhino:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-rhino-win.ps1",
 		"package:rhino": "node scripts/package-rhino.mjs",
 		"verify:rhino-package": "node scripts/verify-rhino-package.mjs",
+		"size:rhino-package": "node scripts/report-rhino-package-size.mjs",
 		"prepack": "pnpm build:release"
 	},
 	"devDependencies": {
@@ -53,6 +56,7 @@
 		"@vitejs/plugin-react": "^6.1.1",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
+		"esbuild": "0.28.1",
 		"happy-dom": "^20.14.0",
 		"lucide-react": "^1.39.0",
 		"react": "^19.2.8",

@@ -12,6 +12,8 @@ import {
 	normalizePackagePath,
 } from "./rhino-package-rules.mjs";
 
+import { summarizePackageSize, validateSizeBudgets } from "./rhino-package-size.mjs";
+
 const PE_MACHINE = Object.freeze({
 	0x014c: "x86",
 	0x8664: "x64",
@@ -272,6 +274,7 @@ export async function verifyRhinoPackage(options) {
 	const errors = requiredRuntimeErrors(files, target);
 	const manifestFiles = [];
 	const yakFiles = [];
+	const nativePaths = [];
 
 	for (const file of files) {
 		if (manifestIsInsideStage && resolve(file.absolutePath) === manifestPath) continue;
@@ -297,6 +300,7 @@ export async function verifyRhinoPackage(options) {
 			errors.push(`${file.relativePath}: ${binaryError}`);
 			continue;
 		}
+		if (binary && !binary.managed) nativePaths.push(file.relativePath);
 		manifestFiles.push({
 			path: file.relativePath,
 			size: file.size,
@@ -312,6 +316,10 @@ export async function verifyRhinoPackage(options) {
 	const stagedSize = manifestFiles.reduce((total, file) => total + file.size, 0);
 	const stagedSizeError = validateStagedSize(target, stagedSize);
 	if (stagedSizeError) throw new Error(`Rhino package verification failed: ${stagedSizeError}`);
+	const webManifest = options.webManifest ?? (options.webManifestPath ? JSON.parse(await readFile(options.webManifestPath, "utf8")) : undefined);
+	const sizeReport = summarizePackageSize(manifestFiles, { target, yakFiles, nativePaths, webManifest });
+	const budgetErrors = validateSizeBudgets(sizeReport, options.sizeBudgets ?? RHINO_PACKAGE_TARGETS[target].sizeBudgets);
+	if (budgetErrors.length) throw new Error(`Rhino package size budgets failed:\n${budgetErrors.join("\n")}`);
 	const manifest = { target, stagedSize, files: manifestFiles };
 	await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
@@ -322,12 +330,13 @@ export async function verifyRhinoPackage(options) {
 		}
 		process.stdout.write(`[hopper-pi] Wrote package manifest: ${manifestPath}\n`);
 	}
-	return { manifest, manifestPath, yakFiles };
+	return { manifest, manifestPath, yakFiles, sizeReport };
 }
 
 function parseArguments(args) {
 	let target;
 	let manifestPath;
+	let webManifestPath;
 	let stage;
 	for (let index = 0; index < args.length; index += 1) {
 		const argument = args[index];
@@ -337,6 +346,9 @@ function parseArguments(args) {
 		} else if (argument === "--manifest") {
 			manifestPath = args[++index];
 			if (!manifestPath) throw new Error("--manifest requires a value");
+		} else if (argument === "--web-manifest") {
+			webManifestPath = args[++index];
+			if (!webManifestPath) throw new Error("--web-manifest requires a value");
 		} else if (argument.startsWith("-")) {
 			throw new Error(`Unknown option: ${argument}`);
 		} else if (stage) {
@@ -346,9 +358,9 @@ function parseArguments(args) {
 		}
 	}
 	if (!target || !stage) {
-		throw new Error("Usage: verify-rhino-package.mjs --target <mac-arm64|win-x64> [--manifest <path>] <staging-path>");
+		throw new Error("Usage: verify-rhino-package.mjs --target <mac-arm64|win-x64> [--manifest <path>] [--web-manifest <vite-manifest.json>] <staging-path>");
 	}
-	return { target, stage, manifestPath };
+	return { target, stage, manifestPath, webManifestPath };
 }
 
 const isEntrypoint = process.argv[1]

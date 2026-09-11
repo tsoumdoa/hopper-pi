@@ -123,6 +123,19 @@ HOPPER_SKIP_GH_PLUGIN=1 pnpm install
 pnpm package:rhino -- --target mac-arm64
 ```
 
+Rhino packaging uses a separate minified host build with tree shaking and code splitting. Pi session modules remain lazy. Pi dependencies keep their original runtime asset paths; packaging removes declaration files and shares Pi's duplicate SDK bundle through its unbundled implementation. Pi upgrades must pass the version/layout check in `scripts/prune-rhino-host.mjs`. The standalone Pi extension keeps its existing TypeScript build.
+
+Packaging writes `<stage>-host-metafile.json`, `<stage>-web-manifest.json`, and `<stage>-size-report.json` beside the stage. Reports stay out of the installer. The verifier enforces total and category size limits in `scripts/rhino-package-rules.mjs`; inspect clean before/after reports and record measurements in the PR before changing a limit.
+
+```bash
+pnpm ui:analyze --output artifacts/web-bundle-report.json
+pnpm build:rhino-host --output artifacts/rhino-host/dist --report artifacts/host-metafile.json
+pnpm size:rhino-package --target mac-arm64 --web-manifest artifacts/package-mac-web-manifest.json artifacts/package-mac
+node scripts/smoke-staged-host.mjs artifacts/package-mac
+```
+
+Use your actual stage path in the last two commands. Initial browser JavaScript follows static imports in the matching Vite manifest; without that manifest the metric is `null`. Module rendered lengths precede final minification and do not sum to chunk bytes. Native binary bytes overlap the size report's categories. The editor retains multilingual drawing fonts and Mermaid support; adding translated editor controls requires extending or removing `excalidrawEnglishUi` in `scripts/excalidraw-assets.ts`.
+
 Restart Rhino after installation, then run:
 
 ```text

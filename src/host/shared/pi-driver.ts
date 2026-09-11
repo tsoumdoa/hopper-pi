@@ -2,8 +2,8 @@ import { createDocumentTool, executeDocumentTool } from "../../tools/document-to
 import { admitCurrentToolDispatch } from "../../services/tool-policy-context.js";
 import type { DocumentKind, DocumentRequest } from "../../types/document-management.js";
 import { mkdir } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { hostProjectRoot } from "../runtime-paths.js";
 import { type Model, type Api } from "@earendil-works/pi-ai";
 import {
 	createAgentSessionFromServices,
@@ -122,7 +122,7 @@ export async function createPiTaskDriver(
 			// Each task gets a snapshot. Later UI changes apply to the next task without
 			// changing the approved files underneath a running model/tool call.
 			const skills = new HostSkillLibrary(
-				options.projectRoot ?? resolve(dirname(fileURLToPath(import.meta.url)), "../../.."),
+				options.projectRoot ?? hostProjectRoot(),
 				join(skillDataDirectory, "skills-settings.json"),
 				join(skillDataDirectory, "skills"),
 			);

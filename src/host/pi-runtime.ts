@@ -1,8 +1,8 @@
 import { RuntimeSessionContext } from "../infra/runtime-session-context.js";
 import { closeRuntimeRpc } from "../infra/runtime-rpc.js";
 import { mkdir } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { hostProjectRoot } from "./runtime-paths.js";
 import type { AuthType } from "@earendil-works/pi-ai";
 import {
 	type AgentSession,
@@ -35,10 +35,6 @@ export type EmbeddedPiHostOptions = {
 	bus?: HostMessageBus;
 	onShutdownRequest?: () => void;
 };
-
-function defaultProjectRoot(): string {
-	return resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-}
 
 function modelSummary(model: { provider: string; id: string; name?: string; input?: string[] }) {
 	return { provider: model.provider, id: model.id, name: model.name, input: model.input };
@@ -113,7 +109,7 @@ export class EmbeddedPiHost {
 	}
 
 	private static async createInSession(options: EmbeddedPiHostOptions, runtimeSession: RuntimeSessionContext): Promise<EmbeddedPiHost> {
-		const projectRoot = options.projectRoot ?? defaultProjectRoot();
+		const projectRoot = options.projectRoot ?? hostProjectRoot();
 		const { paths } = options;
 		await Promise.all([
 			mkdir(paths.agentDir, { recursive: true }),
