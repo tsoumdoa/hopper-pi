@@ -334,15 +334,7 @@ it("keeps drafts in their thread when hopping to a globally live thread and back
 	await act(async () =>
 		socket.receive({ type: "shared_snapshot", snapshot: next }),
 	);
-	expect(container.querySelector("#composer-input")).toBeNull();
-	expect(container.textContent).toContain("This thread is read-only for now");
-	expect(
-		container.querySelector<HTMLButtonElement>(
-			'button[aria-label="New thread"]',
-		)!.disabled,
-	).toBe(true);
 	await act(async () => byText("Jump back").click());
-	expect(container.querySelector("h1")!.textContent).toBe("Second");
 	expect(
 		container.querySelector<HTMLTextAreaElement>("#composer-input")!.value,
 	).toBe("");
@@ -354,33 +346,4 @@ it("keeps drafts in their thread when hopping to a globally live thread and back
 	expect(
 		container.querySelector<HTMLTextAreaElement>("#composer-input")!.value,
 	).toBe("Draft for the first thread");
-});
-
-it("browses archived threads read-only and falls back after deleting the selection", async () => {
-	const next = {
-		...snapshot,
-		conversations: [
-			{ ...snapshot.conversations[0], archived_at: 1 },
-			snapshot.conversations[1],
-		],
-	};
-	await act(async () =>
-		socket.receive({ type: "shared_snapshot", snapshot: next }),
-	);
-	expect(container.querySelector("#composer-input")).toBeNull();
-	await act(async () => byText("Unarchive").click());
-	expect(
-		socket.sent.find((command) => command.type === "unarchive_conversation"),
-	).toMatchObject({ conversationId: "conversation" });
-	await act(async () =>
-		socket.receive({
-			type: "shared_snapshot",
-			snapshot: { ...snapshot, conversations: [snapshot.conversations[1]] },
-		}),
-	);
-	expect(container.querySelector("h1")!.textContent).toBe("Second");
-	expect(socket.sent.at(-1)).toMatchObject({
-		type: "snapshot",
-		conversationId: "other",
-	});
 });

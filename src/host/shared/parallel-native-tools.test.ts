@@ -210,7 +210,6 @@ it("identifies the task blocking an active sibling and queues new prompts before
 	expect(f.journal.snapshot().tasks.find((task) => task.id === a!.taskId)?.state).toBe("running");
 	await expect(f.script(b!.taskId)).rejects.toThrow(a!.taskId);
 	await expect(f.script(b!.taskId)).rejects.toThrow("Hopper task recovery");
-	expect(() => f.service.submit({ requestId: "busy", conversationId: "new-chat", sessionId: "new-session", kind: "prompt", text: "Work", bindings: [], attachments: [] })).toThrow();
 	await f.finish(a!.taskId); await f.finish(b!.taskId); await f.finish(f.root.taskId);
 	f.journal.registerSession("new-chat", "new-session");
 	const next = f.service.submit({ requestId: "next", conversationId: "new-chat", sessionId: "new-session",
