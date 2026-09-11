@@ -1,9 +1,11 @@
-import { link, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { link, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
 import { afterEach, expect, it } from "vitest";
-import { bundlePiRuntime } from "./bundle-pi-runtime.mjs";
+import { bundlePiRuntime, deferUndiciImport } from "./bundle-pi-runtime.mjs";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -60,4 +62,81 @@ it("fails before modifying an unsupported package and refuses development depend
 	await expect(bundlePiRuntime(root)).rejects.toThrow("Review Pi");
 	expect(await readFile(entry, "utf8")).toBe(original);
 	await expect(bundlePiRuntime(resolve("node_modules"))).rejects.toThrow("development node_modules");
+});
+
+it("defers the audited HTTP client until configuration while retaining dispatcher behavior", async () => {
+	const { root, pkg } = await fixture();
+	const source = await readFile(new URL("./core/http-dispatcher.js", import.meta.resolve("@earendil-works/pi-coding-agent")), "utf8");
+	expect(() => deferUndiciImport(source + "\n")).toThrow("Review changed Pi HTTP dispatcher");
+	await writeFile(join(pkg, "dist/core/http-dispatcher.js"), source);
+	await writeFile(join(pkg, "dist/index.js"), 'export * from "./core/http-dispatcher.js";');
+	const undici = join(root, "node_modules/undici");
+	await mkdir(undici, { recursive: true });
+	await writeFile(join(undici, "package.json"), JSON.stringify({ name: "undici", main: "index.cjs" }));
+	await writeFile(join(undici, "index.cjs"), `
+		const { EventEmitter } = require("node:events");
+		class Dispatcher extends EventEmitter { constructor(...args) { super(); this.args = args; } }
+		exports.Client = exports.Pool = exports.EnvHttpProxyAgent = Dispatcher;
+		exports.installed = 0;
+		exports.setGlobalDispatcher = value => { exports.current = value; };
+		exports.install = () => { exports.installed++; };
+	`);
+	await bundlePiRuntime(root);
+	const require = createRequire(join(pkg, "dist/index.js"));
+	const clientPath = require.resolve("undici");
+	const sdk = await import(pathToFileURL(join(pkg, "dist/index.js")).href);
+	expect(sdk.DEFAULT_HTTP_IDLE_TIMEOUT_MS).toBe(300000);
+	expect(sdk.parseHttpIdleTimeoutMs("disabled")).toBe(0);
+	expect(sdk.formatHttpIdleTimeoutMs(60000)).toBe("1 min");
+	expect(() => sdk.configureHttpDispatcher(-1)).toThrow("Invalid HTTP idle timeout");
+	expect(require.cache[clientPath]).toBeUndefined();
+	sdk.configureHttpDispatcher(60000);
+	const client = require("undici");
+	expect(client.installed).toBe(1);
+	const options = client.current.args[0];
+	expect(options).toMatchObject({ bodyTimeout: 60000, headersTimeout: 60000, proxyTunnel: true });
+	const single = options.factory("http://localhost", { connections: 1 });
+	const pool = options.factory("http://localhost", { connections: 2 });
+	expect(single.args[0]).toBe("http://localhost");
+	expect(pool.args[1].factory("http://localhost", {}).args[0]).toBe("http://localhost");
+	expect(() => single.emit("error", new Error("stream failure"))).not.toThrow();
+	sdk.configureHttpDispatcher(30000);
+	expect(client.current.args[0].bodyTimeout).toBe(30000);
+});
+
+it("loads real Undici on demand and completes an HTTP request through its dispatcher", async () => {
+	const { root, pkg } = await fixture();
+	const originalEntry = import.meta.resolve("@earendil-works/pi-coding-agent");
+	const source = await readFile(new URL("./core/http-dispatcher.js", originalEntry), "utf8");
+	await writeFile(join(pkg, "dist/core/http-dispatcher.js"), source);
+	await writeFile(join(pkg, "dist/index.js"), 'export * from "./core/http-dispatcher.js";');
+	const dependency = dirname(createRequire(originalEntry).resolve("undici/package.json"));
+	await mkdir(join(root, "node_modules"));
+	await symlink(dependency, join(root, "node_modules/undici"), "junction");
+	await bundlePiRuntime(root);
+	// Dispatcher configuration installs fetch globals, so exercise it in a child.
+	const child = spawnSync(process.execPath, ["--input-type=module", "--eval", `
+		import assert from "node:assert/strict";
+		import { createServer } from "node:http";
+		import { createRequire } from "node:module";
+		const url = ${JSON.stringify(pathToFileURL(join(pkg, "dist/index.js")).href)};
+		const require = createRequire(url);
+		const clientPath = require.resolve("undici");
+		const sdk = await import(url);
+		assert.equal(require.cache[clientPath], undefined);
+		for (const key of Object.keys(process.env)) if (/^(http|https|all|no)_proxy$/i.test(key)) delete process.env[key];
+		const server = createServer((req, res) => res.end("lazy dispatcher works"));
+		await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+		sdk.configureHttpDispatcher(1000);
+		const client = require("undici");
+		try {
+			const response = await fetch("http://127.0.0.1:" + server.address().port);
+			assert.equal(await response.text(), "lazy dispatcher works");
+		} finally {
+			await client.getGlobalDispatcher().close();
+			await new Promise(resolve => server.close(resolve));
+		}
+	`], { encoding: "utf8", timeout: 10000, windowsHide: true });
+	expect(child.error).toBeUndefined();
+	expect(child.status, child.stderr).toBe(0);
 });

@@ -31,9 +31,11 @@ export async function startSharedHost(
 	args: string[],
 ): Promise<void> {
 	const startupStartedAt = performance.now();
-	const startupStage = (stage: string) => process.stderr.write(
-		`[shared-host] ${new Date().toISOString()} startup: ${stage} (${Math.round(performance.now() - startupStartedAt)} ms elapsed)\n`,
-	);
+	const startupCpu = process.cpuUsage();
+	const startupStage = (stage: string) => {
+		const cpu = process.cpuUsage(startupCpu);
+		process.stderr.write(`[shared-host] ${new Date().toISOString()} startup: ${stage} (${Math.round(performance.now() - startupStartedAt)} ms elapsed); ${Math.round((cpu.user + cpu.system) / 1000)} ms CPU\n`);
+	};
 	startupStage("initializing control");
 	process.stderr.write(`[shared-host] Runtime ${process.version} (${process.execPath}); process age ${Math.round(process.uptime() * 1000)} ms\n`);
 	const control = new SharedHostControl();

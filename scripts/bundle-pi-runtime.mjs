@@ -1,10 +1,24 @@
 import { build, transform } from "esbuild";
 import { readFile, realpath, mkdir, writeFile, lstat, rename } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const developmentModules = resolve(dirname(fileURLToPath(import.meta.url)), "../node_modules");
+
+// SettingsManager reads timeout constants without configuring Pi's CLI HTTP
+// dispatcher. Keep that synchronous API, but load Undici only when it is used.
+export function deferUndiciImport(source) {
+	if (createHash("sha256").update(source).digest("hex") !== "f9aa2c81b0a5958ffba6368506f24c9b202904c234ada19494cdc9c4a1d0e97b")
+		throw new Error("Review changed Pi HTTP dispatcher before deferring Undici");
+	return source.replace('import * as undici from "undici";', [
+		'import { createRequire as createUndiciRequire } from "node:module";',
+		'const requireUndici = createUndiciRequire(import.meta.url);',
+		'let undici;',
+		'const loadUndici = () => undici ??= requireUndici("undici");',
+	].join("\n")).replace(/new undici\.(\w+)/g, "new (loadUndici().$1)")
+		.replace(/\bundici\./g, "loadUndici().");
+}
 function inside(root, path) {
 	const local = relative(root, path);
 	return local && local !== ".." && !local.startsWith("../") && !local.startsWith("..\\") && !isAbsolute(local);
@@ -48,7 +62,9 @@ export async function bundlePiRuntime(nodeModules) {
 				bundler.onLoad({ filter: /\.js$/ }, async ({ path }) => {
 					if (!inside(directory, path) || await realpath(path) !== path)
 						throw new Error("Pi source escaped its staged package");
-					const source = await readFile(path, "utf8");
+					let source = await readFile(path, "utf8");
+					if (relative(directory, path).replaceAll("\\", "/") === "dist/core/http-dispatcher.js")
+						source = deferUndiciImport(source);
 					if (!source.includes("import.meta.url")) return { contents: source, loader: "js" };
 					const original = relative(output, path).replaceAll("\\", "/");
 					const transformed = await transform(source, {

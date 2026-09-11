@@ -127,7 +127,7 @@ The experiment's first host launch took 4,190 ms, while subsequent runs took
 Real Rhino host logs on this machine show recent runtime import stages of
 6,355–9,940 ms, followed by about 310–362 ms of agent initialization. Even the
 installed package benchmarks below one second with isolated warm launches. That
-gap remains unexplained: these measurements do not establish a new in-Rhino
+gap was not explained by those benchmarks: these measurements do not establish a new in-Rhino
 launch time. Startup logs now include the Node executable, version, and process
 age to help compare the real launch environment with the benchmark. Further work
 should reproduce the slow Rhino launch and correlate import timing with process
@@ -155,3 +155,46 @@ over the initial #104 packages. Windows native runtime smoke passed sessions,
 typed extensions, shared SDK/schema/agent identity, providers, native bindings,
 image workers/WASM, SQLite, and esbuild. This follow-up has not been executed
 natively on macOS or accepted manually in Rhino/browser.
+
+## Fresh-package file reads and deferred HTTP client
+
+A subsequent real installed launch still spent 5,410 ms in imports and reached
+host readiness at 5,835 ms. A traced warm launch through Rhino with the same
+installed package and existing Hopper data reached readiness in 639 ms.
+Launching a fresh copy of the package through Rhino reproduced 3,712 ms to
+readiness, including about 1,010 ms in synchronous file reads during imports.
+The warm trace spent only about 17 ms in those reads. This reproduces a large
+first-use file-loading cost; it does not establish whether storage, caching, or
+security scanning is responsible, nor prove that every repeated launch is fast.
+
+Pi's SettingsManager imports HTTP timeout constants from a module that eagerly
+imports Undici. Hopper's embedded startup does not configure Pi's CLI dispatcher.
+The staged SDK bundler now defers that dependency until the dispatcher actually
+uses it, retaining the synchronous configuration API, proxy/timeouts, error
+listeners, and fetch override behavior. A SHA-256 check against the audited Pi
+0.85.1 dispatcher source stops packaging if upstream code changes. The original
+Pi files and Undici remain installed for CLI and extension compatibility.
+
+This removes 108 loaded modules: the SDK import graph falls from 572 to 464 files
+and from 1,612 to 1,182 resolutions. Five isolated warm Windows host runs give
+medians of 409 ms for runtime imports, 687 ms for first health, and 794 ms for
+readiness. Standalone SDK import median was 436 ms.
+
+A fresh-copy Rhino launch with this change reached readiness in 3,448 ms, with
+about 452 ms in synchronous import-time file reads and 875 ms total process CPU
+reported at readiness. The 3,712 → 3,448 ms comparison is one launch per fresh
+directory, with uncontrolled filesystem caches and temporary tracing. It is not
+a reliable cold-start percentile or a browser-render measurement. Both used
+Rhino `/notemplate` and the existing Hopper journal. No geometry/model work ran.
+
+Normal startup stage logs now include cumulative CPU time alongside elapsed
+time, without installing module hooks. Future slow-launch reports can distinguish
+CPU work from elapsed waits. Temporary tracing was confined to test-launched
+Rhino processes and is not part of normal launch configuration.
+
+Validation: 421 Vitest tests passed / one skipped, two benchmark tests passed,
+host/web TypeScript checks passed, Windows staged runtime smoke passed, and
+Windows/macOS Yak packaging passed unchanged budgets. New regressions verify
+that reading settings does not load Undici, unsupported source is rejected,
+dispatcher settings/error handling are preserved, and the real deferred client
+successfully completes a loopback HTTP request in an isolated child process.
