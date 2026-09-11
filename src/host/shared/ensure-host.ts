@@ -37,7 +37,10 @@ export async function ensureSharedHost(
 	};
 	const existing = await healthyDiscovery(options.control, state, browserReady);
 	if (existing) return existing;
-	const deadline = Date.now() + (options.timeoutMs ?? 15000);
+	// Cold SDK loading and journal migrations can outlast the old 15-second limit.
+	// Keep this below SharedNodeAttachment's outer launcher deadline (75 seconds).
+	const timeoutMs = options.timeoutMs ?? 60_000;
+	const deadline = Date.now() + timeoutMs;
 	if (await endpointOccupied(state.endpointPort)) {
 		const previous = options.control.readDiscovery();
 		const draining =
@@ -119,7 +122,7 @@ export async function ensureSharedHost(
 		await new Promise((resolve) => setTimeout(resolve, 100));
 	}
 	throw new Error(
-		"Shared host did not publish compatible readiness; inspect its private host.log. No fallback host was started",
+		`Shared host did not become ready within ${timeoutMs / 1000} seconds; inspect startup stages in its private host.log. No fallback host was started`,
 	);
 }
 async function healthyDiscovery(

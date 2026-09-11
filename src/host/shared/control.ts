@@ -67,7 +67,8 @@ export class SharedHostControl {
 					"/grant:r",
 					`${userInfo().username}:${directory ? "(OI)(CI)" : ""}F`,
 				],
-				{ stdio: "pipe" },
+				// The detached host has no console. Avoid creating one for every ACL check.
+				{ stdio: "pipe", windowsHide: true },
 			);
 		} else chmodSync(path, directory ? 0o700 : 0o600);
 	}

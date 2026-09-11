@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -222,7 +223,7 @@ namespace Hopper.Rhino.Host
             {
                 if (!pendingStart.IsCancellationRequested)
                 {
-                    var result = await _lifecycle.StartAsync(pendingStart.Token).ConfigureAwait(false);
+                    var result = await StartWithProgressAsync(pendingStart.Token).ConfigureAwait(false);
                     SyncStatus();
                     if (IsCurrentRunningInstance(result.Snapshot))
                         _runningObserver?.OnRunning();
@@ -238,6 +239,40 @@ namespace Hopper.Rhino.Host
                 }
                 pendingStart.Dispose();
             }
+        }
+
+        private async Task<LifecycleCommandResult> StartWithProgressAsync(CancellationToken cancellationToken)
+        {
+            using var progressCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var progress = ReportStartupProgressAsync(progressCancellation.Token);
+            try
+            {
+                return await _lifecycle.StartAsync(cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                progressCancellation.Cancel();
+                // Finish progress reporting before publishing the final startup result.
+                await progress.ConfigureAwait(false);
+            }
+        }
+
+        private async Task ReportStartupProgressAsync(CancellationToken cancellationToken)
+        {
+            if (_completionSink == null || cancellationToken.IsCancellationRequested) return;
+            var elapsed = Stopwatch.StartNew();
+            _completionSink.Write("HopperCode is starting... (0s elapsed)");
+            try
+            {
+                while (true)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (_lifecycle.Snapshot.State != Hopper.Core.Lifecycle.LifecycleState.Starting) return;
+                    _completionSink.Write($"HopperCode is starting... ({(int)elapsed.Elapsed.TotalSeconds}s elapsed)");
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         }
 
         private OperationResultV2 StartGrasshopper()

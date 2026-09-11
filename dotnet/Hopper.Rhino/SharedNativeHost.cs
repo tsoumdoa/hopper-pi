@@ -110,7 +110,8 @@ internal sealed class SharedNodeAttachment : IDisposable
         if (explicitStart) info.ArgumentList.Add("--explicit-start");
         using var launcher = Process.Start(info) ?? throw new InvalidOperationException("Could not start shared host launcher.");
         var stderr = launcher.StandardError.ReadToEndAsync();
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); deadline.CancelAfter(TimeSpan.FromSeconds(20));
+        // Allow the launcher's 60-second cold-start window plus process/control overhead.
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); deadline.CancelAfter(TimeSpan.FromSeconds(75));
         var stdout = ObserveBrowserReadyAsync(launcher, deadline.Token);
         await launcher.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
         await stdout.ConfigureAwait(false);

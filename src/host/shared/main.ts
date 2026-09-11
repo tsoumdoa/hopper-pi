@@ -5,7 +5,6 @@ import type { EmbeddedPiHost } from "../pi-runtime.js";
 import { sharedToolSettings } from "./tool-settings.js";
 import { monitorHostLifetime } from "./lifetime.js";
 import { SharedHostControl } from "./control.js";
-import { ensureSharedHost } from "./ensure-host.js";
 import { TaskJournal } from "./journal.js";
 import { SharedTaskService } from "./task-service.js";
 import { SharedRegistry } from "./registry.js";
@@ -13,7 +12,6 @@ import { SharedBackend } from "./backend.js";
 import { createSharedBrowserServer } from "./browser-server.js";
 import type { SharedNativeRuntime } from "./native-runtime.js";
 import { SharedRecoveryService } from "./recovery.js";
-import { admitDocumentTool } from "./document-tool-policy.js";
 import { DocumentActionService } from "./document-actions.js";
 import type { RhinoLaunchService } from "./rhino-launch.js";
 import { GeometryTransferService } from "./transfer.js";
@@ -31,16 +29,12 @@ function sharedLimit(name: string, fallback: number): number {
 export async function startSharedHost(
 	config: HostConfig,
 	args: string[],
-	entrypoint: string,
 ): Promise<void> {
-	if (
-		args.includes("--parent-pid") ||
-		args.includes("--instance-id") ||
-		args.includes("--connection-profile")
-	)
-		throw new Error(
-			"Hopper uses one persistent host; per-process host options are no longer supported",
-		);
+	const startupStartedAt = performance.now();
+	const startupStage = (stage: string) => process.stderr.write(
+		`[shared-host] ${new Date().toISOString()} startup: ${stage} (${Math.round(performance.now() - startupStartedAt)} ms elapsed)\n`,
+	);
+	startupStage("initializing control");
 	const control = new SharedHostControl();
 	const dataDirectory = args.includes("--data-dir")
 		? join(config.paths.dataDir, "shared-host")
@@ -50,22 +44,6 @@ export async function startSharedHost(
 		dataDirectory,
 		explicitStart: args.includes("--explicit-start"),
 	};
-	if (args.includes("--ensure-host")) {
-		const forwarded = args.filter(
-			(arg) => !["--ensure-host", "--explicit-start"].includes(arg),
-		);
-		const discovery = await ensureSharedHost({
-			control,
-			...initialize,
-			entrypoint,
-			hostArguments: forwarded,
-			onBrowserReady: (host) => process.stdout.write(`${JSON.stringify({ type: "shared_browser_ready", hostEpoch: host.hostEpoch, port: host.endpointPort })}\n`),
-		});
-		process.stdout.write(
-			`${JSON.stringify({ type: "shared_ready", hostEpoch: discovery.hostEpoch, port: discovery.endpointPort })}\n`,
-		);
-		return;
-	}
 	const state = await control.initialize(initialize);
 	if (state.desiredState !== "running")
 		throw new Error(
@@ -166,19 +144,23 @@ export async function startSharedHost(
 	try {
 		await control.acquireOwnership(browser.server, state.revision);
 		await control.publish(discovery);
+		startupStage("browser listening; loading runtime modules");
 		// Serve the loading UI before importing and initializing the AI runtime.
 		// The short-lived --ensure-host launcher never loads these modules.
 		const [{ EmbeddedPiHost }, { createPiTaskDriver }, { Type },
 			{ collectDelegationResults, delegationBindingSchema, selectDelegationImages },
-			{ SharedNativeRuntime }, { RhinoLaunchService }] = await Promise.all([
+			{ SharedNativeRuntime }, { RhinoLaunchService }, { admitDocumentTool }] = await Promise.all([
 			import("../pi-runtime.js"), import("./pi-driver.js"), import("@earendil-works/pi-ai"),
 			import("./delegation.js"), import("./native-runtime.js"), import("./rhino-launch.js"),
+			import("./document-tool-policy.js"),
 		]);
+		startupStage("opening journal and rebuilding browser history if needed");
 		journal = new TaskJournal(join(state.dataDirectory, "journal.sqlite"));
 		if (journal.identity !== state.journalIdentity)
 			throw new Error(
 				"Pinned journal identity does not match the shared database",
 			);
+		startupStage("recovering journal");
 		journal.recover();
 		const registry = new SharedRegistry(journal);
 		launches = new RhinoLaunchService(journal, registry, { allowsLaunch: async () => {
@@ -186,6 +168,7 @@ export async function startSharedHost(
 			return !closing && intent?.desiredState === "running" && intent.revision === state.revision;
 		} });
 		native = new SharedNativeRuntime(epoch, registry, journal);
+		startupStage("initializing agent");
 		admin = await EmbeddedPiHost.create({
 			// Native connections belong to registered attachments and task sessions.
 			// Probing the default profile here can wait on a stale Rhino process.
@@ -198,6 +181,7 @@ export async function startSharedHost(
 				scriptWorkspaceDir: join(state.dataDirectory, "admin", "scripts"),
 			},
 		});
+		startupStage("restoring task service");
 		tasks = new SharedTaskService(journal, {
 			resolveBinding: (binding) => registry.resolveBinding(binding),
 			resolveLifecycle: (lifecycleId) => registry.resolveLifecycle(lifecycleId),
@@ -435,6 +419,7 @@ export async function startSharedHost(
 			void close();
 		});
 		tasks.pump();
+		startupStage("ready");
 		process.stdout.write(
 			`${JSON.stringify({ type: "ready", mode: "shared", url: `http://127.0.0.1:${state.endpointPort}/`, pid: process.pid })}\n`,
 		);

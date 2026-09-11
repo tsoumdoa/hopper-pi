@@ -27,6 +27,43 @@ function setup() {
 	};
 }
 describe("detached shared host launcher", () => {
+	it.each([21_000, Infinity])("bounds cold startup while allowing readiness after 15 seconds: %s", async readyAfter => {
+		const options = setup();
+		const startedAt = Date.now();
+		let now = startedAt;
+		const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+		const onBrowserReady = vi.fn();
+		let spawns = 0;
+		try {
+			const waiting = ensureSharedHost({
+				...options, explicitStart: true, onBrowserReady,
+				spawnHost: async state => {
+					spawns++;
+					const discovery: HostDiscovery = {
+						endpointPort: state.endpointPort, dataDirectory: state.dataDirectory,
+						journalIdentity: state.journalIdentity, revision: state.revision,
+						hostEpoch: "cold-host", pid: 123, processStartIdentity: "start",
+						protocolVersion: 2, schemaVersion: 2, registrationToken: "private",
+					};
+					const server = createServer((_request, response) => {
+						now += 8000; // Advance elapsed startup time without slowing the test.
+						response.end(JSON.stringify({ ...discovery, listening: true, ready: now - startedAt >= readyAfter }));
+					});
+					servers.push(server);
+					await options.control.acquireOwnership(server, state.revision);
+					await options.control.publish(discovery);
+				},
+			});
+			if (Number.isFinite(readyAfter)) {
+				await expect(waiting).resolves.toMatchObject({ hostEpoch: "cold-host" });
+				expect(now - startedAt).toBeGreaterThan(15_000);
+			} else {
+				await expect(waiting).rejects.toThrow("did not become ready within 60 seconds");
+			}
+			expect(spawns).toBe(1);
+			expect(onBrowserReady).toHaveBeenCalledOnce();
+		} finally { clock.mockRestore(); }
+	});
 	it("reuses verified readiness without spawning and leaves its revision unchanged", async () => {
 		const options = setup();
 		let spawns = 0;
