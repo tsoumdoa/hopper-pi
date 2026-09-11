@@ -550,7 +550,7 @@ export function App() {
 				))}
 			</SelectContent>
 		</Select>
-		<Button variant="ghost" size="sm" aria-label="Instance access" aria-pressed={onlyThisInstance} title="Choose which Hopper Code instances this message can access" disabled={!connected || sendMode === "steer" || submitting} onClick={() => setOnlyThisInstance((value) => !value)}>{onlyThisInstance ? "Only this instance" : "All instances"}</Button>
+		<Button variant="ghost" size="sm" aria-label="Instance access" aria-pressed={onlyThisInstance} title={onlyThisInstance ? "Restrict this message to the chosen document's Rhino process" : "Let this message reach all connected Hopper Code instances"} disabled={!connected || sendMode === "steer" || submitting} onClick={() => setOnlyThisInstance((value) => !value)}>{onlyThisInstance ? "This instance" : "All instances"}</Button>
 		</>
 	);
 

@@ -11,7 +11,7 @@ const MANAGE = "__manage-providers__";
 
 /** Compact trigger used inside the composer toolbar. */
 export const toolbarTriggerClass =
-	"h-7 w-auto max-w-[220px] gap-1.5 border-transparent bg-transparent px-2 text-xs font-medium text-ink-soft hover:border-transparent hover:bg-ink/[.06] hover:text-ink data-[placeholder]:text-muted";
+	"h-7 w-auto max-w-[176px] min-w-0 gap-1.5 border-transparent bg-transparent px-2 text-xs font-medium text-ink-soft hover:border-transparent hover:bg-ink/[.06] hover:text-ink data-[placeholder]:text-muted";
 
 export type ModelControlsProps = {
 	connected: boolean;
