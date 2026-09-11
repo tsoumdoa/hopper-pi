@@ -10,7 +10,8 @@ import { bundlePiRuntime, deferJitiImport, deferUndiciImport } from "./bundle-pi
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
-	const root = await mkdtemp(join(tmpdir(), "hopper-pi-runtime-"));
+	// macOS aliases /var to /private/var; use one URL for both module imports.
+	const root = await realpath(await mkdtemp(join(tmpdir(), "hopper-pi-runtime-")));
 	roots.push(root);
 	const pkg = join(root, "@earendil-works/pi-coding-agent");
 	await mkdir(join(pkg, "dist/core"), { recursive: true });
