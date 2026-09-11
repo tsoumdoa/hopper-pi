@@ -99,10 +99,10 @@ export type RhinoViewMetadata = {
 	cameraDirection: RhinoPoint3d;
 	cameraUp: RhinoPoint3d;
 	lensLength: number;
-	cplaneName: string;
-	cplaneOrigin: RhinoPoint3d;
-	width?: number;
-	height?: number;
+	cPlaneName: string;
+	cPlaneOrigin: RhinoPoint3d;
+	width?: number | null;
+	height?: number | null;
 };
 
 export type CaptureRhinoViewResponse = {
