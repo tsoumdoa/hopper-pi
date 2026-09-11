@@ -535,3 +535,16 @@ describe("shared runtime policy admissions", () => {
 		expect(f.pi.getActiveTools()).toContain("other_extension");
 	});
 });
+
+it("previews online and offline targets without borrowing or changing admin exposure", async () => {
+	const f = await fixture();
+	f.tool("rh_run_script", async () => completed());
+	await f.runtime.reconcile();
+	expect((await f.runtime.getToolSettings()).tools.find(tool => tool.name === "rh_run_script")?.active).toBe(true);
+	backend.online = false;
+	const online = await f.runtime.getToolSettings(true);
+	expect(online.tools.find(tool => tool.name === "rh_run_script")).toMatchObject({ available: true, active: false, status: "available-on-demand" });
+	const offline = await f.runtime.getToolSettings(false);
+	expect(offline.tools.find(tool => tool.name === "rh_run_script")).toMatchObject({ available: false, active: false, status: "backend-unavailable" });
+	expect(f.pi.getActiveTools()).toContain("rh_run_script");
+});

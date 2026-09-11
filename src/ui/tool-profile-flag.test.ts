@@ -35,7 +35,7 @@ it("resolves CLI profile flags after factory loading without writing the default
 		await expect(access(join(configuredDirectory, "tool-settings.json"))).resolves.toBeUndefined();
 		await expect(access(profile.defaultDirectory)).rejects.toMatchObject({ code: "ENOENT" });
 	} finally {
-		toolPolicyForSession(sessionManager.getSessionId())?.close();
+		await toolPolicyForSession(sessionManager.getSessionId())?.close();
 		session?.dispose();
 		await rm(root, { recursive: true, force: true });
 	}

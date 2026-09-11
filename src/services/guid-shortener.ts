@@ -1,3 +1,4 @@
+import { getRuntimeSessionContext } from "../infra/runtime-session-context.js";
 import { createHash } from "node:crypto";
 
 const BASE62_ALPHABET =
@@ -14,7 +15,9 @@ type GuidStore = {
 	normalizedToShort: Map<string, string>;
 };
 
-const stores: Record<GuidKind, GuidStore> = {
+const storesKey = Symbol("guidAliases");
+function getStores(): Record<GuidKind, GuidStore> {
+	return getRuntimeSessionContext().get(storesKey, () => ({
 	type: {
 		shortToFull: new Map(),
 		normalizedToFull: new Map(),
@@ -30,7 +33,8 @@ const stores: Record<GuidKind, GuidStore> = {
 		normalizedToFull: new Map(),
 		normalizedToShort: new Map(),
 	},
-};
+	}));
+}
 
 function normalizeGuid(guid: string): string {
 	return guid.trim().toLowerCase().replace(/[{}-]/g, "");
@@ -63,7 +67,7 @@ export function shortGuidBase62(guid: string, length = DEFAULT_SHORT_LENGTH): st
 }
 
 function registerGuid(guid: string, kind: GuidKind): string {
-	const store = stores[kind];
+	const store = getStores()[kind];
 	const normalized = normalizeGuid(guid);
 
 	const existingShort = store.normalizedToShort.get(normalized);
@@ -92,7 +96,7 @@ function registerGuid(guid: string, kind: GuidKind): string {
 }
 
 function resolveGuid(value: string, kind: GuidKind): string {
-	const store = stores[kind];
+	const store = getStores()[kind];
 	const byShort = store.shortToFull.get(value);
 	if (byShort) {
 		return byShort;
@@ -146,7 +150,7 @@ export function resolveRhinoGuids(values: string[]): string[] {
 
 /** Forget aliases scoped to the document that just ended or changed. Type GUIDs are global. */
 export function clearDocumentGuidAliases(owner: "rhino" | "grasshopper"): void {
-	const store = stores[owner === "rhino" ? "rhino" : "instance"];
+	const store = getStores()[owner === "rhino" ? "rhino" : "instance"];
 	store.shortToFull.clear();
 	store.normalizedToFull.clear();
 	store.normalizedToShort.clear();

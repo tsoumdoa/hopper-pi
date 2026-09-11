@@ -16,11 +16,16 @@ public sealed record RpcTransportOwnerOptions
     public required string PublisherEndpoint { get; init; }
     public required string ConnectionToken { get; init; }
     public required string LifecycleInstanceId { get; init; }
+    public Func<RpcRequestV2, ExecutionOwner, string?>? SharedBindingValidator { get; init; }
+    public Func<ExecutionOwner?, ExecutionOwner?, bool>? SharedTransactionCleanup { get; init; }
+    public bool SharedMode { get; init; }
     public TimeSpan PollInterval { get; init; } = TimeSpan.FromMilliseconds(5);
     public TimeSpan StartTimeout { get; init; } = TimeSpan.FromSeconds(5);
 
     internal void Validate()
     {
+        if (SharedMode && (SharedBindingValidator is null || SharedTransactionCleanup is null))
+            throw new ArgumentException("Shared mode requires native document validation and transaction cleanup.");
         RequireEndpoint(RouterEndpoint, nameof(RouterEndpoint));
         RequireEndpoint(PublisherEndpoint, nameof(PublisherEndpoint));
         if (RouterEndpoint == PublisherEndpoint)
@@ -123,6 +128,7 @@ public sealed class RpcTransportOwner : IDisposable
 {
     private const long MaximumUnixMilliseconds = 253_402_300_799_999;
     private readonly object _stateGate = new();
+    private readonly SharedExecutionFence? _sharedFence;
     private readonly RpcTransportOwnerOptions _options;
     private readonly OrderedDispatcher _dispatcher;
     private readonly IRpcOperationHandler _handler;
@@ -154,6 +160,7 @@ public sealed class RpcTransportOwner : IDisposable
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _options.Validate();
+        _sharedFence = options.SharedMode ? new SharedExecutionFence(options.LifecycleInstanceId, options.SharedBindingValidator!) : null;
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _handler = handler ?? throw new ArgumentNullException(nameof(handler));
         _handshakeObserver = handshakeObserver;
@@ -453,6 +460,13 @@ public sealed class RpcTransportOwner : IDisposable
             }
 
             var request = parsed.Value;
+            if ((!_options.SharedMode && (request.ExecutionOwner is not null || request.DocumentActionOwner is not null)) ||
+                (request.Operation != RpcOperation.lifecycleHandshake && _sharedFence?.ValidateAdmission(request, Encoding.UTF8.GetString(routingIdentity)) is { }))
+            {
+                QueueOperationResponse(routingIdentity, request, _sharedFence?.ValidateAdmission(request, Encoding.UTF8.GetString(routingIdentity))
+                    ?? Result(RpcResultClass.failed, RpcReasonCode.HANDSHAKE_REJECTED, "Shared owner envelopes require shared transport mode."));
+                return;
+            }
             if (_clock.UtcNow.ToUnixTimeMilliseconds() >= request.StartDeadlineAt)
             {
                 QueueOperationResponse(
@@ -515,6 +529,11 @@ public sealed class RpcTransportOwner : IDisposable
 
         try
         {
+            if (_options.SharedMode != (args.HostEpoch is not null))
+            {
+                QueueOperationResponse(routingIdentity, request, Result(RpcResultClass.failed, RpcReasonCode.HANDSHAKE_REJECTED, "Host mode does not match the native lifecycle."));
+                return;
+            }
             var observation = _handshakeObserver?.OnAuthenticatedHandshake(args)
                 ?? RpcHandshakeObservation.Allow(0);
             if (observation.State == RpcHandshakeObservationState.Rejected)
@@ -529,6 +548,12 @@ public sealed class RpcTransportOwner : IDisposable
                 return;
             }
 
+            var generation = _sharedFence?.Attach(args.HostEpoch!, routedIdentity);
+            if (generation is not null)
+            {
+                // Recovery shares the UI queue with geometry. Old queued work observes the new fence.
+                _ = _dispatcher.SubmitLifecycleControl(() => _sharedFence!.Recover(generation, _options.SharedTransactionCleanup!), DateTimeOffset.MaxValue);
+            }
             var handshake = new AuthenticatedRpcHandshake(
                 args.NodeProcessId,
                 args.NodeVersion,
@@ -544,6 +569,7 @@ public sealed class RpcTransportOwner : IDisposable
                     data: JsonSerializer.SerializeToElement(
                         new LifecycleHandshakeDataV2
                         {
+                            AttachmentGeneration = generation,
                             Handshake = HandshakeState.live,
                             StatusRevision = observation.StatusRevision,
                         },
@@ -591,7 +617,7 @@ public sealed class RpcTransportOwner : IDisposable
             ? DateTimeOffset.MaxValue
             : DateTimeOffset.FromUnixTimeMilliseconds(request.StartDeadlineAt);
         var completion = _dispatcher.SubmitExternal(
-            () => _handler.Execute(request),
+            () => _sharedFence is null ? _handler.Execute(request) : _sharedFence.Execute(request, Encoding.UTF8.GetString(routingIdentity), () => _handler.Execute(request)),
             deadline,
             operationId: request.OperationId);
         _ = completion.ContinueWith(
@@ -630,7 +656,7 @@ public sealed class RpcTransportOwner : IDisposable
             MutationLookupState.Pending => new OperationLookupDataV2
             {
                 State = OperationLookupState.pending,
-                Phase = OperationPhase.queued,
+                Phase = _dispatcher.IsOperationRunning(args.OperationId) ? OperationPhase.running : OperationPhase.queued,
             },
             MutationLookupState.Terminal => new OperationLookupDataV2
             {

@@ -14,6 +14,8 @@ public enum RpcOperation
     getGrasshopperDocumentSettings,
     browseDocumentFiles,
     getDocumentTransactionState,
+    exportRhinoArtifact,
+    importRhinoArtifact,
     manageRhinoDocument,
     manageGrasshopperDocument,
 
@@ -183,6 +185,10 @@ public enum CancelOperationState
 
 public sealed record RpcRequestV2
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? ExecutionOwner { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? DocumentActionOwner { get; init; }
     public int ProtocolVersion { get; init; }
     public string LifecycleInstanceId { get; init; } = string.Empty;
     public string RequestId { get; init; } = string.Empty;
@@ -230,6 +236,8 @@ public sealed record ProtocolErrorResponseV2 : RpcResponseV2
 
 public sealed record LifecycleHandshakeArgsV2
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? HostEpoch { get; init; }
     public int NodeProcessId { get; init; }
     public string NodeVersion { get; init; } = string.Empty;
     public string ClientIdentity { get; init; } = string.Empty;
@@ -242,6 +250,8 @@ public sealed record OperationReferenceArgsV2
 
 public sealed record LifecycleHandshakeDataV2
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AttachmentGeneration { get; init; }
     public HandshakeState Handshake { get; init; }
     public long StatusRevision { get; init; }
 }
@@ -378,6 +388,8 @@ public static class RpcV2Operations
 
     public static readonly RpcOperation[] Mutation =
     {
+        RpcOperation.exportRhinoArtifact,
+        RpcOperation.importRhinoArtifact,
         RpcOperation.manageRhinoDocument,
         RpcOperation.manageGrasshopperDocument,
 
@@ -458,7 +470,7 @@ public static class RpcV2Contract
     public const int ProtocolVersion = 2;
     public const string UncorrelatedRequestPolicy = "drop";
     private const long MaxSafeInteger = 9_007_199_254_740_991;
-    private static readonly Regex IdentifierPattern = new("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", RegexOptions.CultureInvariant);
+    private static readonly Regex IdentifierPattern = new(@"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\z", RegexOptions.CultureInvariant);
     private static readonly Regex TokenPattern = new("^[A-Za-z0-9_-]{32,128}$", RegexOptions.CultureInvariant);
     private static readonly Regex NodeVersionPattern = new("^v?[0-9]+\\.[0-9]+\\.[0-9]+$", RegexOptions.CultureInvariant);
     public static readonly IReadOnlySet<RpcReasonCode> ProtocolErrorReasonCodes = new HashSet<RpcReasonCode>
@@ -583,6 +595,16 @@ public static class RpcV2Contract
             "protocolVersion", "lifecycleInstanceId", "requestId", "token", "operation", "startDeadlineAt", "args",
         };
         if (operationClass == RpcOperationClass.Mutation) allowed.Add("operationId");
+        if (root.TryGetProperty("executionOwner", out var owner))
+        {
+            allowed.Add("executionOwner");
+            if (SharedExecutionContract.ParseOwner(owner) is null) errors.Add("executionOwner is invalid");
+        }
+        if (root.TryGetProperty("documentActionOwner", out var actionOwner))
+        {
+            allowed.Add("documentActionOwner");
+            if (SharedExecutionContract.ParseDocumentActionOwner(actionOwner) is null || root.TryGetProperty("executionOwner", out _)) errors.Add("documentActionOwner is invalid or ambiguous");
+        }
         RequireExactProperties(root, allowed, "request", errors);
         RequireProtocolVersion(root, errors);
         RequireIdentifier(root, "lifecycleInstanceId", errors);
@@ -660,7 +682,9 @@ public static class RpcV2Contract
         switch (operation)
         {
             case RpcOperation.lifecycleHandshake:
-                RequireExactProperties(args, new HashSet<string> { "nodeProcessId", "nodeVersion", "clientIdentity" }, "handshake args", errors);
+                var handshakeFields = new HashSet<string> { "nodeProcessId", "nodeVersion", "clientIdentity" };
+                if (args.TryGetProperty("hostEpoch", out _)) { handshakeFields.Add("hostEpoch"); RequireIdentifier(args, "hostEpoch", errors); }
+                RequireExactProperties(args, handshakeFields, "handshake args", errors);
                 RequireSafeInteger(args, "nodeProcessId", 1, errors, int.MaxValue);
                 RequirePattern(args, "nodeVersion", NodeVersionPattern, errors);
                 RequireIdentifier(args, "clientIdentity", errors);
@@ -710,7 +734,9 @@ public static class RpcV2Contract
         switch (operation)
         {
             case RpcOperation.lifecycleHandshake:
-                RequireExactProperties(data, new HashSet<string> { "handshake", "statusRevision" }, "handshake data", errors);
+                var handshakeFields = new HashSet<string> { "handshake", "statusRevision" };
+                if (data.TryGetProperty("attachmentGeneration", out _)) { handshakeFields.Add("attachmentGeneration"); RequireIdentifier(data, "attachmentGeneration", errors); }
+                RequireExactProperties(data, handshakeFields, "handshake data", errors);
                 if (!data.TryGetProperty("handshake", out var handshake) || handshake.GetString() != "live") errors.Add("handshake must be live");
                 RequireSafeInteger(data, "statusRevision", 0, errors);
                 break;

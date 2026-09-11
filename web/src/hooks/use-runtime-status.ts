@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RuntimeStatus } from "../../../src/protocol/v2.js";
 import { useHopperStore } from "../state/hopper-store-context";
-import { mockRuntimeStatus } from "../mocks/hopper-mock";
+import { mockRuntimeStatus } from "../mocks/runtime-status-mock";
 
 const POLL_INTERVAL_MS = 3_000;
 

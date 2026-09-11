@@ -102,6 +102,15 @@ if [[ -n "$INSTALLED_LINE" ]]; then
 				;;
 		esac
 	fi
+fi
+
+# Building can take several minutes; check again before touching the installation.
+if pgrep -x "Rhinoceros" >/dev/null 2>&1; then
+	fail "Rhino was opened during the build. Quit Rhino fully, then run this script again."
+fi
+node scripts/stop-shared-host.mjs
+
+if [[ -n "$INSTALLED_LINE" ]]; then
 	echo "[hopper-pi] Removing the installed $PACKAGE_NAME package"
 	"$YAK" uninstall "$PACKAGE_NAME"
 fi
@@ -116,6 +125,7 @@ fi
 echo
 echo "[hopper-pi] Installed $PACKAGE_NAME $PACKAGE_VERSION"
 echo "[hopper-pi] Package files: $STAGE_DIR"
+echo "[hopper-pi] HopperCode will start a fresh background host using this installation."
 echo "[hopper-pi] In Rhino, run HopperCode. Grasshopper loads only when the first gh_* tool needs it."
 
 if [[ "$OPEN_RHINO" -eq 1 ]]; then

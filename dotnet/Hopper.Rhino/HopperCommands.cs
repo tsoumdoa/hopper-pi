@@ -21,7 +21,10 @@ namespace rhino_zmq_poc
                 return Result.Failure;
             }
 
-            RhinoCodeRunner.PreloadLanguages();
+            SharedNativeHost.MessageDocumentSerialNumber = doc?.RuntimeSerialNumber;
+            SharedNativeHost.InitializeDocument(doc);
+            // Script execution initializes its requested language on demand.
+            // Cold Python/C# setup must not block host startup on Rhino's UI thread.
             var result = facade.RequestStart();
             RhinoApp.WriteLine(result.Message);
             return result.Accepted ? Result.Success : Result.Failure;
@@ -82,10 +85,12 @@ namespace rhino_zmq_poc
                 RhinoApp.WriteLine("Hopper runtime adapters are not configured.");
                 return Result.Failure;
             }
-            RhinoCodeRunner.PreloadLanguages();
+            SharedNativeHost.MessageDocumentSerialNumber = doc?.RuntimeSerialNumber;
+            SharedNativeHost.InitializeDocument(doc);
             var result = facade.RequestRestart();
             RhinoApp.WriteLine(result.Message);
             return result.Accepted ? Result.Success : Result.Nothing;
         }
     }
+
 }

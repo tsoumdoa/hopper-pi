@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { useHopperStoreApi } from "../state/hopper-store-context";
 import { Button } from "./ui/button";
 
-export function ExportSessionButton({ token, disabled }: { token: string; disabled: boolean }) {
+export function ExportSessionButton({ token, disabled, conversationId }: { token: string; disabled: boolean; conversationId?: string }) {
 	const store = useHopperStoreApi();
 	const pending = useRef(false);
 	const [exporting, setExporting] = useState(false);
@@ -13,7 +13,8 @@ export function ExportSessionButton({ token, disabled }: { token: string; disabl
 		pending.current = true;
 		setExporting(true);
 		try {
-			const response = await fetch("/api/session/export", {
+			const query = conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : "";
+			const response = await fetch(`/api/session/export${query}`, {
 				headers: { Authorization: `Bearer ${token}` },
 			});
 			if (!response.ok) throw new Error(`Export failed (${response.status}).`);

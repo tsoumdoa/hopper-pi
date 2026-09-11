@@ -25,16 +25,16 @@ internal sealed class RhinoDocumentOperations : DocumentService<RhinoDoc>, IDisp
         DocumentSession.EnsureRhinoDocumentReady = EnsureDocumentReady;
         DocumentSession.ReadRhinoSettings = id => id == null ? (Active == null ? null : Settings(Active)) : Settings(Resolve(id));
         DocumentSession.ActiveRhinoDocumentId = () => Active == null ? null : Id(Active);
-        EventHandler<Rhino.DocObjects.RhinoObjectEventArgs> AddRhinoObjectHandler = (_, e) => Touch(e.TheObject.Document);
+        EventHandler<Rhino.DocObjects.RhinoObjectEventArgs> AddRhinoObjectHandler = (_, e) => Touch(e.TheObject?.Document);
         RhinoDoc.AddRhinoObject += AddRhinoObjectHandler;
         _unsubscribe.Add(() => RhinoDoc.AddRhinoObject -= AddRhinoObjectHandler);
-        EventHandler<Rhino.DocObjects.RhinoObjectEventArgs> DeleteRhinoObjectHandler = (_, e) => Touch(e.TheObject.Document);
+        EventHandler<Rhino.DocObjects.RhinoObjectEventArgs> DeleteRhinoObjectHandler = (_, e) => Touch(e.TheObject?.Document);
         RhinoDoc.DeleteRhinoObject += DeleteRhinoObjectHandler;
         _unsubscribe.Add(() => RhinoDoc.DeleteRhinoObject -= DeleteRhinoObjectHandler);
         EventHandler<Rhino.DocObjects.RhinoReplaceObjectEventArgs> ReplaceRhinoObjectHandler = (_, e) => Touch(e.Document);
         RhinoDoc.ReplaceRhinoObject += ReplaceRhinoObjectHandler;
         _unsubscribe.Add(() => RhinoDoc.ReplaceRhinoObject -= ReplaceRhinoObjectHandler);
-        EventHandler<Rhino.DocObjects.RhinoObjectEventArgs> UndeleteRhinoObjectHandler = (_, e) => Touch(e.TheObject.Document);
+        EventHandler<Rhino.DocObjects.RhinoObjectEventArgs> UndeleteRhinoObjectHandler = (_, e) => Touch(e.TheObject?.Document);
         RhinoDoc.UndeleteRhinoObject += UndeleteRhinoObjectHandler;
         _unsubscribe.Add(() => RhinoDoc.UndeleteRhinoObject -= UndeleteRhinoObjectHandler);
         EventHandler<Rhino.DocObjects.RhinoModifyObjectAttributesEventArgs> ModifyObjectAttributesHandler = (_, e) => Touch(e.Document);
@@ -88,7 +88,7 @@ internal sealed class RhinoDocumentOperations : DocumentService<RhinoDoc>, IDisp
         EventHandler<Rhino.DocumentOpenEventArgs> BeginOpenDocumentHandler = (_, _) => ExternalBoundary();
         RhinoDoc.BeginOpenDocument += BeginOpenDocumentHandler;
         _unsubscribe.Add(() => RhinoDoc.BeginOpenDocument -= BeginOpenDocumentHandler);
-        EventHandler<Rhino.DocumentEventArgs> CloseDocumentHandler = (_, e) => { MacDocumentWindows.Forget(e.Document.RuntimeSerialNumber); ExternalBoundary(); };
+        EventHandler<Rhino.DocumentEventArgs> CloseDocumentHandler = (_, e) => { SharedNativeHost.ForgetDocument(e.Document.RuntimeSerialNumber); MacDocumentWindows.Forget(e.Document.RuntimeSerialNumber); ExternalBoundary(); };
         RhinoDoc.CloseDocument += CloseDocumentHandler;
         _unsubscribe.Add(() => RhinoDoc.CloseDocument -= CloseDocumentHandler);
         EventHandler<Rhino.DocumentEventArgs> ActiveDocumentChangedHandler = (_, _) => ExternalBoundary();
@@ -98,16 +98,17 @@ internal sealed class RhinoDocumentOperations : DocumentService<RhinoDoc>, IDisp
         Rhino.Commands.Command.UndoRedo += UndoRedoHandler;
         _unsubscribe.Add(() => Rhino.Commands.Command.UndoRedo -= UndoRedoHandler);
     }
-    private void Touch(RhinoDoc doc, bool content = true) { _revisions[doc.RuntimeSerialNumber] = _revisions.GetValueOrDefault(doc.RuntimeSerialNumber) + 1; if (content) _contentRevisions[doc.RuntimeSerialNumber] = _contentRevisions.GetValueOrDefault(doc.RuntimeSerialNumber) + 1; }
+    private void Touch(RhinoDoc? doc, bool content = true) { if (doc is null) return; _revisions[doc.RuntimeSerialNumber] = _revisions.GetValueOrDefault(doc.RuntimeSerialNumber) + 1; if (content) _contentRevisions[doc.RuntimeSerialNumber] = _contentRevisions.GetValueOrDefault(doc.RuntimeSerialNumber) + 1; }
     private void ExternalBoundary()
     {
         if (_managed) return;
-        try { RhinoAgentTransaction.CommitActive(); }
+        try { DocumentSession.AbandonActiveSegment(Kind, RhinoAgentTransaction.IsActive, () => RhinoAgentTransaction.CommitActive()); }
         catch { /* A native close may already have invalidated the undo record. Never touch another document. */ }
-        finally { DocumentSession.Advance(Kind, null, "abandoned"); }
     }
     protected override string Kind => "rhino";
     protected override IEnumerable<RhinoDoc> Documents => RhinoDoc.OpenDocuments(false);
+    protected override bool HopperInitialized(RhinoDoc doc) => SharedNativeHost.IsDocumentInitialized(doc);
+    protected override void InitializeHopper(RhinoDoc doc) => SharedNativeHost.InitializeDocument(doc);
     protected override RhinoDoc? Active => RhinoDoc.ActiveDoc;
     protected override string NativeId(RhinoDoc doc) => doc.RuntimeSerialNumber.ToString();
     protected override string? PathOf(RhinoDoc doc) => doc.Path;

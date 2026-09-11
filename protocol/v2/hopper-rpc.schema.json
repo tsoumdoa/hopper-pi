@@ -11,7 +11,7 @@
   "$defs": {
     "identifier": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}(?![\\s\\S])"
     },
     "token": {
       "type": "string",
@@ -53,6 +53,8 @@
     },
     "mutationOperation": {
       "enum": [
+        "exportRhinoArtifact",
+        "importRhinoArtifact",
         "manageRhinoDocument",
         "manageGrasshopperDocument",
         "applyGraph",
@@ -131,9 +133,121 @@
       "properties": {
         "nodeProcessId": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
         "nodeVersion": { "type": "string", "pattern": "^v?[0-9]+\\.[0-9]+\\.[0-9]+$" },
-        "clientIdentity": { "$ref": "#/$defs/identifier" }
+        "clientIdentity": { "$ref": "#/$defs/identifier" },
+        "hostEpoch": { "$ref": "#/$defs/identifier" }
       },
       "required": ["nodeProcessId", "nodeVersion", "clientIdentity"],
+      "additionalProperties": false
+    },
+    "targetBinding": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "rhino"
+            },
+            "lifecycleInstanceId": {
+              "$ref": "#/$defs/identifier"
+            },
+            "rhinoDocumentId": {
+              "$ref": "#/$defs/identifier"
+            }
+          },
+          "required": [
+            "kind",
+            "lifecycleInstanceId",
+            "rhinoDocumentId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "grasshopper"
+            },
+            "lifecycleInstanceId": {
+              "$ref": "#/$defs/identifier"
+            },
+            "grasshopperDocumentId": {
+              "$ref": "#/$defs/identifier"
+            },
+            "associatedRhinoDocumentId": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/identifier"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "lifecycleInstanceId",
+            "grasshopperDocumentId",
+            "associatedRhinoDocumentId"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "executionOwner": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "turnId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "attachmentGeneration": {
+          "$ref": "#/$defs/identifier"
+        },
+        "binding": {
+          "$ref": "#/$defs/targetBinding"
+        }
+      },
+      "required": [
+        "taskId",
+        "turnId",
+        "attachmentGeneration",
+        "binding"
+      ],
+      "additionalProperties": false
+    },
+    "documentActionOwner": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "turnId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "actionId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "grantId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "lifecycleInstanceId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "attachmentGeneration": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "required": [
+        "taskId",
+        "turnId",
+        "actionId",
+        "grantId",
+        "lifecycleInstanceId",
+        "attachmentGeneration"
+      ],
       "additionalProperties": false
     },
     "requestBase": {
@@ -146,7 +260,9 @@
         "operation": { "$ref": "#/$defs/operation" },
         "startDeadlineAt": { "$ref": "#/$defs/unixMilliseconds" },
         "args": { "$ref": "#/$defs/domainArgs" },
-        "operationId": { "$ref": "#/$defs/identifier" }
+        "operationId": { "$ref": "#/$defs/identifier" },
+        "executionOwner": { "$ref": "#/$defs/executionOwner" },
+        "documentActionOwner": { "$ref": "#/$defs/documentActionOwner" }
       },
       "required": [
         "protocolVersion",
@@ -162,6 +278,7 @@
       "unevaluatedProperties": false,
       "allOf": [
         { "$ref": "#/$defs/requestBase" },
+        { "not": { "required": ["executionOwner", "documentActionOwner"] } },
         {
           "oneOf": [
             {
@@ -423,7 +540,8 @@
       "type": "object",
       "properties": {
         "handshake": { "const": "live" },
-        "statusRevision": { "type": "integer", "minimum": 0 }
+        "statusRevision": { "type": "integer", "minimum": 0 },
+        "attachmentGeneration": { "$ref": "#/$defs/identifier" }
       },
       "required": ["handshake", "statusRevision"],
       "additionalProperties": false

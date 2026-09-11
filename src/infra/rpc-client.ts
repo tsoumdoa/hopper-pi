@@ -1,4 +1,5 @@
 import { admitCurrentToolDispatch } from "../services/tool-policy-context.js";
+import type { DocumentActionOwner, ExecutionOwner } from "../protocol/shared-execution.js";
 import { randomUUID } from "node:crypto";
 import {
 	PROTOCOL_VERSION,
@@ -87,6 +88,8 @@ export type NodeLocalOutcomeUnknown = {
 export type RpcCallResult = RpcOperationResponse | NodeLocalOutcomeUnknown;
 
 export type RpcCallOptions = {
+	executionOwner?: ExecutionOwner;
+	documentActionOwner?: DocumentActionOwner;
 	/** Checked before transport send; never claims to interrupt native execution. */
 	signal?: AbortSignal;
 	startDeadlineMs?: number;
@@ -231,6 +234,8 @@ export class HopperRpcClient {
 			operation,
 			startDeadlineAt: now + startDeadlineMs,
 			args,
+			...(options.executionOwner ? { executionOwner: options.executionOwner } : {}),
+			...(options.documentActionOwner ? { documentActionOwner: options.documentActionOwner } : {}),
 		};
 		const request = operationClass === "mutation"
 			? { ...base, operationId: options.operationId ?? this.operationIdFactory() }

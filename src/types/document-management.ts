@@ -10,6 +10,9 @@ export type AffectedDocument = {
 	createDirectories?: boolean;
 };
 export type DocumentRequest = {
+	/** Shared host destination for new/open; otherwise the captured target is used. */
+	lifecycleInstanceId?: string;
+ expectedDestinations?: {path:string;exists:boolean;byteLength?:number;sha256?:string}[];
 	action: DocumentAction;
 	documentId?: string;
 	expectedStateToken?: string;
@@ -53,6 +56,8 @@ export type DocumentSettings = {
 	diagnostics?: string[];
 };
 export type DocumentMetadata = {
+	/** Only true opts a Rhino document into shared targets; absent metadata does not. */
+	hopperInitialized?: boolean;
 	documentId: string;
 	lifecycleInstanceId: string;
 	kind: DocumentKind;
@@ -70,4 +75,6 @@ export type DocumentTransactionState = {
 	epoch: number;
 	state: "idle" | "active" | "abandoned";
 	lifecycleInstanceId: string;
+	scopeOwner?: import("../protocol/shared-execution.js").ExecutionOwner | null;
+	recoveryRequired?: boolean;
 };

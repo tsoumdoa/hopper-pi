@@ -1,6 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
 import { BookOpen, KeyRound, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Settings2, Wrench, X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useHopperStore } from "../state/hopper-store-context";
 import { useRuntimeStatus } from "../hooks/use-runtime-status";
 import { cn, providerLabel } from "../lib/utils";
@@ -17,7 +17,7 @@ function BrandMark({ className }: { className?: string }) {
 	);
 }
 
-type Tone = "ok" | "warn" | "danger" | "muted";
+export type Tone = "ok" | "warn" | "danger" | "muted";
 
 function toneClass(tone: Tone) {
 	return {
@@ -92,6 +92,11 @@ export type SidebarProps = {
 	onManageSkills(): void;
 	onViewTools(): void;
 	onReconnect(): void;
+	/**
+	 * Replaces the single-runtime status panel when the host tracks several Rhino instances.
+	 * The summary drives the status dot on the collapsed rail.
+	 */
+	rhino?: { summary: { tone: Tone; text: string }; panel: ReactNode };
 };
 
 export function Sidebar({
@@ -106,13 +111,14 @@ export function Sidebar({
 	onManageSkills,
 	onViewTools,
 	onReconnect,
+	rhino,
 }: SidebarProps) {
 	const state = useHopperStore(useShallow((state) => ({
 		connection: state.connection, backendDetail: state.backendDetail,
 		providers: state.providers, selectedModel: state.selectedModel,
 		runtimeStatus: state.runtimeStatus, runtimeStatusError: state.runtimeStatusError,
 	})));
-	const { refresh: onRefreshRuntime, refreshing: runtimeRefreshing } = useRuntimeStatus(token, connected);
+	const { refresh: onRefreshRuntime, refreshing: runtimeRefreshing } = useRuntimeStatus(token, connected && !rhino);
 	const container = useRef<HTMLElement>(null);
 
 	// Mobile settings sheet closes on Escape and on taps outside the sidebar.
@@ -132,7 +138,7 @@ export function Sidebar({
 		};
 	}, [mobileOpen, onMobileOpenChange]);
 
-	const runtime = summarizeRuntimeStatus(state.runtimeStatus, state.runtimeStatusError);
+	const runtime = rhino?.summary ?? summarizeRuntimeStatus(state.runtimeStatus, state.runtimeStatusError);
 	const connection = connectionSummary(state);
 
 	const panels = (
@@ -144,7 +150,7 @@ export function Sidebar({
 			<Button variant="secondary" size="sm" className="justify-start" disabled={!connected} onClick={onViewTools}>
 				<Wrench className="size-3.5" />Agent tools
 			</Button>
-			<RuntimeStatusPanel status={state.runtimeStatus} error={state.runtimeStatusError} onRefresh={onRefreshRuntime} refreshing={runtimeRefreshing} />
+			{rhino?.panel ?? <RuntimeStatusPanel status={state.runtimeStatus} error={state.runtimeStatusError} onRefresh={onRefreshRuntime} refreshing={runtimeRefreshing} />}
 			<ConnectionCard state={state} onReconnect={onReconnect} />
 		</>
 	);
@@ -208,7 +214,7 @@ export function Sidebar({
 						<Wrench className="size-4" />
 					</Button>
 					<div className="mt-auto grid gap-2.5 pb-2" aria-label="Status">
-						<span title={`Rhino runtime · ${runtime.text}`} aria-label={`Rhino runtime: ${runtime.text}`} role="img" className={cn("size-1.5 rounded-full", toneClass(runtime.tone))} />
+						<span title={`${rhino ? "Hopper Code instances" : "Rhino runtime"} · ${runtime.text}`} aria-label={`${rhino ? "Hopper Code instances" : "Rhino runtime"}: ${runtime.text}`} role="img" className={cn("size-1.5 rounded-full", toneClass(runtime.tone))} />
 						<span title={`Connection · ${connection.label}`} aria-label={`Connection: ${connection.label}`} role="img" className={cn("size-1.5 rounded-full", toneClass(connection.tone))} />
 					</div>
 				</div>

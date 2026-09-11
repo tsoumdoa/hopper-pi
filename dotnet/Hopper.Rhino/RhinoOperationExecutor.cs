@@ -7,8 +7,9 @@ using Rhino;
 
 namespace rhino_zmq_poc
 {
-    internal sealed class RhinoOperationExecutor : IRhinoOperationExecutor, IRhinoDocumentExecutor
+    internal sealed class RhinoOperationExecutor : IRhinoOperationExecutor, IRhinoDocumentExecutor, IRhinoArtifactExecutor
     {
+        public OperationResultV2 ArtifactOperation(RpcOperation operation, JsonElement args) => ArtifactTransferOperations.Execute(operation, args);
         private readonly RhinoDocumentOperations _documents = RhinoDocumentOperations.Instance;
         public object CurrentSettings => RhinoDoc.ActiveDoc == null ? null : _documents.ReadSettings(null);
         public OperationResultV2 DocumentOperation(RpcOperation operation, JsonElement args) => _documents.Execute(operation, args);
@@ -79,7 +80,12 @@ namespace rhino_zmq_poc
 
         public RhinoTransactionExecution CancelTransaction() { var result = Transaction(RhinoAgentTransaction.CancelActive()); DocumentSession.Advance("rhino", null, "idle"); return result; }
 
-        public void CleanupOpenTransactions() => RhinoAgentTransaction.CancelActive();
+        public void CleanupOpenTransactions()
+        {
+            var result = RhinoAgentTransaction.CancelActive();
+            if (result.IndexOf(" error", System.StringComparison.OrdinalIgnoreCase) >= 0) throw new System.InvalidOperationException(result);
+            DocumentSession.Advance("rhino", null, "idle");
+        }
 
         private static RhinoTransactionExecution Transaction(string result)
         {

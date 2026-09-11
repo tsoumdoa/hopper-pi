@@ -1,136 +1,1551 @@
 // @vitest-environment happy-dom
+import { Storage } from "happy-dom";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "./app";
-import { createHopperStore } from "./state/hopper-store";
-import type { HopperStore } from "./state/hopper-types";
 import { HopperStoreProvider } from "./state/hopper-store-context";
-import type { PromptReceipt } from "./hooks/use-hopper-connection";
-import type { DraftImage } from "./lib/image-attachments";
-
-const { prompt } = vi.hoisted(() => ({ prompt: vi.fn<(...args: unknown[]) => boolean>(() => true) }));
-
-vi.mock("./hooks/use-hopper-connection", () => ({
-	useHopperConnection: () => {
-		return { token: "test", send: () => true, prompt, login: () => true, logout: () => true, reconnect: () => {}, isMockMode: false };
-	},
-}));
-vi.mock("./hooks/use-runtime-status", () => ({ useRuntimeStatus: () => ({ refresh: async () => {}, refreshing: false }) }));
-vi.mock("./lib/image-attachments", async (load) => ({
-	...await load<typeof import("./lib/image-attachments")>(),
-	readImage: async () => ({ id: "draft-image", name: "plan.png", width: 800, height: 500,
-		image: { type: "image", mimeType: "image/png", data: "bWFya2Vk" },
-		original: { type: "image", mimeType: "image/png", data: "cGxhbg==" },
-		scene: { elements: [], files: {}, appState: { currentItemStrokeColor: "red" } },
-	}),
+import { TaskJournal } from "../../src/host/shared/journal.js";
+import { snapshotPatch } from "../../src/host/shared/snapshot-patch.js";
+vi.mock("./hooks/use-runtime-status", () => ({
+	useRuntimeStatus: () => ({ refresh: async () => {}, refreshing: false }),
 }));
 vi.mock("./components/image-annotation-dialog", () => ({
-	ImageAnnotationDialog: ({ attachment }: { attachment: DraftImage }) => createElement("div", { role: "dialog" },
-		attachment.scene?.appState.currentItemStrokeColor === "red" ? "Editable annotations restored" : "Missing annotations"),
+	ImageAnnotationDialog: () => null,
 }));
-
-let root: Root;
-let container: HTMLDivElement;
-let store: HopperStore;
+vi.mock("./lib/image-attachments", async (load) => ({
+	...(await load<typeof import("./lib/image-attachments")>()),
+	readImage: async (file: File) => ({
+		id: file.name,
+		name: file.name,
+		width: 10,
+		height: 10,
+		image: { type: "image", mimeType: "image/png", data: btoa(file.name) },
+		original: { type: "image", mimeType: "image/png", data: btoa(file.name) },
+	}),
+}));
+class Socket {
+	static OPEN = 1;
+	static sockets: Socket[] = [];
+	readyState = 1;
+	sent: any[] = [];
+	onopen: (() => void) | null = null;
+	onmessage: ((event: { data: string }) => void) | null = null;
+	onclose: ((event: { code: number; reason: string }) => void) | null = null;
+	constructor(readonly url: string | URL) {
+		Socket.sockets.push(this);
+	}
+	send(data: string) {
+		this.sent.push(JSON.parse(data));
+	}
+	close() {}
+	receive(data: unknown) {
+		this.onmessage?.({ data: JSON.stringify(data) });
+	}
+}
+const binding = {
+	kind: "rhino",
+	lifecycleInstanceId: "life",
+	rhinoDocumentId: "model",
+};
+const snapshot = {
+	hostEpoch: "epoch",
+	conversationSession: { id: "rhino-session", afterConversationSequence: 0 },
+	conversations: [
+		{ id: "conversation", title: "First", sequence: 1 },
+		{ id: "other", title: "Second", sequence: 2 },
+	],
+	sessions: [
+		{ id: "session", conversation_id: "conversation" },
+		{ id: "other-session", conversation_id: "other" },
+	],
+	tasks: [],
+	turns: [],
+	events: [],
+	recoveries: [],
+	questions: [],
+	targets: [
+		{
+			label: "Rhino",
+			lifecycleInstanceId: "life",
+			processId: 42,
+			admission: "ready",
+			documents: [binding],
+			documentLabels: { model: "Facade.3dm" },
+		},
+	],
+	runtime: {
+		messages: [],
+		thinkingLevel: "off",
+		availableThinkingLevels: ["off"],
+		model: { provider: "test", id: "test" },
+		models: [{ provider: "test", id: "test", input: ["text", "image"] }],
+		providers: [],
+	},
+	eventCursor: 0,
+};
+let root: Root, container: HTMLDivElement, socket: Socket;
+const byText = (text: string) =>
+	[...container.querySelectorAll("button")].find(
+		(button) => button.textContent === text,
+	)!;
+const sendButton = () =>
+	container.querySelector<HTMLButtonElement>(
+		'button[aria-label="Send message"]',
+	)!;
+async function value(selector: string, text: string) {
+	const input = document.querySelector<
+		HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+	>(selector)!;
+	await act(async () => {
+		const prototype =
+			input instanceof HTMLTextAreaElement
+				? HTMLTextAreaElement.prototype
+				: input instanceof HTMLSelectElement
+					? HTMLSelectElement.prototype
+					: HTMLInputElement.prototype;
+		Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(input, text);
+		input.dispatchEvent(
+			new Event(input instanceof HTMLSelectElement ? "change" : "input", {
+				bubbles: true,
+			}),
+		);
+	});
+}
+async function upload(name: string) {
+	const input =
+		container.querySelector<HTMLInputElement>('input[type="file"]')!;
+	Object.defineProperty(input, "files", {
+		configurable: true,
+		value: [new File(["image"], name, { type: "image/png" })],
+	});
+	await act(async () =>
+		input.dispatchEvent(new Event("change", { bubbles: true })),
+	);
+}
 beforeEach(async () => {
 	vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-	store = createHopperStore();
-	store.getState().actions.applySnapshot({
-		sessionId: "session-1", messages: [], isStreaming: true, thinkingLevel: "off", availableThinkingLevels: ["off"],
-		models: [{ provider: "openai", id: "test-model", name: "Test model" }], model: { provider: "openai", id: "test-model" },
-		providers: [{ id: "openai", name: "OpenAI", authenticated: true, authMethods: [{ type: "api_key", label: "API key" }] }],
-		streamingMessage: { id: "assistant-1", role: "assistant", content: [{ type: "text", text: "Checking " }] },
-	});
+	vi.stubGlobal("WebSocket", Socket);
+	Socket.sockets = [];
+	history.replaceState(null, "", "/#credential");
+	sessionStorage.clear();
+	vi.stubGlobal("localStorage", new Storage());
 	container = document.createElement("div");
 	document.body.append(container);
 	root = createRoot(container);
-	await act(async () => root.render(createElement(HopperStoreProvider, { store, children: createElement(App) })));
-	vi.clearAllMocks();
+	await act(async () =>
+		root.render(
+			createElement(HopperStoreProvider, { children: createElement(App) }),
+		),
+	);
+	socket = Socket.sockets[0]!;
+	await act(async () => {
+		socket.onopen?.();
+		socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, conversations: [], sessions: [] } });
+	});
+	expect(container.querySelector("h1")!.textContent).toBe("New chat");
+	const startup = socket.sent.find((command) => command.type === "create_conversation");
+	expect(startup.title).toBe("New chat");
+	await act(async () => socket.receive({
+		type: "command_accepted", requestId: startup.requestId,
+		result: { conversationId: "conversation" },
+	}));
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot }));
+	socket.sent = [];
 });
 afterEach(async () => {
 	await act(async () => root.unmount());
 	container.remove();
 	vi.unstubAllGlobals();
+	vi.useRealTimers();
+});
+it("sends image-only input with the existing image limit and retains it on rejection", async () => {
+	await upload("plan.png");
+	expect(container.querySelectorAll("img")).toHaveLength(1);
+	await act(async () => sendButton().click());
+	const command = socket.sent.find((command) => command.type === "submit");
+	expect(command.text).toBe("");
+	expect(command.attachments).toEqual([
+		{ type: "image", mimeType: "image/png", data: btoa("plan.png") },
+	]);
+	expect(sendButton().disabled).toBe(true);
+	await act(async () =>
+		socket.receive({
+			type: "error",
+			requestId: command.requestId,
+			message: "Not accepted",
+		}),
+	);
+	expect(container.querySelectorAll("img")).toHaveLength(1);
+	expect(sendButton().disabled).toBe(false);
+});
+it("late acceptance cannot erase a draft in a new session", async () => {
+ await value("#composer-input", "First task");
+ await act(async () => sendButton().click());
+ const command = socket.sent.find((command) => command.type === "submit");
+ await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="New session"]')!.click());
+ const create = socket.sent.find((command) => command.type === "create_conversation");
+ await act(async () => socket.receive({ type: "command_accepted", requestId: create.requestId, result: { conversationId: "other" } }));
+ await value("#composer-input", "Second task");
+ await act(async () => socket.receive({ type: "command_accepted", requestId: command.requestId, result: { taskId: "task" } }));
+ expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Second task");
 });
 
-async function submitAnnotatedDraft() {
-	const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
-	Object.defineProperty(input, "files", { value: [new File(["image"], "plan.png", { type: "image/png" })] });
-	await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
-	await act(async () => {
-		const textarea = container.querySelector("textarea")!;
-		Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, "Inspect the marked area");
-		textarea.dispatchEvent(new Event("input", { bubbles: true }));
+it("groups child work under its document without diagnostic history", async () => {
+	const rootTask = {
+		id: "root",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "running",
+		payload: JSON.stringify({ text: "Compare options", bindings: [] }),
+	};
+	const nextTask = {
+		id: "next",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "queued",
+		payload: JSON.stringify({ text: "Next task", bindings: [] }),
+	};
+	const child = {
+		id: "child",
+		conversation_id: "conversation",
+		parent_task_id: "root",
+		state: "running",
+		payload: JSON.stringify({ text: "Explore facade", bindings: [binding] }),
+	};
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				tasks: [rootTask, nextTask, child],
+				turns: [{ id: "turn", task_id: "child", state: "running", usage: 123 }],
+				events: [
+					{
+						task_id: "child",
+						kind: "progress",
+						payload: JSON.stringify({
+							type: "tool_progress",
+							phase: "started",
+							toolName: "queryRhinoObjects",
+							toolCallId: "call",
+						}),
+					},
+				],
+				records: [
+					{
+						kind: "artifact",
+						id: "artifact",
+						task_id: "child",
+						state: "published",
+						payload: JSON.stringify({
+							format: "3dm",
+							units: "Meters",
+							objectIds: ["source"],
+							checksum: "abc",
+							path: "/retained/geometry.3dm",
+						}),
+					},
+				],
+			},
+		}),
+	);
+	const article = container.querySelector("article")!,
+		details = article.nextElementSibling as HTMLDetailsElement;
+	expect(details.tagName).toBe("DETAILS");
+	expect(details.open).toBe(false);
+	expect(details.querySelector("summary")!.textContent).toContain("Facade.3dm");
+	expect(details.querySelector("summary")!.textContent).toContain("Working");
+	expect(details.textContent).toContain("queryRhinoObjects");
+	expect(details.textContent).toContain("Running");
+	expect(container.textContent).not.toContain("tokens");
+	expect(container.textContent).not.toContain("Task history");
+	expect(container.textContent).not.toContain("/retained/geometry.3dm");
+	expect(container.textContent).not.toContain("SHA-256");
+	expect(details.nextElementSibling!.textContent).toContain("Next task");
+});
+
+it.each(["queued", "running", "suspending", "awaiting_user"])("uses one square Stop button in place of Send while a task is %s", async (state) => {
+	const task = { id: "cancel-task", conversation_id: "conversation", parent_task_id: null, state, payload: JSON.stringify({ text: "Create a courtyard", bindings: [binding] }) };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [task] } }));
+	const stop = container.querySelector<HTMLButtonElement>('footer button[aria-label="Stop"]')!;
+	expect(stop).not.toBeNull();
+	expect(stop.disabled).toBe(false);
+	expect(stop.textContent).toBe("");
+	expect(stop.querySelector("svg.lucide-square")).not.toBeNull();
+	expect(sendButton()).toBeNull();
+	expect([...container.querySelectorAll('[aria-label="Conversation"] button')].some(button => ["Stop", "Cancel"].includes(button.textContent ?? ""))).toBe(false);
+	await act(async () => stop.click());
+	expect(socket.sent.find(command => command.type === "cancel")).toMatchObject({ taskId: task.id, conversationId: "conversation" });
+	expect(socket.sent.some(command => command.type === "submit")).toBe(false);
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [{ ...task, state: "cancelled" }] } }));
+	expect(container.querySelector('footer button[aria-label="Stop"]')).toBeNull();
+	expect(sendButton()).not.toBeNull();
+});
+
+it("stops the active task before queued follow-ups and disables Stop while disconnected", async () => {
+	const queued = { id: "queued-task", conversation_id: "conversation", parent_task_id: null, state: "queued", payload: JSON.stringify({ text: "Follow-up", bindings: [binding] }) };
+	const running = { ...queued, id: "running-task", state: "running" };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [queued, running] } }));
+	const stop = container.querySelector<HTMLButtonElement>('footer button[aria-label="Stop"]')!;
+	await act(async () => stop.click());
+	expect(socket.sent.find(command => command.type === "cancel")).toMatchObject({ taskId: running.id });
+	await act(async () => socket.onclose?.({ code: 4001, reason: "Replaced by another tab" }));
+	expect(stop.disabled).toBe(true);
+});
+
+it("switches the shared button to Send for a follow-up draft and back to Stop after acceptance", async () => {
+	const task = { id: "running-task", conversation_id: "conversation", parent_task_id: null, state: "running", payload: JSON.stringify({ text: "Create a courtyard", bindings: [binding] }) };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [task] } }));
+	await value("#composer-input", "Add a tree afterward");
+	expect(container.querySelector('footer button[aria-label="Stop"]')).toBeNull();
+	expect(sendButton().disabled).toBe(false);
+	await act(async () => sendButton().click());
+	const command = socket.sent.find(command => command.type === "submit");
+	expect(command).toMatchObject({ kind: "follow_up", text: "Add a tree afterward" });
+	expect(socket.sent.some(command => command.type === "cancel")).toBe(false);
+	await act(async () => socket.receive({ type: "command_accepted", requestId: command.requestId, result: { taskId: "follow-up" } }));
+	expect(sendButton()).toBeNull();
+	expect(container.querySelector('footer button[aria-label="Stop"]')).not.toBeNull();
+});
+it("keeps assistant output from each turn and the answered question after continuation", async () => {
+	const task = {
+		id: "root",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "completed",
+		payload: JSON.stringify({ text: "Explore", bindings: [] }),
+	};
+	const event = (turnId: string, text: string) => ({
+		task_id: "root",
+		kind: "progress",
+		payload: JSON.stringify({
+			type: "messages",
+			turnId,
+			messages: [{ role: "assistant", content: [{ type: "text", text }] }],
+		}),
 	});
-	await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Send message"]')!.click());
-	return prompt.mock.calls.at(-1)![3] as PromptReceipt;
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				tasks: [task],
+				turns: [],
+				events: [
+					event("first", "Outdated draft"),
+					event("first", "First turn result"),
+					event("second", "Second turn result"),
+				],
+				questions: [
+					{
+						id: "question",
+						task_id: "root",
+						answer: JSON.stringify("Use meters"),
+						payload: JSON.stringify({ question: "Which units?" }),
+					},
+				],
+			},
+		}),
+	);
+	expect(container.textContent).toContain("First turn result");
+	expect(container.textContent).toContain("Second turn result");
+	expect(container.textContent).toContain("Which units?");
+	expect(container.textContent).toContain("Answer: Use meters");
+	const article = container.querySelector("article")!;
+	expect(
+		[...article.children]
+			.filter((child) => child.tagName !== "DETAILS")
+			.map((child) => child.textContent)
+			.join(" "),
+	).not.toContain("Outdated draft");
+});
+it("shows captured tool images as visual child evidence", async () => {
+	const rootTask = {
+		id: "root",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "completed",
+		payload: JSON.stringify({ text: "Compare", bindings: [] }),
+	};
+	const child = {
+		id: "child",
+		conversation_id: "conversation",
+		parent_task_id: "root",
+		state: "completed",
+		payload: JSON.stringify({ text: "Capture", bindings: [binding] }),
+	};
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				tasks: [rootTask, child],
+				events: [
+					{
+						task_id: "child",
+						kind: "progress",
+						payload: JSON.stringify({
+							type: "messages",
+							turnId: "turn",
+							messages: [
+								{
+									role: "toolResult",
+									toolName: "Capture Rhino view",
+									toolCallId: "capture",
+									content: [
+										{ type: "image", mimeType: "image/png", data: "aGk=" },
+									],
+								},
+							],
+						}),
+					},
+				],
+			},
+		}),
+	);
+	const image = container.querySelector<HTMLImageElement>(
+		'img[alt="Capture from Capture Rhino view"]',
+	)!;
+	expect(image).not.toBeNull();
+	expect(image.src).toContain("data:image/png;base64,aGk=");
+});
+
+it("shows the host's queue blocker and clears it when the block is removed", async () => {
+	const task = {
+		id: "queued",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "queued",
+		payload: JSON.stringify({ text: "model hello world", bindings: [binding] }),
+	};
+	const reason = "Waiting for recovery of an earlier task in this Rhino instance.";
+	await act(async () => socket.receive({
+		type: "shared_snapshot",
+		snapshot: { ...snapshot, tasks: [task], records: [{
+			kind: "scheduling", id: "queued", task_id: "queued", state: "blocked",
+			payload: JSON.stringify({ reason, blockingTaskId: "earlier" }),
+		}] },
+	}));
+	expect(container.textContent).toContain(reason);
+	expect(container.textContent).not.toContain("Waiting to start…");
+	await act(async () => socket.receive({
+		type: "shared_snapshot",
+		snapshot: { ...snapshot, tasks: [task], records: [] },
+	}));
+	expect(container.textContent).not.toContain(reason);
+	expect(container.textContent).toContain("Waiting to start…");
+});
+
+it("shows both child agents working while one waits only for a native tool", async () => {
+	const task = { id: "root", conversation_id: "conversation", parent_task_id: null, state: "running",
+		payload: JSON.stringify({ text: "Edit both", bindings: [binding] }) };
+	const children = ["a", "b"].map((id) => ({ ...task, id, parent_task_id: "root",
+		payload: JSON.stringify({ text: `Edit ${id}`, bindings: [{ ...binding, rhinoDocumentId: id }] }) }));
+	const reason = "Waiting to use Rhino. Other agents can keep thinking while a native tool runs.";
+	const current = { ...snapshot, tasks: [task, ...children], turns: children.map((child) => ({
+		id: `${child.id}-turn`, task_id: child.id, state: "running", started_at: Date.now(), usage: 0,
+	})), records: [{ kind: "scheduling", id: "b", task_id: "b", state: "blocked", payload: JSON.stringify({ reason }) }] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: current }));
+	const summaries = [...container.querySelectorAll("details > summary")];
+	expect(summaries.filter((summary) => summary.textContent?.includes("Working"))).toHaveLength(2);
+	expect(container.textContent).toContain(reason);
+	expect(container.textContent).not.toContain("Waiting to start…");
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...current, records: [] } }));
+	expect(container.textContent).not.toContain(reason);
+});
+
+it("allows task recovery without a written note and waits for host confirmation", async () => {
+	const task = {
+		id: "root",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "uncertain",
+		payload: JSON.stringify({ text: "Edit the model", bindings: [binding] }),
+	};
+	await act(async () => socket.receive({
+		type: "shared_snapshot",
+		snapshot: { ...snapshot, tasks: [task] },
+	}));
+	expect(container.querySelector('textarea[aria-label="Recovery inspection"]')).toBeNull();
+	expect(container.textContent).not.toContain("safe release");
+	await act(async () => byText("I've checked, continue").click());
+	expect(socket.sent.find((command) => command.type === "recover")).toMatchObject({
+		conversationId: "conversation",
+		taskId: "root",
+		acknowledgement: expect.stringContaining("User checked"),
+	});
+	expect(container.textContent).not.toContain("You can send a new message.");
+	expect(byText("I've checked, continue")).toBeDefined();
+	await act(async () => socket.receive({
+		type: "shared_snapshot",
+		snapshot: { ...snapshot, tasks: [task], recoveries: [{ id: "recovery", task_id: "root" }] },
+	}));
+	expect(byText("I've checked, continue")).toBeUndefined();
+	expect(container.textContent).not.toContain("Check your model and any saved files");
+	expect(container.textContent).toContain("You can send a new message.");
+	expect(container.textContent).toContain("This task's result remains unknown");
+});
+
+async function chooseModel(label: string) {
+ await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Message document"]')!.click());
+ const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) => option.textContent?.includes(label))!;
+ await act(async () => option.click());
 }
-
-it("retains text and editable annotations after a rejected submission and snapshot", async () => {
-	const receipt = await submitAnnotatedDraft();
-	expect(container.querySelector("textarea")!.disabled).toBe(true);
-	expect(container.querySelector("img")!.src).toContain("bWFya2Vk");
+it("shows the document picker without the old target settings and hides conversation history", async () => {
+ const picker = container.querySelector('[aria-label="Message document"]')!;
+ expect(picker.closest("form")!.querySelector("#composer-input")).not.toBeNull();
+ expect(container.querySelector('[aria-label="Rhino targets"]')).toBeNull();
+ expect(container.querySelector('[aria-label="Message target settings"]')).toBeNull();
+ expect(container.textContent).not.toContain("Second");
+ for (const label of ["New Rhino document", "Open Rhino document", "Launch Rhino", "Modified document policy"]) {
+  expect(container.textContent).not.toContain(label);
+ }
+ await value("#composer-input", "Edit the selected document");
+ await act(async () => sendButton().click());
+ const command = socket.sent.find((command) => command.type === "submit");
+ expect(command.bindings).toEqual([binding]);
+ expect(command).not.toHaveProperty("documentAction");
+ expect(command).not.toHaveProperty("launch");
+});
+it("blocks sending when the selected model disconnects without disabling the draft", async () => {
+ await value("#composer-input", "Create a sphere");
+ await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [{ ...snapshot.targets[0], admission: "detached", documents: [] }] } }));
+ expect(sendButton().disabled).toBe(true);
+ expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.disabled).toBe(false);
+ expect(container.textContent).toContain("Selected document disconnected");
+ expect(container.querySelector('[aria-label="Message destination"]')!.textContent).toBe("No documents connected");
+ await act(async () => socket.receive({ type: "shared_snapshot", snapshot }));
+ expect(sendButton().disabled).toBe(false);
+});
+it("removes an ineligible selection from the picker without sending the draft to another document", async () => {
+ await value("#composer-input", "Create a sphere");
+ const otherBinding = { ...binding, rhinoDocumentId: "other-model" };
+ await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [{
+  ...snapshot.targets[0], documents: [otherBinding], documentLabels: { "other-model": "Eligible.3dm", model: "Facade.3dm" },
+ }] } }));
+ expect(container.querySelector('[aria-label="Message destination"]')!.textContent).toBe("Choose a document");
+ expect(sendButton().disabled).toBe(true);
+ expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Create a sphere");
+ await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Message document"]')!.click());
+ const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+ expect(options.map(option => option.textContent)).toEqual(["Eligible.3dm"]);
+ await act(async () => options[0]!.click());
+ await act(async () => sendButton().click());
+ expect(socket.sent.find(command => command.type === "submit").messageTarget).toEqual(otherBinding);
+});
+it("keeps a task target distinct from the next message selection", async () => {
+	const otherBinding = {
+		kind: "rhino",
+		lifecycleInstanceId: "other-life",
+		rhinoDocumentId: "other-model",
+	};
+	const task = {
+		id: "root",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "completed",
+		payload: JSON.stringify({ text: "Created in facade", bindings: [binding] }),
+	};
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				tasks: [task],
+				targets: [
+					...snapshot.targets,
+					{
+						label: "Rhino",
+						lifecycleInstanceId: "other-life",
+						processId: 43,
+						admission: "ready",
+						documents: [otherBinding],
+						documentLabels: { "other-model": "Roof.3dm" },
+					},
+				],
+			},
+		}),
+	);
+	await chooseModel("Roof.3dm");
+	expect(
+		container.querySelector('[aria-label="Message destination"]')!.textContent,
+	).toContain("Roof.3dm · Hopper Code 2");
+	expect(container.querySelector("article")!.textContent).toContain(
+		"Target: Facade.3dm · Hopper Code 1",
+	);
+	await value("#composer-input", "Edit the roof");
+	await act(async () => sendButton().click());
+	expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({ bindings: [binding, otherBinding], messageTarget: otherBinding });
+});
+it("preserves normal sidebar controls and exports the selected durable conversation", async () => {
+	expect(
+		container.querySelector('button[aria-label="Export session"]'),
+	).not.toBeNull();
+	expect(container.textContent).toContain("Skills & Markdown");
+	expect(container.textContent).toContain("Agent tools");
+	const fetcher = vi.fn().mockResolvedValue({ ok: false, status: 409 });
+	vi.stubGlobal("fetch", fetcher);
+	await act(async () =>
+		container
+			.querySelector<HTMLButtonElement>('button[aria-label="Export session"]')!
+			.click(),
+	);
+	expect(fetcher).toHaveBeenCalledWith(
+		"/api/session/export?conversationId=conversation",
+		expect.objectContaining({
+			headers: { Authorization: "Bearer credential" },
+		}),
+	);
+	expect(container.textContent).toContain("Export failed (409)");
+});
+it("defaults to a follow-up while a task runs and returns to a new task afterward", async () => {
+	const task = {
+		id: "root",
+		session_id: "session",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "running",
+		payload: JSON.stringify({ text: "First task", bindings: [] }),
+	};
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: { ...snapshot, tasks: [task] },
+		}),
+	);
+	await value("#composer-input", "Then inspect the roof");
+	await act(async () => sendButton().click());
+	const command = socket.sent.find((command) => command.type === "submit");
+	expect(command.kind).toBe("follow_up");
 	await act(async () => {
-		receipt.onRejected();
-		store.getState().actions.applySnapshot({ sessionId: "session-1", messages: [], isStreaming: false,
-			thinkingLevel: "off", availableThinkingLevels: [], models: [], providers: [] });
+		socket.receive({
+			type: "command_accepted",
+			requestId: command.requestId,
+			result: { taskId: "next" },
+		});
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: { ...snapshot, tasks: [{ ...task, state: "completed" }] },
+		});
 	});
-	expect(container.querySelector("textarea")!.value).toBe("Inspect the marked area");
-	expect(container.querySelector("textarea")!.disabled).toBe(false);
-	await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Annotate plan.png"]')!.click());
-	expect(container.textContent).toContain("Editable annotations restored");
+	await value("#composer-input", "Start another task");
+	await act(async () => sendButton().click());
+	expect(
+		socket.sent.filter((command) => command.type === "submit").at(-1).kind,
+	).toBe("prompt");
+});
+it("shows the active turn target when steering instead of the next selected destination", async () => {
+	const oldBinding = {
+		kind: "rhino",
+		lifecycleInstanceId: "life",
+		rhinoDocumentId: "old-model",
+	};
+	const task = {
+		id: "root",
+		session_id: "session",
+		conversation_id: "conversation",
+		parent_task_id: null,
+		state: "running",
+		payload: JSON.stringify({
+			text: "Work in old model",
+			bindings: [oldBinding],
+		}),
+	};
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				tasks: [task],
+				turns: [
+					{
+						id: "turn",
+						task_id: "root",
+						state: "running",
+						owner: JSON.stringify({ binding }),
+					},
+				],
+				targets: [
+					{
+						...snapshot.targets[0],
+						documents: [binding, oldBinding],
+						documentLabels: { model: "Facade.3dm", "old-model": "Old.3dm" },
+					},
+				],
+			},
+		}),
+	);
+	await chooseModel("Old.3dm");
+	await act(async () =>
+		container
+			.querySelector<HTMLButtonElement>(
+				'button[aria-label="Message delivery"]',
+			)!
+			.click(),
+	);
+	const option = [
+		...document.querySelectorAll<HTMLElement>('[role="option"]'),
+	].find((option) => option.textContent?.includes("Steer"))!;
+	await act(async () => option.click());
+	const destination = container.querySelector(
+		'[aria-label="Message destination"]',
+	)!.textContent;
+	expect(destination).toContain("Steering: Facade.3dm");
+	expect(destination).not.toContain("Old.3dm");
+	await value("#composer-input", "Make it larger");
+	await act(async () => sendButton().click());
+	expect(socket.sent.find((command) => command.type === "steer")).toMatchObject(
+		{ taskId: "root", turnId: "turn" },
+	);
 });
 
-it("clears a draft only after acceptance and ignores late receipts from previous submissions", async () => {
-	const first = await submitAnnotatedDraft();
-	await act(async () => first.onRejected());
-	await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Send message"]')!.click());
-	const second = prompt.mock.calls.at(-1)![3] as PromptReceipt;
-	await act(async () => first.onAccepted());
-	expect(container.querySelector("img")).not.toBeNull();
-	await act(async () => second.onAccepted());
-	expect(container.querySelector("img")).toBeNull();
-	expect(container.querySelector("textarea")!.value).toBe("");
+it("hides stale instances and gives unnamed available documents readable choices", async () => {
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				targets: [
+					{
+						...snapshot.targets[0],
+						lifecycleInstanceId: "stale-life",
+						admission: "detached",
+						documents: [
+							{
+								...binding,
+								lifecycleInstanceId: "stale-life",
+								rhinoDocumentId: "stale-secret-id",
+							},
+						],
+						documentLabels: {},
+					},
+					{
+						...snapshot.targets[0],
+						documents: [
+							binding,
+							{ ...binding, rhinoDocumentId: "second-secret-id" },
+						],
+						documentLabels: {},
+					},
+				],
+			},
+		}),
+	);
+	await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Message document"]')!.click());
+ const options = [...document.querySelectorAll('[role="option"]')];
+ expect(options).toHaveLength(2);
+ expect(options.map((option) => option.textContent).join(" ")).toContain("Untitled Rhino document 1");
+ expect(options.map((option) => option.textContent).join(" ")).toContain("Untitled Rhino document 2");
+ expect(options.map((option) => option.textContent).join(" ")).not.toContain("secret-id");
 });
 
-it("downloads the full session through the authenticated export endpoint", async () => {
-	let finish!: (response: Response) => void;
-	const fetchMock = vi.fn(() => new Promise<Response>((resolve) => { finish = resolve; }));
-	vi.stubGlobal("fetch", fetchMock);
-	const createUrl = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:session-export");
-	const revokeUrl = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
-	const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
-		expect(this.download).toBe("hopper-session-debug.json");
-		expect(this.href).toBe("blob:session-export");
+it("keeps submitted images and steering messages visible without diagnostic history", async () => {
+	const attachment = { type: "image", mimeType: "image/png", data: "aGVsbG8=" };
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: {
+				...snapshot,
+				tasks: [
+					{
+						id: "root",
+						conversation_id: "conversation",
+						parent_task_id: null,
+						state: "completed",
+						payload: JSON.stringify({
+							text: "Use this sketch",
+							bindings: [],
+							attachments: [attachment],
+						}),
+					},
+				],
+				inputs: [
+					{
+						id: 1,
+						task_id: "root",
+						state: "applied",
+						payload: JSON.stringify({
+							text: "Make it blue",
+							attachments: [attachment],
+						}),
+					},
+					{
+						id: 2,
+						task_id: "root",
+						state: "not_applied",
+						payload: JSON.stringify({ text: "Make it taller" }),
+					},
+				],
+			},
+		}),
+	);
+	expect(container.querySelector("article")!.textContent).toContain(
+		"Make it blue",
+	);
+	expect(container.querySelector("article")!.textContent).toContain(
+		"Make it taller",
+	);
+	expect(container.querySelector("article")!.textContent).toContain(
+		"Not delivered",
+	);
+	expect(container.querySelectorAll('img[alt="Attached image"]')).toHaveLength(
+		2,
+	);
+	expect(container.textContent).not.toContain("Task history");
+});
+
+it("never switches to a historical conversation when the current chat disappears", async () => {
+	await act(async () =>
+		socket.receive({
+			type: "shared_snapshot",
+			snapshot: { ...snapshot, conversations: [snapshot.conversations[1]], sessions: [snapshot.sessions[1]] },
+		}),
+	);
+	await value("#composer-input", "Continue here");
+	await act(async () => sendButton().click());
+	expect(sendButton().disabled).toBe(true);
+	expect(socket.sent.some((command) => command.type === "submit")).toBe(false);
+	expect(container.textContent).not.toContain("Second");
+});
+
+it("allows a coordinator message when no document is connected", async () => {
+ await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [] } }));
+ await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="New session"]')!.click());
+ const create = socket.sent.find((command) => command.type === "create_conversation");
+ await act(async () => socket.receive({ type: "command_accepted", requestId: create.requestId, result: { conversationId: "other" } }));
+ await value("#composer-input", "Launch Rhino");
+ expect(sendButton().disabled).toBe(false);
+ expect(container.textContent).toContain("No documents connected");
+ await act(async () => sendButton().click());
+ expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({
+	text: "Launch Rhino",
+	bindings: [],
+ });
+});
+
+it("creates a chat only when the journal has none and retries startup once on reconnect", async () => {
+ await act(async () => root.unmount());
+ root = createRoot(container);
+ await act(async () => root.render(createElement(HopperStoreProvider, { children: createElement(App) })));
+ socket = Socket.sockets.at(-1)!;
+ const oldSnapshot = { ...snapshot, conversations: [], sessions: [], tasks: [] };
+ await act(async () => {
+  socket.onopen?.();
+  socket.receive({ type: "shared_snapshot", snapshot: oldSnapshot });
+  socket.receive({ type: "shared_snapshot", snapshot: oldSnapshot });
+ });
+ expect(container.querySelector("article")).toBeNull();
+ expect(container.textContent).not.toContain("acceptance");
+ const creates = socket.sent.filter((command) => command.type === "create_conversation");
+ expect(creates).toHaveLength(1);
+ await act(async () => socket.onclose?.({ code: 4003, reason: "Disconnected" }));
+ // Explicit reconnect avoids timers and must reuse the pending startup request.
+ await act(async () => byText("Retry").click());
+ const reconnected = Socket.sockets.at(-1)!;
+ await act(async () => {
+  reconnected.onopen?.();
+  reconnected.receive({ type: "shared_snapshot", snapshot: oldSnapshot });
+ });
+ expect(reconnected.sent.filter((command) => command.type === "create_conversation")).toEqual(creates);
+ await act(async () => reconnected.receive({ type: "command_accepted", requestId: creates[0].requestId, result: { conversationId: "fresh" } }));
+ await act(async () => reconnected.receive({
+  type: "shared_snapshot",
+  snapshot: { ...oldSnapshot, conversations: [...oldSnapshot.conversations, { id: "fresh", title: "New chat" }], sessions: [{ id: "fresh-session", conversation_id: "fresh" }] },
+ }));
+ expect(container.querySelector("article")).toBeNull();
+ await value("#composer-input", "Hello");
+ await act(async () => sendButton().click());
+ expect(reconnected.sent.find((command) => command.type === "submit")).toMatchObject({ conversationId: "fresh", sessionId: "fresh-session", text: "Hello" });
+});
+
+it.each(["reload", "relaunch", "missing browser storage", "completed task", "pending question", "another Rhino"])("restores the existing thread after %s without submitting or creating a task", async (scenario) => {
+	const task = { id: "persisted-task", session_id: "session", conversation_id: "conversation", parent_task_id: null,
+		state: scenario === "completed task" ? "completed" : scenario === "pending question" ? "awaiting_user" : "running",
+		payload: JSON.stringify({ text: "Build the persistent courtyard", messageTarget: binding, bindings: [binding] }) };
+	const persisted = { ...snapshot,
+		targets: scenario === "another Rhino" ? [...snapshot.targets, { ...snapshot.targets[0], lifecycleInstanceId: "other-life", processId: 43,
+			documents: [{ ...binding, lifecycleInstanceId: "other-life", rhinoDocumentId: "other-model" }], documentLabels: { model: "", "other-model": "Other.3dm" } }] : snapshot.targets,
+		questions: scenario === "pending question" ? [{ id: "question", task_id: task.id, answer: null, payload: JSON.stringify({ kind: "ask_user", question: "Which courtyard?", options: ["North", "South"] }) }] : [],
+		hostEpoch: "epoch", tasks: [task],
+		events: [{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "messages", turnId: "turn", messages: [
+			{ role: "assistant", content: [{ type: "text", text: "The first stage is complete." }] },
+		] }) }] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: persisted }));
+	await act(async () => root.unmount());
+	if (scenario !== "reload") { sessionStorage.clear(); history.replaceState(null, "", scenario === "another Rhino" ? "/?instance=other-life&document=other-model#credential" : "/#credential"); }
+	if (scenario === "missing browser storage") window.localStorage.clear();
+	root = createRoot(container);
+	await act(async () => root.render(createElement(HopperStoreProvider, { children: createElement(App) })));
+	socket = Socket.sockets.at(-1)!;
+	await act(async () => { socket.onopen?.(); socket.receive({ type: "shared_snapshot", snapshot: persisted }); });
+	expect(container.textContent).toContain("Build the persistent courtyard");
+	expect(container.textContent).toContain("The first stage is complete.");
+	expect(container.querySelector("h1")!.textContent).toBe("First");
+	expect(socket.sent.some((command) => ["create_conversation", "submit", "steer"].includes(command.type))).toBe(false);
+	if (scenario !== "completed task") expect(container.querySelector('button[aria-label="Stop"]')).not.toBeNull();
+	if (scenario === "pending question") expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Which courtyard?");
+	if (scenario === "another Rhino") expect(container.querySelector('[aria-label="Message destination"]')?.textContent).toContain("Other.3dm");
+});
+
+it.each([false, true])("starts a fresh thread after all Rhino processes exit and a new one connects, reopened browser: %s", async (reopen) => {
+	const oldTask = { id: "old-task", session_id: "session", conversation_id: "conversation", parent_task_id: null, state: "completed",
+		payload: JSON.stringify({ text: "Previous Rhino session", bindings: [binding] }) };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [oldTask] } }));
+	if (reopen) {
+		await act(async () => root.unmount());
+		sessionStorage.clear(); history.replaceState(null, "", "/#credential");
+		root = createRoot(container);
+		await act(async () => root.render(createElement(HopperStoreProvider, { children: createElement(App) })));
+		socket = Socket.sockets.at(-1)!;
+	}
+	const next = { ...snapshot, tasks: [oldTask], conversationSession: { id: "new-rhino-session", afterConversationSequence: 2 } };
+	await act(async () => {
+		if (reopen) socket.onopen?.();
+		socket.receive({ type: "shared_snapshot", snapshot: next });
+		socket.receive({ type: "shared_snapshot", snapshot: next });
 	});
-	try {
-		const button = container.querySelector<HTMLButtonElement>('button[aria-label="Export session"]')!;
-		await act(async () => button.click());
-		expect(button.disabled).toBe(true);
-		expect(fetchMock).toHaveBeenCalledExactlyOnceWith("/api/session/export", { headers: { Authorization: "Bearer test" } });
-		await act(async () => button.click());
-		expect(fetchMock).toHaveBeenCalledOnce();
-		vi.useFakeTimers();
-		await act(async () => finish(new Response('{"entries":[{"toolCallId":"call-1"}]}', { headers: { "Content-Type": "application/json" } })));
-		expect(click).toHaveBeenCalledOnce();
-		expect(await (createUrl.mock.calls[0][0] as Blob).text()).toContain('"toolCallId":"call-1"');
-		expect(button.disabled).toBe(false);
-		expect(document.querySelector('a[download]')).toBeNull();
-		await act(async () => vi.advanceTimersByTime(10_000));
-		expect(revokeUrl).toHaveBeenCalledWith("blob:session-export");
-	} finally {
-		vi.useRealTimers();
-		createUrl.mockRestore(); revokeUrl.mockRestore(); click.mockRestore();
+	expect(container.textContent).not.toContain("Previous Rhino session");
+	const creates = socket.sent.filter((command) => command.type === "create_conversation");
+	expect(creates).toHaveLength(1);
+	await act(async () => {
+		socket.receive({ type: "command_accepted", requestId: creates[0].requestId, result: { conversationId: "fresh" } });
+		socket.receive({ type: "shared_snapshot", snapshot: { ...next,
+			conversations: [...next.conversations, { id: "fresh", title: "New chat", sequence: 3 }],
+			sessions: [...next.sessions, { id: "fresh-session", conversation_id: "fresh" }],
+		} });
+	});
+	await value("#composer-input", "Start the new model");
+	await act(async () => sendButton().click());
+	expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({ conversationId: "fresh", sessionId: "fresh-session" });
+});
+
+it("counts working time from the saved start and freezes the completed duration", async () => {
+ vi.useFakeTimers();
+ const startedAt = 1_800_000_000_000;
+ vi.setSystemTime(startedAt + 12_000);
+ const task = {
+  id: "timed-task", session_id: "session", conversation_id: "conversation",
+  parent_task_id: null, state: "running", created_at: startedAt - 30_000,
+  updated_at: startedAt, payload: JSON.stringify({ text: "Build a roof", bindings: [binding] }),
+ };
+ const turn = { id: "timed-turn", task_id: task.id, state: "running", started_at: startedAt };
+ try {
+  await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [task], turns: [turn] } }));
+  expect(container.querySelector("article")!.textContent).toContain("Working for 12s");
+  expect(container.querySelector("header")!.textContent).toContain("Working for 12s");
+  await act(async () => vi.advanceTimersByTime(1_000));
+  expect(container.querySelector("article")!.textContent).toContain("Working for 13s");
+  // A fresh snapshot must not reset the running clock.
+  await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [task], turns: [turn] } }));
+  expect(container.querySelector("article")!.textContent).toContain("Working for 13s");
+  const completed = { ...snapshot, tasks: [{ ...task, state: "completed", updated_at: startedAt + 65_000 }], turns: [{ ...turn, state: "completed", ended_at: startedAt + 65_000 }] };
+  await act(async () => socket.receive({ type: "shared_snapshot", snapshot: completed }));
+  expect(container.querySelector("article")!.textContent).toContain("Worked for 1m 5s");
+  await act(async () => vi.advanceTimersByTime(120_000));
+  await act(async () => socket.receive({ type: "shared_snapshot", snapshot: completed }));
+  expect(container.querySelector("article")!.textContent).toContain("Worked for 1m 5s");
+  expect(container.querySelector("header")!.textContent).toContain("Ready");
+ } finally {
+  vi.useRealTimers();
 	}
 });
 
-it("shows export failures and disables export when disconnected", async () => {
-	vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Forbidden", { status: 403 })));
-	const button = container.querySelector<HTMLButtonElement>('button[aria-label="Export session"]')!;
-	await act(async () => button.click());
-	expect(document.body.textContent).toContain("Export failed (403).");
-	expect(button.disabled).toBe(false);
-	await act(async () => store.getState().actions.setConnection("disconnected", "Offline"));
-	expect(button.disabled).toBe(true);
+it("presents an active ask_user question as selectable choices and sends the selected answer", async () => {
+	const task = {
+		id: "question-task", session_id: "session", conversation_id: "conversation",
+		parent_task_id: null, state: "awaiting_user",
+		payload: JSON.stringify({ text: "Choose a size", bindings: [binding] }),
+	};
+	await act(async () => socket.receive({
+		type: "shared_snapshot",
+		snapshot: {
+			...snapshot,
+			tasks: [task],
+			questions: [{
+				id: "size-question", task_id: task.id, answer: null,
+				payload: JSON.stringify({ question: "Which size should I use?", options: ["Small", "Large"] }),
+			}],
+		},
+	}));
+	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Which size should I use?");
+	expect(document.querySelector('[role="radiogroup"]')).not.toBeNull();
+	expect(document.querySelector("datalist")).toBeNull();
+	expect(document.querySelector<HTMLInputElement>('input[value="Large"]')!.disabled).toBe(false);
+	expect(document.querySelector("header")!.textContent).toContain("Answer needed");
+	expect(sendButton()).toBeNull();
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.disabled).toBe(true);
+	await act(async () => document.querySelector<HTMLInputElement>('input[value="Large"]')!.click());
+	await act(async () => [...document.querySelectorAll("button")].find((button) => button.textContent === "Continue")!.click());
+	expect(socket.sent.find((command) => command.type === "answer")).toMatchObject({
+		questionId: "size-question", answer: "Large",
+	});
+});
+
+it("shows the tool name and its live and completed state", async () => {
+	const task = {
+		id: "tool-task", session_id: "session", conversation_id: "conversation",
+		parent_task_id: null, state: "running",
+		payload: JSON.stringify({ text: "Inspect the model", bindings: [binding] }),
+	};
+	const call = { type: "toolCall", id: "inspect", name: "rh_query_objects", arguments: { layer: "Walls" } };
+	await act(async () => socket.receive({
+		type: "shared_snapshot",
+		snapshot: {
+			...snapshot, tasks: [task],
+			events: [
+				{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "messages", turnId: "turn", messages: [{ role: "assistant", content: [call] }] }) },
+				{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "tool_progress", phase: "started", toolName: "rh_query_objects", toolCallId: "inspect" }) },
+			],
+		},
+	}));
+	expect(container.textContent).toContain("rh_query_objects");
+	expect(container.textContent).toContain("Running");
+	await act(async () => socket.receive({
+		type: "shared_snapshot",
+		snapshot: {
+			...snapshot, tasks: [task],
+			events: [
+				{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "messages", turnId: "turn", messages: [{ role: "assistant", content: [call] }, { role: "toolResult", toolCallId: "inspect", toolName: "rh_query_objects", content: [{ type: "text", text: "Found 12 objects" }], isError: false }] }) },
+				{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "tool_progress", phase: "completed", toolName: "rh_query_objects", toolCallId: "inspect", isError: false }) },
+			],
+		},
+	}));
+	expect(container.textContent).toContain("Done");
+});
+
+it("welcomes a fresh chat with prompt suggestions that fill the composer", async () => {
+	expect(container.textContent).toContain("What should Hopper build?");
+	await act(async () => byText("Check the Rhino model").click());
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toContain("Check the active Rhino document");
+	expect(container.querySelector("article")).toBeNull();
+});
+
+it("confirms shutting down in a dialog instead of a native prompt and reports host errors as toasts", async () => {
+	const nativeConfirm = vi.fn(() => true);
+	vi.stubGlobal("confirm", nativeConfirm);
+	await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Shut down the Hopper host"]')!.click());
+	expect(nativeConfirm).not.toHaveBeenCalled();
+	expect(socket.sent.some((command) => command.type === "stop_host")).toBe(false);
+	const dialog = document.querySelector('[role="dialog"]')!;
+	expect(dialog.textContent).toContain("Shut down the Hopper host?");
+	await act(async () => [...dialog.querySelectorAll("button")].find((button) => button.textContent === "Shut down")!.click());
+	const stop = socket.sent.find((command) => command.type === "stop_host");
+	expect(stop).toMatchObject({ hostEpoch: snapshot.hostEpoch });
+	await act(async () => socket.receive({ type: "error", requestId: stop.requestId, message: "Host refused to stop." }));
+	expect(container.querySelector("header")!.textContent).not.toContain("Host refused to stop.");
+	expect(container.textContent).toContain("Host refused to stop.");
+});
+
+it("shows the connection banner while offline and hides it once a snapshot arrives", async () => {
+	expect(container.querySelector('[role="status"]')?.textContent ?? "").not.toContain("Connection to the local Hopper host was lost.");
+	await act(async () => socket.onclose?.({ code: 1006, reason: "" }));
+	expect(container.textContent).toContain("Connection to the local Hopper host was lost.");
+	expect(container.querySelector("header")!.textContent).toContain("Offline");
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.disabled).toBe(true);
+	await act(async () => byText("Retry").click());
+	const reconnected = Socket.sockets.at(-1)!;
+	await act(async () => {
+		reconnected.onopen?.();
+		reconnected.receive({ type: "shared_snapshot", snapshot });
+	});
+	expect(container.textContent).not.toContain("Connection to the local Hopper host was lost.");
+	expect(container.querySelector("header")!.textContent).toContain("Ready");
+});
+
+it("renders assistant text and thinking before the turn has finished", async () => {
+	const task = {
+		id: "streaming-task", session_id: "session", conversation_id: "conversation",
+		parent_task_id: null, state: "running",
+		payload: JSON.stringify({ text: "Inspect the model", bindings: [binding] }),
+	};
+	await act(async () => socket.receive({
+		type: "shared_snapshot",
+		snapshot: {
+			...snapshot, tasks: [task],
+			events: [
+				{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "agent_event", turnId: "turn", event: { type: "message_start", message: { role: "assistant" } } }) },
+				{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "agent_event", turnId: "turn", event: { type: "message_update", assistantMessageEvent: { type: "thinking_delta", delta: "Checking the model." } } }) },
+				{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "agent_event", turnId: "turn", event: { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "I found three objects." } } }) },
+			],
+		},
+	}));
+	expect(container.textContent).not.toContain("Checking the model.");
+	await act(async () => byText("Thinking").click());
+	expect(container.textContent).toContain("Checking the model.");
+	expect(container.textContent).toContain("I found three objects.");
+});
+
+async function showPickQuestion() {
+	const task = {
+		id: "pick-task", session_id: "session", conversation_id: "conversation", parent_task_id: null,
+		state: "awaiting_user", payload: JSON.stringify({ text: "Choose a size", bindings: [binding] }),
+	};
+	const next = { ...snapshot, tasks: [task], questions: [{
+		id: "pick-question", task_id: task.id, answer: null,
+		payload: JSON.stringify({ kind: "pick_option", question: "Which size?", options: [
+			{ label: "Small", value: "size-small", description: "Fits the courtyard" },
+			{ label: "Large", value: "size-large", description: "More seating" },
+		] }),
+	}] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: next }));
+	return next;
+}
+const dialogButton = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) => button.textContent === label)!;
+
+it.each([
+	{ state: "running", selectedOwner: true },
+	{ state: "awaiting_user", selectedOwner: true },
+	{ state: "running", selectedOwner: false },
+	{ state: "awaiting_user", selectedOwner: false },
+])("renders multi-instance work from the real journal: $state, selected owner $selectedOwner", async ({ state, selectedOwner }) => {
+	const second = { ...binding, lifecycleInstanceId: "second-life", rhinoDocumentId: "second-model" };
+	const targets = [...snapshot.targets, { ...snapshot.targets[0], lifecycleInstanceId: "second-life", processId: 43, documents: [second], documentLabels: { "second-model": "Roof.3dm" } }];
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets } }));
+	await value("#composer-input", "Compare these two models");
+	await act(async () => sendButton().click());
+	const command = socket.sent.find((command) => command.type === "submit");
+	expect(command.bindings).toEqual([binding, second]);
+	const journal = new TaskJournal(":memory:");
+	try {
+		journal.registerSession(command.conversationId, command.sessionId);
+		const receipt = journal.accept(command);
+		journal.finishAdmission(receipt.taskId);
+		// New messages keep the selected owner. Older saved coordinator turns can
+		// still contain JSON null and must remain readable after upgrading.
+		const owner = selectedOwner ? { taskId: receipt.taskId, turnId: receipt.turnId, binding: command.messageTarget, attachmentGeneration: "generation" } : null;
+		journal.start(receipt.taskId, receipt.turnId, owner);
+		let questionId: string | undefined;
+		if (state === "awaiting_user") {
+			questionId = journal.ask(receipt.taskId, receipt.turnId, "choose-model", { kind: "pick_option", question: "Which model should change?", options: ["Facade", "Roof"] });
+			journal.confirmSuspension(receipt.taskId, receipt.turnId);
+		}
+		const saved = journal.snapshot();
+		expect(JSON.parse(String(saved.turns[0]!.owner))).toEqual(owner);
+		await act(async () => {
+			socket.receive({ type: "command_accepted", requestId: command.requestId, result: receipt });
+			socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, ...saved, targets } });
+		});
+		expect(container.querySelector("#composer-input")).not.toBeNull();
+		expect(container.textContent).toContain("Compare these two models");
+		expect(container.textContent).toContain("Target: Facade.3dm");
+		if (state === "awaiting_user") {
+			expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Which model should change?");
+			await act(async () => dialogButton("Continue").click());
+			expect(socket.sent.find((sent) => sent.type === "answer")).toMatchObject({ questionId, answer: "Facade" });
+		} else {
+			await value("#composer-input", "Also compare their heights");
+			await act(async () => sendButton().click());
+			expect(socket.sent.filter((sent) => sent.type === "submit").at(-1)).toMatchObject({ kind: "follow_up", text: "Also compare their heights" });
+		}
+	} finally {
+		journal.close();
+	}
+});
+
+it("restores the original option modal with descriptions, default selection and an automatic Other choice", async () => {
+	await showPickQuestion();
+	const dialog = document.querySelector('[role="dialog"]')!;
+	expect(dialog.textContent).toContain("Fits the courtyard");
+	expect(dialog.querySelectorAll('input[type="radio"]')).toHaveLength(3);
+	expect(dialog.querySelector<HTMLInputElement>('input[type="radio"]')!.checked).toBe(true);
+	await act(async () => dialogButton("Continue").click());
+	expect(socket.sent.find((command) => command.type === "answer")).toMatchObject({ questionId: "pick-question", answer: "Small — Fits the courtyard" });
+});
+
+it("accepts a custom Other answer and keeps it through snapshots and target label changes", async () => {
+	const next = await showPickQuestion();
+	await act(async () => document.querySelector<HTMLInputElement>('input[value="Other"]')!.click());
+	await act(async () => dialogButton("Continue").click());
+	expect(socket.sent.some((command) => command.type === "answer")).toBe(false);
+	const input = document.querySelector<HTMLInputElement>('[role="dialog"] input')!;
+	await act(async () => {
+		Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Medium with a canopy");
+		input.dispatchEvent(new Event("input", { bubbles: true }));
+	});
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: next }));
+	expect(document.querySelector<HTMLInputElement>('[role="dialog"] input')!.value).toBe("Medium with a canopy");
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...next, targets: [{ ...next.targets[0]!, documentLabels: { model: "Renamed facade.3dm" } }] } }));
+	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Renamed facade.3dm");
+	expect(document.querySelector<HTMLInputElement>('[role="dialog"] input')!.value).toBe("Medium with a canopy");
+	await act(async () => dialogButton("Continue").click());
+	expect(socket.sent.find((command) => command.type === "answer")).toMatchObject({ answer: "Other: Medium with a canopy" });
+});
+
+it("sends cancellation from the original picker as a null answer", async () => {
+	await showPickQuestion();
+	await act(async () => dialogButton("Cancel").click());
+	expect(socket.sent.find((command) => command.type === "answer")).toMatchObject({ questionId: "pick-question", answer: null });
+});
+
+it("queues worker pickers with their captured targets and advances only after an acknowledged answer", async () => {
+	const initial = await showPickQuestion();
+	const secondBinding = { ...binding, lifecycleInstanceId: "second-life", rhinoDocumentId: "second-model" };
+	const parent = { ...initial.tasks[0]!, state: "running" };
+	const firstWorker = { ...parent, id: "first-worker", parent_task_id: parent.id, state: "awaiting_user" };
+	const secondWorker = { ...firstWorker, id: "second-worker" };
+	const firstQuestion = { ...initial.questions[0]!, task_id: firstWorker.id };
+	const secondQuestion = { ...firstQuestion, id: "second-question", task_id: secondWorker.id, turn_id: "second-turn" };
+	const otherTask = { ...firstWorker, id: "other-task", conversation_id: "other" };
+	const otherQuestion = { ...firstQuestion, id: "other-question", task_id: otherTask.id };
+	const next = { ...initial, tasks: [parent, firstWorker, secondWorker, otherTask], questions: [firstQuestion, secondQuestion, otherQuestion], turns: [{ id: "second-turn", task_id: secondWorker.id, owner: JSON.stringify({ binding: secondBinding }) }], targets: [
+		...snapshot.targets,
+		{ ...snapshot.targets[0]!, lifecycleInstanceId: "second-life", processId: 43, documents: [secondBinding], documentLabels: { "second-model": "Garden.3dm" } },
+	] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: next }));
+	expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("1 more waiting");
+	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Target: Facade.3dm · Hopper Code 1");
+	await act(async () => dialogButton("Continue").click());
+	expect(socket.sent.find(command => command.type === "answer")).toMatchObject({ questionId: firstQuestion.id });
+	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Facade.3dm");
+	const answered = { ...next, questions: [{ ...firstQuestion, answer: JSON.stringify("Small") }, secondQuestion, otherQuestion] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: answered }));
+	expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Target: Garden.3dm · Hopper Code 2");
+	expect(document.querySelector('[role="dialog"]')!.textContent).not.toContain("more waiting");
+	await act(async () => dialogButton("Cancel").click());
+	expect(socket.sent.filter(command => command.type === "answer").at(-1)).toMatchObject({ questionId: secondQuestion.id, answer: null });
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...answered, questions: [answered.questions[0], { ...secondQuestion, answer: "null" }, otherQuestion] } }));
+	expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(0);
+});
+
+it("does not replace an active picker when an earlier worker question finishes cleanup", async () => {
+	const initial = await showPickQuestion();
+	const earlierTask = { ...initial.tasks[0]!, id: "earlier-worker", parent_task_id: "pick-task", state: "suspending" };
+	const earlierQuestion = { ...initial.questions[0]!, id: "earlier-question", task_id: earlierTask.id, payload: JSON.stringify({ question: "Earlier question" }) };
+	const next = { ...initial, tasks: [...initial.tasks, earlierTask], questions: [earlierQuestion, ...initial.questions] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: next }));
+	await act(async () => document.querySelectorAll<HTMLInputElement>('[role="dialog"] input[type="radio"]')[1]!.click());
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...next, tasks: [...initial.tasks, { ...earlierTask, state: "awaiting_user" }] } }));
+	expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+	expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Which size?");
+	expect(document.querySelectorAll<HTMLInputElement>('[role="dialog"] input[type="radio"]')[1]!.checked).toBe(true);
+});
+
+it("keeps earlier assistant responses visible through tool turns and final message persistence", async () => {
+	const task = { id: "streaming-task", session_id: "session", conversation_id: "conversation", parent_task_id: null, state: "running", payload: JSON.stringify({ text: "Inspect the model", bindings: [binding] }) };
+	const first = { role: "assistant", content: [{ type: "text", text: "I will inspect the courtyard first." }] };
+	const last = { role: "assistant", content: [{ type: "text", text: "The courtyard has three objects." }] };
+	const event = (event: unknown) => ({ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "agent_event", turnId: "turn", event }) });
+	const events = [
+		event({ type: "message_start", message: { role: "assistant" } }),
+		event({ type: "message_end", message: first }),
+		event({ type: "message_start", message: { role: "assistant" } }),
+		event({ type: "message_end", message: { role: "assistant", content: [{ type: "toolCall", id: "inspect", name: "rh_query_objects", arguments: {} }] } }),
+		event({ type: "message_start", message: { role: "assistant" } }),
+		event({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: last.content[0]!.text } }),
+	];
+	const next = { ...snapshot, tasks: [task], events };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: next }));
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: next }));
+	for (const text of [first.content[0]!.text, last.content[0]!.text]) expect(container.textContent!.split(text)).toHaveLength(2);
+	expect(container.textContent!.indexOf(first.content[0]!.text)).toBeLessThan(container.textContent!.indexOf(last.content[0]!.text));
+	expect(container.querySelectorAll(".animate-blink")).toHaveLength(1);
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...next, tasks: [{ ...task, state: "completed" }], events: [...events, { task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "messages", turnId: "turn", messages: [first, last] }) }] } }));
+	for (const text of [first.content[0]!.text, last.content[0]!.text]) expect(container.textContent!.split(text)).toHaveLength(2);
+	expect(container.querySelectorAll(".animate-blink")).toHaveLength(0);
+});
+
+it("renders compact streaming history and applies row updates without duplicating replies", async () => {
+	const task = { id: "compact-task", session_id: "session", conversation_id: "conversation", parent_task_id: null, state: "running", payload: JSON.stringify({ text: "Inspect", bindings: [binding] }) };
+	const event = (text: string) => ({ id: 10, task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "assistant_message", turnId: "turn", messageId: "message", streaming: true,
+		message: { role: "assistant", content: [{ type: "thinking", thinking: "Checking the model" }, { type: "text", text }] } }) });
+	const first = { ...snapshot, tasks: [task], eventCursor: 10, events: [event("Partial response")] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: first }));
+	expect(container.textContent).toContain("Partial response");
+	const second = { ...first, eventCursor: 11, events: [event("Updated response")] };
+	await act(async () => socket.receive({ type: "shared_patch", patch: snapshotPatch(first, second) }));
+	expect(container.textContent).not.toContain("Partial response");
+	expect(container.textContent!.split("Updated response")).toHaveLength(2);
+	const final = { ...second, eventCursor: 12, tasks: [{ ...task, state: "completed" }], events: [{ id: 12, task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "messages", turnId: "turn", messages: [{ role: "assistant", content: [{ type: "text", text: "Final response" }] }] }) }] };
+	await act(async () => socket.receive({ type: "shared_patch", patch: snapshotPatch(second, final) }));
+	expect(container.textContent).not.toContain("Updated response");
+	expect(container.textContent!.split("Final response")).toHaveLength(2);
+	expect(container.querySelectorAll(".animate-blink")).toHaveLength(0);
+});
+
+it("opens an interrupted chat from a previous host for recovery and returns to the current chat", async () => {
+	const journal = new TaskJournal(":memory:");
+	try {
+		const old = journal.createConversation("old", "Interrupted chat");
+		const task = journal.accept({ ...old, requestId: "old-task", kind: "prompt", text: "Old edit", bindings: [], attachments: [] });
+		journal.start(task.taskId, task.turnId);
+		journal.recover();
+		const afterConversationSequence = journal.lastConversationSequence;
+		journal.registerSession("conversation", "session");
+		const show = async (conversationId: string) => act(async () => socket.receive({ type: "shared_snapshot", snapshot: {
+			...snapshot, ...journal.browserSnapshot({ afterConversationSequence, conversationId }),
+			conversationSession: { id: "rhino-session", afterConversationSequence }, eventCursor: journal.eventCursor,
+		} }));
+		await show("conversation");
+		expect(container.textContent).not.toContain("Old edit");
+		await act(async () => byText("Review Interrupted chat").click());
+		expect(socket.sent.at(-1)).toEqual({ type: "snapshot", conversationId: old.conversationId });
+		await show(old.conversationId);
+		expect(container.textContent).toContain("Old edit");
+		await act(async () => byText("I've checked, continue").click());
+		expect(socket.sent.at(-1)).toMatchObject({ type: "recover", conversationId: old.conversationId, taskId: task.taskId });
+		journal.recoveryDisposition("recovery", task.taskId, { acknowledged: true, originalProcessExited: true, inspectedBaseline: {} });
+		await show(old.conversationId);
+		expect(byText("I've checked, continue")).toBeUndefined();
+		await act(async () => byText("Back to chat").click());
+		expect(socket.sent.at(-1)).toEqual({ type: "snapshot", conversationId: "conversation" });
+		await show("conversation");
+		expect(byText("Review Interrupted chat")).toBeUndefined();
+	} finally { journal.close(); }
+});
+
+it("requests bounded older/latest pages and preserves the page in heartbeat requests", async () => {
+	const latest = { ...snapshot, history: { conversationId: "conversation", before: null, hasOlder: true, oldestSequence: 25, pageTaskIds: [] } };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: latest }));
+	await act(async () => byText("Older messages").click());
+	expect(socket.sent.at(-1)).toEqual({ type: "snapshot", conversationId: "conversation", before: 25 });
+	const older = { ...latest, history: { ...latest.history, before: 25, oldestSequence: 5, hasOlder: false } };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: older }));
+	expect(byText("Older messages")).toBeUndefined();
+	await act(async () => window.dispatchEvent(new Event("pageshow")));
+	expect(socket.sent.at(-1)).toEqual({ type: "snapshot", conversationId: "conversation", before: 25 });
+	await act(async () => socket.receive({ type: "shared_status", runtime: snapshot.runtime, targets: snapshot.targets, hostEpoch: snapshot.hostEpoch, conversationSession: snapshot.conversationSession }));
+	expect(byText("Latest messages")).toBeTruthy();
+	await act(async () => byText("Latest messages").click());
+	expect(socket.sent.at(-1)).toEqual({ type: "snapshot", conversationId: "conversation" });
+});
+
+it("accepts lightweight heartbeat responses without reconnecting or losing a draft", async () => {
+	vi.useFakeTimers();
+	await value("#composer-input", "Keep this draft");
+	await act(async () => window.dispatchEvent(new Event("pageshow")));
+	await act(async () => socket.receive({ type: "shared_status", runtime: snapshot.runtime, targets: snapshot.targets, hostEpoch: snapshot.hostEpoch, conversationSession: snapshot.conversationSession }));
+	await act(async () => vi.advanceTimersByTimeAsync(11_000));
+	expect(Socket.sockets).toHaveLength(1);
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Keep this draft");
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.disabled).toBe(false);
+});
+
+it("expands live tool cards with input and partial output before the final messages arrive", async () => {
+	const task = { id: "live-tools", session_id: "session", conversation_id: "conversation", parent_task_id: null, state: "running", payload: JSON.stringify({ text: "Run script", bindings: [binding] }) };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [task], events: [
+		{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "tool_progress", turnId: "turn", toolCallId: "call", toolName: "rh_run_script", phase: "started", event: { args: { code: "return 42;" } } }) },
+		{ task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "tool_progress", turnId: "turn", toolCallId: "call", toolName: "rh_run_script", phase: "updated", event: { partialResult: { content: [{ type: "text", text: "Evaluating script" }] } } }) },
+	] } }));
+	await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("rh_run_script"))!.click());
+	expect(container.textContent).toContain("Input");
+	expect(container.textContent).toContain("Output");
+	expect(container.textContent).toContain("return 42;");
+	expect(container.textContent).toContain("Evaluating script");
+	expect(container.textContent).not.toContain("No details");
+});
+
+it("reconnects to the same shared endpoint and retries a captured multi-target command once", async () => {
+	vi.useFakeTimers();
+	const second = { ...binding, lifecycleInstanceId: "life-2", rhinoDocumentId: "other-model" };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [...snapshot.targets, { ...snapshot.targets[0], lifecycleInstanceId: "life-2", processId: 43, documents: [second] }] } }));
+	await value("#composer-input", "Compare these models");
+	await act(async () => sendButton().click());
+	const submitted = socket.sent.find((command) => command.type === "submit");
+	expect(submitted.bindings).toEqual([binding, second]);
+	await act(async () => socket.onclose?.({ code: 1006, reason: "Network lost" }));
+	await act(async () => vi.advanceTimersByTimeAsync(1500));
+	const replacement = Socket.sockets.at(-1)!;
+	expect(replacement.url.toString()).toBe(socket.url.toString());
+	expect(replacement.url.toString()).toContain("/ws-shared");
+	await act(async () => { replacement.onopen?.(); replacement.receive({ type: "shared_snapshot", snapshot: { ...snapshot, hostEpoch: "replacement-host" } }); });
+	expect(replacement.sent.filter((command) => command.type === "submit")).toEqual([submitted]);
+	expect(replacement.sent.filter((command) => command.type === "create_conversation")).toEqual([]);
+	expect(replacement.sent[0]).toEqual({ type: "authenticate", token: "credential" });
+	await act(async () => replacement.receive({ type: "shared_snapshot", snapshot }));
+	expect(replacement.sent.filter((command) => command.type === "submit")).toHaveLength(1);
+	await act(async () => replacement.receive({ type: "command_accepted", requestId: submitted.requestId, result: { taskId: "task" } }));
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("");
+});
+
+it("shows startup progress and waits for its Rhino before restoring or creating a conversation", async () => {
+	await act(async () => root.unmount());
+	history.replaceState(null, "", "/?instance=new-rhino&starting=1#credential");
+	root = createRoot(container);
+	await act(async () => root.render(createElement(HopperStoreProvider, null, createElement(App))));
+	let early = Socket.sockets.at(-1)!;
+	expect(container.textContent).toContain("Starting Hopper…");
+	expect(sendButton().disabled).toBe(true);
+	vi.useFakeTimers();
+	await act(async () => {
+		early.onopen?.();
+		early.onclose?.({ code: 1013, reason: "Host is initializing; retry shortly" });
+	});
+	expect(container.textContent).not.toContain("Connection to the local Hopper host was lost");
+	await act(async () => vi.advanceTimersByTimeAsync(250));
+	early = Socket.sockets.at(-1)!;
+	await act(async () => {
+		early.onopen?.();
+		early.receive({ type: "shared_snapshot", snapshot });
+	});
+	expect(container.textContent).toContain("Starting Hopper…");
+	expect(container.querySelector("h1")!.textContent).toBe("New chat");
+	expect(early.sent.map((command) => command.type)).toEqual(["authenticate"]);
+	expect(sendButton().disabled).toBe(true);
+	await act(async () => early.receive({ type: "shared_status",
+		runtime: snapshot.runtime, hostEpoch: snapshot.hostEpoch,
+		conversationSession: { id: "new-session", afterConversationSequence: 2 },
+		targets: [{ ...snapshot.targets[0], lifecycleInstanceId: "new-rhino" }],
+	}));
+	expect(container.textContent).not.toContain("Starting Hopper…");
+	expect(new URLSearchParams(location.search).has("starting")).toBe(false);
+	expect(early.sent.filter((command) => command.type === "create_conversation")).toHaveLength(1);
+});
+
+it.each([4001, 4003])("does not take control automatically after close code %s", async (code) => {
+	vi.useFakeTimers();
+	await act(async () => socket.onclose?.({ code, reason: "Disconnected" }));
+	await act(async () => {
+		window.dispatchEvent(new Event("online"));
+		window.dispatchEvent(new Event("pageshow"));
+		document.dispatchEvent(new Event("visibilitychange"));
+		await vi.advanceTimersByTimeAsync(60_000);
+	});
+	expect(Socket.sockets).toHaveLength(1);
+	if (code === 4003) expect(container.textContent).toContain("fresh link");
+});
+
+it("ignores late messages, acknowledgements and opens from the replaced socket", async () => {
+	await value("#composer-input", "Keep this draft");
+	await act(async () => sendButton().click());
+	const submitted = socket.sent.find((command) => command.type === "submit");
+	await act(async () => socket.onclose?.({ code: 1006, reason: "Lost" }));
+	await act(async () => byText("Retry").click());
+	const sent = socket.sent.length;
+	await act(async () => {
+		socket.onopen?.();
+		socket.receive({ type: "command_accepted", requestId: submitted.requestId, result: { taskId: "task" } });
+		socket.receive({ type: "shared_snapshot", snapshot });
+	});
+	expect(socket.sent).toHaveLength(sent);
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.disabled).toBe(true);
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Keep this draft");
+	const replacement = Socket.sockets.at(-1)!;
+	await act(async () => { replacement.onopen?.(); replacement.receive({ type: "shared_snapshot", snapshot }); });
+	expect(replacement.sent).toContainEqual(submitted);
+});
+
+it("recovers a silently dead connection after wake and keeps the draft", async () => {
+	vi.useFakeTimers();
+	await act(async () => socket.onclose?.({ code: 1006, reason: "Lost" }));
+	await act(async () => window.dispatchEvent(new Event("online")));
+	const replacement = Socket.sockets.at(-1)!;
+	await act(async () => { replacement.onopen?.(); replacement.receive({ type: "shared_snapshot", snapshot }); });
+	await value("#composer-input", "Preserved after sleep");
+	replacement.sent = [];
+	await act(async () => window.dispatchEvent(new Event("pageshow")));
+	expect(replacement.sent).toEqual([{ type: "snapshot", conversationId: "conversation" }]);
+	await act(async () => vi.advanceTimersByTimeAsync(10_000));
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.disabled).toBe(true);
+	await act(async () => vi.advanceTimersByTimeAsync(1500));
+	expect(Socket.sockets).toHaveLength(3);
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Preserved after sleep");
+});
+
+it("bounds connection authentication even when no close event arrives", async () => {
+	vi.useFakeTimers();
+	await act(async () => socket.onclose?.({ code: 1006, reason: "Lost" }));
+	await act(async () => byText("Retry").click());
+	await act(async () => Socket.sockets.at(-1)!.onopen?.());
+	await act(async () => vi.advanceTimersByTimeAsync(10_000));
+	await act(async () => vi.advanceTimersByTimeAsync(1500));
+	expect(Socket.sockets).toHaveLength(3);
+});
+
+it("accepts a fresh token link on explicit reconnect and removes the fragment", async () => {
+	await act(async () => socket.onclose?.({ code: 4003, reason: "Authentication failed" }));
+	history.replaceState(null, "", "/#token=replacement-credential");
+	await act(async () => byText("Retry").click());
+	const replacement = Socket.sockets.at(-1)!;
+	await act(async () => replacement.onopen?.());
+	expect(replacement.sent[0]).toEqual({ type: "authenticate", token: "replacement-credential" });
+	expect(location.hash).toBe("");
+});
+
+it("selects a default with multiple instances and preserves the chosen message document as inventory changes", async () => {
+	const second = { ...binding, lifecycleInstanceId: "other-life", rhinoDocumentId: "other-model" };
+	const two = { ...snapshot, targets: [...snapshot.targets, { ...snapshot.targets[0], lifecycleInstanceId: "other-life", processId: 43, documents: [second], documentLabels: { "other-model": "Garden.3dm" } }] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: two }));
+	await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="New session"]')!.click());
+	const create = socket.sent.find((command) => command.type === "create_conversation");
+	await act(async () => socket.receive({ type: "command_accepted", requestId: create.requestId, result: { conversationId: "other" } }));
+	expect(container.querySelector('[aria-label="Message destination"]')!.textContent).toContain("Facade.3dm");
+	await value("#composer-input", "Edit this model");
+	expect(sendButton().disabled).toBe(false);
+	await chooseModel("Garden.3dm");
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...two, targets: [...two.targets].reverse() } }));
+	await act(async () => sendButton().click());
+	expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({ bindings: [second, binding], messageTarget: second });
+});
+
+it("restricts access to the chosen instance, including its other documents", async () => {
+	const sibling = { ...binding, rhinoDocumentId: "sibling" };
+	const second = { ...binding, lifecycleInstanceId: "other-life", rhinoDocumentId: "other-model" };
+	const two = { ...snapshot, targets: [{ ...snapshot.targets[0], documents: [binding, sibling] }, { ...snapshot.targets[0], lifecycleInstanceId: "other-life", processId: 43, documents: [second] }] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: two }));
+	await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Instance access"]')!.click());
+	await value("#composer-input", "Use only this instance");
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: two }));
+	expect(container.querySelector('[aria-label="Instance access"]')!.textContent).toBe("Only this instance");
+	await act(async () => sendButton().click());
+	expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({ bindings: [binding, sibling], messageTarget: binding });
+});
+
+it("keeps target identity across snapshots with reordered binding fields", async () => {
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [{ ...snapshot.targets[0], documents: [{ rhinoDocumentId: "model", lifecycleInstanceId: "life", kind: "rhino" }] }] } }));
+	await value("#composer-input", "Use the same model");
+	expect(sendButton().disabled).toBe(false);
+	expect(container.textContent).not.toContain("Selected document disconnected");
+});
+
+it("retains a durable command when WebSocket.send throws and retries the same request", async () => {
+	await value("#composer-input", "Keep the request");
+	const original = socket.send.bind(socket);
+	socket.send = (data) => { original(data); throw new Error("Socket closed"); };
+	await act(async () => sendButton().click());
+	const command = socket.sent.find((command) => command.type === "submit");
+	const replacement = Socket.sockets.at(-1)!;
+	expect(replacement).not.toBe(socket);
+	await act(async () => { replacement.onopen?.(); replacement.receive({ type: "shared_snapshot", snapshot }); });
+	expect(replacement.sent.filter((command) => command.type === "submit")).toEqual([command]);
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Keep the request");
+});
+
+it("includes Grasshopper canvases by default and can choose one as the message document", async () => {
+	const grasshopper = { kind: "grasshopper", lifecycleInstanceId: "life", grasshopperDocumentId: "canvas", associatedRhinoDocumentId: "model" };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [{ ...snapshot.targets[0], documents: [binding, grasshopper], documentLabels: { model: "Facade.3dm", canvas: "Facade.gh" } }] } }));
+	await chooseModel("Facade.gh");
+	await value("#composer-input", "Compare the model and definition");
+	await act(async () => sendButton().click());
+	expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({ bindings: [binding, grasshopper], messageTarget: grasshopper });
+});
+
+it("waits for the document that opened the browser when another instance registers first", async () => {
+	await act(async () => root.unmount());
+	history.replaceState(null, "", "/?instance=origin&document=origin-doc#credential");
+	root = createRoot(container);
+	await act(async () => root.render(createElement(HopperStoreProvider, { children: createElement(App) })));
+	socket = Socket.sockets.at(-1)!;
+	await act(async () => { socket.onopen?.(); socket.receive({ type: "shared_snapshot", snapshot }); });
+	expect(socket.sent.some((command) => command.type === "create_conversation")).toBe(false);
+	await value("#composer-input", "Edit this model");
+	expect(sendButton().disabled).toBe(true);
+	const origin = { ...binding, lifecycleInstanceId: "origin", rhinoDocumentId: "origin-doc" };
+	const sibling = { ...origin, rhinoDocumentId: "sibling" };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [...snapshot.targets, { ...snapshot.targets[0], lifecycleInstanceId: "origin", processId: 43, documents: [sibling, origin], documentLabels: { "origin-doc": "Origin.3dm" } }] } }));
+	expect(container.querySelector('[aria-label="Message destination"]')!.textContent).toContain("Origin.3dm");
+	await act(async () => sendButton().click());
+	expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({ bindings: [binding, sibling, origin], messageTarget: origin });
+});
+
+it("restores access to all running instances after a restriction is removed", async () => {
+	const second = { ...binding, lifecycleInstanceId: "other-life", rhinoDocumentId: "other-model" };
+	await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Instance access"]')!.click());
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, targets: [...snapshot.targets, { ...snapshot.targets[0], lifecycleInstanceId: "other-life", processId: 43, documents: [second] }] } }));
+	await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Instance access"]')!.click());
+	await value("#composer-input", "Compare the models");
+	await act(async () => sendButton().click());
+	expect(socket.sent.find((command) => command.type === "submit")).toMatchObject({ bindings: [binding, second], messageTarget: binding });
 });

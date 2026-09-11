@@ -60,11 +60,12 @@ export const rhQueryObjectsTool = defineTool({
 	}),
 
 	async execute(_toolCallId, params) {
+		// RPC validates before JSON serialization, so omit unset optional fields.
 		const requestParams = {
-			selectionOnly: params.selectionOnly,
-			layer: params.layer,
-			objectType: params.objectType,
-			objectIds: params.objectIds?.map(resolveRhinoGuid),
+			...(params.selectionOnly !== undefined ? { selectionOnly: params.selectionOnly } : {}),
+			...(params.layer !== undefined ? { layer: params.layer } : {}),
+			...(params.objectType !== undefined ? { objectType: params.objectType } : {}),
+			...(params.objectIds !== undefined ? { objectIds: params.objectIds.map(resolveRhinoGuid) } : {}),
 		};
 
 		const res = await withRequester((req) =>

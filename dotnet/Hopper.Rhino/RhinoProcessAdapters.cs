@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using Hopper.Core;
@@ -153,323 +151,47 @@ namespace rhino_zmq_poc
         }
     }
 
-    internal sealed class ManagedNodeChildProcess :
-        IManagedChildProcess,
-        INodeHealthEndpointSource,
-        IDisposable
+    /// <summary>Adapts lifecycle stop and exit to detaching this Rhino, never stopping the shared host.</summary>
+    internal sealed class SharedHostProcessAdapter : IManagedChildProcess, IDisposable
     {
-        private readonly object _gate = new object();
-        private readonly HopperHostEntryResolver _hostEntry;
-        private readonly string _dataDirectory;
-        private readonly RuntimeStatusStore _status;
-        private readonly ChildProcessStatusCoordinator _childStatus;
-        private readonly HostStartupErrorBuffer _startupErrors = new HostStartupErrorBuffer();
-        private readonly HttpClient _http = new HttpClient();
-        private Process _process;
-        private DateTime _startedAt;
-        private Uri _readyUri;
-        private string _lifecycleInstanceId;
-        private bool _intentionalStop;
-        private int _disposed;
+        private readonly SharedNodeAttachment _attachment;
 
-        public ManagedNodeChildProcess(
-            HopperHostEntryResolver hostEntry,
-            string dataDirectory,
-            RuntimeStatusStore status)
+        public SharedHostProcessAdapter(HopperHostEntryResolver hostEntry, RuntimeStatusStore status)
         {
-            _hostEntry = hostEntry ?? throw new ArgumentNullException(nameof(hostEntry));
-            _dataDirectory = dataDirectory ?? throw new ArgumentNullException(nameof(dataDirectory));
-            _status = status ?? throw new ArgumentNullException(nameof(status));
-            _childStatus = new ChildProcessStatusCoordinator(status);
+            _attachment = new SharedNodeAttachment(
+                hostEntry ?? throw new ArgumentNullException(nameof(hostEntry)),
+                status ?? throw new ArgumentNullException(nameof(status)));
         }
 
-        public event Action<Uri> Ready;
-        public event Action UnexpectedExit;
-
-        public Uri ReadyUri
+        public event Action<Uri> Ready
         {
-            get
-            {
-                lock (_gate)
-                    return _readyUri;
-            }
+            add => _attachment.Ready += value;
+            remove => _attachment.Ready -= value;
         }
 
-        public bool IsAlive
-        {
-            get
-            {
-                lock (_gate)
-                    return _process != null && !SafeHasExited(_process);
-            }
-        }
-
-        public Uri GetReadyUri(string lifecycleInstanceId)
-        {
-            lock (_gate)
-            {
-                return string.Equals(
-                        _lifecycleInstanceId,
-                        lifecycleInstanceId,
-                        StringComparison.Ordinal)
-                    ? _readyUri
-                    : null;
-            }
-        }
+        public Uri ReadyUri => _attachment.ReadyUri;
+        public bool IsAlive => _attachment.IsAlive;
+        public Task EnsureRunningAsync() => _attachment.EnsureRunningAsync();
 
         public Task<ChildStartResult> StartAsync(
             NodeRuntime runtime,
             string profilePath,
             string lifecycleInstanceId,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken) =>
+            _attachment.StartAsync(runtime, profilePath, lifecycleInstanceId, cancellationToken);
+
+        public async Task<bool> RequestGracefulStopAsync(TimeSpan timeout, CancellationToken cancellationToken)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var entry = _hostEntry.Resolve();
-            if (string.IsNullOrWhiteSpace(entry))
-            {
-                return Task.FromResult(new ChildStartResult(
-                    false, false, "The compiled Hopper host entry was not found."));
-            }
-
-            var info = new ProcessStartInfo(runtime.ExecutablePath)
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-                WorkingDirectory = Path.GetDirectoryName(entry),
-            };
-            info.ArgumentList.Add(entry);
-            AddArgument(info, "--connection-profile", Path.GetFullPath(profilePath));
-            AddArgument(info, "--parent-pid", Environment.ProcessId.ToString());
-            AddArgument(info, "--instance-id", lifecycleInstanceId);
-            AddArgument(info, "--port", "0");
-            AddArgument(info, "--data-dir", _dataDirectory);
-
-            var process = new Process { StartInfo = info, EnableRaisingEvents = true };
-            process.OutputDataReceived += OnOutput;
-            process.ErrorDataReceived += OnError;
-            process.Exited += OnExited;
-            lock (_gate)
-            {
-                if (_process != null && !SafeHasExited(_process))
-                {
-                    process.Dispose();
-                    return Task.FromResult(new ChildStartResult(
-                        false, false, "A managed Node child is already running."));
-                }
-                _process?.Dispose();
-                _process = process;
-                _readyUri = null;
-                _lifecycleInstanceId = lifecycleInstanceId;
-                _intentionalStop = false;
-                _startupErrors.Reset();
-            }
-
-            try
-            {
-                if (!process.Start())
-                    throw new InvalidOperationException("Process.Start returned false.");
-                _startedAt = process.StartTime;
-                _childStatus.MarkStarted(
-                    new HostRuntimeStatusUpdate(
-                        Hopper.Core.Lifecycle.LifecycleState.Starting,
-                        process.Id,
-                        runtime.ExecutablePath,
-                        runtime.Version.ToString(),
-                        HandshakeState.connecting,
-                        0),
-                    () => SafeHasExited(process));
-                process.BeginOutputReadLine();
-                process.BeginErrorReadLine();
-                return Task.FromResult(new ChildStartResult(true, true, ""));
-            }
-            catch (Exception exception)
-            {
-                lock (_gate)
-                {
-                    if (ReferenceEquals(_process, process))
-                        _process = null;
-                }
-                process.Dispose();
-                return Task.FromResult(new ChildStartResult(false, false, exception.Message));
-            }
-        }
-
-        public async Task<bool> RequestGracefulStopAsync(
-            TimeSpan timeout,
-            CancellationToken cancellationToken)
-        {
-            Process process;
-            Uri ready;
-            lock (_gate)
-            {
-                process = _process;
-                ready = _readyUri;
-                _intentionalStop = true;
-            }
-            if (process == null || SafeHasExited(process))
-                return true;
-
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             deadline.CancelAfter(timeout);
-            try
-            {
-                if (ready != null)
-                {
-                    var endpoint = new Uri(ready.GetLeftPart(UriPartial.Authority) + "/api/shutdown");
-                    using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-                    request.Headers.Authorization = new AuthenticationHeaderValue(
-                        "Bearer",
-                        ready.Fragment.TrimStart('#'));
-                    using var response = await _http.SendAsync(request, deadline.Token)
-                        .ConfigureAwait(false);
-                    if ((int)response.StatusCode is < 200 or >= 300)
-                        return false;
-                }
-                await process.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
-                return true;
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                return false;
-            }
-            catch
-            {
-                return false;
-            }
+            return await _attachment.Detach(deadline.Token).ConfigureAwait(false);
         }
 
-        public void KillVerifiedTreeNoWait()
-        {
-            Process process;
-            DateTime startedAt;
-            lock (_gate)
-            {
-                process = _process;
-                startedAt = _startedAt;
-                _intentionalStop = true;
-            }
-            if (process == null || SafeHasExited(process))
-                return;
-            try
-            {
-                if (process.StartTime == startedAt)
-                    process.Kill(entireProcessTree: true);
-            }
-            catch
-            {
-            }
-        }
-
-        public async Task<bool> WaitForExitAsync(TimeSpan timeout, CancellationToken cancellationToken)
-        {
-            Process process;
-            lock (_gate)
-                process = _process;
-            if (process == null || SafeHasExited(process))
-                return true;
-            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            deadline.CancelAfter(timeout);
-            try
-            {
-                await process.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
-                return true;
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                return false;
-            }
-        }
-
-        public void Dispose()
-        {
-            if (Interlocked.Exchange(ref _disposed, 1) != 0)
-                return;
-            KillVerifiedTreeNoWait();
-            Process process;
-            lock (_gate)
-            {
-                process = _process;
-                _process = null;
-                _readyUri = null;
-            }
-            if (process != null)
-            {
-                process.OutputDataReceived -= OnOutput;
-                process.ErrorDataReceived -= OnError;
-                process.Exited -= OnExited;
-                process.Dispose();
-            }
-            _http.Dispose();
-        }
-
-        private void OnOutput(object sender, DataReceivedEventArgs args)
-        {
-            if (args.Data == null || sender is not Process process)
-                return;
-            string lifecycleInstanceId;
-            lock (_gate)
-                lifecycleInstanceId = _lifecycleInstanceId;
-            if (!HostReadiness.TryParse(args.Data, process.Id, lifecycleInstanceId, out var ready))
-                return;
-            lock (_gate)
-            {
-                if (!ReferenceEquals(_process, process) || SafeHasExited(process))
-                    return;
-                _readyUri = ready;
-            }
-            Ready?.Invoke(ready);
-        }
-
-        private void OnError(object sender, DataReceivedEventArgs args)
-        {
-            if (string.IsNullOrWhiteSpace(args.Data))
-                return;
-            string message;
-            lock (_gate)
-            {
-                if (!ReferenceEquals(_process, sender))
-                    return;
-                message = _startupErrors.Append(args.Data);
-            }
-            _status.UpdateError(RuntimeStatusComponent.Host, new RuntimeErrorV2
-            {
-                Code = RpcReasonCode.INTERNAL_ERROR,
-                Message = message,
-            });
-        }
-
-        private void OnExited(object sender, EventArgs args)
-        {
-            var unexpected = false;
-            lock (_gate)
-            {
-                if (!ReferenceEquals(_process, sender))
-                    return;
-                unexpected = !_intentionalStop;
-            }
-            _childStatus.MarkExited();
-            if (unexpected)
-                UnexpectedExit?.Invoke();
-        }
-
-        private static void AddArgument(ProcessStartInfo info, string name, string value)
-        {
-            info.ArgumentList.Add(name);
-            info.ArgumentList.Add(value);
-        }
-
-        private static bool SafeHasExited(Process process)
-        {
-            try
-            {
-                return process.HasExited;
-            }
-            catch
-            {
-                return true;
-            }
-        }
+        // IManagedChildProcess is the lifecycle contract. Its forced-stop operation only
+        // stops this attachment; the independently owned Node process must survive.
+        public void KillVerifiedTreeNoWait() => _attachment.StopLocal();
+        public Task<bool> WaitForExitAsync(TimeSpan timeout, CancellationToken cancellationToken) =>
+            Task.FromResult(!_attachment.IsAlive);
+        public void Dispose() => _attachment.Dispose();
     }
 }

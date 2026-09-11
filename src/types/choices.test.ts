@@ -5,6 +5,7 @@ import {
 	appendOtherOptionLabels,
 	formatPickOptionLabels,
 	resolvePickOption,
+	resolvePickOptionAnswer,
 	type PickOption,
 } from "./choices.js";
 
@@ -33,4 +34,17 @@ test("skips Other when already present", () => {
 
 test("does not treat other-prefixed labels as the canonical Other choice", () => {
 	assert.deepEqual(appendOtherOptionLabels(["A", "Others"]), ["A", "Others", OTHER_OPTION_LABEL]);
+});
+
+
+test("durable picker answers retain values, custom text and cancellation", () => {
+	assert.deepEqual(resolvePickOptionAnswer("Choose", options, "Pipe — Surface > Freeform"), {
+		question: "Choose", choice: "Pipe — Surface > Freeform", label: "Pipe", value: "guid-pipe",
+	});
+	assert.deepEqual(resolvePickOptionAnswer("Choose", options, "Other: current selection"), {
+		question: "Choose", choice: "Other", label: "Other", value: "current selection", customAnswer: "current selection",
+	});
+	assert.deepEqual(resolvePickOptionAnswer("Choose", options, null), {
+		question: "Choose", choice: null, label: null, value: null,
+	});
 });

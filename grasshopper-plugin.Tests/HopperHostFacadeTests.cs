@@ -7,6 +7,7 @@ using Hopper.Core.Protocol;
 using Hopper.Core.Runtime;
 using Hopper.Core.Time;
 using Hopper.Rhino.Host;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Xunit;
 
@@ -14,6 +15,60 @@ namespace rhino_zmq_poc.Tests;
 
 public sealed class HopperHostFacadeTests
 {
+    [Theory]
+    [InlineData("running")]
+    [InlineData("failed")]
+    [InlineData("cancelled")]
+    public async Task SlowStartReportsElapsedTimeBeforeItsFinalResult(string outcome)
+    {
+        var sink = new CompletionSink();
+        var fixture = new FacadeFixture(completionSink: sink);
+        var handshake = new TaskCompletionSource<LifecycleActionResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.Transport.PendingHandshake = handshake.Task;
+        fixture.Facade.RequestStart();
+        var starting = fixture.FacadeScheduler.RunNext();
+        try
+        {
+            Assert.Equal("HopperCode is starting... (0s elapsed)", Assert.Single(sink.Messages));
+            var progress = await sink.Progress.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Matches(@"^HopperCode is starting\.\.\. \(\d+s elapsed\)$", progress);
+            Assert.False(starting.IsCompleted);
+            if (outcome == "cancelled") fixture.Facade.RequestStop();
+            else handshake.SetResult(outcome == "running"
+                ? LifecycleActionResult.Success()
+                : LifecycleActionResult.Failure("Test handshake failed."));
+            await starting.WaitAsync(TimeSpan.FromSeconds(5));
+            var messages = sink.Messages.ToArray();
+            Assert.True(messages.Length >= 3);
+            Assert.DoesNotContain("is starting...", messages.Last());
+            if (outcome == "running") Assert.Equal("HopperCode is running.", messages.Last());
+            if (outcome == "failed") Assert.Contains("Test handshake failed.", messages.Last());
+        }
+        finally
+        {
+            handshake.TrySetResult(LifecycleActionResult.Failure("Test finished."));
+            await starting;
+            await fixture.LifecycleScheduler.RunAll();
+            await fixture.FacadeScheduler.RunAll();
+            fixture.Facade.CloseForRhinoExit();
+        }
+    }
+
+    [Fact]
+    public async Task FirstStartRequestsBrowserBeforeRunningNotification()
+    {
+        var sink = new CompletionSink();
+        var fixture = new FacadeFixture(completionSink: sink);
+        Assert.True(fixture.Facade.RequestStart().Accepted);
+        Assert.Equal(1, fixture.RunningObserver.ResetCount);
+        Assert.Equal(0, fixture.RunningObserver.OpenCount);
+        await fixture.FacadeScheduler.RunNext();
+        Assert.Equal(new[] { "HopperCode is starting... (0s elapsed)", "HopperCode is running." }, sink.Messages.ToArray());
+        Assert.Equal(1, fixture.RunningObserver.OpenCount);
+        fixture.RunningObserver.OnRunning();
+        Assert.Equal(1, fixture.RunningObserver.OpenCount);
+    }
+
     [Fact]
     public async Task StartWhileRunningReopensBrowserWithoutRestartingHost()
     {
@@ -32,7 +87,7 @@ public sealed class HopperHostFacadeTests
         Assert.Equal(instanceId, fixture.Controller.Snapshot.LifecycleInstanceId);
         Assert.Equal(1, fixture.Transport.StartCount);
         Assert.Equal(1, fixture.RunningObserver.RunningCount);
-        Assert.Equal(0, fixture.RunningObserver.ResetCount);
+        Assert.Equal(1, fixture.RunningObserver.ResetCount);
     }
 
     [Fact]
@@ -251,7 +306,7 @@ public sealed class HopperHostFacadeTests
 
     private sealed class FacadeFixture
     {
-        public FacadeFixture(bool grasshopperInstalled = true)
+        public FacadeFixture(bool grasshopperInstalled = true, IHopperCommandCompletionSink? completionSink = null)
         {
             Grasshopper = new GrasshopperCapabilityRegistry(
                 SystemHopperClock.Instance,
@@ -279,6 +334,7 @@ public sealed class HopperHostFacadeTests
                 GrasshopperStart,
                 Cancellation,
                 RunningObserver,
+                completionSink: completionSink,
                 reopenBrowser: () => BrowserOpenCount++);
         }
 
@@ -296,6 +352,18 @@ public sealed class HopperHostFacadeTests
         public int BrowserOpenCount { get; private set; }
     }
 
+    private sealed class CompletionSink : IHopperCommandCompletionSink
+    {
+        public ConcurrentQueue<string> Messages { get; } = new();
+        public TaskCompletionSource<string> Progress { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public void Write(string message)
+        {
+            Messages.Enqueue(message);
+            if (message.StartsWith("HopperCode is starting...") && !message.Contains("(0s elapsed)"))
+                Progress.TrySetResult(message);
+        }
+    }
+
     private sealed class Wakeups : IRuntimeStatusWakeupPublisher
     {
         public void PublishStatusChanged(long revision)
@@ -305,14 +373,21 @@ public sealed class HopperHostFacadeTests
 
     private sealed class RunningObserver : IHopperRunningObserver
     {
+        private readonly BrowserOpenRequest _browser = new();
+        public int OpenCount { get; private set; }
         public int ResetCount { get; private set; }
         public int RunningCount { get; private set; }
 
-        public void Reset() => ResetCount++;
+        public void Reset()
+        {
+            ResetCount++;
+            _browser.Request();
+        }
 
         public void OnRunning()
         {
             RunningCount++;
+            if (_browser.Take(true, new Uri("http://127.0.0.1:54321/"))) OpenCount++;
         }
     }
 
@@ -370,6 +445,7 @@ public sealed class HopperHostFacadeTests
     {
         public bool IsRunning { get; private set; }
         public int StartCount { get; private set; }
+        public Task<LifecycleActionResult>? PendingHandshake { get; set; }
 
         public Task<TransportStartResult> StartAsync(
             string lifecycleInstanceId,
@@ -388,7 +464,7 @@ public sealed class HopperHostFacadeTests
             string lifecycleInstanceId,
             TimeSpan timeout,
             CancellationToken cancellationToken) =>
-            Task.FromResult(LifecycleActionResult.Success());
+            PendingHandshake?.WaitAsync(cancellationToken) ?? Task.FromResult(LifecycleActionResult.Success());
 
         public Task<bool> StopAsync(TimeSpan timeout, CancellationToken cancellationToken)
         {

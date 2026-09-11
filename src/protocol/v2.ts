@@ -1,3 +1,4 @@
+import { validateExecutionOwner, validateDocumentActionOwner, type DocumentActionOwner, type ExecutionOwner } from "./shared-execution.js";
 import type { DocumentRequest } from "../types/document-management.js";
 export const PROTOCOL_VERSION = 2 as const;
 
@@ -30,6 +31,8 @@ export const CONTROL_OPERATIONS = [
 ] as const;
 
 export const MUTATION_OPERATIONS = [
+	"exportRhinoArtifact",
+	"importRhinoArtifact",
 	"manageRhinoDocument",
 	"manageGrasshopperDocument",
 
@@ -134,6 +137,7 @@ export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue
 export type JsonObject = { [key: string]: JsonValue };
 
 export type LifecycleHandshakeArgs = {
+	hostEpoch?: string;
 	nodeProcessId: number;
 	nodeVersion: string;
 	clientIdentity: string;
@@ -153,6 +157,8 @@ export type RequestArgsFor<O extends OperationName> =
 				: JsonObject;
 
 type RequestBase<O extends OperationName> = {
+	executionOwner?: ExecutionOwner;
+	documentActionOwner?: DocumentActionOwner;
 	protocolVersion: typeof PROTOCOL_VERSION;
 	lifecycleInstanceId: string;
 	requestId: string;
@@ -346,13 +352,14 @@ function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[])
 }
 
 function isIdentifier(value: unknown): value is string {
-	return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
+	return typeof value === "string" && value.trim() === value && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
 }
 
 function validateInternalArgs(operation: OperationName, args: Record<string, unknown>): boolean {
 	switch (operation) {
 		case "lifecycleHandshake":
-			return hasExactKeys(args, ["nodeProcessId", "nodeVersion", "clientIdentity"])
+			return hasExactKeys(args, ["nodeProcessId", "nodeVersion", "clientIdentity", ...(Object.hasOwn(args, "hostEpoch") ? ["hostEpoch"] : [])])
+				&& (!Object.hasOwn(args, "hostEpoch") || isIdentifier(args.hostEpoch))
 				&& Number.isSafeInteger(args.nodeProcessId) && Number(args.nodeProcessId) > 0
 				&& typeof args.nodeVersion === "string" && /^v?\d+\.\d+\.\d+$/.test(args.nodeVersion)
 				&& isIdentifier(args.clientIdentity);
@@ -375,8 +382,12 @@ export function validateRpcRequest(input: unknown): ValidationResult<HopperRpcRe
 		"protocolVersion", "lifecycleInstanceId", "requestId", "token",
 		"operation", "startDeadlineAt", "args",
 		...(operationClass === "mutation" ? ["operationId"] : []),
+		...(Object.hasOwn(input, "executionOwner") ? ["executionOwner"] : []),
+		...(Object.hasOwn(input, "documentActionOwner") ? ["documentActionOwner"] : []),
 	];
 	if (!hasExactKeys(input, allowed)) errors.push("request envelope fields do not match the operation class");
+	if (Object.hasOwn(input, "executionOwner") && !validateExecutionOwner(input.executionOwner).ok) errors.push("executionOwner is invalid");
+	if (Object.hasOwn(input, "documentActionOwner") && (!validateDocumentActionOwner(input.documentActionOwner).ok || Object.hasOwn(input, "executionOwner"))) errors.push("documentActionOwner is invalid or ambiguous");
 	if (input.protocolVersion !== PROTOCOL_VERSION) errors.push("protocolVersion must be 2");
 	if (!isIdentifier(input.lifecycleInstanceId)) errors.push("lifecycleInstanceId is invalid");
 	if (!isIdentifier(input.requestId)) errors.push("requestId is invalid");
@@ -454,7 +465,8 @@ function validateInternalResponseData(operation: OperationName, data: unknown): 
 	if (!isRecord(data)) return false;
 	switch (operation) {
 		case "lifecycleHandshake":
-			return hasExactKeys(data, ["handshake", "statusRevision"])
+			return hasExactKeys(data, ["handshake", "statusRevision", ...(Object.hasOwn(data, "attachmentGeneration") ? ["attachmentGeneration"] : [])])
+				&& (!Object.hasOwn(data, "attachmentGeneration") || isIdentifier(data.attachmentGeneration))
 				&& data.handshake === "live"
 				&& Number.isSafeInteger(data.statusRevision) && Number(data.statusRevision) >= 0;
 		case "getRuntimeStatus":

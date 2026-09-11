@@ -38,6 +38,7 @@ internal sealed class GrasshopperDocumentOperations : DocumentService<GH_Documen
         }
         return id;
     }
+    public string DocumentIdentity(GH_Document document) => Id(document);
     public string? ActiveId => Active == null ? null : Id(Active);
     protected override string? PathOf(GH_Document doc) => doc.FilePath;
     protected override bool Modified(GH_Document doc) => doc.IsModified;

@@ -1,3 +1,5 @@
+import { RuntimeSessionContext } from "../infra/runtime-session-context.js";
+import { closeRuntimeRpc } from "../infra/runtime-rpc.js";
 import { mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,6 +27,9 @@ import { ToolPolicyRuntime } from "../services/tool-policy-runtime.js";
 import type { ToolSettingsAction } from "./protocol.js";
 
 export type EmbeddedPiHostOptions = {
+	/** Disable automatic native probes for the shared host's unattached settings session. */
+	probeBackend?: boolean;
+	runtimeSession?: RuntimeSessionContext;
 	paths: HostPaths;
 	projectRoot?: string;
 	bus?: HostMessageBus;
@@ -64,13 +69,19 @@ export function isolatedResourceLoaderOptions(scriptOptions?: HopperExtensionOpt
 }
 
 /** Pi snapshots tool definitions after compaction for each continuation. */
-export function bindToolPolicyModelBoundary(session: AgentSession, policy: ToolPolicyRuntime): void {
+export function bindToolPolicyModelBoundary(session: AgentSession, policy: ToolPolicyRuntime, promptSuffix = ""): () => Promise<void> {
+	const refresh = async () => {
+		await policy.reconcile(true);
+		if (promptSuffix && !session.agent.state.systemPrompt.endsWith(promptSuffix))
+			session.agent.state.systemPrompt += promptSuffix;
+	};
 	const prepare = session.agent.prepareNextTurnWithContext;
 	session.agent.prepareNextTurnWithContext = async (turn, signal) => {
 		const next = await prepare?.(turn, signal);
-		await policy.reconcile(true);
+		await refresh();
 		return { ...next, context: { ...(next?.context ?? turn.context), tools: session.agent.state.tools.slice(), systemPrompt: session.agent.state.systemPrompt } };
 	};
+	return refresh;
 }
 
 export class EmbeddedPiHost {
@@ -79,6 +90,7 @@ export class EmbeddedPiHost {
 	private unsubscribe?: () => void;
 	private disposed = false;
 	private skillUpdate?: Promise<void>;
+	private authRefresh?: Promise<void>;
 	private promptPending = false;
 	private promptGeneration = 0;
 
@@ -89,12 +101,18 @@ export class EmbeddedPiHost {
 		private readonly skills: HostSkillLibrary,
 		private readonly onShutdownRequest?: () => void,
 		private readonly currentPolicy?: () => ToolPolicyRuntime,
+		private readonly runtimeSession = new RuntimeSessionContext(),
 	) {
 		this.bus = bus;
 		this.ui = ui;
 	}
 
 	static async create(options: EmbeddedPiHostOptions): Promise<EmbeddedPiHost> {
+		const runtimeSession = options.runtimeSession ?? new RuntimeSessionContext();
+		return runtimeSession.run(() => EmbeddedPiHost.createInSession(options, runtimeSession));
+	}
+
+	private static async createInSession(options: EmbeddedPiHostOptions, runtimeSession: RuntimeSessionContext): Promise<EmbeddedPiHost> {
 		const projectRoot = options.projectRoot ?? defaultProjectRoot();
 		const { paths } = options;
 		await Promise.all([
@@ -122,7 +140,7 @@ export class EmbeddedPiHost {
 			sessionManager,
 			sessionStartEvent,
 		}) => {
-			const policy = new ToolPolicyRuntime({ embedded: true, directory: paths.toolConfigDir });
+			const policy = new ToolPolicyRuntime({ embedded: true, directory: paths.toolConfigDir, probeBackendOnReconcile: options.probeBackend });
 			currentPolicy = policy;
 			policy.onChange = snapshot => host?.bus.publish({ type: "tool_settings", snapshot });
 			const services = await createAgentSessionServices({
@@ -130,7 +148,9 @@ export class EmbeddedPiHost {
 				agentDir: paths.agentDir,
 				modelRuntime,
 				resourceLoaderOptions: isolatedResourceLoaderOptions({
+					backendStatusUI: options.probeBackend,
 					toolPolicy: policy,
+					runtimeSession,
 					scriptWorkspaceDir: paths.scriptWorkspaceDir ?? join(paths.dataDir, "workspaces", "default"),
 					scriptWorkspaceQuotaBytes: paths.scriptWorkspaceQuotaBytes,
 					sessionId: () => sessionManager.getSessionId(),
@@ -158,7 +178,7 @@ export class EmbeddedPiHost {
 			agentDir: paths.agentDir,
 			sessionManager: SessionManager.continueRecent(paths.workspaceDir, paths.sessionsDir),
 		});
-		host = new EmbeddedPiHost(runtime, bus, ui, skills, options.onShutdownRequest, () => currentPolicy);
+		host = new EmbeddedPiHost(runtime, bus, ui, skills, options.onShutdownRequest, () => currentPolicy, runtimeSession);
 		runtime.setRebindSession(async (session) => host!.bindSession(session, true));
 		await host.bindSession(runtime.session, false);
 		return host;
@@ -194,15 +214,15 @@ export class EmbeddedPiHost {
 		})).sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)) };
 	}
 
-	async getToolSettings() {
+	async getToolSettings(backendPreview?: boolean) {
 		this.assertUsable();
-		return this.currentPolicy ? this.currentPolicy().getToolSettings() : this.listTools();
+		return this.runtimeSession.run(() => this.currentPolicy ? this.currentPolicy().getToolSettings(backendPreview) : this.listTools());
 	}
 
 	async updateToolSettings(action: ToolSettingsAction) {
 		this.assertUsable();
 		if (!this.currentPolicy) throw new Error("Tool settings are unavailable");
-		return this.currentPolicy().updateToolSettings(action);
+		return this.runtimeSession.run(() => this.currentPolicy!().updateToolSettings(action));
 	}
 
 	async listSkills() {
@@ -279,6 +299,7 @@ export class EmbeddedPiHost {
 
 	async setModel(provider: string, id: string): Promise<void> {
 		this.assertUsable();
+		await this.refreshAuth();
 		const model = this.runtime.services.modelRuntime.getModel(provider, id);
 		if (!model) throw new Error(`Unknown model: ${provider}/${id}`);
 		if (!this.runtime.services.modelRuntime.hasConfiguredAuth(provider)) {
@@ -300,6 +321,17 @@ export class EmbeddedPiHost {
 		if (!selected) throw new Error(`Thinking level is unavailable: ${level}`);
 		this.runtime.session.setThinkingLevel(selected, { persist: true });
 		this.publishSnapshot();
+	}
+
+	/** Reload credentials changed by the global Pi CLI without fetching model catalogs. */
+	async refreshAuth(): Promise<void> {
+		this.assertUsable();
+		if (!this.authRefresh) {
+			this.authRefresh = this.runtime.services.modelRuntime.refresh({ allowNetwork: false })
+				.then(() => { if (!this.disposed) this.publishSnapshot(); })
+				.finally(() => { this.authRefresh = undefined; });
+		}
+		await this.authRefresh;
 	}
 
 	async login(provider: string, authType: AuthType, apiKey?: string): Promise<void> {
@@ -358,11 +390,13 @@ export class EmbeddedPiHost {
 	async dispose(): Promise<void> {
 		if (this.disposed) return;
 		this.disposed = true;
+		await this.authRefresh?.catch(() => {});
 		if (this.skillUpdate) await this.skillUpdate.catch(() => {});
 		this.unsubscribe?.();
 		this.unsubscribe = undefined;
 		this.ui.cancelAll("Hopper host stopped");
-		await this.runtime.dispose();
+		try { await this.runtime.dispose(); }
+		finally { await this.runtimeSession.run(closeRuntimeRpc); }
 	}
 
 	private async bindSession(session: AgentSession, replaced: boolean): Promise<void> {

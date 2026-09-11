@@ -6,6 +6,70 @@ import { resolveHostConfig } from "./config.js";
 import { isolatedResourceLoaderOptions, providerAuthMethods } from "./pi-runtime.js";
 import { HOPPER_REGISTERED_CATALOG } from "../tools/catalog.js";
 
+it.each([false, true])("creates the settings session with automatic native probes=%s while preserving tool schemas", async (probeBackend) => {
+	const { EmbeddedPiHost } = await import("./pi-runtime.js");
+	const backend = await import("../infra/backend-status.js");
+	const probe = vi.spyOn(backend, "probeBackend").mockResolvedValue({ online: false });
+	const root = await mkdtemp(join(tmpdir(), "hopper-startup-"));
+	const paths = resolveHostConfig(["--data-dir", root, "--auth-path", join(root, "auth.json"), "--tool-config-dir", join(root, "tools")]).paths;
+	let host: import("./pi-runtime.js").EmbeddedPiHost | undefined;
+	try {
+		await writeFile(paths.authPath, "{}");
+		host = await EmbeddedPiHost.create({ paths, projectRoot: resolve("."), probeBackend });
+		if (probeBackend) expect(probe).toHaveBeenCalled();
+		else expect(probe).not.toHaveBeenCalled();
+		const tools = host.listTools().tools;
+		for (const { tool } of HOPPER_REGISTERED_CATALOG) {
+			expect(tools.find(entry => entry.name === tool.name)).toMatchObject({
+				description: tool.description,
+				parameters: JSON.parse(JSON.stringify(tool.parameters)),
+			});
+		}
+		await host.newSession();
+		await host.getToolSettings();
+		if (!probeBackend) expect(probe).not.toHaveBeenCalled();
+	} finally {
+		await host?.dispose();
+		probe.mockRestore();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+it("refreshes external Pi credentials and model availability without restarting or changing the selected model", async () => {
+	const { EmbeddedPiHost } = await import("./pi-runtime.js");
+	const backend = await import("../infra/backend-status.js");
+	const probe = vi.spyOn(backend, "probeBackend").mockResolvedValue({ online: false });
+	const root = await mkdtemp(join(tmpdir(), "hopper-auth-refresh-"));
+	const paths = resolveHostConfig(["--data-dir", root, "--auth-path", join(root, "auth.json")]).paths;
+	let host: import("./pi-runtime.js").EmbeddedPiHost | undefined;
+	try {
+		await writeFile(paths.authPath, "{}");
+		host = await EmbeddedPiHost.create({ paths, projectRoot: resolve(".") });
+		expect(host.snapshot().providers.find(p => p.id === "anthropic")?.authenticated).toBe(false);
+		const receive = vi.fn();
+		host.bus.subscribe(receive);
+		await writeFile(paths.authPath, JSON.stringify({ anthropic: { type: "api_key", key: "test-only-not-a-real-key" } }));
+		await Promise.all([host.refreshAuth(), host.refreshAuth()]);
+		const available = host.snapshot();
+		expect(available.providers.find(p => p.id === "anthropic")?.authenticated).toBe(true);
+		const model = available.models.find(model => model.provider === "anthropic")!;
+		expect(model).toBeDefined();
+		expect(receive).toHaveBeenCalledWith(expect.objectContaining({ type: "snapshot", snapshot: expect.objectContaining({ models: expect.arrayContaining([model]) }) }));
+		await host.setModel(model.provider, model.id);
+		await host.refreshAuth();
+		expect(host.snapshot().model).toEqual(model);
+		await writeFile(paths.authPath, "{}");
+		await host.refreshAuth();
+		expect(host.snapshot().providers.find(p => p.id === "anthropic")?.authenticated).toBe(false);
+		expect(host.snapshot().models.some(model => model.provider === "anthropic")).toBe(false);
+		await expect(host.setModel(model.provider, model.id)).rejects.toThrow("Provider is not authenticated");
+	} finally {
+		await host?.dispose();
+		probe.mockRestore();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 describe("embedded Pi isolation", () => {
 	it("loads only Hopper factories; the host supplies the skill catalog", () => {
 		const options = isolatedResourceLoaderOptions();
@@ -259,4 +323,35 @@ it("exports branches and pre-compaction history using Pi's session manager", asy
 	expect(exported.messages).toEqual(manager.buildSessionContext().messages);
 	expect(exported.streamingMessage).toEqual(call);
 	expect(exported).toMatchObject({ format: "hopper-session-debug", version: 1, leafId: leaf, isStreaming: true });
+});
+
+it("creates independent runtime dependencies for two hosts in the same process", async () => {
+	const { EmbeddedPiHost } = await import("./pi-runtime.js");
+	const { getRuntimeSessionContext } = await import("../infra/runtime-session-context.js");
+	const { toShortRhinoGuid, resolveRhinoGuid } = await import("../services/guid-shortener.js");
+	const backend = await import("../infra/backend-status.js");
+	const contexts: import("../infra/runtime-session-context.js").RuntimeSessionContext[] = [];
+	const probe = vi.spyOn(backend, "probeBackend").mockImplementation(async () => {
+		contexts.push(getRuntimeSessionContext());
+		return { online: false };
+	});
+	const root = await mkdtemp(join(tmpdir(), "hopper-session-isolation-"));
+	const hosts: import("./pi-runtime.js").EmbeddedPiHost[] = [];
+	try {
+		for (const id of ["a", "b"]) {
+			const paths = resolveHostConfig(["--data-dir", join(root, id)]).paths;
+			hosts.push(await EmbeddedPiHost.create({ paths, projectRoot: resolve(".") }));
+		}
+		const sessions = [...new Set(contexts)];
+		expect(sessions).toHaveLength(2);
+		const guid = "11111111-2222-3333-4444-555555555555";
+		const alias = sessions[0].run(() => toShortRhinoGuid(guid));
+		expect(sessions[1].run(() => resolveRhinoGuid(alias))).toBe(alias);
+		await hosts[1].dispose();
+		expect(sessions[0].run(() => resolveRhinoGuid(alias))).toBe(guid);
+	} finally {
+		for (const host of hosts) await host.dispose();
+		probe.mockRestore();
+		await rm(root, { recursive: true, force: true });
+	}
 });

@@ -2,7 +2,7 @@
 
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const stage = resolve(process.argv[2] ?? "");
@@ -23,6 +23,13 @@ const nodeExecutable = process.env.HOPPER_NODE_EXECUTABLE || process.execPath;
 const smokeSource = [
 	`await import(${JSON.stringify(pathToFileURL(hostEntry).href)});`,
 	`await import("zeromq");`,
+	`const { TaskJournal } = await import(${JSON.stringify(pathToFileURL(join(dirname(hostEntry), "shared", "journal.js")).href)});`,
+	`const journal = new TaskJournal(":memory:");`,
+	`journal.registerSession("smoke-conversation", "smoke-session");`,
+	`const submission = { requestId: "smoke", conversationId: "smoke-conversation", sessionId: "smoke-session", kind: "prompt", text: "smoke", bindings: [], attachments: [] };`,
+	`const receipt = journal.accept(submission);`,
+	`if (journal.accept(submission).taskId !== receipt.taskId) throw new Error("SQLite acceptance deduplication failed");`,
+	`journal.close();`,
 	`const esbuild = await import("esbuild");`,
 	`await esbuild.transform("const value: number = 1", { loader: "ts" });`,
 	`process.stdout.write(process.version);`,
@@ -67,4 +74,4 @@ if (!version || version[0] < 22 || (version[0] === 22 && version[1] < 19)) {
 // Starting the HTTP host without Rhino would fabricate lifecycle health. The
 // cross-language RPC smoke covers the authenticated handshake; native release
 // verification starts this staged host through HopperCode inside Rhino.
-console.log(`[hopper-pi] Staged host modules, native ZeroMQ, and esbuild loaded with external Node ${nodeVersion}`);
+console.log(`[hopper-pi] Staged host modules, native ZeroMQ, SQLite journal, and esbuild loaded with external Node ${nodeVersion}`);

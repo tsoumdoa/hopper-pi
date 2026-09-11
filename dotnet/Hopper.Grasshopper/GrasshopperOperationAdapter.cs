@@ -89,6 +89,10 @@ namespace rhino_zmq_poc
         {
             _documentStatus = documentStatus ?? throw new ArgumentNullException(nameof(documentStatus));
             DocumentSession.ReconcileGrasshopper = AgentTransaction.Reconcile;
+            DocumentSession.GrasshopperTransactionDocumentId = () => AgentTransaction.BoundDocumentId;
+            DocumentSession.ActiveGrasshopperDocumentId = () => GrasshopperDocumentOperations.Instance.ActiveId;
+            DocumentSession.GrasshopperAssociationForDocument = id => GrasshopperDocumentOperations.Instance.Resolve(id).RhinoDocument is { } target ? $"{DocumentSession.LifecycleInstanceId}:rhino:{target.RuntimeSerialNumber}" : null;
+            DocumentSession.AssociatedRhinoDocumentId = () => Instances.ActiveCanvas?.Document?.RhinoDocument is { } doc ? $"{DocumentSession.LifecycleInstanceId}:rhino:{doc.RuntimeSerialNumber}" : null;
         }
 
         internal void Start()
@@ -188,7 +192,9 @@ namespace rhino_zmq_poc
 
         public void CleanupOpenTransactions()
         {
-            AgentTransaction.CancelActive();
+            var result = AgentTransaction.CancelActive();
+            if (result.IndexOf(" error", StringComparison.OrdinalIgnoreCase) >= 0) throw new InvalidOperationException(result);
+            DocumentSession.Advance("grasshopper", null, "idle");
         }
 
         private GH_Document ActiveDocument => _documents?.ActiveDocument
@@ -196,6 +202,11 @@ namespace rhino_zmq_poc
 
         public void Dispose()
         {
+            DocumentSession.ActiveGrasshopperDocumentId = null;
+            DocumentSession.AssociatedRhinoDocumentId = null;
+            DocumentSession.GrasshopperAssociationForDocument = null;
+            DocumentSession.ReconcileGrasshopper = null;
+            DocumentSession.GrasshopperTransactionDocumentId = null;
             _documents?.Dispose();
             _documents = null;
         }

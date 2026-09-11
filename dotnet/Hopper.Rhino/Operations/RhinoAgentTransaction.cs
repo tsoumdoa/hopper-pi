@@ -9,6 +9,7 @@ namespace rhino_zmq_poc
         private static bool _active;
 
         public static bool IsActive => _active;
+        public static string BoundDocumentId => _active && _doc != null ? $"{Hopper.Core.Operations.DocumentSession.LifecycleInstanceId}:rhino:{_doc.RuntimeSerialNumber}" : null;
 
         public static string Begin(RhinoDoc doc, string name = "Hopper agent")
         {
@@ -19,13 +20,15 @@ namespace rhino_zmq_poc
             {
                 if (_doc == doc)
                     return "beginRhinoAgentTransaction: transaction already active";
-                Cancel(_doc);
+                throw new System.InvalidOperationException("Cannot begin a transaction while another document owns the undo record.");
             }
 
             var recordName = string.IsNullOrWhiteSpace(name) ? "Hopper agent" : name;
+            var enabledBefore = doc.UndoRecordingEnabled;
+            var recordingBefore = doc.UndoRecordingIsActive;
             _undoSerial = doc.BeginUndoRecord(recordName);
             if (_undoSerial == 0)
-                return "beginRhinoAgentTransaction error: could not start undo record (undo disabled or already recording)";
+                return $"beginRhinoAgentTransaction error: could not start undo record (undo disabled or already recording); document={doc.RuntimeSerialNumber}; undoEnabledBefore={enabledBefore}; undoRecordingBefore={recordingBefore}; undoRecordingAfter={doc.UndoRecordingIsActive}; hopperActive={_active}; undoSerial={_undoSerial}";
 
             _doc = doc;
             _active = true;
@@ -37,16 +40,8 @@ namespace rhino_zmq_poc
             if (!_active || _doc != doc)
                 return "commitRhinoAgentTransaction: no active transaction";
 
-            try
-            {
-                if (_undoSerial != 0)
-                    doc.EndUndoRecord(_undoSerial);
-                return "commitRhinoAgentTransaction: recorded undo";
-            }
-            finally
-            {
-                Reset();
-            }
+            CloseOwnedRecord(doc);
+            return "commitRhinoAgentTransaction: recorded undo";
         }
 
         public static string CommitActive() => Commit(_doc);
@@ -56,19 +51,19 @@ namespace rhino_zmq_poc
             if (!_active || _doc != doc)
                 return "cancelRhinoAgentTransaction: no active transaction";
 
-            try
-            {
-                if (_undoSerial != 0)
-                    doc.EndUndoRecord(_undoSerial);
-                return "cancelRhinoAgentTransaction: closed";
-            }
-            finally
-            {
-                Reset();
-            }
+            CloseOwnedRecord(doc);
+            return "cancelRhinoAgentTransaction: closed";
         }
 
         public static string CancelActive() => Cancel(_doc);
+
+        private static void CloseOwnedRecord(RhinoDoc doc)
+        {
+            // Never forget ownership after a rejected or throwing native close.
+            if (_undoSerial == 0 || !doc.EndUndoRecord(_undoSerial))
+                throw new System.InvalidOperationException($"Could not close Hopper undo record; document={doc.RuntimeSerialNumber}; undoSerial={_undoSerial}; undoEnabled={doc.UndoRecordingEnabled}; undoRecording={doc.UndoRecordingIsActive}");
+            Reset();
+        }
 
         private static void Reset()
         {

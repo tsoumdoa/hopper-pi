@@ -67,6 +67,11 @@ public sealed class OrderedDispatcher : ILifecycleDispatcher
         }
     }
 
+    public bool IsOperationRunning(string operationId)
+    {
+        lock (_gate) return _runningItem?.OperationId == operationId;
+    }
+
     public Task<DispatcherResult<T>> SubmitExternal<T>(
         Func<T> operation,
         DateTimeOffset startDeadlineAt,

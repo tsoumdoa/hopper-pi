@@ -1,3 +1,4 @@
+import { getRuntimeSessionContext } from "./runtime-session-context.js";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -24,13 +25,18 @@ type ConnectionProfile = {
 	};
 };
 
-let cachedConnection: ConnectionConfig | null = null;
+const connectionStateKey = Symbol("connection");
+function connectionState() {
+	return getRuntimeSessionContext().get(connectionStateKey, () => ({ cachedConnection: null as ConnectionConfig | null }));
+}
 
 export function clearConnectionCache(): void {
-	cachedConnection = null;
+	connectionState().cachedConnection = null;
 }
 
 export function connectionProfileDirectory(): string {
+	const injected = getRuntimeSessionContext().options.connectionProfilePath;
+	if (injected) return dirname(injected);
 	if (process.env[ENV.HOPPER_CONNECTION_PROFILE]) {
 		return dirname(process.env[ENV.HOPPER_CONNECTION_PROFILE]!);
 	}
@@ -48,12 +54,15 @@ export function connectionProfileDirectory(): string {
 }
 
 export function connectionProfilePath(): string {
-	return process.env[ENV.HOPPER_CONNECTION_PROFILE]
+	return getRuntimeSessionContext().options.connectionProfilePath
+		?? process.env[ENV.HOPPER_CONNECTION_PROFILE]
 		?? join(connectionProfileDirectory(), "connection.json");
 }
 
 export function resolveConnection(options: { refresh?: boolean } = {}): ConnectionConfig {
-	if (!options.refresh && cachedConnection) return cachedConnection;
+	const injected = getRuntimeSessionContext().options.connection;
+	if (injected) return injected;
+	if (!options.refresh && connectionState().cachedConnection) return connectionState().cachedConnection!;
 
 	const profilePath = connectionProfilePath();
 	const profile = readProfile(profilePath);
@@ -69,7 +78,7 @@ export function resolveConnection(options: { refresh?: boolean } = {}): Connecti
 		profilePath,
 		source: "profile",
 	};
-	cachedConnection = connection;
+	connectionState().cachedConnection = connection;
 	return connection;
 }
 

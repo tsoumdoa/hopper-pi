@@ -1,6 +1,7 @@
 import { createReadStream, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import { sharedHostProxy } from "./scripts/ui-host-proxy";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
@@ -42,8 +43,8 @@ export default defineConfig({
 	},
 	server: {
 		proxy: {
-			"/api": process.env.HOPPER_UI_PROXY_TARGET ?? "http://127.0.0.1:19777",
-			"/ws": { target: process.env.HOPPER_UI_PROXY_TARGET ?? "ws://127.0.0.1:19777", ws: true },
+			"/api": sharedHostProxy(),
+			"/ws": sharedHostProxy(),
 		},
 	},
 });

@@ -1,3 +1,4 @@
+import { getRuntimeSessionContext } from "./runtime-session-context.js";
 import { clearDocumentGuidAliases } from "../services/guid-shortener.js";
 import type { DocumentTransactionState } from "../types/document-management.js";
 import {
@@ -93,6 +94,7 @@ export class RuntimeRpc {
 	readonly lifecycleInstanceId: string;
 
 	private readonly transport: RuntimeRpcTransport;
+	private readonly aliasSession = getRuntimeSessionContext();
 	private readonly readiness: GrasshopperReadinessCoordinator;
 	private readonly nodeProcessId: number;
 	private readonly nodeVersion: string;
@@ -103,6 +105,8 @@ export class RuntimeRpc {
 	private turnAcceptingMutations = false;
 	private turnId = 0;
 	private readonly transactionOpen = { rhino: false, grasshopper: false };
+	// A failed begin can reserve native ownership without opening an undo segment.
+	private readonly cleanupOwed = { rhino: false, grasshopper: false };
 	private readonly segments: Partial<Record<TransactionOwner, DocumentTransactionState>> = {};
 	private readonly aliasDocuments: Partial<Record<TransactionOwner, string>> = {};
 	private readonly mutationQueue: Partial<Record<TransactionOwner, Promise<unknown>>> = {};
@@ -194,7 +198,7 @@ export class RuntimeRpc {
 		} finally {
 			if (boundary && owner !== "core") {
 				this.transactionOpen[owner] = false;
-				clearDocumentGuidAliases(owner);
+				this.aliasSession.run(() => clearDocumentGuidAliases(owner));
 			}
 		}
 	}
@@ -357,8 +361,8 @@ export class RuntimeRpc {
 		await Promise.all(Object.values(this.transactionOpening));
 		await this.reconcileTransaction("grasshopper");
 		await this.reconcileTransaction("rhino");
-		const grasshopperOpen = this.transactionOpen.grasshopper;
-		const rhinoOpen = this.transactionOpen.rhino;
+		const grasshopperOpen = this.transactionOpen.grasshopper || this.cleanupOwed.grasshopper;
+		const rhinoOpen = this.transactionOpen.rhino || this.cleanupOwed.rhino;
 		this.transactionOpen.grasshopper = false;
 		this.transactionOpen.rhino = false;
 
@@ -388,11 +392,12 @@ export class RuntimeRpc {
 			if (segment.documentId) this.observeAliasDocument(owner, segment.documentId);
 			this.segments[owner] = segment;
 			this.transactionOpen[owner] = segment.state === "active";
+			if ("scopeOwner" in segment) this.cleanupOwed[owner] = segment.scopeOwner != null;
 		}
 		if (data && typeof data === "object" && "activeDocumentId" in data) {
 			if (typeof data.activeDocumentId === "string") this.observeAliasDocument(owner, data.activeDocumentId);
 			else if (data.activeDocumentId === null) {
-				clearDocumentGuidAliases(owner);
+				this.aliasSession.run(() => clearDocumentGuidAliases(owner));
 				delete this.aliasDocuments[owner];
 			}
 		}
@@ -400,7 +405,7 @@ export class RuntimeRpc {
 
 	private observeAliasDocument(owner: TransactionOwner, documentId: string): void {
 		const previous = this.aliasDocuments[owner];
-		if (previous !== undefined && previous !== documentId) clearDocumentGuidAliases(owner);
+		if (previous !== undefined && previous !== documentId) this.aliasSession.run(() => clearDocumentGuidAliases(owner));
 		this.aliasDocuments[owner] = documentId;
 	}
 
@@ -412,7 +417,7 @@ export class RuntimeRpc {
 			if (!data || typeof data !== "object" || !("state" in data) || data.state !== "terminal")
 				throw new Error(`Operation ${operationId} remains uncertain. Dependent edits and cancellation are blocked.`);
 		}
-		if (operationId || this.segments[owner]) {
+		if (operationId || this.segments[owner] || this.cleanupOwed[owner]) {
 			const response = await this.invokeDirect("getDocumentTransactionState", { owner });
 			const data = response.result.data;
 			if (!data || typeof data !== "object" || !("segmentId" in data)) throw new Error("Transaction reconciliation returned no segment state.");
@@ -425,7 +430,7 @@ export class RuntimeRpc {
 		const owner = RPC_OPERATION_OWNERS[operation] as TransactionOwner;
 		if (!operation.startsWith("begin")) await this.reconcileTransaction(owner);
 		const segment = this.segments[owner];
-		if (!operation.startsWith("begin") && segment && segment.state !== "active") return true;
+		if (!operation.startsWith("begin") && segment && segment.state !== "active" && !this.cleanupOwed[owner]) return true;
 		try {
 			const response = await this.invokeDirect(operation, segment?.state === "active" ? { ...args, expectedSegment: segment } : args);
 			this.observeTransaction(owner, response.result.data);
@@ -443,11 +448,21 @@ export class RuntimeRpc {
 		args: RequestArgsFor<O>,
 		options: RpcCallOptions = {},
 	): Promise<RpcOperationResponse<O>> {
+		const owner: RpcOperationOwner = RPC_OPERATION_OWNERS[operation];
+		const begins = operation === "beginRhinoAgentTransaction" || operation === "beginAgentTransaction";
+		const finishes = operation === "commitRhinoAgentTransaction" || operation === "cancelRhinoAgentTransaction"
+			|| operation === "commitAgentTransaction" || operation === "cancelAgentTransaction";
+		if (begins && owner !== "core") this.cleanupOwed[owner] = true;
 		const response = await this.transport.call(operation, args, options);
 		if ("source" in response) throw new RpcOutcomeUnknownError(response);
 		if (response.result.class !== "completed") {
 			throw new RpcOperationError(operation, response.result);
 		}
+		const resultData = response.result.data;
+		// Successful begins use normal segment tracking. Failed/partial begins
+		// retain cleanup debt until an ownership probe or cleanup resolves it.
+		if ((begins || finishes) && owner !== "core" && !(resultData && typeof resultData === "object" && "ok" in resultData && resultData.ok === false))
+			this.cleanupOwed[owner] = false;
 		return response as RpcOperationResponse<O>;
 	}
 }
@@ -479,7 +494,9 @@ export const RPC_OPERATION_OWNERS = Object.freeze({
 	listRhinoDocuments: "rhino",
 	getRhinoDocument: "rhino",
 	getRhinoDocumentSettings: "rhino",
-	manageRhinoDocument: "rhino",
+	exportRhinoArtifact: "rhino",
+ importRhinoArtifact: "rhino",
+ manageRhinoDocument: "rhino",
 	listGrasshopperDocuments: "grasshopper",
 	getGrasshopperDocument: "grasshopper",
 	getGrasshopperDocumentSettings: "grasshopper",
@@ -549,39 +566,49 @@ export function requiresGrasshopper(operation: OperationName): boolean {
 	return RPC_OPERATION_OWNERS[operation] === "grasshopper" && !PASSIVE_DOCUMENT_READS.has(operation);
 }
 
-let sharedRuntime: RuntimeRpc | null = null;
-let sharedAgentTurnActive = false;
+const runtimeStateKey = Symbol("runtimeRpc");
+function runtimeState() {
+	return getRuntimeSessionContext().get(runtimeStateKey, () => ({
+		runtime: null as RuntimeRpc | null,
+		agentTurnActive: false,
+	}));
+}
 
 export function beginRuntimeAgentTurn(): void {
-	sharedAgentTurnActive = true;
-	sharedRuntime?.beginAgentTurn();
+	runtimeState().agentTurnActive = true;
+	runtimeState().runtime?.beginAgentTurn();
 }
 
 export async function commitRuntimeAgentTurn(): Promise<void> {
-	sharedAgentTurnActive = false;
-	await sharedRuntime?.commitAgentTurn();
+	runtimeState().agentTurnActive = false;
+	await runtimeState().runtime?.commitAgentTurn();
 }
 
 export async function cancelRuntimeAgentTurn(): Promise<void> {
-	sharedAgentTurnActive = false;
-	await sharedRuntime?.cancelAgentTurn();
+	runtimeState().agentTurnActive = false;
+	await runtimeState().runtime?.cancelAgentTurn();
 }
 
 export function getRuntimeRpc(): RuntimeRpc {
-	if (sharedRuntime) return sharedRuntime;
-	const connection = resolveConnection();
-	const transport = new HopperRpcClient({
-		endpoint: connection.rpcEndpoint,
-		lifecycleInstanceId: connection.lifecycleInstanceId,
-		token: connection.token,
-	});
-	sharedRuntime = new RuntimeRpc({
-		lifecycleInstanceId: connection.lifecycleInstanceId,
-		transport,
-		events: new SubscriberStatusEventSource(connection.pubEndpoint),
-	});
-	if (sharedAgentTurnActive) sharedRuntime.beginAgentTurn();
-	return sharedRuntime;
+	const state = runtimeState();
+	if (state.runtime) return state.runtime;
+	const factory = getRuntimeSessionContext().options.createRuntime;
+	if (factory) {
+		state.runtime = factory();
+	} else {
+		const connection = resolveConnection();
+		state.runtime = new RuntimeRpc({
+			lifecycleInstanceId: connection.lifecycleInstanceId,
+			transport: new HopperRpcClient({
+				endpoint: connection.rpcEndpoint,
+				lifecycleInstanceId: connection.lifecycleInstanceId,
+				token: connection.token,
+			}),
+			events: new SubscriberStatusEventSource(connection.pubEndpoint),
+		});
+	}
+	if (state.agentTurnActive) state.runtime.beginAgentTurn();
+	return state.runtime;
 }
 
 export async function resetRuntimeRpcForTests(): Promise<void> {
@@ -589,8 +616,8 @@ export async function resetRuntimeRpcForTests(): Promise<void> {
 }
 
 export async function closeRuntimeRpc(): Promise<void> {
-	const runtime = sharedRuntime;
-	sharedRuntime = null;
-	sharedAgentTurnActive = false;
+	const runtime = runtimeState().runtime;
+	runtimeState().runtime = null;
+	runtimeState().agentTurnActive = false;
 	if (runtime) await runtime.close();
 }

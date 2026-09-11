@@ -12,6 +12,8 @@ public abstract class DocumentService<T> where T : class
     protected abstract string NativeId(T document);
     protected abstract string? PathOf(T document);
     protected abstract bool Modified(T document);
+    protected virtual bool HopperInitialized(T document) => true;
+    protected virtual void InitializeHopper(T document) { }
     protected abstract void MarkModified(T document);
     protected abstract string Fingerprint(T document);
     // Persisted content only: native overrides exclude path/dirty changes caused by a successful write.
@@ -38,7 +40,7 @@ public abstract class DocumentService<T> where T : class
             _files[Id(doc)] = (path, DocumentFiles.Stamp(path));
         return new(Id(doc), DocumentSession.LifecycleInstanceId, Kind, path == null ? "Untitled" : System.IO.Path.GetFileName(path), path,
             ReferenceEquals(doc, Active), Modified(doc), path == null || !File.Exists(path) ? null : new FileInfo(path).IsReadOnly,
-            DocumentSession.Digest(Id(doc) + "|" + path + "|" + Modified(doc) + "|" + Fingerprint(doc)), Settings(doc));
+            DocumentSession.Digest(Id(doc) + "|" + path + "|" + Modified(doc) + "|" + Fingerprint(doc)), Settings(doc), HopperInitialized(doc));
     }
     public void ObserveNativeSave(T doc) { var path = PathOf(doc); _files[Id(doc)] = (path, DocumentFiles.Stamp(path)); }
     public object List() => new { documents = Documents.Select(Describe).ToArray(), activeDocumentId = Active == null ? null : Id(Active), capabilities = Capabilities,
@@ -67,6 +69,8 @@ public abstract class DocumentService<T> where T : class
     }
     private OperationResultV2 Manage(JsonElement args, List<DocumentEffect> effects)
     {
+        JsonElement? destinations = args.TryGetProperty("expectedDestinations", out var expectedDestinations) ? expectedDestinations : null;
+        if (destinations is { ValueKind: not JsonValueKind.Array }) throw new DocumentOperationException("INVALID_DESTINATION_BASELINES", "Expected destinations must be an array.");
         var action = Required(args, "action");
         if (!new[] { "new", "open", "activate", "save", "saveAs", "close" }.Contains(action))
             throw new DocumentOperationException("INVALID_ACTION", "Unknown document action.");
@@ -77,7 +81,7 @@ public abstract class DocumentService<T> where T : class
             var expectedId = expected.ValueKind == JsonValueKind.Null ? null : expected.GetString();
             if (expectedId != (Active == null ? null : Id(Active))) throw new DocumentOperationException("DOCUMENT_CHANGED", "The active document changed.");
         }
-        if (doc != null && action != "activate") ValidateToken(doc, Required(args, "expectedStateToken"));
+        if (doc != null && (action != "activate" || args.TryGetProperty("expectedStateToken", out _))) ValidateToken(doc, Required(args, "expectedStateToken"));
         var path = action is "open" or "saveAs" ? ValidatePath(Required(args, "path"), action == "open", CreateDirectories(args)) : null;
         var templatePath = action == "new" && Optional(args, "templatePath") is { } template ? ValidatePath(template, true) : null;
         var already = action == "open" ? Documents.FirstOrDefault(d => DocumentFiles.Same(PathOf(d), path)) : null;
@@ -90,10 +94,10 @@ public abstract class DocumentService<T> where T : class
             var matches = policies.EnumerateArray().Where(p => Optional(p, "documentId") == Id(current)).ToArray();
             if (matches.Length != 1) throw new DocumentOperationException("AFFECTED_DOCUMENT_REQUIRED", "Supply exactly one policy for the document being replaced.");
             ValidateToken(current, Required(matches[0], "expectedStateToken"));
-            ValidateUnsaved(current, matches[0]); affected.Add((current, matches[0]));
+            ValidateUnsaved(current, matches[0], destinations); affected.Add((current, matches[0]));
         }
-        if (action == "close") ValidateUnsaved(doc!, args);
-        if (action is "save" or "saveAs") PreflightSave(doc!, path ?? PathOf(doc!), args);
+        if (action == "close") ValidateUnsaved(doc!, args, destinations);
+        if (action is "save" or "saveAs") PreflightSave(doc!, path ?? PathOf(doc!), args, destinations);
         var observedActiveId = Active == null ? null : Id(Active);
         var guardedTargets = new Dictionary<string, string>();
         if (doc != null) guardedTargets[Id(doc)] = Describe(doc).StateToken;
@@ -108,13 +112,13 @@ public abstract class DocumentService<T> where T : class
         effects.Add(new("finishEditingSegment", null, null, true));
         VerifyTransitionState();
         foreach (var item in affected) {
-            ApplyUnsaved(item.Document, item.Policy, effects);
+            ApplyUnsaved(item.Document, item.Policy, effects, destinations);
             // Save checks persisted content before returning. Only its path/dirty changes are accepted here.
             guardedTargets[Id(item.Document)] = Describe(item.Document).StateToken;
             VerifyTransitionState();
         }
         if (action == "close") {
-            ApplyUnsaved(doc!, args, effects);
+            ApplyUnsaved(doc!, args, effects, destinations);
             guardedTargets[Id(doc!)] = Describe(doc!).StateToken;
         }
         VerifyTransitionState();
@@ -122,9 +126,11 @@ public abstract class DocumentService<T> where T : class
         if (action == "new") { doc = Create(templatePath); Activate(doc); }
         else if (action == "open") { doc = already ?? Open(path!); Activate(doc); }
         else if (action == "activate") Activate(doc!);
-        else if (action is "save" or "saveAs") Save(doc!, path ?? PathOf(doc!)!, args, effects);
+        else if (action is "save" or "saveAs") Save(doc!, path ?? PathOf(doc!)!, args, effects, destinations);
         else if (action == "close") { var id = Id(doc!); var closePath = PathOf(doc!); effects.Add(new("close", id, closePath, false)); Close(doc!); effects[^1] = new("close", id, closePath, true); doc = null; }
         if (action is "new" or "open" or "activate") effects[^1] = new(action, doc == null ? null : Id(doc), doc == null ? null : PathOf(doc), true);
+        // Explicit Hopper document creation/opening also makes the resulting target selectable.
+        if (action is "new" or "open") InitializeHopper(doc!);
         DocumentSession.Advance(Kind, null, "idle");
         return DocumentSession.Result(new { ok = true, document = doc == null ? null : Describe(doc), alreadyOpen = already != null,
             effects, outcomeUncertain = false, state = List(), transaction = DocumentSession.Segment(Kind) });
@@ -133,17 +139,17 @@ public abstract class DocumentService<T> where T : class
     {
         if (Describe(doc).StateToken != token) throw new DocumentOperationException("DOCUMENT_CHANGED", "Document content or metadata changed. Inspect it again before applying policy.");
     }
-    private void ValidateUnsaved(T doc, JsonElement policy)
+    private void ValidateUnsaved(T doc, JsonElement policy, JsonElement? destinations)
     {
         var onUnsaved = Optional(policy, "onUnsaved") ?? "fail";
         if (!new[] { "fail", "save", "discard" }.Contains(onUnsaved)) throw new DocumentOperationException("INVALID_UNSAVED_POLICY", "onUnsaved must be fail, save, or discard.");
         if (!Modified(doc)) return;
         if (onUnsaved == "fail") throw new DocumentOperationException("UNSAVED_CHANGES", "Document has unsaved changes. Specify save or user-authorized discard.");
-        if (onUnsaved == "save") PreflightSave(doc, Optional(policy, "savePath") ?? PathOf(doc), policy);
+        if (onUnsaved == "save") PreflightSave(doc, Optional(policy, "savePath") ?? PathOf(doc), policy, destinations);
     }
-    private void ApplyUnsaved(T doc, JsonElement policy, List<DocumentEffect> effects)
+    private void ApplyUnsaved(T doc, JsonElement policy, List<DocumentEffect> effects, JsonElement? destinations)
     {
-        if (Modified(doc) && Optional(policy, "onUnsaved") == "save") Save(doc, Optional(policy, "savePath") ?? PathOf(doc)!, policy, effects);
+        if (Modified(doc) && Optional(policy, "onUnsaved") == "save") Save(doc, Optional(policy, "savePath") ?? PathOf(doc)!, policy, effects, destinations);
     }
     private static bool CreateDirectories(JsonElement policy) => policy.TryGetProperty("createDirectories", out var create) && create.ValueKind == JsonValueKind.True;
     private string ValidatePath(string path, bool mustExist, bool createDirectories = false)
@@ -154,10 +160,11 @@ public abstract class DocumentService<T> where T : class
         if (!createDirectories && !Directory.Exists(System.IO.Path.GetDirectoryName(full))) throw new DocumentOperationException("PATH_NOT_FOUND", "Parent directory does not exist.");
         return full;
     }
-    private void PreflightSave(T doc, string? path, JsonElement policy)
+    private void PreflightSave(T doc, string? path, JsonElement policy, JsonElement? destinations)
     {
         if (string.IsNullOrWhiteSpace(path)) throw new DocumentOperationException("PATH_REQUIRED", "Unnamed document requires saveAs and an absolute path.");
         path = ValidatePath(path, false, CreateDirectories(policy));
+        ValidateDestinationBaseline(path, destinations);
         if (Documents.Any(other => !ReferenceEquals(doc, other) && DocumentFiles.Same(path, PathOf(other))))
             throw new DocumentOperationException("DESTINATION_OPEN_IN_OTHER_DOCUMENT", "Another live document owns the destination file.");
         if (File.Exists(path) && !DocumentFiles.Same(path, PathOf(doc)) && !(policy.TryGetProperty("overwrite", out var overwrite) && overwrite.ValueKind == JsonValueKind.True))
@@ -165,9 +172,30 @@ public abstract class DocumentService<T> where T : class
         if (_files.TryGetValue(Id(doc), out var baseline) && DocumentFiles.Same(path, baseline.Path) && baseline.Stamp != DocumentFiles.Stamp(path))
             throw new DocumentOperationException("FILE_CHANGED_EXTERNALLY", "Backing file changed externally since observation; reopen or choose another destination.");
     }
-    private void Save(T doc, string path, JsonElement policy, List<DocumentEffect> effects)
+    private static void ValidateDestinationBaseline(string path, JsonElement? destinations)
     {
-        PreflightSave(doc, path, policy);
+        if (destinations is null) return; // Owned-child compatibility; shared envelopes require explicit baselines.
+        var matches = destinations.Value.EnumerateArray().Where(expected => expected.ValueKind == JsonValueKind.Object &&
+            expected.TryGetProperty("path", out var candidate) && candidate.ValueKind == JsonValueKind.String && DocumentFiles.Same(candidate.GetString(), path)).ToArray();
+        if (matches.Length != 1) throw new DocumentOperationException("DESTINATION_NOT_RESERVED", "Each native write needs exactly one host-reserved destination baseline.");
+        var expected = matches[0];
+        // The host captured an already-resolved path. Resolving it again must not
+        // redirect a reservation through a newly inserted file or directory link.
+        var reservedPath = System.IO.Path.GetFullPath(expected.GetProperty("path").GetString()!);
+        if (!string.Equals(reservedPath, DocumentFiles.Canonical(reservedPath), StringComparison.Ordinal))
+            throw new DocumentOperationException("FILE_CHANGED_EXTERNALLY", "Reserved destination path was redirected before native write.");
+        if (!expected.TryGetProperty("exists", out var existence) || existence.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            throw new DocumentOperationException("INVALID_DESTINATION_BASELINES", "Destination existence is required.");
+        var exists = File.Exists(path);
+        if (exists != existence.GetBoolean() || Directory.Exists(path)) throw new DocumentOperationException("FILE_CHANGED_EXTERNALLY", "Reserved destination existence changed before native write.");
+        if (exists && (!expected.TryGetProperty("byteLength", out var length) || !length.TryGetInt64(out var size) || new FileInfo(path).Length != size ||
+            !expected.TryGetProperty("sha256", out var checksum) || checksum.ValueKind != JsonValueKind.String ||
+            !string.Equals(DocumentFiles.Stamp(path), checksum.GetString(), StringComparison.OrdinalIgnoreCase)))
+            throw new DocumentOperationException("FILE_CHANGED_EXTERNALLY", "Reserved destination contents changed before native write.");
+    }
+    private void Save(T doc, string path, JsonElement policy, List<DocumentEffect> effects, JsonElement? destinations)
+    {
+        PreflightSave(doc, path, policy, destinations);
         path = DocumentFiles.Canonical(path);
         if (CreateDirectories(policy) && !Directory.Exists(System.IO.Path.GetDirectoryName(path))) {
             effects.Add(new("createDirectories", Id(doc), System.IO.Path.GetDirectoryName(path), false));
@@ -175,6 +203,7 @@ public abstract class DocumentService<T> where T : class
             effects[^1] = new("createDirectories", Id(doc), System.IO.Path.GetDirectoryName(path), true);
         }
         var beforeWrite = TransitionFingerprint(doc);
+        ValidateDestinationBaseline(path, destinations);
         effects.Add(new("save", Id(doc), path, false, "Native write started; inspect file if completion fails."));
         if (!Write(doc, path)) throw new DocumentOperationException("NATIVE_WRITE_FAILED", "Native writer reported failure.");
         effects[^1] = new("save", Id(doc), path, true);

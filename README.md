@@ -5,7 +5,7 @@ AI inside their real workflow — not locked behind a black-box SaaS.
 
 > **Heads up:** This project was heavily vibe-coded and is super early in its own development. APIs, tools, and behavior will change without notice. **Use it at your own risk.**
 
-**hoppercode** (published as [`hopper-pi`](https://www.npmjs.com/package/hopper-pi)) can run in two ways: as a normal Pi extension, or as a private Rhino-owned agent with a browser UI. Both use the same ZeroMQ backend to inspect and edit Grasshopper and Rhino.
+**hoppercode** (published as [`hopper-pi`](https://www.npmjs.com/package/hopper-pi)) runs through a persistent local host with a browser UI. Its embedded Pi agent uses an authenticated ZeroMQ backend to inspect and edit Grasshopper and Rhino.
 
 
 ## What's new
@@ -16,7 +16,7 @@ The browser composer accepts PNG, JPEG, WebP, and GIF files through the image bu
 
 Click an image to annotate it with Excalidraw. Add arrows, shapes, text, or freehand marks, then choose **Save annotations**. You can reopen and edit the marks while the image is in your draft. Sending exports the drawing as a PNG for the selected vision model; the conversation retains that image after reconnecting. Draft images and editable drawing data are kept in memory and are cleared by a page reload or a new session.
 
-To sketch without an image, click **Draw** in the composer. This opens a blank Excalidraw canvas with the freehand tool selected. Choose **Save drawing** to attach it as a PNG; click its thumbnail to continue editing before sending. Drawings share the four-attachment limit with uploaded images.
+To sketch without an image, click the pen icon in the composer. This opens a blank Excalidraw canvas with the freehand tool selected. Choose **Save drawing** to attach it as a PNG; click its thumbnail to continue editing before sending. Drawings share the four-attachment limit with uploaded images.
 
 Use **Image opacity** below the editor to fade the source image from 100% to 0% while keeping your annotations visible. The setting is included in the saved PNG and restored when you reopen the draft's annotations.
 
@@ -96,7 +96,7 @@ cd hoppercode
 ./scripts/install-rhino-mac.sh --open-rhino
 ```
 
-Quit Rhino before running the script. It builds and verifies the `mac-arm64` package, creates the Yak archive, and installs it with Rhino 8's Yak executable. If `hopper-pi` is installed, the script asks before replacing it.
+Quit Rhino before running the script. It builds and verifies the `mac-arm64` package, creates the Yak archive, stops Hopper's background host, and installs it with Rhino 8's Yak executable. If `hopper-pi` is installed, the script asks before replacing it. The next `HopperCode` command starts the newly installed host; saved history remains available.
 
 #### Windows x64
 
@@ -105,15 +105,16 @@ Run these commands in PowerShell with Rhino closed:
 ```powershell
 git clone https://github.com/tsoumdoa/hoppercode.git
 cd hoppercode
-corepack enable
-pnpm install --frozen-lockfile
-pnpm package:rhino -- --target win-x64 --yak
-$version = node -p "require('./package.json').version"
-$source = Join-Path $PWD "artifacts\hopper-pi-$version-win-x64"
-& "$env:ProgramFiles\Rhino 8\System\Yak.exe" install "--source=$source" hopper-pi $version
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-rhino-win.ps1 -OpenRhino
 ```
 
-The package command verifies the staged files before Yak installation. Set `HOPPER_YAK` to the absolute Yak executable path if Rhino is installed elsewhere.
+The command installs dependencies, builds and verifies a fresh `win-x64` Yak package, smoke-tests the packaged host (including native ZeroMQ, SQLite, and esbuild), stops the previous Hopper host, and installs through Rhino 8's Yak. Use `-Yes` to replace an existing Hopper package without prompting. Set `HOPPER_YAK` to the absolute Yak executable path if Rhino is installed elsewhere.
+
+To build and test without installing, replace `-OpenRhino` with `-BuildOnly`. After dependencies are installed, the shorthand is `pnpm install:rhino:win -OpenRhino` (or `-BuildOnly`). Use the direct PowerShell command for the first run: pnpm can auto-install dependencies before running scripts, triggering the legacy Grasshopper postinstall. The PowerShell installer suppresses that legacy install. If pnpm's PowerShell shim is blocked by execution policy, use `pnpm.cmd` instead.
+
+For a Windows acceptance check, run `HopperCode` in an empty Rhino document and confirm the browser UI opens. Connect a second Rhino instance with `HopperCode`, confirm both appear in the picker, and ask Hopper to create one box in each document. Check that each box lands in the intended document, reload the browser to check conversation restoration, then close all Rhino instances and confirm the shared host exits. Use disposable documents for this check.
+
+If you previously used the legacy Grasshopper installer, move `%APPDATA%\Grasshopper\Libraries\hopper-pi` to a backup location outside Grasshopper's Libraries before launching Rhino with the Yak package, to avoid loading duplicate Hopper plugins.
 
 To build a target without creating a `.yak`, omit `--yak`:
 
@@ -128,9 +129,19 @@ Restart Rhino after installation, then run:
 HopperCode
 ```
 
-Rhino starts one private loopback host, completes an authenticated handshake for that Rhino instance, and opens its tokenized localhost URL. Provider login, model choice, conversations, extension dialogs, and tool progress stay in that browser tab.
+Rhino attaches to one private loopback host for your OS user, starting it if needed, and opens the authenticated browser UI. This is the default behavior when you launch Rhino normally. Provider login, model choice, conversations, and work in progress stay in that browser tab.
 
-If you close the browser tab, run `HopperCode` again in the same Rhino instance to reopen it with the current conversation. Closing the tab leaves the host and any active response running. The reopened UI restores the conversation and current progress. If another Hopper tab is still open, the new tab takes over the connection.
+When no Rhino document is connected, the composer remains available for discussion. To work on documents, open Rhino and run `HopperCode`. The agent can create or open files in accessible connected processes through the ordinary document tools. On Windows, it can use `launchRhino` to start an additional instance from a connected Rhino installation, connect it automatically, and delegate to its ready document. On Mac, additional documents use `rh_document` with action `new` in the same process.
+
+The sidebar lists connected **Hopper Code instances**, not every running Rhino process. Run `HopperCode` in each Rhino document you want in the picker. On Mac, those documents share one process connection. A document created manually with Rhino `New` stays out of the picker until you run `HopperCode` there. Documents created or opened through Hopper are initialized automatically.
+
+Messages can read and edit all initialized documents in connected Hopper Code instances by default. The main task owns the document selected in the picker and edits it directly. The shared Node host can send child tasks to other accessible documents and return their results to the main task. Independent child agents run concurrently, including within one Mac Rhino process. Each native tool call acquires the process, activates its captured document, and finishes its transaction before releasing Rhino. Thinking and skill reading do not reserve the process. Each editing tool call has its own undo segment. Click **All instances** beside the message picker to switch to **Only this instance**, which restricts the next message to the chosen document's Rhino process. Access is captured when you send; changing the picker or access setting does not redirect work already in progress. The chat input starts at three lines and grows as you type.
+
+The compact document picker beside the composer shows where your next message will go. Open it to select an available Rhino document or Grasshopper canvas. Closed instances and internal document IDs stay out of the picker. Existing work keeps its selected documents; a closed selection shows an unavailable notice instead of silently switching targets. On Mac, create additional document windows with Rhino `New` inside the same Rhino process. Agents in that process can think concurrently; only their native tool calls take turns. Native calls in separate Rhino processes can also run concurrently.
+
+The host remains running when you close Rhino. Closing a document or stopping its plugin removes that target without switching its tasks to another document. Use the browser's **Stop host** action to stop the background host; run `HopperCode` explicitly to start it again.
+
+Reloading the browser or opening `HopperCode` in another document or Rhino instance keeps the current conversation while at least one connected Rhino process remains running. After you quit all connected Rhino processes, the next `HopperCode` launch starts a fresh chat. Older conversations remain stored. If you close only the browser tab, run `HopperCode` again to reopen the current thread. Closing the tab leaves the host and any active response running. The reopened UI restores the conversation and current progress. If another Hopper tab is still open, the new tab takes over the connection.
 
 Open **Skills & Markdown** in the sidebar to inspect the bundled skills, preview their Markdown and reference files, or turn individual skills off. Enabled skills appear in the agent's skill catalog; the agent can load relevant files with a restricted `read` tool. This tool only reads enabled Markdown in this library. Pi's general shell, edit, and write tools remain disabled.
 
@@ -154,9 +165,9 @@ Use meters. Follow the layer names in [layers.md](./layers.md).
 
 Markdown under a `SKILL.md` folder belongs to that skill and is disabled with it. Other Markdown files, including those in subfolders, are listed individually. Symbolic links and non-Markdown files are skipped. Each file is limited to 256 KiB, with up to 500 Markdown files in the library. Discovery errors appear in the panel.
 
-The default drop folder is `<host data directory>/skills`. On macOS this is `~/Library/Application Support/hopper-pi/host/skills`; on Windows it is `%APPDATA%/hopper-pi/host/skills`. To use an existing folder elsewhere, enter its absolute path in the panel and choose **Use folder**. Paths beginning with `~/` also work. Keep this folder separate from the bundled skill directories.
+The default drop folder is `<pinned shared data directory>/skills`. On macOS this is `~/Library/Application Support/hopper-pi/host/shared-host/skills`; on Windows it is `%APPDATA%/hopper-pi/host/shared-host/skills`. To use an existing folder elsewhere, enter its absolute path in the panel and choose **Use folder**. Paths beginning with `~/` also work. Keep this folder separate from the bundled skill directories.
 
-The host saves the folder and disabled skill IDs in `<host data directory>/skills-settings.json`, shared by Hopper windows using that data directory. If multiple windows save settings simultaneously, the last save wins. Changes apply at the next idle refresh or prompt, and controls are disabled while a turn is running. Disabling a skill removes it from discovery and prevents further reads through `read`; it does not remove text already in conversation history. Start a new session for a clean context. The read restriction applies to this file-reading tool, not to scripts executed inside Rhino.
+The host saves the folder and disabled skill IDs in `<pinned shared data directory>/skills-settings.json`, shared by Hopper windows using that data directory. If multiple windows save settings simultaneously, the last save wins. Changes apply at the next idle refresh or prompt, and controls are disabled while a turn is running. Disabling a skill removes it from discovery and prevents further reads through `read`; it does not remove text already in conversation history. Start a new session for a clean context. The read restriction applies to this file-reading tool, not to scripts executed inside Rhino.
 
 Skill choices survive restarts. Skills are enabled unless their ID appears in the saved `disabled` list; turning one back on removes its ID. The model picker saves the selected provider and model as `defaultProvider` and `defaultModel` in `<host data directory>/agent/settings.json`. New sessions use that selection when its provider is authenticated and the model is available. Resuming an existing conversation restores that conversation's model first.
 
@@ -164,11 +175,11 @@ On Windows, press **Win+R**, enter `%APPDATA%\hopper-pi\host`, and press Enter. 
 
 | Relative path | Saved content |
 | --- | --- |
-| `skills\` | Custom Markdown files, unless you chose another folder |
-| `skills-settings.json` | Custom folder path and disabled skill IDs |
+| `shared-host\skills\` | Custom Markdown files, unless you chose another folder |
+| `shared-host\skills-settings.json` | Custom folder path and disabled skill IDs |
 | `agent\settings.json` | Last selected provider/model and Pi preferences |
 
-On macOS, these files are under `~/Library/Application Support/hopper-pi/host`. A host launched with `--data-dir` uses that directory instead. Changing the custom Markdown folder does not move the settings files.
+On macOS, these files are under `~/Library/Application Support/hopper-pi/host`. A host launched with `--data-dir` stores its journal and skills under that directory's `shared-host` subdirectory. Once initialized, control state pins that location. Changing the custom Markdown folder does not move the settings files.
 
 The Rhino commands are:
 
@@ -176,8 +187,8 @@ The Rhino commands are:
 | ------- | -------- |
 | `HopperCode` | Start Hopper from `stopped` or `faulted`. When `running`, reopen the browser with the current conversation. In other states, print the current state. |
 | `HopperCodeStatus` | Print lifecycle, Node, transport, document, Grasshopper, dispatcher, and recent error details without starting Hopper. |
-| `HopperCodeStop` | Stop the current host and transport in the background. |
-| `HopperCodeRestart` | Finish stopping the current instance, then start one replacement. Repeated restart requests are coalesced. |
+| `HopperCodeStop` | Detach this Rhino lifecycle and stop its transport. Leave the shared host and other attached Rhino lifecycles running. |
+| `HopperCodeRestart` | Detach and reattach this Rhino lifecycle. Repeated restart requests are coalesced. The shared host keeps running. |
 
 `HopperCode` does not load Grasshopper. The first `gh_*` tool call starts it once and waits up to 60 seconds for readiness. Rhino may open the Grasshopper editor and create an untitled definition during that explicit tool call. Grasshopper tools require an active definition, while `rh_*` tools continue to work without one.
 
@@ -215,16 +226,9 @@ Windows example:
 
 The configured file must exist and be executable. Hopper runs `node --version` with a three-second timeout and rejects malformed, prerelease, or older versions. `HopperCodeStatus` prints the resolved path, version, or exact resolution error.
 
-### External Pi extension workflow
+### External Pi extension compatibility
 
-```bash
-pi install npm:hopper-pi
-```
-
-`postinstall` builds the C# plug-ins and copies them into your Grasshopper libraries folder.
-
-1. Restart Rhino and run `HopperCode` to start the Rhino-owned runtime.
-2. Start Pi and talk to the agent about Grasshopper or Rhino. The extension registers `gh_*` and `rh_*` tools automatically.
+Use `HopperCode` and its browser UI for Rhino and Grasshopper geometry work. The standalone Pi extension cannot connect directly to the shared Rhino transport. Every edit now requires a task with a captured document and host ownership; a connection profile alone does not grant that access. The extension source remains available for development, but the old direct geometry workflow is no longer supported.
 
 The GHZMQ component preserves old definitions, but it does not start the transport or Node. No canvas component is required for Hopper.
 
@@ -245,17 +249,11 @@ pnpm install
 pnpm run dev
 ```
 
-### Test the browser UI without Rhino
-
-```bash
-pnpm ui:mock
-```
-
-Open http://localhost:5174. This runs the Vite UI against local fixture data, so it never starts Rhino or contacts a provider account. Send a normal prompt to exercise streaming and tool-call rendering. The following prompts open representative interactive and error states: `/mock option`, `/mock confirm`, `/mock editor`, and `/mock failure`.
-
 ### Develop the browser UI against Hopper
 
-Run `pnpm host:dev` with the Rhino backend active, then run `pnpm ui:dev` in a second terminal. The host prints a JSON object whose `url` ends with the session token. Open `http://localhost:5173/` with that same fragment, for example `http://localhost:5173/#TOKEN`.
+Run `pnpm host:dev`, then `pnpm ui:dev` in a second terminal. Vite reads the host endpoint from `~/.hopper/shared-control/control.json`. Start the host before Vite so the endpoint is available. `HOPPER_UI_PROXY_TARGET` can override it. If another host is already running, stop it through its browser UI before `pnpm host:dev` so the rebuilt host starts with development-origin access.
+
+Run `HopperCode` in Rhino to attach its documents. To authenticate the development page, open the private `~/.hopper/shared-control/control.json` locally and copy its `browserCredential` value into `http://localhost:5173/#<browserCredential>`. The browser removes the fragment after reading it. Keep this credential private; do not paste it into logs, screenshots, issues, or chat. The normal HopperCode workflow opens an authenticated link automatically and needs none of these development steps.
 
 Rebuild or reinstall the plugin manually:
 
@@ -270,14 +268,15 @@ node scripts/install-grasshopper-plugin.mjs --force
 ```
 Browser UI  ⇄  private Hopper host + embedded Pi SDK  ⇄  authenticated ZMQ  ⇄  Rhino
                          ↑                                      ↑
-                  exact local package                  Rhino-owned runtime status
+                  exact local package                  per-Rhino runtime status
 ```
 
 - `Hopper.Rhino.rhp` provides the four `HopperCode` commands and connects Rhino lifecycle services to the host process, browser launch, health checks, and shutdown policy.
 - `Hopper.Core.dll` contains the Rhino-free protocol and lifecycle policies.
 - `Hopper.Grasshopper.gha` registers Grasshopper operations only after Grasshopper loads. It preserves the existing GHZMQ component identity for old definitions.
 - The host binds only `127.0.0.1`, checks the browser origin, and requires a 256-bit token as the first WebSocket message. The token begins in the URL fragment and is removed from browser history.
-- Provider credentials use the global Pi auth file at `~/.pi/agent/auth.json` by default, including `PI_CODING_AGENT_DIR` overrides. Login, token refresh, and logout in Hopper update that shared file. Model settings remain in Hopper's private user-data directory. Session and workspace state are separated per live Rhino backend instance.
+- Provider credentials use the global Pi auth file at `~/.pi/agent/auth.json` by default, including `PI_CODING_AGENT_DIR` overrides. Login, token refresh, and logout in Hopper update that shared file. Model settings remain in Hopper's private user-data directory. Task sessions and workspaces are isolated, with durable conversation and task state in the host journal.
+- `HOPPER_SHARED_MAX_TOKENS` defaults to 1,000,000 tokens per root request, including its continuations and delegated tasks. The host checks recorded usage before starting another turn or child. Earlier requests do not consume a new request's budget.
 
 The RPC socket uses ROUTER and DEALER framing, authenticates every request, and correlates replies by request ID. The loopback PUB/SUB socket carries advisory status wakeups. Node always rereads Rhino's full status after a wakeup. Treat the workstation account as the confidentiality boundary and do not expose these endpoints beyond loopback.
 
@@ -286,7 +285,7 @@ Rhino binds free loopback endpoints and writes them with a local connection toke
 - Windows: `%APPDATA%\hopper-pi\connection.json`
 - macOS: `~/Library/Application Support/hopper-pi/connection.json`
 
-Each Rhino-owned host also writes an authoritative instance profile under `hopper-pi/runtime/profiles/<lifecycle-instance-id>.json` and passes that exact path to its Node child, so concurrent Rhino processes do not depend on the last-writer-wins compatibility pointer. On later launches, Hopper deletes profiles only after verifying that the recorded PID and process start time no longer identify a live owner; malformed or uninspectable profiles are retained. Ephemeral logs use the sibling `<lifecycle-instance-id>.logs/` directory and are eligible for deletion seven days after death is verified.
+Each Rhino lifecycle also writes an authoritative instance profile under `hopper-pi/runtime/profiles/<lifecycle-instance-id>.json` and registers that exact path with the shared host, so concurrent Rhino processes do not depend on the last-writer-wins compatibility pointer. On later launches, Hopper deletes profiles only after verifying that the recorded PID and process start time no longer identify a live owner; malformed or uninspectable profiles are retained. Ephemeral logs use the sibling `<lifecycle-instance-id>.logs/` directory and are eligible for deletion seven days after death is verified.
 Override profile discovery with `HOPPER_CONNECTION_PROFILE` for development.
 
 ## Tool controls and Firecrawl
@@ -300,6 +299,8 @@ External Pi users can run `/hopper-tools`. Use `--hopper-config-dir /absolute/pa
 Tool switches control named Hopper calls. An enabled general-purpose script tool can still perform equivalent operations, including network access; these switches are not a read-only or network sandbox.
 
 ## Agent tools (overview)
+
+Open the first Rhino yourself and run `HopperCode` to connect it. Agents can create or open files in connected processes through `rh_document` and `gh_document`. No separate document grant is needed. On Windows, `new` replaces the current model; use `launchRhino` for an additional delegation target. It launches the connected installation with `/nosplash /notemplate /runscript="_HopperCode"`, preserves the coordinator's selected document, and waits for authenticated document readiness. Automatic worker startup does not open another browser tab; manually running `HopperCode` still does. A timed-out launch is checked again with the same request ID and is never automatically spawned again. Cancellation leaves an already started Rhino open. Default worker models use Rhino's built-in settings, so inspect units before modeling.
 
 **Rhino document**
 
@@ -380,46 +381,22 @@ For new Grasshopper builds, the canonical workflow is: resolve unusual or ambigu
 - **Inspect tool schemas:** Run `/hopper-schemas` to browse the JSON schemas exposed to the agent for every registered tool (or `/hopper-schemas rh_run_script` / `/hopper-schemas all`). Dump them with `/hopper-schemas dump` (writes `tool-schemas.json` in the cwd). `/hopper-schemas sizes` reports catalog counts and compact schema bytes by group/tool.
 - **`HopperCode` is unknown:** Install the generated `.yak`, rather than copying only the `.gha` to Grasshopper Libraries, then restart Rhino. A Rhino `.rhp` must be loaded for the command to exist.
 - **Browser tab closed:** Run `HopperCode` again in the same Rhino instance to reopen the current conversation.
-- **Browser host does not open:** Run `HopperCodeStatus`. It reports lifecycle state, child PID, Node resolution, handshake health, and startup errors without printing the secret URL.
+- **Browser host does not open:** Run `HopperCodeStatus`. It reports lifecycle state, host PID, Node resolution, handshake health, and startup errors without printing the secret URL.
 - **Node is missing or unsupported:** Run `node --version` in a terminal. If Rhino cannot see the same installation, add its absolute path to Hopper's `config.json` as shown in [Choosing Node](#choosing-node), then run `HopperCodeRestart`.
 - **Grasshopper did not open:** `HopperCode` intentionally leaves Grasshopper unloaded. Submit a `gh_*` request in the browser. Hopper warns before opening Grasshopper and waits for its active definition. Run `HopperCodeStatus` for a typed startup or document error.
-- **Tools fail in external Pi mode:** Run `HopperCode` first, then run `/hopper-backend` in Pi to reread the last-started connection profile. The GHZMQ component does not start the runtime.
-- **Invalid connection token:** Run `HopperCodeStop`, then `HopperCode` to create a new instance profile and authenticated host connection. External Pi users should run `/hopper-backend` after the new instance starts.
+- **Tools fail in external Pi mode:** Use the normal `HopperCode` browser UI. Standalone Pi connections cannot acquire shared task ownership.
+- **Invalid connection token:** Run `HopperCodeStop`, then `HopperCode` to create a new instance profile and authenticated host connection.
 - **Grasshopper shows offline in Rhino.Inside.Revit:** Keep Grasshopper visible while the agent is working and inspect `HopperCodeStatus` after refocusing Rhino. Older Rhino.Inside.Revit versions may still limit background Grasshopper work.
 - **Plugin did not install:** Install [.NET 7 SDK](https://dotnet.microsoft.com/download), then run `pnpm run build:gh-plugin`. On Windows, set `HOPPER_GH_LIBRARIES` if auto-detect fails.
 - **Stale plugin after `git pull`:** `node scripts/install-grasshopper-plugin.mjs --force`, then restart Rhino.
 
-### Export the current session for debugging
+### Export the current conversation for debugging
 
-Click **Export session** in the conversation header to download `hopper-session-debug.json`. On narrow screens, use the download icon. Export is available while connected, including during a response. Wait until the response finishes for complete tool results.
+Use the conversation export control to download its recorded task state. The authenticated endpoint is `GET /api/session/export?conversationId=<conversation ID>`.
 
-The running host provides `GET /api/session/export`, authenticated with its bearer token. It downloads a versioned JSON document containing every Pi session entry, including assistant tool-call arguments and tool results with their content, details, and error flags. Entries include earlier branches and history before compaction. The export also includes the current context messages, system prompt, model, thinking level, active leaf ID, and any partial assistant response.
+The JSON format is `hopper-conversation-debug`, version 1. It includes the selected conversation, sessions, tasks, turns, inputs, questions, events, operations, recoveries, records, and dependencies. This is a point-in-time export. Wait for active tasks to finish for complete results.
 
-From the developer console in the Hopper page served by the host, run:
-
-```js
-const response = await fetch('/api/session/export', {
-  headers: { Authorization: `Bearer ${sessionStorage.getItem('hopper.sessionToken')}` },
-});
-if (!response.ok) throw new Error(`Export failed: ${response.status}`);
-const url = URL.createObjectURL(await response.blob());
-const link = document.createElement('a');
-link.href = url;
-link.download = 'hopper-session-debug.json';
-link.click();
-setTimeout(() => URL.revokeObjectURL(url), 10000);
-```
-
-For terminal access, use the running host's port and token:
-
-```sh
-curl --fail --show-error --silent \
-  -H "Authorization: Bearer $HOPPER_TOKEN" \
-  "http://127.0.0.1:$HOPPER_PORT/api/session/export" \
-  -o hopper-session-debug.json
-```
-
-This is a point-in-time export. Wait for the turn to finish to include all final tool results. It exports Pi's recorded results, including embedded images, rather than raw network traffic or transient tool progress events. Credentials from the auth store are not included, but conversation and tool content are not redacted, so review the file before sharing it. Exporting does not change or start a session.
+Exporting does not start or change a task. Auth-store credentials are excluded, but conversation and tool content are not redacted. Review the file before sharing it.
 
 ## License
 

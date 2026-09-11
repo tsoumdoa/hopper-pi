@@ -15,41 +15,65 @@ using Rhino;
 
 namespace rhino_zmq_poc
 {
-    internal sealed class BrowserAfterRunningCoordinator : IHopperRunningObserver, IDisposable
+    internal sealed class BrowserWhenAvailableCoordinator : IHopperRunningObserver, IDisposable
     {
         private readonly object _gate = new object();
-        private readonly ManagedNodeChildProcess _child;
+        private readonly SharedHostProcessAdapter _child;
+        private readonly LifecycleController _lifecycle;
         private readonly IBrowserLauncher _browser;
         private readonly RuntimeStatusStore _status;
-        private bool _running;
+        private readonly BrowserOpenRequest _openRequest = new();
 
-        public BrowserAfterRunningCoordinator(
-            ManagedNodeChildProcess child,
+        public BrowserWhenAvailableCoordinator(
+            SharedHostProcessAdapter child,
             IBrowserLauncher browser,
-            RuntimeStatusStore status)
+            RuntimeStatusStore status,
+            LifecycleController lifecycle)
         {
             _child = child;
             _browser = browser;
             _status = status;
+            _lifecycle = lifecycle;
             _child.Ready += OnReady;
         }
 
         public void Reset()
         {
             lock (_gate)
-                _running = false;
+            {
+                // Only the first automatic worker startup suppresses UI. Consume the
+                // process-local flag before spawning Node; later manual HopperCode opens normally.
+                var workerStartup = Environment.GetEnvironmentVariable("HOPPER_RHINO_WORKER") == "1";
+                Environment.SetEnvironmentVariable("HOPPER_RHINO_WORKER", null);
+                _openRequest.Request(suppress: workerStartup);
+            }
         }
 
-        public void OnRunning()
+        public void OnRunning() => OnReady(_child.ReadyUri);
+
+        public void Reopen()
         {
             lock (_gate)
             {
-                if (_status.Read().Lifecycle.State != Hopper.Core.Protocol.LifecycleState.running)
-                    return;
-                _running = true;
-                var ready = _child.ReadyUri;
-                if (ready != null)
-                    Open(ready);
+                _openRequest.Request();
+            }
+            _ = EnsureAndOpenAsync();
+        }
+
+        private async Task EnsureAndOpenAsync()
+        {
+            try
+            {
+                await _child.EnsureRunningAsync().ConfigureAwait(false);
+                OnRunning();
+            }
+            catch (Exception exception)
+            {
+                _status.UpdateError(RuntimeStatusComponent.Host, new RuntimeErrorV2
+                {
+                    Code = RpcReasonCode.INTERNAL_ERROR,
+                    Message = $"Could not reopen Hopper: {exception.Message}",
+                });
             }
         }
 
@@ -62,10 +86,10 @@ namespace rhino_zmq_poc
         {
             lock (_gate)
             {
-                if (!_running
-                    || _status.Read().Lifecycle.State != Hopper.Core.Protocol.LifecycleState.running)
-                    return;
-                Open(ready);
+                if (_lifecycle.Snapshot.State is not (Hopper.Core.Lifecycle.LifecycleState.Starting
+                    or Hopper.Core.Lifecycle.LifecycleState.Running)) return;
+                if (_openRequest.Take(true, ready))
+                    Open(ready);
             }
         }
 
@@ -73,6 +97,13 @@ namespace rhino_zmq_poc
         {
             try
             {
+                if (SharedNativeHost.MessageDocumentSerialNumber is { } serial)
+                {
+                    var documentId = $"{DocumentSession.LifecycleInstanceId}:rhino:{serial}";
+                    var builder = new UriBuilder(ready);
+                    builder.Query = builder.Query.TrimStart('?') + "&document=" + Uri.EscapeDataString(documentId);
+                    ready = builder.Uri;
+                }
                 _browser.Open(ready);
             }
             catch (Exception exception)
@@ -93,11 +124,8 @@ namespace rhino_zmq_poc
         private readonly HostDocumentStatusCoordinator _documentStatus;
         private readonly RhinoDocumentStatusMonitor _rhinoDocuments;
         private readonly RpcLifecycleTransport _transport;
-        private readonly LifecycleController _lifecycle;
-        private readonly ManagedNodeChildProcess _child;
-        private readonly BrowserAfterRunningCoordinator _browser;
-        private readonly HttpNodeHealthProbe _healthProbe;
-        private readonly NodeHealthMonitor _healthMonitor;
+        private readonly SharedHostProcessAdapter _child;
+        private readonly BrowserWhenAvailableCoordinator _browser;
         private int _disposed;
 
         private RhinoHostComposition(
@@ -107,11 +135,8 @@ namespace rhino_zmq_poc
             HostDocumentStatusCoordinator documentStatus,
             RhinoDocumentStatusMonitor rhinoDocuments,
             RpcLifecycleTransport transport,
-            LifecycleController lifecycle,
-            ManagedNodeChildProcess child,
-            BrowserAfterRunningCoordinator browser,
-            HttpNodeHealthProbe healthProbe,
-            NodeHealthMonitor healthMonitor)
+            SharedHostProcessAdapter child,
+            BrowserWhenAvailableCoordinator browser)
         {
             Facade = facade;
             _rhinoRegistry = rhinoRegistry;
@@ -119,11 +144,8 @@ namespace rhino_zmq_poc
             _documentStatus = documentStatus;
             _rhinoDocuments = rhinoDocuments;
             _transport = transport;
-            _lifecycle = lifecycle;
             _child = child;
             _browser = browser;
-            _healthProbe = healthProbe;
-            _healthMonitor = healthMonitor;
         }
 
         public HopperHostFacade Facade { get; }
@@ -159,9 +181,8 @@ namespace rhino_zmq_poc
                 profileFiles,
                 new UniqueAtomicWritePathProvider(),
                 applicationData);
-            var child = new ManagedNodeChildProcess(
+            var child = new SharedHostProcessAdapter(
                 new HopperHostEntryResolver(pluginDirectory),
-                Path.Combine(applicationData, "host"),
                 status);
             var environment = new SystemNodeRuntimeEnvironment();
             var node = new NodeRuntimeResolver(
@@ -187,18 +208,11 @@ namespace rhino_zmq_poc
                 new GuidLifecycleInstanceIdSource(),
                 lifecycleBackground,
                 clock);
-            var browser = new BrowserAfterRunningCoordinator(
+            var browser = new BrowserWhenAvailableCoordinator(
                 child,
                 new BrowserLauncher(),
-                status);
-            var healthProbe = new HttpNodeHealthProbe(child, TimeSpan.FromSeconds(2));
-            var healthMonitor = new NodeHealthMonitor(
-                lifecycle,
                 status,
-                healthProbe,
-                SystemHealthPollDelay.Instance,
-                lifecycleBackground);
-            var runningObservers = new CompositeHopperRunningObserver(browser, healthMonitor);
+                lifecycle);
             var facade = new HopperHostFacade(
                 lifecycle,
                 lifecycleBackground,
@@ -207,9 +221,9 @@ namespace rhino_zmq_poc
                 status,
                 new RhinoGrasshopperStartController(),
                 transport,
-                runningObservers,
+                browser,
                 new RhinoCommandCompletionSink(dispatcher),
-                reopenBrowser: browser.OnRunning);
+                reopenBrowser: browser.Reopen);
             deferredOperations.SetTarget(facade);
 
             HostDocumentStatusCoordinator documentStatus = null;
@@ -237,12 +251,8 @@ namespace rhino_zmq_poc
                     documentStatus,
                     rhinoDocuments,
                     transport,
-                    lifecycle,
                     child,
-                    browser,
-                    healthProbe,
-                    healthMonitor);
-                child.UnexpectedExit += composition.OnUnexpectedChildExit;
+                    browser);
                 return composition;
             }
             catch
@@ -251,8 +261,6 @@ namespace rhino_zmq_poc
                 if (documentStatus != null)
                     HostOperationRegistries.DocumentStatus.TryUnregister(documentStatus);
                 rhino.TryUnregister(rhinoAdapter);
-                healthMonitor.Dispose();
-                healthProbe.Dispose();
                 browser.Dispose();
                 transport.SignalStopNoWait();
                 child.Dispose();
@@ -270,26 +278,13 @@ namespace rhino_zmq_poc
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
                 return;
-            _child.UnexpectedExit -= OnUnexpectedChildExit;
             _rhinoDocuments.Dispose();
             HostOperationRegistries.DocumentStatus.TryUnregister(_documentStatus);
             _rhinoRegistry.TryUnregister(_rhinoAdapter);
-            _healthMonitor.Dispose();
-            _healthProbe.Dispose();
             _browser.Dispose();
             _transport.SignalStopNoWait();
             _child.Dispose();
         }
 
-        private void OnUnexpectedChildExit()
-        {
-            _ = ObserveUnexpectedChildExitAsync();
-        }
-
-        private async Task ObserveUnexpectedChildExitAsync()
-        {
-            await _lifecycle.ReportUnexpectedChildExitAsync().ConfigureAwait(false);
-            Facade.GetStatus();
-        }
     }
 }

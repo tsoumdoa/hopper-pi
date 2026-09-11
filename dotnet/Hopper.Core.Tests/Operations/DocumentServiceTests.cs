@@ -13,6 +13,66 @@ public sealed class DocumentServiceTests : IDisposable
     private string FilePath(string name) => System.IO.Path.Combine(_directory, name + ".3dm");
     private static JsonElement Args(object value) => JsonSerializer.SerializeToElement(value, RpcV2Contract.JsonOptions);
     private static JsonElement Manage(FakeService service, object args) => service.Execute(RpcOperation.manageRhinoDocument, Args(args)).Data!.Value;
+    [Fact] public void ManualDocumentsStayUninitializedUntilExplicitOptIn()
+    {
+        var service = new FakeService();
+        var first = service.Add(null, false); first.Initialized = true;
+        var second = service.Add(null, false);
+        Assert.True(service.Describe(first).HopperInitialized);
+        Assert.False(service.Describe(second).HopperInitialized);
+        var inventory = service.Execute(RpcOperation.listRhinoDocuments, Args(new { })).Data!.Value.GetProperty("documents");
+        Assert.True(inventory[0].GetProperty("hopperInitialized").GetBoolean());
+        Assert.False(inventory[1].GetProperty("hopperInitialized").GetBoolean());
+        var token = service.Describe(second).StateToken;
+        second.Initialized = true;
+        Assert.True(service.Describe(second).HopperInitialized);
+        Assert.Equal(token, service.Describe(second).StateToken);
+    }
+    [Theory]
+    [InlineData("new")]
+    [InlineData("open")]
+    public void ManagedDocumentsAreInitializedWithoutAnotherCommand(string action)
+    {
+        var service = new FakeService(); var path = FilePath("opened");
+        File.WriteAllText(path, "fixture");
+        var response = Manage(service, new { action, path = action == "open" ? path : null,
+            expectedActiveDocument = (string?)null, affectedDocuments = Array.Empty<object>() });
+        Assert.True(response.GetProperty("ok").GetBoolean());
+        Assert.True(response.GetProperty("document").GetProperty("hopperInitialized").GetBoolean());
+    }
+    [Fact] public void SharedDestinationSymlinkReplacementCannotRedirectMatchingContents()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var service = new FakeService(); var doc = service.Add(null, true); var observed = service.Describe(doc);
+        var path = FilePath("reserved-link"); var other = FilePath("unreserved");
+        File.WriteAllText(path, "before"); File.WriteAllText(other, "before"); var checksum = DocumentFiles.Stamp(path);
+        service.OnFinish = () => { File.Delete(path); File.CreateSymbolicLink(path, other); };
+        var result = Manage(service, new { action = "saveAs", documentId = observed.DocumentId, expectedStateToken = observed.StateToken, path, overwrite = true,
+            expectedDestinations = new[] { new { path = DocumentFiles.Canonical(path), exists = true, byteLength = 6, sha256 = checksum } } });
+        Assert.Contains(result.GetProperty("error").GetProperty("code").GetString(), new[] { "FILE_CHANGED_EXTERNALLY", "DESTINATION_NOT_RESERVED" });
+        Assert.Equal(0, service.Writes); Assert.Equal("before", File.ReadAllText(other));
+    }
+    [Fact] public void SharedDestinationAppearingDuringScopeCompletionIsNotOverwritten()
+    {
+        var service = new FakeService(); var doc = service.Add(null, true); var observed = service.Describe(doc); var path = FilePath("reserved-new");
+        service.OnFinish = () => File.WriteAllText(path, "external");
+        var result = Manage(service, new { action = "saveAs", documentId = observed.DocumentId, expectedStateToken = observed.StateToken, path, overwrite = true,
+            expectedDestinations = new[] { new { path = DocumentFiles.Canonical(path), exists = false } } });
+        Assert.Equal("FILE_CHANGED_EXTERNALLY", result.GetProperty("error").GetProperty("code").GetString());
+        Assert.Equal(0, service.Writes); Assert.Equal("external", File.ReadAllText(path));
+    }
+    [Fact] public void SharedSaveRequiresDisclosedDestinationAndRechecksSameSizeContents()
+    {
+        var service = new FakeService(); var doc = service.Add(null, true); var observed = service.Describe(doc); var path = FilePath("reserved-existing");
+        File.WriteAllText(path, "before"); var checksum = DocumentFiles.Stamp(path);
+        var absent = Manage(service, new { action = "saveAs", documentId = observed.DocumentId, expectedStateToken = observed.StateToken, path, overwrite = true, expectedDestinations = Array.Empty<object>() });
+        Assert.Equal("DESTINATION_NOT_RESERVED", absent.GetProperty("error").GetProperty("code").GetString());
+        service.OnFinish = () => File.WriteAllText(path, "change");
+        var result = Manage(service, new { action = "saveAs", documentId = observed.DocumentId, expectedStateToken = observed.StateToken, path, overwrite = true,
+            expectedDestinations = new[] { new { path = DocumentFiles.Canonical(path), exists = true, byteLength = 6, sha256 = checksum } } });
+        Assert.Equal("FILE_CHANGED_EXTERNALLY", result.GetProperty("error").GetProperty("code").GetString());
+        Assert.Equal(0, service.Writes); Assert.Equal("change", File.ReadAllText(path));
+    }
     [Fact] public void StaleReplacementRejectsEvenAlreadyDirtyDocument()
     {
         var service = new FakeService(); var doc = service.Add(null, true); var observed = service.Describe(doc);
@@ -153,7 +213,7 @@ public sealed class DocumentServiceTests : IDisposable
         Assert.Equal(0, service.Closes); Assert.Same(target, service.Current); Assert.True(target.Dirty);
         Assert.Contains(response.GetProperty("effects").EnumerateArray(), e => e.GetProperty("stage").GetString() == "save" && e.GetProperty("completed").GetBoolean());
     }
-    private sealed class FakeDoc { public string Id = Guid.NewGuid().ToString(); public string? Path; public bool Dirty; public int Revision; }
+    private sealed class FakeDoc { public string Id = Guid.NewGuid().ToString(); public string? Path; public bool Dirty; public int Revision; public bool Initialized; }
     private sealed class FakeService : DocumentService<FakeDoc>
     {
         private readonly List<FakeDoc> _documents = new(); public FakeDoc? Current; public int Boundaries; public int Writes; public bool FailClose; public int Creates; public int Closes; public Action? OnFinish; public Action? OnWrite;
@@ -164,6 +224,8 @@ public sealed class DocumentServiceTests : IDisposable
         protected override string NativeId(FakeDoc doc) => doc.Id;
         protected override string? PathOf(FakeDoc doc) => doc.Path;
         protected override bool Modified(FakeDoc doc) => doc.Dirty;
+        protected override bool HopperInitialized(FakeDoc doc) => doc.Initialized;
+        protected override void InitializeHopper(FakeDoc doc) => doc.Initialized = true;
         protected override void MarkModified(FakeDoc doc) => doc.Dirty = true;
         protected override string Fingerprint(FakeDoc doc) => doc.Revision.ToString();
         protected override object Settings(FakeDoc doc) => new { units = "Millimeters" };

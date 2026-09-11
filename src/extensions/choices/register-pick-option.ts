@@ -9,7 +9,7 @@ import {
 	isOtherChoice,
 	resolvePickOption,
 } from "../../types/choices.js";
-import { throwNoUi } from "./ui-helpers.js";
+import { throwNoUi, type SuspendQuestion } from "./ui-helpers.js";
 
 const OptionSchema = Type.Object({
 	label: Type.String({ description: "Display label shown in the picker" }),
@@ -41,7 +41,7 @@ function cancelledResult(question: string): {
 	};
 }
 
-export function registerPickOptionTool(pi: ExtensionAPI): void {
+export function registerPickOptionTool(pi: ExtensionAPI, suspend?: SuspendQuestion): void {
 	pi.registerTool({
 		name: "pick_option",
 		label: "Pick Option",
@@ -59,7 +59,7 @@ export function registerPickOptionTool(pi: ExtensionAPI): void {
 		}),
 
 		async execute(_id, params, signal, _onUpdate, ctx) {
-			if (!ctx.hasUI) {
+			if (!suspend && !ctx.hasUI) {
 				throwNoUi("pick_option");
 			}
 
@@ -67,6 +67,8 @@ export function registerPickOptionTool(pi: ExtensionAPI): void {
 			if (options.some((option) => isOtherChoice(option.label))) {
 				throw new Error(`pick_option reserves the "${OTHER_OPTION_LABEL}" label for custom answers. Rename that option or omit it.`);
 			}
+
+			if (suspend) return suspend(_id, { kind: "pick_option", ...params });
 
 			const labels = appendOtherOptionLabels(formatPickOptionLabels(options));
 			const choice = await ctx.ui.select(params.question, labels, { signal });

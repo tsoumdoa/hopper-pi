@@ -195,6 +195,20 @@ namespace rhino_zmq_poc
                     PublisherEndpoint = endpoints.Publisher,
                     ConnectionToken = token,
                     LifecycleInstanceId = lifecycleInstanceId,
+                    SharedMode = true,
+                    SharedBindingValidator = DocumentSession.ValidateSharedBinding,
+                    SharedTransactionCleanup = (rhinoOwner, grasshopperOwner) => {
+                        var rhinoDocument = RhinoAgentTransaction.BoundDocumentId;
+                        var expectedRhino = rhinoOwner?.Binding is RhinoTargetBinding r ? r.RhinoDocumentId : (rhinoOwner?.Binding as GrasshopperTargetBinding)?.AssociatedRhinoDocumentId;
+                        var grasshopperDocument = DocumentSession.GrasshopperTransactionDocumentId?.Invoke();
+                        var expectedGrasshopper = (grasshopperOwner?.Binding as GrasshopperTargetBinding)?.GrasshopperDocumentId;
+                        if (rhinoDocument is not null && rhinoDocument != expectedRhino || grasshopperDocument is not null && grasshopperDocument != expectedGrasshopper)
+                            return false; // Missing or conflicting ownership metadata requires explicit recovery.
+
+                        new RhinoOperationExecutor().CleanupOpenTransactions();
+                        new RegisteredGrasshopperTransactionCleanup(HostOperationRegistries.Grasshopper).CleanupOpenTransactions();
+                        return true;
+                    },
                 },
                 _dispatcher,
                 _operations,
@@ -299,13 +313,15 @@ namespace rhino_zmq_poc
 
         public RpcHandshakeObservation OnAuthenticatedHandshake(LifecycleHandshakeArgsV2 handshake)
         {
+            if (!SharedNativeHost.IsCurrentHandshake(handshake))
+                return RpcHandshakeObservation.Reject("Shared host discovery identity changed.");
             var acceptance = _status.TryAcceptInitialHostHandshake(
                 handshake.NodeProcessId,
                 handshake.NodeVersion);
             return acceptance.Accepted
                 ? RpcHandshakeObservation.Allow(acceptance.StatusRevision)
                 : RpcHandshakeObservation.Reject(
-                    "The handshake process ID does not match the managed Node child.");
+                    "The handshake process ID does not match the registered Hopper host.");
         }
 
         public CancelOperationState Cancel(string operationId)

@@ -30,14 +30,23 @@ export type ComposerProps = {
 	onModeChange(mode: SendMode): void;
 	disabled: boolean;
 	streaming: boolean;
+	/** Cancellation remains available while work is queued or waiting for input. */
+	canAbort?: boolean;
+	abortDisabled?: boolean;
 	onSubmit(): void;
 	onAbort(): void;
-	/** Toolbar controls rendered at the start of the bottom row (model, thinking). */
+	/** Toolbar controls rendered at the start of the bottom row (model, thinking, Rhino target). */
 	controls?: ReactNode;
+	/** Blocks sending while keeping the draft editable, e.g. when the chosen Rhino model disconnected. */
+	submitDisabled?: boolean;
+	/** Explains why sending is blocked. Shown above the text field like attachment errors. */
+	alert?: ReactNode;
+	/** Overrides the placeholder while the composer is disabled for a reason other than connecting. */
+	placeholder?: string;
 };
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-	{ draft, onDraftChange, images, onImagesChange, imagesSupported, mode, onModeChange, disabled, streaming, onSubmit, onAbort, controls },
+	{ draft, onDraftChange, images, onImagesChange, imagesSupported, mode, onModeChange, disabled, streaming, canAbort = streaming, abortDisabled = false, onSubmit, onAbort, controls, submitDisabled, alert, placeholder },
 	ref,
 ) {
 	const fileInput = useRef<HTMLInputElement>(null);
@@ -72,7 +81,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 		const node = textarea.current;
 		if (!node) return;
 		node.style.height = "auto";
-		node.style.height = `${Math.min(node.scrollHeight, MAX_HEIGHT)}px`;
+		node.style.height = `${Math.max(88, Math.min(node.scrollHeight, MAX_HEIGHT))}px`;
 		node.style.overflowY = node.scrollHeight > MAX_HEIGHT ? "auto" : "hidden";
 	}, [draft]);
 
@@ -89,7 +98,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 		}
 	};
 
-	const canSend = !disabled && !loading && (draft.trim().length > 0 || images.length > 0) && (!images.length || imagesSupported);
+	const canSend = !disabled && !submitDisabled && !loading && (draft.trim().length > 0 || images.length > 0) && (!images.length || imagesSupported);
+	const showStop = canAbort && !canSend;
 
 	return (
 		<footer className="shrink-0 px-4 pb-4 pt-1 sm:px-6">
@@ -120,23 +130,24 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 				{loading && <p role="status" className="px-3 pt-2 text-xs text-muted">Opening images…</p>}
 				{imageError && <p role="alert" className="px-3 pt-2 text-xs text-danger">{imageError}</p>}
 				{images.length > 0 && !imagesSupported && <p role="alert" className="px-3 pt-2 text-xs text-danger">Select a model that supports images to send these attachments.</p>}
+				{alert && <p role="alert" className="px-3 pt-2 text-xs text-danger">{alert}</p>}
 				<label className="sr-only" htmlFor="composer-input">Message Hopper</label>
 				<textarea
 					id="composer-input"
 					ref={textarea}
-					rows={1}
+					rows={3}
 					value={draft}
 					disabled={disabled}
 					autoComplete="off"
 					onChange={(event) => onDraftChange(event.target.value)}
 					onKeyDown={onKeyDown}
 					onPaste={(event) => { const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/")); if (files.length) { event.preventDefault(); void addImages(files); } }}
-					placeholder={disabled ? "Waiting for the Hopper host…" : "Ask Hopper…"}
-					className="block max-h-[220px] w-full resize-none bg-transparent px-3.5 pb-1 pt-3 text-[14px] leading-6 outline-none placeholder:text-muted disabled:cursor-not-allowed"
+					placeholder={disabled ? placeholder ?? "Waiting for the Hopper host…" : "Ask Hopper…"}
+					className="block min-h-[88px] max-h-[220px] w-full resize-none bg-transparent px-3.5 pb-1 pt-3 text-[14px] leading-6 outline-none placeholder:text-muted disabled:cursor-not-allowed"
 				/>
 				<div className="flex flex-wrap items-center gap-1 px-1.5 pb-1.5 pt-0.5">
 					<Button type="button" variant="ghost" size="icon-sm" disabled={disabled || loading || images.length >= MAX_IMAGES} aria-label="Attach images" title="Attach images, or paste a screenshot" onClick={() => { replaceId.current = null; if (fileInput.current) { fileInput.current.multiple = true; fileInput.current.click(); } }}><ImagePlus className="size-4" /></Button>
-					<Button type="button" variant="ghost" size="sm" disabled={disabled || loading || images.length >= MAX_IMAGES} aria-label="New drawing" title="Draw on a blank canvas" onClick={() => { setImageError(null); setEditor({ kind: "new" }); }}><Pencil className="size-3.5" />Draw</Button>
+					<Button type="button" variant="ghost" size="icon-sm" disabled={disabled || loading || images.length >= MAX_IMAGES} aria-label="New drawing" title="Draw on a blank canvas" onClick={() => { setImageError(null); setEditor({ kind: "new" }); }}><Pencil className="size-4" /></Button>
 					{controls}
 					{streaming && (
 						<Select value={mode} onValueChange={(value) => onModeChange(value as SendMode)}>
@@ -151,14 +162,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 						</Select>
 					)}
 					<span className="flex-1" />
-					{streaming && (
-						<Button type="button" size="sm" variant="destructive" onClick={onAbort}>
-							<Square className="size-3 fill-current" />
-							Stop
-						</Button>
-					)}
-					<Button type="submit" size="icon-sm" disabled={!canSend} aria-label="Send message" title="Send (Enter)">
-						<ArrowUp className="size-4" />
+					<Button
+						type={showStop ? "button" : "submit"}
+						size="icon-sm"
+						disabled={showStop ? abortDisabled : !canSend}
+						onClick={showStop ? onAbort : undefined}
+						aria-label={showStop ? "Stop" : "Send message"}
+						title={showStop ? "Stop" : "Send (Enter)"}
+					>
+						{showStop ? <Square className="size-3 fill-current" /> : <ArrowUp className="size-4" />}
 					</Button>
 				</div>
 			</form>
