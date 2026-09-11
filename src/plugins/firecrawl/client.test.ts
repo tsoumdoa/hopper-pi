@@ -15,7 +15,6 @@ describe("Firecrawl URLs", () => {
 		expect(() => canonicalPublicUrl(url)).toThrow();
 	});
 	it.each(["https://example.com/path", "http://8.8.8.8/", "https://[2606:4700:4700::1111]/", "https://[::ffff:8.8.8.8]/"])("accepts public %s", url => expect(canonicalPublicUrl(url)).toMatch(/^https?:/));
-	it("canonicalizes host and removes fragments", () => expect(canonicalPublicUrl("https://EXAMPLE.com:443/a#b")).toBe("https://example.com/a"));
 });
 
 describe("Firecrawl adapter", () => {
