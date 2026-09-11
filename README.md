@@ -105,15 +105,16 @@ Run these commands in PowerShell with Rhino closed:
 ```powershell
 git clone https://github.com/tsoumdoa/hoppercode.git
 cd hoppercode
-corepack enable
-pnpm install --frozen-lockfile
-pnpm package:rhino -- --target win-x64 --yak
-$version = node -p "require('./package.json').version"
-$source = Join-Path $PWD "artifacts\hopper-pi-$version-win-x64"
-& "$env:ProgramFiles\Rhino 8\System\Yak.exe" install "--source=$source" hopper-pi $version
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-rhino-win.ps1 -OpenRhino
 ```
 
-The package command verifies the staged files before Yak installation. Set `HOPPER_YAK` to the absolute Yak executable path if Rhino is installed elsewhere.
+The command installs dependencies, builds and verifies a fresh `win-x64` Yak package, smoke-tests the packaged host (including native ZeroMQ, SQLite, and esbuild), stops the previous Hopper host, and installs through Rhino 8's Yak. Use `-Yes` to replace an existing Hopper package without prompting. Set `HOPPER_YAK` to the absolute Yak executable path if Rhino is installed elsewhere.
+
+To build and test without installing, replace `-OpenRhino` with `-BuildOnly`. After dependencies are installed, the shorthand is `pnpm install:rhino:win -OpenRhino` (or `-BuildOnly`). Use the direct PowerShell command for the first run: pnpm can auto-install dependencies before running scripts, triggering the legacy Grasshopper postinstall. The PowerShell installer suppresses that legacy install. If pnpm's PowerShell shim is blocked by execution policy, use `pnpm.cmd` instead.
+
+For a Windows acceptance check, run `HopperCode` in an empty Rhino document and confirm the browser UI opens. Connect a second Rhino instance with `HopperCode`, confirm both appear in the picker, and ask Hopper to create one box in each document. Check that each box lands in the intended document, reload the browser to check conversation restoration, then close all Rhino instances and confirm the shared host exits. Use disposable documents for this check.
+
+If you previously used the legacy Grasshopper installer, move `%APPDATA%\Grasshopper\Libraries\hopper-pi` to a backup location outside Grasshopper's Libraries before launching Rhino with the Yak package, to avoid loading duplicate Hopper plugins.
 
 To build a target without creating a `.yak`, omit `--yak`:
 

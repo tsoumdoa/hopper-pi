@@ -26,7 +26,7 @@ async function directory() {
 	return path;
 }
 
-async function host() {
+async function host(exitNaturally = false) {
 	const path = await directory();
 	const child = spawn(process.execPath, ["--input-type=module", "-e", `
 		import { createServer } from 'node:http';
@@ -34,6 +34,7 @@ async function host() {
 		const server = createServer((req, res) => res.end(JSON.stringify(health)));
 		server.listen(0, '127.0.0.1', () => process.send({ ...health, endpointPort: server.address().port }));
 		process.once('SIGTERM', () => setTimeout(() => server.close(() => process.exit(0)), 100));
+		if (${exitNaturally}) setTimeout(() => server.close(() => process.exit(0)), 500);
 	`], { stdio: ["ignore", "ignore", "inherit", "ipc"] });
 	children.push(child);
 	const [discovery] = await once(child, "message");
@@ -42,7 +43,7 @@ async function host() {
 }
 
 it("waits for the verified host's graceful shutdown before allowing package replacement", async () => {
-	const { path, child } = await host();
+	const { path, child } = await host(process.platform === "win32");
 	await stopSharedHost(path);
 	expect(child.exitCode).toBe(0);
 	expect(child.signalCode).toBeNull();

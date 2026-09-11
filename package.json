@@ -34,6 +34,7 @@
 		"postinstall": "node scripts/install-grasshopper-plugin.mjs",
 		"build:gh-plugin": "node scripts/install-grasshopper-plugin.mjs --build-only",
 		"install:rhino:mac": "bash scripts/install-rhino-mac.sh",
+		"install:rhino:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-rhino-win.ps1",
 		"package:rhino": "node scripts/package-rhino.mjs",
 		"verify:rhino-package": "node scripts/verify-rhino-package.mjs",
 		"prepack": "pnpm build:release"

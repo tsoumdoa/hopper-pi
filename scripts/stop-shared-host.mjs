@@ -38,12 +38,15 @@ export async function stopSharedHost(directory = join(userInfo().homedir, ".hopp
 		health.hostEpoch !== hostEpoch || health.processStartIdentity !== processStartIdentity)
 		throw new Error("Could not verify the running shared host; package replacement cancelled.");
 
-	console.log("[hopper-pi] Stopping the previous background host before replacing its files");
-	// SIGTERM runs the host's normal task drain and journal cleanup.
-	try {
-		process.kill(pid, "SIGTERM");
-	} catch (error) {
-		if (error.code !== "ESRCH") throw error;
+	console.log("[hopper-pi] Waiting for the previous background host to stop before replacing its files");
+	// Windows SIGTERM forcibly terminates Node without running cleanup. With
+	// Rhino closed, the shared host exits itself after its normal lifecycle drain.
+	if (process.platform !== "win32") {
+		try {
+			process.kill(pid, "SIGTERM");
+		} catch (error) {
+			if (error.code !== "ESRCH") throw error;
+		}
 	}
 	const deadline = Date.now() + 30_000;
 	while (isRunning(pid)) {
