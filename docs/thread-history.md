@@ -9,7 +9,8 @@ the target document's name even after that document closes.
 
 One thread can hold the host's work slot. Queued work and questions awaiting an
 answer hold that slot too. Other threads remain available to read, with a Jump
-back button. Follow-ups in the live thread queue behind its current task.
+back button. Recovery acknowledgment remains available in unarchived threads
+so queued work can resume after an interrupted task is reviewed. Follow-ups in the live thread queue behind its current task.
 Delegated workers can still run concurrently under that root task.
 
 Archive hides a thread in the expandable Archived section. Archived transcripts

@@ -533,8 +533,9 @@ export function App() {
 	const cancelTask = (taskId: string) => send({ type: "cancel", requestId: crypto.randomUUID(), conversationId, taskId });
 	const commands = {
 		enabled: connected && !readOnly,
+		recoveryEnabled: connected && !archived,
 		answer: (questionId: string, answer: string | null) => connected && !readOnly && send({ type: "answer", requestId: crypto.randomUUID(), conversationId, questionId, answer }),
-		recover: (taskId: string, acknowledgement: string) => connected && !readOnly && send({ type: "recover", requestId: crypto.randomUUID(), conversationId, taskId, acknowledgement }),
+		recover: (taskId: string, acknowledgement: string) => connected && !archived && send({ type: "recover", requestId: crypto.randomUUID(), conversationId, taskId, acknowledgement }),
 	};
 
 	const manageThread = (row: Row) => send({ type: row.archived_at ? "unarchive_conversation" : "archive_conversation", requestId: crypto.randomUUID(), conversationId: String(row.id) });

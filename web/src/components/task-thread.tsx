@@ -170,6 +170,7 @@ function Question({ question, enabled, inactive, waiting, target, queued = 0, an
 
 export type TaskThreadCommands = {
 	enabled?: boolean;
+	recoveryEnabled: boolean;
 	answer(questionId: string, answer: string | null): boolean;
 	recover(taskId: string, acknowledgement: string): boolean;
 };
@@ -296,7 +297,7 @@ function TaskReply({ task, snapshot, labelFor, commands }: {
 				{state === "uncertain" && !recovered && (
 					<div className="grid justify-items-start gap-2">
 						<Notice tone="muted">Hopper couldn't confirm how this task ended. Check your model and any saved files before continuing.</Notice>
-						<Button size="sm" variant="secondary" disabled={commands.enabled === false} onClick={() => commands.recover(String(task.id), "User checked the model and saved files and requested permission for new work.")}>
+						<Button size="sm" variant="secondary" disabled={!commands.recoveryEnabled} onClick={() => commands.recover(String(task.id), "User checked the model and saved files and requested permission for new work.")}>
 							I've checked, continue
 						</Button>
 					</div>

@@ -231,6 +231,19 @@ END;
 CREATE TABLE deleted_conversation_files (id TEXT PRIMARY KEY);
 PRAGMA user_version=6;`);
 			});
+			this.db.exec(`
+CREATE INDEX IF NOT EXISTS tasks_by_state ON tasks(state);
+CREATE INDEX IF NOT EXISTS tasks_by_root ON tasks(root_task_id);
+CREATE INDEX IF NOT EXISTS tasks_by_parent ON tasks(parent_task_id);
+CREATE INDEX IF NOT EXISTS tasks_by_conversation ON tasks(conversation_id);
+CREATE INDEX IF NOT EXISTS recoveries_by_task ON recovery_dispositions(task_id);
+CREATE INDEX IF NOT EXISTS operations_by_task ON operations(task_id);
+CREATE INDEX IF NOT EXISTS turns_by_task ON turns(task_id);
+CREATE INDEX IF NOT EXISTS records_by_task ON records(task_id);
+CREATE INDEX IF NOT EXISTS questions_by_task ON questions(task_id);
+CREATE INDEX IF NOT EXISTS inputs_by_task ON inputs(task_id);
+CREATE INDEX IF NOT EXISTS events_by_task ON events(task_id);
+`);
 			this.browserHistory = new BrowserHistory(this.db);
 			this.cleanupDeletedConversationFiles();
 		} catch (error) {
@@ -1833,6 +1846,91 @@ WHERE conversation_id=? AND NOT fixture AND state IN ('queued','running','suspen
 				operations: [] as Row[], reservations: [] as Row[], attachments: [] as Row[], dependencies: [] as Row[],
 				history: { conversationId, before: options.before ?? null, hasOlder: roots.length > 20,
 					oldestSequence: page[0]?.sequence ?? null, pageTaskIds: tasks.filter(row => visibleRoots.some(root => root.id === row.id || root.id === row.root_task_id || root.id === row.parent_task_id)).map(row => row.id) },
+			};
+		});
+	}
+
+	getOperation(operationId: string): Row | undefined {
+		return this.db.prepare("SELECT * FROM operations WHERE id=?").get(operationId);
+	}
+	getTaskOperations(taskId: string): Row[] {
+		return this.db.prepare("SELECT * FROM operations WHERE task_id=? ORDER BY rowid").all(taskId);
+	}
+	getTaskTurns(taskId: string): Row[] {
+		return this.db.prepare("SELECT * FROM turns WHERE task_id=? ORDER BY rowid").all(taskId);
+	}
+	getTaskReservations(taskId: string): Row[] {
+		return this.db.prepare("SELECT * FROM reservations WHERE operation_id IN (SELECT id FROM operations WHERE task_id=?) ORDER BY destination").all(taskId);
+	}
+	getTaskRecords(taskId: string, kind: string): Row[] {
+		return this.db.prepare("SELECT * FROM records WHERE task_id=? AND kind=? ORDER BY rowid").all(taskId, kind);
+	}
+	getAttachments(): Row[] {
+		return this.db.prepare("SELECT * FROM attachments ORDER BY rowid").all();
+	}
+	unresolvedOperations(includeRecovered = false): Row[] {
+		return this.db.prepare(`SELECT id,task_id,turn_id,owner,state,wire_id FROM operations o
+			WHERE state IN ('dispatched','uncertain') ${includeRecovered ? "" : "AND NOT EXISTS (SELECT 1 FROM recovery_dispositions r WHERE r.task_id=o.task_id)"} ORDER BY rowid`).all();
+	}
+	delegationSnapshot(rootTaskId: string) {
+		return this.transaction(() => ({
+			tasks: this.db.prepare("SELECT * FROM tasks WHERE parent_task_id=? ORDER BY rowid").all(rootTaskId),
+			turns: this.db.prepare("SELECT * FROM turns WHERE task_id IN (SELECT id FROM tasks WHERE parent_task_id=?) ORDER BY rowid").all(rootTaskId),
+			events: this.db.prepare("SELECT * FROM events WHERE task_id IN (SELECT id FROM tasks WHERE parent_task_id=?) ORDER BY id").all(rootTaskId),
+			records: this.db.prepare("SELECT * FROM records WHERE kind='artifact' AND task_id IN (SELECT id FROM tasks WHERE parent_task_id=?) ORDER BY rowid").all(rootTaskId),
+		}));
+	}
+
+	getInputState(inputId: number): Value | undefined {
+		return this.db.prepare("SELECT state FROM inputs WHERE id=?").get(inputId)?.state;
+	}
+	getRecord(kind: string, id: string): Row | undefined {
+		return this.db.prepare("SELECT * FROM records WHERE kind=? AND id=?").get(kind, id);
+	}
+
+	/** Keep finished siblings for dependencies and usage, without reading saved payloads. */
+	schedulingSnapshot(taskIds: string[] = []) {
+		return this.transaction(() => {
+			const scope = `WITH RECURSIVE relevant(id) AS (
+				SELECT id FROM tasks WHERE state IN ('queued','running','suspending','awaiting_user')
+					OR (state='uncertain' AND NOT EXISTS (SELECT 1 FROM recovery_dispositions r WHERE r.task_id=tasks.id))
+					OR id IN (SELECT value FROM json_each(?))
+				UNION SELECT t.id FROM tasks t JOIN relevant r ON t.root_task_id=r.id
+				UNION SELECT t.root_task_id FROM tasks t JOIN relevant r ON t.id=r.id WHERE t.root_task_id IS NOT NULL
+				UNION SELECT d.dependency_id FROM dependencies d JOIN relevant r ON d.task_id=r.id
+			) `;
+			const query = (sql: string) => this.db.prepare(scope + sql).all(JSON.stringify(taskIds));
+			const selected = "SELECT id FROM relevant";
+			return {
+				conversations: query(`SELECT * FROM conversations WHERE id IN (SELECT conversation_id FROM tasks WHERE id IN (${selected})) ORDER BY rowid`),
+				tasks: query(`SELECT id,conversation_id,session_id,state,parent_task_id,root_task_id,cancellation_requested,
+					json_object('bindings',json_extract(payload,'$.bindings'),'messageTarget',json_extract(payload,'$.messageTarget')) AS payload
+					FROM tasks WHERE id IN (${selected}) ORDER BY rowid`),
+				turns: query(`SELECT id,task_id,state,owner,usage FROM turns WHERE task_id IN (${selected}) ORDER BY rowid`),
+				operations: query(`SELECT id,task_id,turn_id,owner,state FROM operations WHERE task_id IN (${selected}) ORDER BY rowid`),
+				recoveries: query(`SELECT id,task_id FROM recovery_dispositions WHERE task_id IN (${selected}) ORDER BY rowid`),
+				dependencies: query(`SELECT * FROM dependencies WHERE task_id IN (${selected}) ORDER BY rowid`),
+				questions: query(`SELECT id,task_id,turn_id,continuation_id FROM questions WHERE task_id IN (${selected}) ORDER BY rowid`),
+				records: query(`SELECT kind,id,task_id,state,
+					json_object('turnId',json_extract(payload,'$.turnId'),'continuationId',json_extract(payload,'$.continuationId'),
+					'binding',json_extract(payload,'$.binding'),'grantId',json_extract(payload,'$.grantId')) AS payload
+					FROM records WHERE task_id IN (${selected}) AND kind IN ('admission','handoff','scope','document-action') ORDER BY rowid`),
+				attachments: this.db.prepare("SELECT lifecycle_id,json_object('processId',json_extract(payload,'$.processId'),'processStartTime',json_extract(payload,'$.processStartTime')) AS payload FROM attachments ORDER BY rowid").all(),
+			};
+		});
+	}
+
+	/** Filter in SQLite so an export never materializes other conversations. */
+	conversationSnapshot(conversationId: string | null) {
+		return this.transaction(() => {
+			const conversations = this.db.prepare("SELECT rowid AS sequence,* FROM conversations WHERE id=?").all(conversationId);
+			const rows = (table: string) => this.db.prepare(`SELECT * FROM ${table} WHERE task_id IN (SELECT id FROM tasks WHERE conversation_id=?) ORDER BY ${table === "events" || table === "inputs" ? "id" : "rowid"}`).all(conversationId);
+			return {
+				conversations,
+				sessions: this.db.prepare("SELECT * FROM sessions WHERE conversation_id=? ORDER BY rowid").all(conversationId),
+				tasks: this.db.prepare("SELECT * FROM tasks WHERE conversation_id=? ORDER BY rowid").all(conversationId),
+				turns: rows("turns"), inputs: rows("inputs"), questions: rows("questions"), events: rows("events"),
+				operations: rows("operations"), recoveries: rows("recovery_dispositions"), records: rows("records"), dependencies: rows("dependencies"),
 			};
 		});
 	}
