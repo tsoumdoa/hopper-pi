@@ -28,12 +28,14 @@ function validate(arguments_: Record<string, unknown>) {
 	});
 }
 
-test("items requires exactly one branch selector", () => {
+test("items requires branchIndex and rejects path selection", () => {
 	const params = { targetId: "port", mode: "items" };
 	expect(() => validate(params)).toThrow();
 	expect(() => validate({ ...params, branchIndex: 0 })).not.toThrow();
-	expect(() => validate({ ...params, path: "{0;2}" })).not.toThrow();
+	expect(() => validate({ ...params, path: "{0;2}" })).toThrow();
 	expect(() => validate({ ...params, branchIndex: 0, path: "{0;2}" })).toThrow();
+	expect(() => validate({ targetId: "port", branchIndex: 0 })).toThrow();
+	expect(() => validate({ ...params, branchIndex: 2147483648 })).toThrow();
 });
 
 test("cursor accepts an optional limit but excludes new inspection inputs", () => {

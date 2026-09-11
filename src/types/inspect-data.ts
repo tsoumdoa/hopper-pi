@@ -41,8 +41,6 @@ interface InspectItem {
 	index: number;
 	type: string;
 	wrappedType?: string;
-	valid?: boolean;
-	invalidReason?: string;
 	value?: unknown;
 	summary?: boolean;
 	omitted?: string;

@@ -4,7 +4,6 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Grasshopper.Kernel;
-using Grasshopper.Kernel.Data;
 using Grasshopper.Kernel.Types;
 
 namespace rhino_zmq_poc
@@ -36,10 +35,9 @@ namespace rhino_zmq_poc
             if (request == null || !Guid.TryParse(request.TargetId, out var id)) throw new ArgumentException("Invalid targetId.");
             if (request.Mode is not ("summary" or "branches" or "items")) throw new ArgumentException("Unknown inspection mode.");
             if (request.Side is not ("both" or "input" or "output")) throw new ArgumentException("Unknown side.");
-            if (request.Offset < 0 || request.BranchIndex < 0 || request.Path?.Length > 512) throw new ArgumentException("Invalid offset, branchIndex, or path.");
-            if (request.Mode != "items" && (request.Path != null || request.BranchIndex != null))
-                throw new ArgumentException("path and branchIndex are only valid for items.");
-            if (request.Path != null && request.BranchIndex != null) throw new ArgumentException("Provide path or branchIndex, not both.");
+            if (request.Offset < 0 || request.BranchIndex < 0) throw new ArgumentException("Invalid offset or branchIndex.");
+            if (request.Mode != "items" && request.BranchIndex != null)
+                throw new ArgumentException("branchIndex is only valid for items.");
 
             var target = doc.FindObject(id, false) ?? throw new ArgumentException("Target not found in the active Grasshopper document.");
             var owner = target.Attributes?.GetTopLevel.DocObject ?? target;
@@ -109,18 +107,8 @@ namespace rhino_zmq_poc
                 }
                 else
                 {
-                    int branchIndex;
-                    if (request.Path != null)
-                    {
-                        var path = new GH_Path();
-                        if (!path.FromString(request.Path) || !data.PathExists(path)) throw new ArgumentException("Branch path not found.");
-                        branchIndex = 0;
-                        int upper = 0;
-                        data.PathIndex(path, ref branchIndex, ref upper);
-                    }
-                    else branchIndex = request.BranchIndex ?? throw new ArgumentException("items requires path or branchIndex.");
-                    if (branchIndex < 0 || branchIndex >= data.PathCount) throw new ArgumentException("Branch index not found.");
-                    request = request with { Path = null, BranchIndex = branchIndex };
+                    int branchIndex = request.BranchIndex ?? throw new ArgumentException("items requires branchIndex.");
+                    if (branchIndex >= data.PathCount) throw new ArgumentException("Branch index not found.");
                     var branch = data.get_Branch(branchIndex);
                     total = branch?.Count ?? 0;
                     response["branchIndex"] = branchIndex;
@@ -163,7 +151,7 @@ namespace rhino_zmq_poc
                 row["wrappedType"] = Clip(wrapped?.GetType().FullName ?? "null");
                 switch (wrapped)
                 {
-                    case null: row["value"] = null; row["valid"] = false; break;
+                    case null: row["value"] = null; break;
                     case string text: row["value"] = Clip(text); row["truncated"] = text.Length > TextLimit; break;
                     case bool or byte or sbyte or short or ushort or int or uint or long or ulong or decimal:
                         row["value"] = wrapped; break;
@@ -173,21 +161,8 @@ namespace rhino_zmq_poc
                 }
                 return row;
             }
-            if (item is not (GH_Number or GH_Integer or GH_Boolean or GH_String or GH_Point or GH_Vector or IGH_GeometricGoo))
-                return Omitted(row);
             try
             {
-                if (item is IGH_Goo goo)
-                {
-                    bool valid = goo.IsValid;
-                    row["valid"] = valid;
-                    if (!valid)
-                    {
-                        string reason = goo.IsValidWhyNot;
-                        row["invalidReason"] = Clip(reason);
-                        row["truncated"] = reason?.Length > TextLimit;
-                    }
-                }
                 object value;
                 switch (item)
                 {
@@ -197,16 +172,11 @@ namespace rhino_zmq_poc
                     case GH_String text: value = text.Value; break;
                     case GH_Point point: value = Coordinates(point.Value.X, point.Value.Y, point.Value.Z); break;
                     case GH_Vector vector: value = Coordinates(vector.Value.X, vector.Value.Y, vector.Value.Z); break;
-                    case IGH_GeometricGoo geometry:
-                        var box = geometry.Boundingbox;
-                        value = box.IsValid ? new { boundingBox = new { min = Coordinates(box.Min.X, box.Min.Y, box.Min.Z), max = Coordinates(box.Max.X, box.Max.Y, box.Max.Z) } } : null;
-                        row["summary"] = true;
-                        break;
                     default: return Omitted(row);
                 }
                 if (value is string description)
                 {
-                    row["truncated"] = (row.TryGetValue("truncated", out var truncated) && truncated is true) || description.Length > TextLimit;
+                    row["truncated"] = description.Length > TextLimit;
                     value = Clip(description);
                 }
                 row["value"] = value;
@@ -218,7 +188,7 @@ namespace rhino_zmq_poc
         private static object Omitted(Dictionary<string, object> row)
         {
             row["summary"] = true;
-            row["omitted"] = "Unsupported value; type only. Formatting and validation were not invoked.";
+            row["omitted"] = "unsupported_type";
             return row;
         }
     }

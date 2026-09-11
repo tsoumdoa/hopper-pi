@@ -10,7 +10,6 @@ namespace rhino_zmq_poc
         public string TargetId { get; init; }
         public string Mode { get; init; } = "summary";
         public string Side { get; init; } = "both";
-        public string Path { get; init; }
         public int? BranchIndex { get; init; }
         public int Offset { get; init; }
         public string DocumentRevision { get; init; }
