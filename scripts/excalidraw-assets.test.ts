@@ -13,7 +13,7 @@ test("production editor keeps English controls and every drawing font without du
 	});
 	if (Array.isArray(result) || !("output" in result)) throw new Error("Expected one browser build");
 	const chunks = result.output.filter((output) => output.type === "chunk");
-	const localeModules = chunks.map((chunk) => chunk.facadeModuleId ?? "").filter((id) => /excalidraw\/dist\/prod\/locales\//.test(id));
+	const localeModules = chunks.map((chunk) => (chunk.facadeModuleId ?? "").replaceAll("\\", "/")).filter((id) => /excalidraw\/dist\/prod\/locales\//.test(id));
 	expect(localeModules).toHaveLength(1);
 	expect(localeModules[0]).toMatch(/\/en-[\w-]+\.js$/);
 

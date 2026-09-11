@@ -17,6 +17,8 @@ import type { RhinoLaunchService } from "./rhino-launch.js";
 import { GeometryTransferService } from "./transfer.js";
 import { createNativeActionAdapters } from "./native-actions.js";
 import { validateTargetBinding } from "../../protocol/shared-execution.js";
+import { loadStartupSources } from "../startup-sources.js";
+import { hostProjectRoot } from "../runtime-paths.js";
 
 function sharedLimit(name: string, fallback: number): number {
 	const value =
@@ -31,10 +33,13 @@ export async function startSharedHost(
 	args: string[],
 ): Promise<void> {
 	const startupStartedAt = performance.now();
-	const startupStage = (stage: string) => process.stderr.write(
-		`[shared-host] ${new Date().toISOString()} startup: ${stage} (${Math.round(performance.now() - startupStartedAt)} ms elapsed)\n`,
-	);
+	const startupCpu = process.cpuUsage();
+	const startupStage = (stage: string) => {
+		const cpu = process.cpuUsage(startupCpu);
+		process.stderr.write(`[shared-host] ${new Date().toISOString()} startup: ${stage} (${Math.round(performance.now() - startupStartedAt)} ms elapsed); ${Math.round((cpu.user + cpu.system) / 1000)} ms CPU\n`);
+	};
 	startupStage("initializing control");
+	process.stderr.write(`[shared-host] Runtime ${process.version} (${process.execPath}); process age ${Math.round(process.uptime() * 1000)} ms\n`);
 	const control = new SharedHostControl();
 	const dataDirectory = args.includes("--data-dir")
 		? join(config.paths.dataDir, "shared-host")
@@ -148,10 +153,12 @@ export async function startSharedHost(
 		closing = true;
 		return shutdown();
 	};
+	let releaseStartupSources = () => {};
 	try {
 		await control.acquireOwnership(browser.server, state.revision);
 		await control.publish(discovery);
 		startupStage("browser listening; loading runtime modules");
+		releaseStartupSources = await loadStartupSources(hostProjectRoot());
 		// Serve the loading UI before importing and initializing the AI runtime.
 		// The short-lived --ensure-host launcher never loads these modules.
 		const [{ EmbeddedPiHost }, { createPiTaskDriver }, { Type },
@@ -188,6 +195,7 @@ export async function startSharedHost(
 				scriptWorkspaceDir: join(state.dataDirectory, "admin", "scripts"),
 			},
 		});
+		releaseStartupSources();
 		startupStage("restoring task service");
 		tasks = new SharedTaskService(journal, {
 			resolveBinding: (binding) => registry.resolveBinding(binding),
@@ -435,5 +443,7 @@ export async function startSharedHost(
 		process.exitCode = 1;
 		await close();
 		throw error;
+	} finally {
+		releaseStartupSources();
 	}
 }

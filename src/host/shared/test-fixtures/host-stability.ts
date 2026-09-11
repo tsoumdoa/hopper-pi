@@ -34,6 +34,7 @@ const close = createHostShutdown({
 });
 process.once("SIGTERM", () => { void close(); });
 process.on("message", message => {
+	if (message === "SIGTERM" && process.platform === "win32") process.emit("SIGTERM");
 	if (message === "stop") void close();
 	if (message === "lifetime") stopMonitor = monitorHostLifetime({ shouldStop: () => true, close, log: () => {} });
 });

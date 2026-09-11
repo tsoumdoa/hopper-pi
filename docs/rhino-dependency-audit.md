@@ -1,5 +1,9 @@
 # Rhino dependency audit
 
+The subsequent runtime dependency bundling change combines
+TypeBox and Pi agent core modules to reduce startup file reads. The measurements
+below describe the preceding pruning pass.
+
 Audited on 2026-09-11 against PR #101 at `f0e3632`, with the locked production dependencies. This pass removes 639 files and 6,463,947 unpacked bytes from each target. Every retained staged file has the same SHA-256 as the preceding optimized package.
 
 ## Removed files and runtime evidence

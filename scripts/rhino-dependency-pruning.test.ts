@@ -1,9 +1,9 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { link, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { DEPENDENCY_PRUNE_RULES } from "./rhino-dependency-pruning.mjs";
-import { pruneAuditedDependencies } from "./prune-rhino-host.mjs";
+import { deduplicatePiBundle, pruneAuditedDependencies } from "./prune-rhino-host.mjs";
 import { evaluatePackagePath } from "./rhino-package-rules.mjs";
 
 const roots: string[] = [];
@@ -50,5 +50,41 @@ it("preserves the native loader and denies audited paths in either stage", async
 		for (const path of ["cmake-ts/build/loader.js", "cmake-ts/build/loader.mjs", "openai/index.js", "openai/index.mjs", "zod/v4/core/index.cjs", "unreviewed/src/runtime.js"]) {
 			expect(evaluatePackagePath(`runtime/host/node_modules/${path}`, target).allowed).toBe(true);
 		}
+	}
+});
+
+async function linkedPiFixture(version = "0.85.1") {
+	const root = await mkdtemp(join(tmpdir(), "hopper-prune-links-"));
+	roots.push(root);
+	const nodeModules = join(root, "node_modules");
+	const packageRoot = join(nodeModules, "@earendil-works/pi-coding-agent");
+	const bundle = join(packageRoot, "dist/bundle");
+	await mkdir(join(bundle, "chunks"), { recursive: true });
+	await writeFile(join(packageRoot, "package.json"), JSON.stringify({ version }));
+	for (const name of ["cli.js", "index.js", "rpc-entry.js"]) {
+		await writeFile(join(packageRoot, "dist", name), "original SDK");
+		await writeFile(join(root, name), `original shared ${name}`);
+		await link(join(root, name), join(bundle, name));
+	}
+	return { root, nodeModules, bundle };
+}
+
+it("replaces staged Pi entries without modifying their hardlinked store originals", async () => {
+	const { root, nodeModules, bundle } = await linkedPiFixture();
+	await deduplicatePiBundle(nodeModules);
+	for (const name of ["cli.js", "index.js", "rpc-entry.js"]) {
+		expect(await readFile(join(root, name), "utf8")).toBe(`original shared ${name}`);
+		expect(await readFile(join(bundle, name), "utf8")).toBe(name === "index.js"
+			? 'export * from "../index.js";\n'
+			: `#!/usr/bin/env node\nimport "../${name}";\n`);
+	}
+});
+
+it("checks the Pi version before replacing any hardlinked entries", async () => {
+	const { root, nodeModules, bundle } = await linkedPiFixture("0.86.0");
+	await expect(deduplicatePiBundle(nodeModules)).rejects.toThrow("Review Pi bundle deduplication");
+	for (const name of ["cli.js", "index.js", "rpc-entry.js"]) {
+		expect(await readFile(join(root, name), "utf8")).toBe(`original shared ${name}`);
+		expect(await readFile(join(bundle, name), "utf8")).toBe(`original shared ${name}`);
 	}
 });

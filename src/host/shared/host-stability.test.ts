@@ -53,7 +53,10 @@ it.each([
 	["cancel", "stop"], ["run", "stop"], ["cancel", "SIGTERM"], ["run", "SIGTERM"], ["run", "lifetime"],
 ])("bounds %s shutdown via %s and preserves unfinished work for recovery", async (mode, trigger) => {
 	const f = await fixture(mode);
-	if (trigger === "SIGTERM") f.child.kill("SIGTERM");
+	if (trigger === "SIGTERM" && process.platform !== "win32") f.child.kill("SIGTERM");
+	// Windows kill(SIGTERM) forcibly terminates Node without invoking its signal
+	// handler. Ask the fixture to emit that event so the same shutdown path and
+	// recovery assertions run here; POSIX still exercises actual signal delivery.
 	else f.child.send(trigger);
 	expect(await f.exited).toEqual([1, null]);
 	expect(f.stderr()).toContain("cleanup exceeded 5 seconds");

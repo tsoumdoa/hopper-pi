@@ -14,6 +14,7 @@ export async function buildRhinoHost(outputDirectory, reportPath) {
 			index: "src/host/index.ts",
 			"shared/journal": "src/host/shared/journal.ts",
 			"runtime-paths": "src/host/runtime-paths.ts",
+			"startup-sources": "src/host/startup-sources.ts",
 		},
 		outdir: resolve(outputDirectory, "host"),
 		bundle: true,
@@ -23,6 +24,7 @@ export async function buildRhinoHost(outputDirectory, reportPath) {
 		format: "esm",
 		// Pi's extension loader exposes entire module namespaces and loads workers,
 		// native bindings and assets relative to the original package locations.
+		// Audited dependency trees are bundled in place by bundle-rhino-dependencies.
 		packages: "external",
 		minify: true,
 		keepNames: true,
