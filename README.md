@@ -292,7 +292,7 @@ Override profile discovery with `HOPPER_CONNECTION_PROFILE` for development.
 
 Open **Agent tools** to enable or disable a group or an individual Hopper tool. Choices persist across conversations, restarts, and Rhino windows using the same profile. Group switches preserve child choices. In progressive mode, **Activate for this session** works even when tool discovery is disabled. **Check connection** refreshes a disconnected backend.
 
-Firecrawl is bundled and disabled by default. Turn it on, enter your own key, and choose **Save key and enable** to add `web_search` and `web_fetch`. Requests send queries or URLs to Firecrawl and may consume your credits. Keys live in macOS Keychain, Windows Credential Manager, or Linux Secret Service, separate from settings and conversations. See [Firecrawl setup and limits](docs/firecrawl.md) and [storage and external Pi controls](docs/tool-policy-storage.md).
+Firecrawl is bundled and disabled by default. Use **Manage API key** to save your own key, then turn on Firecrawl to add `web_search` and `web_fetch`. Saving a key leaves the enable switch unchanged. Requests send queries or URLs to Firecrawl and may consume your credits. Keys live in macOS Keychain, Windows Credential Manager, or Linux Secret Service, separate from settings and conversations. See [Firecrawl setup and limits](docs/firecrawl.md) and [storage and external Pi controls](docs/tool-policy-storage.md).
 
 External Pi users can run `/hopper-tools`. Use `--hopper-config-dir /absolute/path` in external Pi or `--tool-config-dir /absolute/path` in the embedded host to select a separate profile. Firecrawl does not read API keys from environment variables.
 

@@ -16,10 +16,7 @@ Rhino's pinned `Open` API replaces the active model on Windows and opens another
 
 Document ownership is scoped to a Rhino process and host lifecycle, not an execution thread. Separate Rhino processes have separate host identities. On Mac, several model windows share one process, so handles include the exact document's runtime serial number and window operations resolve that document's NSDocument. The two platforms share request policy and result shapes, while their native lifecycle implementations remain separate.
 
-
-On macOS, `RhinoDoc.Create(null)` produced a nonheadless model with no native model window during native testing. `RhinoDoc.Dispose` is a no-op for that model, and the Close macro requires a named file path. The macOS bridge therefore uses the public AppKit document controller for visible new/open and the exact native `NSDocument.Close` for named and unnamed documents. It resolves existing model windows through the pinned `RhinoEtoApp.MainWindowForDocument` API. AppKit access uses reflection against the macOS host's loaded platform assembly; Core and Windows have no AppKit dependency. The bridge never runs a close macro.
-
-The [Rhino 8 Mac scripting reference](https://docs.mcneel.com/rhino/8mac/help/en-us/information/rhinoscripting.htm) documents the Close macro's required path. Native smoke testing caught the incomplete macro before release; test cleanup now also uses the native document bridge and preserves the original failure if cleanup fails.
+On macOS, the bridge uses the public AppKit document controller for visible new/open and the exact native `NSDocument.Close` for named and unnamed documents. It resolves existing model windows through `RhinoEtoApp.MainWindowForDocument`. AppKit access uses reflection against the macOS host's loaded platform assembly; Core and Windows have no AppKit dependency. Native test cleanup uses the same bridge and preserves the original failure if cleanup fails.
 
 A missing parent directory is created only with `createDirectories: true`, after document and overwrite policy checks. `templatePath` creates an unnamed document. The agent must use `saveAs` for unnamed documents.
 
@@ -43,15 +40,15 @@ The full Rhino event-coverage matrix, including third-party custom data and all 
 
 ## Editing segments
 
-Document mutations finish the editing segment in the same ordered backend dispatch as the native lifecycle operation. The Node runtime serializes mutations for each owner, reconciles `{documentId, segmentId, epoch, state, lifecycleInstanceId}`, and sends the expected segment with later edits. File writes never join the geometry/canvas undo transaction.
+Document mutations finish the editing segment in the same ordered backend dispatch as the native lifecycle operation. The shared host activates the task's captured document under a process queue and completes its geometry/canvas transaction after each tool call. The Node runtime serializes mutations for each owner, reconciles `{documentId, segmentId, epoch, state, lifecycleInstanceId}`, and sends the expected segment with later edits. File writes never join the geometry/canvas undo transaction.
 
 Rhino's native save/open/close/activation/Undo/Redo callbacks finish or abandon old grouping. Grasshopper records its last agent snapshot and abandons rollback when native state, active definition, backing path, or external save changes. Commit/cancel callbacks run under a guard so their own native undo events cannot recursively abandon an in-progress completion. Handlers detach on service disposal and document removal.
 
-A lost mutation response blocks dependent edits and cancellation until retained operation lookup returns a terminal result and the native segment query succeeds. A host restart invalidates the old lifecycle. There is no exactly-once guarantee across a host crash.
+A lost mutation response blocks dependent edits and cancellation until retained operation lookup returns a terminal result and the native segment query succeeds. A host restart invalidates the old host attachment and execution ownership. There is no exactly-once guarantee across a host crash.
 
 ## Settings interpretation
 
-`getSettings` never activates another document, modifies a file, or runs a Grasshopper solution. Model and layout units remain separate. Relative tolerance is the native dimensionless ratio; the Properties UI displays ratio multiplied by 100 as a percentage. Angle tolerance includes explicitly labeled radians and degrees. Display precision does not replace computational tolerance.
+The native `getSettings` handler reads settings without activating a document, modifying a file, or running a Grasshopper solution. The shared host can activate the task's captured document before dispatching the tool, as it does for other native calls. Model and layout units remain separate. Relative tolerance is the native dimensionless ratio; the Properties UI displays ratio multiplied by 100 as a percentage. Angle tolerance includes explicitly labeled radians and degrees. Display precision does not replace computational tolerance.
 
 Unitless or unavailable conversions return no meters-per-unit conversion. Grasshopper reports unresolved context when no Rhino source exists. Standard helper context is identified as active Rhino; individual components and explicit inputs can use different tolerances.
 

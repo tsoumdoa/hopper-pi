@@ -21,19 +21,20 @@ Reads return at most 200 complete lines and 16,000 source characters. Long lines
 
 ## Persistence and replay
 
-Embedded storage uses a stable data-directory workspace; CLI storage binds to the selected project. `HOPPER_SCRIPT_WORKSPACE` and `HOPPER_SCRIPT_WORKSPACE_QUOTA_BYTES` override the path and quota. Host instance lifecycles do not own source history. Local source/history/run inspection works offline.
+The shared host stores scripts under `<data-dir>/workspaces/<task-id>/.hopper/rhino-scripts`. Each task has its own workspace; scripts are not automatically shared with other tasks. External Pi defaults to `<project>/.hopper/rhino-scripts`, with `HOPPER_SCRIPT_WORKSPACE` overriding the project root. That path override does not replace the shared host's explicit task workspace. `HOPPER_SCRIPT_WORKSPACE_QUOTA_BYTES` sets the quota in both modes. Stored source history survives host shutdown. Source/history/run inspection reads local files without a native RPC call.
 
 Each asset stores immutable revisions and replay records in one atomic JSON record. IDs include the workspace identity and cannot contain paths. A mutation's persistent session/tool-call identity and payload hash return the prior result on replay, even after history advances. Reusing that identity with another payload fails. Mutation identity remains unique across the workspace.
 
 Short exclusive writer transactions protect quota checks and file flush/rename. They never remain locked while awaiting native execution. Dead-writer recovery requires evidence that the owning process ended; an old timestamp is insufficient. Unreadable locks and interrupted recovery guards require manual inspection. Corrupt records remain available for inspection rather than being replaced with empty data.
 
-The default quota is 64 MiB. History is retained through soft deletion; purge is outside this change. Admitted runs reserve 128,000 bytes each for bounded completion records, plus missing run-record source storage. Increasing the configured quota permits further history without silently deleting old revisions.
+The default quota is 64 MiB. History is retained through soft deletion; there is no purge action. Admitted runs reserve 128,000 bytes each for bounded completion records, plus missing run-record source storage. Increasing the configured quota permits further history without silently deleting old revisions.
 
 ## Execution
 
 Asset items identify `scriptId`, `revision`, and `expectedDocument`. The latter contains `documentId`, `lifecycleInstanceId`, and optional `settingsRevision`. Native code validates the target on the UI thread immediately before execution. It rejects a switched document or changed units/tolerances. The script itself can still modify settings.
 
 For a batch containing an asset:
+
 1. Check the durable call identity before validating current asset state.
 2. Pin every item's source, target, lifecycle, and RPC operation ID, then atomically save the batch inventory.
 3. Dispatch sequentially under the original runner's claim. Persist `dispatching` before transport send.
