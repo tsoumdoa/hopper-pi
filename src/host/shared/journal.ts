@@ -1429,6 +1429,21 @@ PRAGMA user_version=5;`);
 			.all(taskId)
 			.map((row) => JSON.parse(String(row.payload)).binding as TargetBinding);
 	}
+	/** Commit readiness and delegation access together without retargeting the current turn. */
+	completeRhinoLaunch(id: string, binding: TargetBinding, result: unknown): void {
+		if (!validateTargetBinding(binding).ok || binding.kind !== "rhino") throw new Error("Invalid launch binding");
+		this.transaction(() => {
+			const action = this.db.prepare("SELECT * FROM records WHERE kind='launch' AND id=?").get(id);
+			if (!action || !["dispatched", "uncertain"].includes(String(action.state))) throw new Error("Launch is not awaiting readiness");
+			const task = this.db.prepare("SELECT * FROM tasks WHERE id=?").get(action.task_id);
+			if (!task || task.parent_task_id !== null || task.state !== "running" || task.cancellation_requested)
+				throw new Error("Cancelled or inactive task gains no launch authority");
+			this.db.prepare("UPDATE records SET state='completed',payload=? WHERE kind='launch' AND id=?").run(canonical(result), id);
+			this.db.prepare("INSERT INTO records VALUES ('authorization',?,?,?,'verified')")
+				.run(id, action.task_id, canonical({ binding, actionId: id }));
+			this.event(String(action.task_id), "authorization_added", { binding, actionId: id });
+		});
+	}
 	completeGrantedAction(
 		kind: "launch" | "document-action",
 		id: string,

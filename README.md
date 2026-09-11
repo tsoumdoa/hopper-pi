@@ -131,7 +131,7 @@ HopperCode
 
 Rhino attaches to one private loopback host for your OS user, starting it if needed, and opens the authenticated browser UI. This is the default behavior when you launch Rhino normally. Provider login, model choice, conversations, and work in progress stay in that browser tab.
 
-When no Rhino document is connected, the composer remains available for discussion. To work on documents, open Rhino and run `HopperCode`. The agent can create or open files in accessible connected processes through the ordinary document tools. Agent-managed process launching is deferred.
+When no Rhino document is connected, the composer remains available for discussion. To work on documents, open Rhino and run `HopperCode`. The agent can create or open files in accessible connected processes through the ordinary document tools. On Windows, it can use `launchRhino` to start an additional instance from a connected Rhino installation, connect it automatically, and delegate to its ready document. On Mac, additional documents use `rh_document` with action `new` in the same process.
 
 The sidebar lists connected **Hopper Code instances**, not every running Rhino process. Run `HopperCode` in each Rhino document you want in the picker. On Mac, those documents share one process connection. A document created manually with Rhino `New` stays out of the picker until you run `HopperCode` there. Documents created or opened through Hopper are initialized automatically.
 
@@ -300,7 +300,7 @@ Tool switches control named Hopper calls. An enabled general-purpose script tool
 
 ## Agent tools (overview)
 
-Open Rhino yourself and run `HopperCode` to connect it. Agents can create or open files in connected processes through `rh_document` and `gh_document`. No separate document grant is needed. Agent-managed Rhino process launching is deferred.
+Open the first Rhino yourself and run `HopperCode` to connect it. Agents can create or open files in connected processes through `rh_document` and `gh_document`. No separate document grant is needed. On Windows, `new` replaces the current model; use `launchRhino` for an additional delegation target. It launches the connected installation with `/nosplash /notemplate /runscript="_HopperCode"`, preserves the coordinator's selected document, and waits for authenticated document readiness. Automatic worker startup does not open another browser tab; manually running `HopperCode` still does. A timed-out launch is checked again with the same request ID and is never automatically spawned again. Cancellation leaves an already started Rhino open. Default worker models use Rhino's built-in settings, so inspect units before modeling.
 
 **Rhino document**
 

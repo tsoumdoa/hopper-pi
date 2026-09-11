@@ -6,6 +6,20 @@ namespace Hopper.Core.Tests;
 public sealed class BrowserOpenRequestTests
 {
     [Fact]
+    public void WorkerStartupSuppressesReadinessNotificationsButManualOpenStillWorks()
+    {
+        var request = new BrowserOpenRequest();
+        var uri = new Uri("http://127.0.0.1:54321/");
+        request.Request();
+        request.Request(suppress: true);
+        Assert.False(request.Take(true, uri));
+        Assert.False(request.Take(true, uri));
+        request.Request();
+        Assert.True(request.Take(true, uri));
+        Assert.False(request.Take(true, uri));
+    }
+
+    [Fact]
     public void MultipleRhinosReattachWithoutReplacingTheExistingBrowser()
     {
         var uri = new Uri("http://127.0.0.1:54321/#credential");

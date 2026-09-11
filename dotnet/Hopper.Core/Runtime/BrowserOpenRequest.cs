@@ -5,7 +5,7 @@ public sealed class BrowserOpenRequest
 {
     private bool _pending;
 
-    public void Request() => _pending = true;
+    public void Request(bool suppress = false) => _pending = !suppress;
 
     // The caller serializes lifecycle and readiness notifications.
     public bool Take(bool running, Uri? ready)

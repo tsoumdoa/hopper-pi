@@ -1,6 +1,6 @@
 # Shared native operation routing audit
 
-The native launcher always attaches the shared transport. Users start Rhino and run `HopperCode`; agent-managed process launching is deferred. The wire schema retains unowned envelopes for protocol compatibility, but the Rhino lifecycle requires the shared host handshake and execution fence. Standalone external Pi clients cannot bypass task ownership. Native builds and deterministic transport tests verify the checks below. Packaged Rhino focus, document-window and transfer fidelity tests remain separate acceptance evidence.
+The native launcher always attaches the shared transport. Users start the first Rhino and run `HopperCode`; Windows agents can launch additional processes using the same command and authenticated registration. Launch readiness adds delegation access only after matching the spawned process identity. The wire schema retains unowned envelopes for protocol compatibility, but the Rhino lifecycle requires the shared host handshake and execution fence. Standalone external Pi clients cannot bypass task ownership. Native builds and deterministic transport tests verify the checks below. Packaged Rhino focus, document-window and transfer fidelity tests remain separate acceptance evidence.
 
 ## Dispatch and attachment checks
 

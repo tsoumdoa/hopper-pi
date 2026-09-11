@@ -440,17 +440,18 @@ it.each([null, "parent"])("keeps native tools with selected ownership and expose
 	const driver = await createPiTaskDriver(context, {
 		dataDirectory: root, toolConfigDir: join(root, "tool-settings"), authPath: join(root, "auth.json"),
 		geometry: async () => ({ runtimeSession, cleanup: async () => ({ confirmed: true }) }),
-		delegationTools: () => ["listRhinoTargets", "delegate", "waitForDelegates"].map((name) => ({ name, label: name, description: name, parameters: Type.Object({}), execute: async () => ({ content: [{ type: "text", text: "done" }], details: {} }) })),
+		delegationTools: () => ["listRhinoTargets", "launchRhino", "delegate", "waitForDelegates"].map((name) => ({ name, label: name, description: name, parameters: Type.Object({}), execute: async () => ({ content: [{ type: "text", text: "done" }], details: {} }) })),
 		configureSession: (created) => { session = created; },
 	});
 	try {
 		const names = session!.agent.state.tools.map((tool) => tool.name);
 		expect(names).toContain("rh_run_script");
-		for (const name of ["listRhinoTargets", "delegate", "waitForDelegates"])
+		for (const name of ["listRhinoTargets", "launchRhino", "delegate", "waitForDelegates"])
 			expect(names.includes(name)).toBe(parentTaskId === null);
+		expect(session!.systemPrompt.includes("Use launchRhino to create an additional process")).toBe(parentTaskId === null);
 		const listed = (await driver.toolSettings!.getToolSettings()).tools;
-		for (const name of ["listRhinoLaunches", "launchRhino"])
-			expect(listed.some(tool => tool.name === name)).toBe(false);
+		expect(listed.some(tool => tool.name === "listRhinoLaunches")).toBe(false);
+		expect(listed.some(tool => tool.name === "launchRhino")).toBe(parentTaskId === null);
 		expect(session!.systemPrompt).toContain("Use your native geometry tools directly for this document");
 	} finally {
 		await driver.cleanup();

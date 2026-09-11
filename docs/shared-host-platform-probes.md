@@ -1,6 +1,26 @@
 # Shared host platform checks
 
-Current scope: agent-managed Rhino process launching and `HopperBootstrap` have been removed. Launch/bootstrap results below are historical evidence for an earlier build. The current fixture requires a manually opened empty Rhino document connected through `HopperCode`.
+Current scope: Windows additional-process launching uses `launchRhino` and ordinary `HopperCode` registration, without `HopperBootstrap`. The bootstrap results below are historical evidence for an earlier build, not acceptance evidence for this Windows launch path. The Mac document/transfer fixture requires a manually opened empty Rhino document connected through `HopperCode`.
+
+## Windows additional-process launch check, 2026-09-11
+
+The new `scripts/windows-rhino-launch-smoke.mjs` fixture passed against Rhino 8.33.26188.13001 on Windows. It used the production launch service and process adapter, observed the running host's authenticated registrations through a read-only journal connection, and kept fixture tasks/access records in a separate SQLite database. It made no model calls and did not edit geometry.
+
+The first attempt exposed a native argument-parsing requirement: `/runscript=_HopperCode` opened a blank Rhino but did not execute the command. That request timed out with its one process recorded and no delegation authority. Manually running `HopperCode` confirmed that the rebuilt native plugin could connect; the blank test process was then closed normally.
+
+The corrected adapter preserves literal macro quotes with fixed arguments and `windowsVerbatimArguments: true`, passing `/nosplash /notemplate /runscript="_HopperCode"` without a shell. Source PID 24096 remained open, and worker PID 25180 registered a ready initialized document in 6,941 ms. The repeated request returned the same process, the coordinator retained its original binding, and the fixture journal accepted a delegate bound to the worker. Rhino's command history showed automatic `HopperCode` startup and its running confirmation; no competing browser tab appeared.
+
+The new process loaded the rebuilt installed `Hopper.Rhino.rhp` and `Hopper.Core.dll`. Their SHA-256 hashes were respectively `7d8c98ba3d95529c795173455fa63956fd131cfc63d65eaa8b7b8b50616a413a` and `4f3c6b6e33c1c7f8d8b6189d66cb13e39e7dc6bb90a7e08a9c03e61c1feae5ea`. Both test processes were closed normally without save/discard commands. Original installed binaries were restored from backups and their hashes verified; the pre-existing Rhino remained open. Local reports are retained under `.tmp/windows-launch/live-1` and `.tmp/windows-launch/live-2`.
+
+To reproduce after building and installing the updated native plugin:
+
+```powershell
+node scripts/windows-rhino-launch-smoke.mjs --allow-new-test-document --source-pid <connected-Rhino-PID> --output <new-empty-directory>
+```
+
+This verifies real launch, automatic attachment, readiness, duplicate-request handling, and delegation admission. Full model-driven delegated geometry execution, fresh-install prompts, and Windows lifetime/transfer acceptance remain separate checks.
+
+## Historical Mac evidence
 
 Recorded on 2026-09-09, Asia/Hong_Kong. This records observed behavior separately from tests with injected adapters.
 

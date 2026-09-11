@@ -15,6 +15,7 @@ import type { SharedNativeRuntime } from "./native-runtime.js";
 import { SharedRecoveryService } from "./recovery.js";
 import { admitDocumentTool } from "./document-tool-policy.js";
 import { DocumentActionService } from "./document-actions.js";
+import type { RhinoLaunchService } from "./rhino-launch.js";
 import { GeometryTransferService } from "./transfer.js";
 import { createNativeActionAdapters } from "./native-actions.js";
 import { validateTargetBinding } from "../../protocol/shared-execution.js";
@@ -79,6 +80,7 @@ export async function startSharedHost(
 	let native: SharedNativeRuntime | undefined;
 	let tasks: SharedTaskService | undefined;
 	let documents: DocumentActionService | undefined;
+	let launches: RhinoLaunchService | undefined;
 	let transfers: GeometryTransferService | undefined;
 	let refresh: ReturnType<typeof setInterval> | undefined;
 	let stopLifetimeMonitor: (() => void) | undefined;
@@ -168,9 +170,9 @@ export async function startSharedHost(
 		// The short-lived --ensure-host launcher never loads these modules.
 		const [{ EmbeddedPiHost }, { createPiTaskDriver }, { Type },
 			{ collectDelegationResults, delegationBindingSchema, selectDelegationImages },
-			{ SharedNativeRuntime }] = await Promise.all([
+			{ SharedNativeRuntime }, { RhinoLaunchService }] = await Promise.all([
 			import("../pi-runtime.js"), import("./pi-driver.js"), import("@earendil-works/pi-ai"),
-			import("./delegation.js"), import("./native-runtime.js"),
+			import("./delegation.js"), import("./native-runtime.js"), import("./rhino-launch.js"),
 		]);
 		journal = new TaskJournal(join(state.dataDirectory, "journal.sqlite"));
 		if (journal.identity !== state.journalIdentity)
@@ -179,6 +181,10 @@ export async function startSharedHost(
 			);
 		journal.recover();
 		const registry = new SharedRegistry(journal);
+		launches = new RhinoLaunchService(journal, registry, { allowsLaunch: async () => {
+			const intent = await control.snapshot();
+			return !closing && intent?.desiredState === "running" && intent.revision === state.revision;
+		} });
 		native = new SharedNativeRuntime(epoch, registry, journal);
 		admin = await EmbeddedPiHost.create({
 			// Native connections belong to registered attachments and task sessions.
@@ -216,6 +222,7 @@ export async function startSharedHost(
 							}
 						: {}),
 					delegationTools: (context) => context.parentTaskId === null ? [
+						...launches!.tools(context),
 						{
 							name: "listRhinoTargets",
 							label: "Rhino targets",
@@ -394,7 +401,7 @@ export async function startSharedHost(
 		);
 		let refreshing = false;
 		stopLifetimeMonitor = monitorHostLifetime({
-			shouldStop: () => !closing && native!.shouldStopAfterRhinoExit(),
+			shouldStop: () => !closing && !launches!.pending && native!.shouldStopAfterRhinoExit(),
 			close,
 			exit: code => process.exit(code),
 			log: message => process.stdout.write(`[shared-host] ${message}\n`),

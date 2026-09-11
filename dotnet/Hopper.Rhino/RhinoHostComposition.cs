@@ -41,7 +41,11 @@ namespace rhino_zmq_poc
         {
             lock (_gate)
             {
-                _openRequest.Request();
+                // Only the first automatic worker startup suppresses UI. Consume the
+                // process-local flag before spawning Node; later manual HopperCode opens normally.
+                var workerStartup = Environment.GetEnvironmentVariable("HOPPER_RHINO_WORKER") == "1";
+                Environment.SetEnvironmentVariable("HOPPER_RHINO_WORKER", null);
+                _openRequest.Request(suppress: workerStartup);
             }
         }
 
