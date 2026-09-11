@@ -2,8 +2,13 @@ import { createRequire } from "node:module";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TaskJournal, type Submission } from "./journal.js";
+
+vi.mock("node:fs", async (original) => {
+	const fs = await original<typeof import("node:fs")>();
+	return { ...fs, rmSync: vi.fn(fs.rmSync) };
+});
 
 const cleanup: (() => void)[] = [];
 afterEach(() => {
@@ -198,7 +203,6 @@ describe("shared task journal foundation", () => {
 it("commits a whole reservation set with dispatch and rolls all of it back on conflict", () => {
 	const j = new TaskJournal(":memory:");
 	j.registerSession("a", "a");
-	j.registerSession("b", "b");
 	const binding = {
 		kind: "rhino" as const,
 		lifecycleInstanceId: "rhino",
@@ -213,9 +217,11 @@ it("commits a whole reservation set with dispatch and rolls all of it back on co
 		bindings: [binding],
 		attachments: [],
 	});
-	const b = j.accept({
+	j.start(a.taskId, a.turnId);
+	const b = j.delegate({
+		parentTaskId: a.taskId, dependencies: [],
 		requestId: "b",
-		conversationId: "b",
+		conversationId: "a",
 		sessionId: "b",
 		kind: "prompt",
 		text: "save",
@@ -228,7 +234,6 @@ it("commits a whole reservation set with dispatch and rolls all of it back on co
 		binding,
 		attachmentGeneration: "generation",
 	});
-	j.start(a.taskId, a.turnId, owner(a));
 	j.start(b.taskId, b.turnId, owner(b));
 	j.operationIntent({
 		taskId: a.taskId,
@@ -277,4 +282,97 @@ it("retires old pending authorization submissions on restart while preserving th
  expect(snapshot.records.find(row => row.kind === "admission")!.state).toBe("failed");
  expect(snapshot.events.some(row => String(row.payload).includes("Submit the request again"))).toBe(true);
  expect(snapshot.operations).toHaveLength(0);
+});
+
+it("deletes child logs and session files without deleting other threads or replaying requests", async () => {
+	const { mkdirSync, writeFileSync, existsSync } = await import("node:fs");
+	const f = fixture(),
+		j = f.journal;
+	const other = j.createConversation("other", "Other");
+	const input = {
+		...submission(),
+		bindings: [
+			{
+				kind: "rhino" as const,
+				lifecycleInstanceId: "life",
+				rhinoDocumentId: "doc",
+			},
+		],
+	};
+	const root = j.accept(input);
+	j.start(root.taskId, root.turnId);
+	const child = j.delegate({
+		...input,
+		requestId: "child",
+		parentTaskId: root.taskId,
+		sessionId: "worker",
+		dependencies: [],
+	});
+	j.start(child.taskId, child.turnId);
+	j.publish(child.taskId, {
+		type: "messages",
+		turnId: child.turnId,
+		messages: [{ text: "private transcript" }],
+	});
+	j.settle(child.taskId, child.turnId, "completed");
+	j.settle(root.taskId, root.turnId, "completed");
+	const folder = join(f.path, "..", "sessions", "conversation");
+	mkdirSync(folder, { recursive: true });
+	writeFileSync(join(folder, "session.jsonl"), "private transcript");
+	j.manageConversation("archive", "conversation", "archive_conversation");
+	// A thread restored after the preview invalidates the entire batch.
+	j.manageConversation("archive-other", other.conversationId, "archive_conversation");
+	j.manageConversation("restore-other", other.conversationId, "unarchive_conversation");
+	expect(() => j.purgeArchivedConversations("stale", ["conversation", other.conversationId], null)).toThrow(/changed/);
+	expect(j.getTask(root.taskId)).toBeDefined();
+	expect(existsSync(folder)).toBe(true);
+	const remove = vi.mocked(rmSync), original = remove.getMockImplementation()!;
+	remove.mockImplementation((path, options) => {
+		if (path === folder) throw Object.assign(new Error("Directory locked"), { code: "EACCES" });
+		return original(path, options);
+	});
+	try {
+		expect(j.purgeArchivedConversations("delete", ["conversation"], null).cleanupPending).toBe(1);
+		expect(f.reopen().getTask(root.taskId)).toBeUndefined();
+		expect(existsSync(folder)).toBe(true);
+	} finally { remove.mockImplementation(original); }
+	const reopened = f.reopen();
+	expect(existsSync(folder)).toBe(false);
+	expect(reopened.snapshot().tasks).toEqual([]);
+	expect(reopened.snapshot().sessions.map((row) => row.conversation_id)).toEqual([
+		other.conversationId,
+	]);
+	expect(() => reopened.accept(input)).toThrow(/deleted/);
+	// Retrying the completed purge must not include a newly archived thread.
+	reopened.manageConversation("archive-other-again", other.conversationId, "archive_conversation");
+	reopened.purgeArchivedConversations("delete", ["conversation"], null);
+	expect(
+		f
+			.reopen()
+			.browserSnapshot()
+			.conversations.map((row) => row.id),
+	).toEqual([other.conversationId]);
+});
+
+it("migrates version five without losing history and never reuses the epoch watermark after deletion", () => {
+	const f = fixture(),
+		j = f.journal;
+	const a = j.accept(submission());
+	j.start(a.taskId, a.turnId);
+	j.settle(a.taskId, a.turnId, "completed");
+	const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite");
+	const db = new DatabaseSync(f.path);
+	db.exec(
+		"DROP TRIGGER conversation_created; DROP TABLE conversation_sequence; DROP TABLE deleted_conversation_files; ALTER TABLE conversations DROP COLUMN archived_at; ALTER TABLE conversations DROP COLUMN document_label; PRAGMA user_version=5;",
+	);
+	db.close();
+	const migrated = f.reopen();
+	expect(migrated.snapshot().tasks[0]?.id).toBe(a.taskId);
+	const sequence = migrated.lastConversationSequence;
+	migrated.manageConversation("delete", "conversation", "delete_conversation");
+	const next = migrated.createConversation("new-chat", "New chat");
+	expect(
+		migrated.browserSnapshot({ afterConversationSequence: sequence }).history
+			.conversationId,
+	).toBe(next.conversationId);
 });

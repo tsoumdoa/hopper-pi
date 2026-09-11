@@ -7,15 +7,16 @@ it("keeps scheduling data independent of completed image history and delivers se
 	const current = journal.createConversation("current", "Current");
 	const old = journal.createConversation("old", "Old");
 	const image = { type: "image", mimeType: "image/png", data: "x".repeat(1_000_000) };
-	const task = journal.accept({ ...current, requestId: "current-task", kind: "prompt", text: "Inspect", bindings: [], attachments: [image] });
-	const before = journal.schedulingSnapshot();
+	const empty = journal.schedulingSnapshot();
 	for (let i = 0; i < 20; i++) {
 		const prior = journal.accept({ ...old, requestId: `old-${i}`, kind: "prompt", text: "Old", bindings: [], attachments: [image] });
 		journal.start(prior.taskId, prior.turnId);
 		journal.publish(prior.taskId, { image });
 		journal.settle(prior.taskId, prior.turnId, "completed");
 	}
-	expect(journal.schedulingSnapshot()).toEqual(before);
+	expect(journal.schedulingSnapshot()).toEqual(empty);
+	const task = journal.accept({ ...current, requestId: "current-task", kind: "prompt", text: "Inspect", bindings: [], attachments: [image] });
+	const before = journal.schedulingSnapshot();
 	expect(JSON.stringify(before).length).toBeLessThan(2_000);
 	const exported = journal.conversationSnapshot(current.conversationId);
 	expect(exported.tasks.map(row => row.id)).toEqual([task.taskId]);

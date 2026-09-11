@@ -218,6 +218,7 @@ export function createSharedBrowserServer(options: {
 						type: "error",
 						requestId,
 						message: error instanceof Error ? error.message : "Command failed",
+						...(error && typeof error === "object" && "code" in error ? { code: error.code } : {}),
 					}),
 			);
 		});

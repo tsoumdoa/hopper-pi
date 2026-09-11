@@ -23,13 +23,16 @@ WHERE NOT r.fixture AND t.state='uncertain'
 
 export const browserConversationsQuery = `
 WITH recovery AS (${browserRecoveryTasksQuery}),
-eligible AS (SELECT rowid AS sequence, * FROM conversations
- WHERE rowid>? OR id=? OR id IN (SELECT conversation_id FROM recovery)),
+eligible AS (SELECT rowid AS sequence, * FROM conversations),
 visibility AS (
  SELECT r.conversation_id, MAX(r.fixture) AS has_fixture, MAX(NOT r.fixture) AS has_user
  FROM browser_roots r JOIN eligible c ON c.id=r.conversation_id GROUP BY r.conversation_id
 )
-SELECT c.sequence, c.id, c.created_at, c.title,
+SELECT c.sequence, c.id, c.created_at, c.title, c.archived_at, c.document_label,
+ COALESCE((SELECT MAX(r.updated_at) FROM browser_roots r WHERE r.conversation_id=c.id AND NOT r.fixture),c.created_at) AS last_activity_at,
+ (SELECT r.state FROM browser_roots r WHERE r.conversation_id=c.id AND NOT r.fixture AND r.state IN ('queued','running','suspending','awaiting_user') ORDER BY CASE WHEN r.state='queued' THEN 1 ELSE 0 END,r.sequence LIMIT 1) AS live_state,
+ (SELECT COALESCE(json_extract(r.payload,'$.messageTarget'),json_extract(r.payload,'$.bindings[0]')) FROM browser_roots r WHERE r.conversation_id=c.id AND NOT r.fixture ORDER BY r.sequence LIMIT 1) AS document_target,
+ (SELECT COALESCE(json_extract(r.payload,'$.messageTarget'),json_extract(r.payload,'$.bindings[0]')) FROM browser_roots r WHERE r.conversation_id=c.id AND NOT r.fixture ORDER BY r.sequence DESC LIMIT 1) AS last_message_target,
  EXISTS(SELECT 1 FROM recovery WHERE conversation_id=c.id) AS recovery_required,
  (SELECT json_group_array(DISTINCT COALESCE(json_extract(r.payload,'$.messageTarget.lifecycleInstanceId'),
    json_extract(r.payload,'$.bindings[0].lifecycleInstanceId')))
@@ -39,11 +42,9 @@ SELECT c.sequence, c.id, c.created_at, c.title,
   FROM (SELECT task_id,owner FROM turns UNION ALL SELECT task_id,owner FROM operations) o
   JOIN recovery r ON r.task_id=o.task_id WHERE r.conversation_id=c.id AND o.owner IS NOT NULL) AS recovery_instance_ids,
  COALESCE(v.has_fixture,0) AS has_fixture,
- CASE WHEN v.has_fixture THEN
-  (SELECT json_extract(r.payload,'$.text') FROM browser_roots r
-   WHERE r.conversation_id=c.id AND NOT r.fixture ORDER BY r.sequence LIMIT 1)
- END AS first_user_text
+ (SELECT json_extract(r.payload,'$.text') FROM browser_roots r
+   WHERE r.conversation_id=c.id AND NOT r.fixture ORDER BY r.sequence LIMIT 1) AS first_user_text
 FROM eligible c LEFT JOIN visibility v ON v.conversation_id=c.id
 WHERE v.has_fixture IS NULL OR v.has_user
-ORDER BY c.sequence;
+ORDER BY last_activity_at DESC,c.sequence DESC;
 `;

@@ -210,6 +210,7 @@ it("identifies the task blocking an active sibling and queues new prompts before
 	expect(f.journal.snapshot().tasks.find((task) => task.id === a!.taskId)?.state).toBe("running");
 	await expect(f.script(b!.taskId)).rejects.toThrow(a!.taskId);
 	await expect(f.script(b!.taskId)).rejects.toThrow("Hopper task recovery");
+	await f.finish(a!.taskId); await f.finish(b!.taskId); await f.finish(f.root.taskId);
 	f.journal.registerSession("new-chat", "new-session");
 	const next = f.service.submit({ requestId: "next", conversationId: "new-chat", sessionId: "new-session",
 		kind: "prompt", text: "Create another document", bindings: [binding("a")], attachments: [] });
@@ -222,7 +223,6 @@ it("identifies the task blocking an active sibling and queues new prompts before
 		reason: expect.stringContaining('select "I\'ve checked, continue"'),
 	});
 	await f.service.cancel(next.taskId);
-	await f.finish(a!.taskId); await f.finish(b!.taskId); await f.finish(f.root.taskId);
 });
 
 it("releases a waiting parent's model slot so a single-slot host can finish all delegates", async () => {
