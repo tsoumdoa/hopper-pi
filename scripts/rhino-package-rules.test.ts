@@ -3,7 +3,8 @@ import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { evaluatePackagePath } from "./rhino-package-rules.mjs";
+import { evaluatePackagePath, RHINO_PACKAGE_TARGETS } from "./rhino-package-rules.mjs";
+import { validateSizeBudgets } from "./rhino-package-size.mjs";
 import {
 	classifyBinary,
 	validateBinaryForTarget,
@@ -127,10 +128,15 @@ describe("Rhino package path rules", () => {
 			"runtime/host/node_modules/.pnpm/lock.yaml",
 			"runtime/host/scripts/install-grasshopper-plugin.mjs",
 			"runtime/host/dist/host/index.js.map",
+			"runtime/host/dist/host/static/.vite/manifest.json",
+			"runtime/host/dist/host-metafile.json",
 			"runtime/host/dist/host/server.test.js",
 			"runtime/node/darwin-arm64/bin/node",
 			"runtime/host/node_modules/.bin/pi",
 			"runtime/host/node_modules/typescript/lib/typescript.js",
+			"runtime/host/node_modules/example/index.d.ts",
+			"runtime/host/node_modules/example/index.d.cts",
+			"runtime/host/node_modules/example/index.d.mts",
 		];
 		for (const path of paths) expect(evaluatePackagePath(path, "mac-arm64").allowed, path).toBe(false);
 	});
@@ -204,10 +210,20 @@ describe("Rhino package verifier", () => {
 	});
 
 	it("enforces the documented per-target size ceilings", () => {
-		expect(validateStagedSize("mac-arm64", 128 * 1024 * 1024)).toBeNull();
-		expect(validateStagedSize("mac-arm64", 128 * 1024 * 1024 + 1)).toContain("above");
-		expect(validateStagedSize("win-x64", 128 * 1024 * 1024)).toBeNull();
-		expect(validateStagedSize("win-x64", 128 * 1024 * 1024 + 1)).toContain("above");
+		expect(validateStagedSize("mac-arm64", 90 * 1024 * 1024)).toBeNull();
+		expect(validateStagedSize("mac-arm64", 90 * 1024 * 1024 + 1)).toContain("above");
+		expect(validateStagedSize("win-x64", 94 * 1024 * 1024)).toBeNull();
+		expect(validateStagedSize("win-x64", 94 * 1024 * 1024 + 1)).toContain("above");
+	});
+
+	it.each(["mac-arm64", "win-x64"] as const)("enforces every category ceiling exactly for %s", (target) => {
+		const budgets = RHINO_PACKAGE_TARGETS[target].sizeBudgets;
+		const report = { categories: { ...budgets } };
+		expect(validateSizeBudgets(report, budgets)).toEqual([]);
+		for (const [category, limit] of Object.entries(budgets)) {
+			const oversized = { categories: { ...budgets, [category]: limit + 1 } };
+			expect(validateSizeBudgets(oversized, budgets)).toEqual([`${category}: ${limit + 1} bytes exceeds ${limit} byte budget`]);
+		}
 	});
 
 	it("writes a stable sorted manifest with sizes and SHA-256 hashes", async () => {
@@ -225,6 +241,13 @@ describe("Rhino package verifier", () => {
 		expect(JSON.parse(await readFile(result.manifestPath, "utf8"))).toEqual(result.manifest);
 		const repeated = await verifyRhinoPackage({ target: "mac-arm64", stage, quiet: true });
 		expect(repeated.manifest).toEqual(result.manifest);
+	});
+
+	it("enforces category budgets during verification", async () => {
+		const stage = await minimalStage("mac-arm64");
+		await fixtureFile(stage, "runtime/host/dist/host/static/font.woff2", Buffer.alloc(11));
+		await expect(verifyRhinoPackage({ target: "mac-arm64", stage, quiet: true, sizeBudgets: { webFonts: 10 } }))
+			.rejects.toThrow("webFonts: 11 bytes exceeds 10 byte budget");
 	});
 
 	it("accepts matching Windows native files and managed assemblies", async () => {

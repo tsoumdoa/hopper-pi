@@ -74,6 +74,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      esbuild:
+        specifier: 0.28.1
+        version: 0.28.1
       happy-dom:
         specifier: ^20.14.0
         version: 20.14.0

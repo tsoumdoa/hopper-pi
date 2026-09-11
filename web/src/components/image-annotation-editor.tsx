@@ -90,7 +90,7 @@ export default function ImageAnnotationEditor({ attachment, onSave, onCancel }: 
 
 	return <>
 		<div className="min-h-0 flex-1 overflow-hidden rounded-sm border border-line">
-			<Excalidraw initialData={initialData} excalidrawAPI={setApi} theme="light" autoFocus viewModeEnabled={saving}
+			<Excalidraw langCode="en" initialData={initialData} excalidrawAPI={setApi} theme="light" autoFocus viewModeEnabled={saving}
 				onChange={(elements, state) => {
 					const image = elements.find((element) => element.id === sourceImage?.id && !element.isDeleted);
 					setImageOpacity(image?.opacity ?? null);
