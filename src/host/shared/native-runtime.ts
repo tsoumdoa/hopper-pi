@@ -612,9 +612,7 @@ export class SharedNativeRuntime {
 				}
 				this.journal.operationResult(operation.id, "completed", response);
 			} catch (error) {
-				const recorded = this.journal
-					.snapshot({ includeEvents: false })
-					.operations.find((item) => item.id === operation.id);
+				const recorded = this.journal.getOperation(operation.id);
 				if (recorded?.state === "dispatched")
 					this.journal.operationResult(operation.id, error instanceof ToolPolicyDenied ? "failed" : "uncertain", {
 						error: String(error),
@@ -768,13 +766,8 @@ export class SharedNativeRuntime {
 					) {
 						const scopes = await this.scopes(instance);
 						if (!current()) return;
-						const snapshot = this.journal.snapshot({ includeEvents: false });
-						const recovered = new Set(
-							snapshot.recoveries.map((recovery) => String(recovery.task_id)),
-						);
-						const unresolved = snapshot.operations.some(
+						const unresolved = this.journal.unresolvedOperations().some(
 							(operation) =>
-								!recovered.has(String(operation.task_id)) &&
 								["dispatched", "uncertain"].includes(String(operation.state)) &&
 								(() => {
 									try {
@@ -840,7 +833,7 @@ export class SharedNativeRuntime {
 		const scopes = await this.scopes(current);
 		const observations: unknown[] = [];
 		let operationsIdle = true;
-		for (const operation of this.journal.snapshot({ includeEvents: false }).operations) {
+		for (const operation of this.journal.unresolvedOperations(true)) {
 			if (!["dispatched", "uncertain"].includes(String(operation.state)))
 				continue;
 			let owner: any;

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { HostConfig } from "../config.js";
 import type { EmbeddedPiHost } from "../pi-runtime.js";
 import { sharedToolSettings } from "./tool-settings.js";
-import { monitorHostLifetime } from "./lifetime.js";
+import { createHostShutdown, monitorHostLifetime } from "./lifetime.js";
 import { SharedHostControl } from "./control.js";
 import { TaskJournal } from "./journal.js";
 import { SharedTaskService } from "./task-service.js";
@@ -64,7 +64,7 @@ export async function startSharedHost(
 	let refresh: ReturnType<typeof setInterval> | undefined;
 	let stopLifetimeMonitor: (() => void) | undefined;
 	let refreshWork: Promise<void> | undefined;
-	let closing: Promise<void> | undefined;
+	let closing = false;
 	const discovery = {
 		hostEpoch: epoch,
 		pid: process.pid,
@@ -131,8 +131,10 @@ export async function startSharedHost(
 			};
 		},
 	});
-	const close = () =>
-		(closing ??= (async () => {
+	const shutdown = createHostShutdown({
+		exit: code => process.exit(code || (Number(process.exitCode) || 0)),
+		log: message => process.stderr.write(`[shared-host] ${message}\n`),
+		cleanup: async () => {
 			startupGate?.close();
 			backend?.stopAdmission();
 			stopLifetimeMonitor?.();
@@ -144,7 +146,12 @@ export async function startSharedHost(
 			await admin?.dispose();
 			await browser.close();
 			journal?.close();
-		})());
+		},
+	});
+	const close = () => {
+		closing = true;
+		return shutdown();
+	};
 	try {
 		await control.acquireOwnership(browser.server, state.revision);
 		await control.publish(discovery);
@@ -287,7 +294,7 @@ export async function startSharedHost(
 							execute: async () => {
 								await tasks!.waitForChildren(context.taskId);
 								return collectDelegationResults(
-									journal!.snapshot(),
+									journal!.delegationSnapshot(context.taskId),
 									context.taskId,
 								);
 							},
@@ -398,7 +405,6 @@ export async function startSharedHost(
 		stopLifetimeMonitor = monitorHostLifetime({
 			shouldStop: () => !closing && !launches!.pending && native!.shouldStopAfterRhinoExit(),
 			close,
-			exit: code => process.exit(code),
 			log: message => process.stdout.write(`[shared-host] ${message}\n`),
 		});
 		refresh = setInterval(() => {
@@ -435,6 +441,9 @@ export async function startSharedHost(
 			`${JSON.stringify({ type: "ready", mode: "shared", url: `http://127.0.0.1:${state.endpointPort}/`, pid: process.pid })}\n`,
 		);
 	} catch (error) {
+		process.stderr.write(`[shared-host] Startup failed: ${String(error)}\n`);
+		// Report failed startup even when its cleanup succeeds.
+		process.exitCode = 1;
 		await close();
 		throw error;
 	}

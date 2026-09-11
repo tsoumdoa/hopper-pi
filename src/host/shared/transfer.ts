@@ -128,13 +128,7 @@ export class GeometryTransferService {
 			);
 		if (
 			record.state !== "accepted" ||
-			this.journal
-				.snapshot({ includeEvents: false })
-				.operations.some(
-					(op) =>
-						op.task_id === input.taskId &&
-						String(op.arguments).includes(artifactId),
-				)
+			this.journal.getTaskOperations(input.taskId).some(op => String(op.arguments).includes(artifactId))
 		)
 			throw new Error(
 				"Export outcome needs reconciliation before another dispatch",
@@ -288,11 +282,8 @@ export class GeometryTransferService {
 		const artifactRecord = this.record("artifact", input.artifactId);
 		if (artifactRecord.state !== "published")
 			throw new Error("Artifact is not published");
-		const snapshot = this.journal.snapshot({ includeEvents: false }),
-			task = snapshot.tasks.find((task) => task.id === input.taskId),
-			sourceTask = snapshot.tasks.find(
-				(task) => task.id === artifactRecord.task_id,
-			);
+		const task = this.journal.getTask(input.taskId),
+			sourceTask = this.journal.getTask(String(artifactRecord.task_id));
 		if (!task || !sourceTask) throw new Error("Artifact task is unavailable");
 		const submission = JSON.parse(String(task.payload)) as {
 			attachments: unknown[];
@@ -325,12 +316,7 @@ export class GeometryTransferService {
 		if (record.state === "completed") return JSON.parse(String(record.payload));
 		if (
 			record.state !== "accepted" ||
-			this.journal
-				.snapshot({ includeEvents: false })
-				.operations.some(
-					(op) =>
-						op.task_id === input.taskId && String(op.arguments).includes(id),
-				)
+			this.journal.getTaskOperations(input.taskId).some(op => String(op.arguments).includes(id))
 		)
 			throw new Error(
 				"Import outcome needs reconciliation; automatic replay is disabled",
@@ -385,9 +371,7 @@ export class GeometryTransferService {
 					return receipt;
 				} catch (error) {
 					if (
-						this.journal
-							.snapshot({ includeEvents: false })
-							.operations.find((op) => op.id === operation.id)?.state ===
+						this.journal.getOperation(operation.id)?.state ===
 						"dispatched"
 					)
 						this.journal.operationResult(
@@ -419,9 +403,7 @@ export class GeometryTransferService {
 		);
 	}
 	private record(kind: string, id: string) {
-		const record = this.journal
-			.snapshot({ includeEvents: false })
-			.records.find((record) => record.kind === kind && record.id === id);
+		const record = this.journal.getRecord(kind, id);
 		if (!record) throw new Error("Unknown retained artifact or transfer");
 		return record;
 	}

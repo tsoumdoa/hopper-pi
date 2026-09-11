@@ -49,15 +49,12 @@ export class SharedRecoveryService {
 		const request = { kind: "recover_task", taskId, acknowledgement };
 		const prior = this.journal.findRequest<{ id: string }>(requestId, request);
 		if (prior) return prior;
-		const snapshot = this.journal.snapshot(),
-			task = snapshot.tasks.find((task) => task.id === taskId);
+		const task = this.journal.getTask(taskId);
 		if (task?.state !== "uncertain") throw new Error("Task is not uncertain");
-		const operations = snapshot.operations.filter(
-			(operation) => operation.task_id === taskId,
-		);
+		const operations = this.journal.getTaskOperations(taskId);
 		const lifecycleIds = new Set<string>();
 		for (const record of [
-			...snapshot.turns.filter((turn) => turn.task_id === taskId),
+			...this.journal.getTaskTurns(taskId),
 			...operations,
 		]) {
 			const owner = record.owner ? JSON.parse(String(record.owner)) : null;
@@ -133,9 +130,7 @@ export class SharedRecoveryService {
 			}
 			evidence.push({ lifecycleId, ...recovery });
 		}
-		const reservations = snapshot.reservations.filter((reservation) =>
-			operations.some((operation) => operation.id === reservation.operation_id),
-		);
+		const reservations = this.journal.getTaskReservations(taskId);
 		const files: unknown[] = [];
 		for (const operation of operations) {
 			const reserved = reservations.filter(

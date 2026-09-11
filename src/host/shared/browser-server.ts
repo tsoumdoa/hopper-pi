@@ -141,6 +141,8 @@ export function createSharedBrowserServer(options: {
 		);
 	});
 	sockets.on("connection", (socket: WebSocket) => {
+		// Frame decoding errors happen before the message handler, including before auth.
+		socket.on("error", () => socket.terminate());
 		let previous: Parameters<typeof snapshotPatch>[0] | undefined;
 		const snapshots = createSnapshotSender((event, done) => {
 			if (socket.readyState !== WebSocket.OPEN) return done(new Error("Browser disconnected"));
