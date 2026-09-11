@@ -34,6 +34,7 @@ type ToolGroup = { id: string; name: string; icon: LucideIcon };
 const TOOL_GROUPS: ToolGroup[] = [
 	{ id: "hopper.rhino", name: "Rhino", icon: Box },
 	{ id: "hopper.grasshopper", name: "Grasshopper", icon: Workflow },
+	{ id: "hopper.delegate", name: "Delegate", icon: Workflow },
 	{ id: "hopper.interaction", name: "Interaction", icon: Terminal },
 	{ id: "hopper.skills", name: "Skills", icon: Terminal },
 	{ id: "hopper.general", name: "General", icon: Terminal },
@@ -41,6 +42,7 @@ const TOOL_GROUPS: ToolGroup[] = [
 
 function toolGroup(name: string, parent?: string): string {
 	if (parent) return parent;
+	if (["listRhinoTargets", "launchRhino", "delegate", "waitForDelegates"].includes(name)) return "hopper.delegate";
 	if (name.startsWith("rh_")) return "hopper.rhino";
 	if (name.startsWith("gh_")) return "hopper.grasshopper";
 	return "hopper.general";
