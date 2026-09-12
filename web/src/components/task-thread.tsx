@@ -198,7 +198,7 @@ function TaskReply({ task, snapshot, labelFor, commands }: {
 	// begin streaming. Keep graph progress visible through that whole turn.
 	const generatingGraph = running && snapshot.turns.some((turn) =>
 		turn.task_id === task.id && turn.state === "running" && readOwner(turn.owner)?.binding?.kind === "grasshopper");
-	const activeTool = tools.some((tool) => tool.status === "generating" || tool.status === "running");
+	const activeTool = tools.some((tool) => tool.status === "running");
 	const questions = snapshot.questions.filter((question) => question.task_id === task.id);
 	const recovered = snapshot.recoveries?.some((record) => record.task_id === task.id) ?? false;
 	const captures = useMemo(() => messages

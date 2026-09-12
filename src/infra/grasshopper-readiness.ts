@@ -49,6 +49,7 @@ export class GrasshopperReadinessCoordinator {
 	private activeInFlight: Promise<RuntimeStatus> | null = null;
 	private wakeups: WakeupGate | null = null;
 	private closed = false;
+	private readonly cancellation = new AbortController();
 
 	constructor(options: GrasshopperReadinessOptions) {
 		this.lifecycleInstanceId = options.lifecycleInstanceId;
@@ -85,6 +86,7 @@ export class GrasshopperReadinessCoordinator {
 
 	close(): void {
 		this.closed = true;
+		this.cancellation.abort();
 		this.wakeups?.close();
 	}
 
@@ -106,7 +108,7 @@ export class GrasshopperReadinessCoordinator {
 				startIssued = true;
 				try {
 					await this.beforeStartGrasshopper?.(status);
-					await this.startGrasshopper(this.remainingCallBudget(deadlineAt));
+					await this.untilClosed(() => this.startGrasshopper(this.remainingCallBudget(deadlineAt)));
 				} catch (error) {
 					lastReadError = error;
 				}
@@ -129,7 +131,7 @@ export class GrasshopperReadinessCoordinator {
 						startIssued = true;
 						try {
 							await this.beforeStartGrasshopper?.(status);
-							await this.startGrasshopper(this.remainingCallBudget(deadlineAt));
+							await this.untilClosed(() => this.startGrasshopper(this.remainingCallBudget(deadlineAt)));
 						} catch (error) {
 							lastReadError = error;
 						}
@@ -190,13 +192,33 @@ export class GrasshopperReadinessCoordinator {
 	private async tryReadStatus(
 		deadlineAt: number,
 	): Promise<{ status: RuntimeStatus | null; error: unknown }> {
+		this.throwIfClosed();
 		try {
 			return {
-				status: await this.readStatus(this.remainingCallBudget(deadlineAt)),
+				status: await this.untilClosed(() => this.readStatus(this.remainingCallBudget(deadlineAt))),
 				error: undefined,
 			};
 		} catch (error) {
+			this.throwIfClosed();
 			return { status: null, error };
+		}
+	}
+
+	/** Stop waiting without retrying a control request that may already be running. */
+	private async untilClosed<T>(work: () => Promise<T>): Promise<T> {
+		this.throwIfClosed();
+		const signal = this.cancellation.signal;
+		let cancel!: () => void;
+		const cancelled = new Promise<never>((_, reject) => {
+			cancel = () => reject(new Error("Grasshopper readiness is closed."));
+			signal.addEventListener("abort", cancel, { once: true });
+		});
+		try {
+			const result = await Promise.race([work(), cancelled]);
+			this.throwIfClosed();
+			return result;
+		} finally {
+			signal.removeEventListener("abort", cancel);
 		}
 	}
 

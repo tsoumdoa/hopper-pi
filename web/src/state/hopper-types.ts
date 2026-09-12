@@ -12,7 +12,7 @@ export type ToolCall = {
 	args?: unknown;
 	/** Latest tool output. Falls back to `args` for display until a result arrives. */
 	detail: unknown;
-	status: "generating" | "running" | "complete" | "error";
+	status: "running" | "complete" | "error";
 };
 
 export type ConversationMessage = {

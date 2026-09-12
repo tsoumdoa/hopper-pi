@@ -32,7 +32,7 @@ export interface DocumentActionPreflight {
 }
 export interface DocumentActionAdapter {
 	/** Inspect every affected document and destination again while owning the queue. */
-	preflight(grant: DocumentActionRequest): Promise<DocumentActionPreflight>;
+	preflight(grant: DocumentActionRequest, signal?: AbortSignal): Promise<DocumentActionPreflight>;
 	execute(
 		owner: DocumentActionOwner,
 		grant: DocumentActionRequest,
@@ -132,7 +132,7 @@ export class DocumentActionService {
 			grant.lifecycleInstanceId,
 			async (target) => withToolDispatchContext(() => this.admit(grant.kind), async () => {
 				await this.admit(grant.kind);
-				const preflight = await this.adapter.preflight(grant);
+				const preflight = await this.adapter.preflight(grant, target.signal);
 				await this.admit(grant.kind);
 				if (this.journal.getTask(grant.taskId)?.cancellation_requested) throw new Error("Task cancellation requested");
 				const owner: DocumentActionOwner = {

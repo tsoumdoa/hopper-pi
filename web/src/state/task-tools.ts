@@ -19,14 +19,14 @@ export function taskTools(events: EventSnapshot[]): ToolCall[] {
 			}
 			return `${turnId}:${raw}`;
 		};
-		const start = (id: unknown, name: unknown, args: unknown, status?: ToolCall["status"]) => {
+		const start = (id: unknown, name: unknown, args: unknown, running: boolean) => {
 			const toolId = key(id);
 			const prior = tools.get(toolId);
 			tools.set(toolId, {
 				id: toolId, name: String(name ?? prior?.name ?? "Tool call"),
 				args: args ?? prior?.args,
 				detail: prior && prior.detail !== prior.args ? prior.detail : args ?? prior?.args,
-				status: status ?? prior?.status ?? "complete",
+				status: running ? "running" : prior?.status ?? "complete",
 			});
 		};
 		const result = (id: unknown, name: unknown, output: unknown, isError: boolean, partial = false) => {
@@ -41,7 +41,7 @@ export function taskTools(events: EventSnapshot[]): ToolCall[] {
 		const message = (item: BrowserMessage | undefined, running = false) => {
 			if (item?.role === "assistant" && Array.isArray(item.content)) {
 				for (const part of item.content) if (part.type === "toolCall")
-					start(part.id ?? part.toolCallId, part.name, part.arguments, running ? "running" : undefined);
+					start(part.id ?? part.toolCallId, part.name, part.arguments, running);
 			}
 			if (item?.role === "toolResult") {
 				// Preserve textual content even when the tool also returns empty or internal details.
@@ -54,18 +54,12 @@ export function taskTools(events: EventSnapshot[]): ToolCall[] {
 		if (payload.type === "agent_event" && event) {
 			if (event.type === "message_start" || event.type === "message_end") message(event.message);
 			const update = event.assistantMessageEvent;
-			if (update?.type === "toolcall_start" && update.id) {
-				const toolId = key(update.id);
-				if (!tools.has(toolId)) tools.set(toolId, {
-					id: toolId, name: String(update.toolName ?? "Tool call"), detail: undefined, status: "generating",
-				});
-			}
 			if (update?.type === "toolcall_end" && update.toolCall)
-				start(update.toolCall.id, update.toolCall.name, update.toolCall.arguments, tools.get(key(update.toolCall.id))?.status === "generating" ? undefined : "running");
+				start(update.toolCall.id, update.toolCall.name, update.toolCall.arguments, true);
 		}
 		if (payload.type === "tool_progress") {
-			if (payload.phase === "generating" || payload.phase === "started") {
-				start(payload.toolCallId, payload.toolName, event?.args ?? payload.args, payload.phase === "generating" ? "generating" : "running");
+			if (payload.phase === "started") {
+				start(payload.toolCallId, payload.toolName, event?.args ?? payload.args, true);
 			} else {
 				result(payload.toolCallId, payload.toolName,
 					payload.phase === "updated" ? event?.partialResult ?? payload.partialResult : event?.result ?? payload.result,

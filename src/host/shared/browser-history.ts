@@ -61,16 +61,7 @@ INSERT OR IGNORE INTO browser_history_cursor VALUES (1, 0);
 			slot = `tool:${turn}:${payload.toolCallId}:${payload.phase === "started" ? "start" : "result"}`;
 		} else if (payload.type === "agent_event") {
 			const event = payload.event;
-			const update = event?.assistantMessageEvent;
-			if (event?.type === "message_update" && update?.type === "toolcall_start" && update.id) {
-				// Keep generation visible while argument deltas are compacted. Execution
-				// replaces this same slot with the tool's arguments and running state.
-				slot = `tool:${turn}:${update.id}:start`;
-				payload.type = "tool_progress";
-				payload.phase = "generating";
-				payload.toolCallId = update.id;
-				payload.toolName = update.toolName;
-			} else if (event?.type === "message_start" && event.message?.role === "assistant") {
+			if (event?.type === "message_start" && event.message?.role === "assistant") {
 				slot = `assistant:${turn}:${row.id}`;
 				payload.type = "assistant_message";
 				payload.message = event.message;
@@ -100,7 +91,7 @@ INSERT OR IGNORE INTO browser_history_cursor VALUES (1, 0);
 				// Preserve message ordering and identity as its content changes.
 				row = { ...row, id: previous.id, created_at: previous.created_at };
 			} else return;
-			if (payload.type === "assistant_message") payload.messageId = slot;
+			payload.messageId = slot;
 			delete payload.event;
 		} else {
 			// Display diagnostics need only their latest value per turn/type.

@@ -187,6 +187,65 @@ it.each([
 	}
 });
 
+it.each(["loading", "pending-status", "pending-start"])("cancels startup during %s and releases the process for the next task", async phase => {
+	const { journal, registry, runtime } = await setup();
+	const normal = wire.call.getMockImplementation()!;
+	let started = false;
+	let releaseRpc: (() => void) | undefined;
+	const blockedRpc = new Promise<void>(resolve => { releaseRpc = resolve; });
+	const reply = (data: unknown) => ({ result: { class: "completed", data } });
+	wire.call.mockClear();
+	wire.call.mockImplementation(async (operation: string, ...args: any[]) => {
+		if (operation === "startGrasshopper") {
+			started = true;
+			if (phase === "pending-start") await blockedRpc;
+			return reply({});
+		}
+		if (operation === "getRuntimeStatus") {
+			if (started && phase === "pending-status") await blockedRpc;
+			return reply({ transport: { lifecycleInstanceId: "life" },
+				grasshopper: { state: started ? "loading" : "not_loaded", activeDocument: false } });
+		}
+		return normal(operation, ...args);
+	});
+	journal.registerSession("conversation", "session");
+	let actions: DocumentActionService;
+	let runs = 0;
+	const scheduler = new SharedTaskService(journal, {
+		resolveBinding: binding => registry.resolveBinding(binding),
+		resolveLifecycle: lifecycle => registry.resolveLifecycle(lifecycle),
+		validateBinding: owner => registry.validateBinding(owner),
+		createDriver: context => ({
+			run: async () => {
+				if (++runs !== 1) return;
+				context.requestDocumentAction(actions.prepare({ requestId: "create", taskId: context.taskId,
+					lifecycleInstanceId: "life", kind: "grasshopper", action: "new", modifiedPolicy: "refuse" }).grantId);
+			},
+			steer: async () => {}, cancel: () => {}, cleanup: async () => ({ confirmed: true }),
+		}),
+	});
+	actions = new DocumentActionService(journal, scheduler, createNativeActionAdapters(runtime, journal, registry).documents);
+	scheduler.setDocumentActionExecutor(id => actions.execute(id));
+	const submit = (requestId: string) => scheduler.submit({ requestId, conversationId: "conversation", sessionId: "session",
+		kind: "prompt", text: "Create a graph", attachments: [],
+		bindings: [{ kind: "rhino", lifecycleInstanceId: "life", rhinoDocumentId: "doc" }] });
+	try {
+		const first = submit("first");
+		await expect.poll(() => started).toBe(true);
+		const second = submit("second");
+		await scheduler.cancel(first.taskId);
+		await expect.poll(() => journal.getTask(first.taskId)?.state).toBe("cancelled");
+		await expect.poll(() => journal.getTask(second.taskId)?.state).toBe("completed");
+		expect(wire.unsubscribe).toHaveBeenCalledTimes(1);
+		expect(wire.call.mock.calls.filter(call => call[0] === "startGrasshopper")).toHaveLength(1);
+		expect(wire.call.mock.calls.some(call => call[0] === "manageGrasshopperDocument")).toBe(false);
+	} finally {
+		releaseRpc!();
+		await scheduler.stop();
+		await runtime.close();
+	}
+});
+
 it.each(["failed", "not_installed"])("does not create a document when Grasshopper is %s", async state => {
 	const { journal, registry, runtime } = await setup();
 	wire.call.mockClear();
@@ -211,7 +270,8 @@ it("preserves unsaved-document checks after Grasshopper becomes ready", async ()
 	await expect(createNativeActionAdapters(runtime, journal, registry).documents.preflight({
 		requestId: "new", taskId: "task", lifecycleInstanceId: "life", kind: "grasshopper", action: "new", modifiedPolicy: "refuse",
 	})).rejects.toThrow("unsaved changes");
-	expect(wire.call.mock.calls.map(call => call[0])).toEqual(["getRuntimeStatus", "getRuntimeStatus", "listGrasshopperDocuments"]);
+	expect(wire.call.mock.calls.some(call => call[0] === "listGrasshopperDocuments")).toBe(true);
+	expect(wire.call.mock.calls.some(call => call[0] === "manageGrasshopperDocument")).toBe(false);
 });
 
 it("bounds a stalled Grasshopper startup without retrying start or creating a document", async () => {

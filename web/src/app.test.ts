@@ -213,8 +213,18 @@ it("shows graph generation as soon as the task resumes on a ready Grasshopper do
 	expect(container.textContent).toContain("Generating graph…");
 	expect(container.textContent).not.toContain("Getting started…");
 	expect(container.textContent).not.toContain("Generating…");
-	for (const state of ["completed", "cancelled", "failed", "awaiting_user"]) {
-		await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...planning, tasks: [{ ...task, state }] } }));
+	const graphEvents = [...planning.events];
+	for (const payload of [
+		{ type: "agent_event", event: { type: "message_update", assistantMessageEvent: { type: "toolcall_start", id: "graph", toolName: "gh_apply_graph" } } },
+		{ type: "agent_event", event: { type: "message_update", assistantMessageEvent: { type: "toolcall_delta", delta: '{"components":' } } },
+		{ type: "tool_progress", phase: "started", toolCallId: "graph", toolName: "gh_apply_graph", args: { components: [] } },
+	]) {
+		graphEvents.push({ id: graphEvents.length + 1, task_id: task.id, kind: "progress", payload: JSON.stringify({ ...payload, turnId: "ready" }) });
+		await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...planning, events: graphEvents } }));
+		expect(container.textContent?.match(/Generating graph…/g)).toHaveLength(1);
+	}
+	for (const state of ["completed", "cancelled", "failed", "awaiting_user", "uncertain"]) {
+		await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...planning, events: graphEvents, tasks: [{ ...task, state }] } }));
 		expect(container.textContent).not.toContain("Generating graph…");
 	}
 });
@@ -231,10 +241,6 @@ it("shows generation after a document handoff without a competing startup placeh
 	expect(container.textContent).toContain("Generating…");
 	expect(container.textContent).not.toContain("Getting started…");
 	const progress = { type: "tool_progress", turnId: "after", toolCallId: "graph", toolName: "gh_apply_graph" };
-	await show([...messages, row(3, { ...progress, phase: "generating" })]);
-	expect(container.textContent).toContain("Generating graph…");
-	expect(container.textContent).not.toContain("Getting started…");
-	expect(container.textContent).not.toContain("Generating…");
 	await show([...messages, row(3, { ...progress, phase: "started", args: { components: [] } })]);
 	expect(container.querySelector('[aria-label="Running"]')).not.toBeNull();
 	expect(container.textContent).not.toContain("Generating");

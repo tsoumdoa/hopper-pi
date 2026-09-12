@@ -433,7 +433,7 @@ export class SharedTaskService {
 	async withLifecycle<T>(
 		taskId: string,
 		lifecycleId: string,
-		work: (target: { turnId: string; attachmentGeneration: string }) => Promise<T>,
+		work: (target: { turnId: string; attachmentGeneration: string; signal: AbortSignal }) => Promise<T>,
 	): Promise<T> {
 		const active = this.active.get(taskId);
 		const resolveLifecycle = this.options.resolveLifecycle;
@@ -442,7 +442,7 @@ export class SharedTaskService {
 		if (active.processKey || [...this.held.values()].includes(taskId))
 			throw new Error("Finish direct scope handoff before a lifecycle action");
 		return this.withProcessLease(taskId, lifecycleId, () => resolveLifecycle(lifecycleId), (target) => work({
-			turnId: active.turnId, attachmentGeneration: target.attachmentGeneration,
+			turnId: active.turnId, attachmentGeneration: target.attachmentGeneration, signal: active.controller.signal,
 		}));
 	}
 
