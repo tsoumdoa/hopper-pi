@@ -1,7 +1,7 @@
-import { getRuntimeSessionContext } from "../infra/runtime-session-context.js";
-import { Requester } from "../infra/requester.js";
-import { withRequester } from "../infra/request-helpers.js";
-import { getRuntimeRpc } from "../infra/runtime-rpc.js";
+import { getRuntimeSessionContext } from "./runtime-session-context.js";
+import { Requester } from "./requester.js";
+import { withRequester } from "./request-helpers.js";
+import { getRuntimeRpc } from "./runtime-rpc.js";
 import type {
 	GetCanvasErrorsResponse,
 	GetCurrentCanvasResponse,
