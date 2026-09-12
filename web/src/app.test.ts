@@ -4,6 +4,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "./app";
+import { TaskJournal } from "../../src/host/shared/journal.js";
 import { HopperStoreProvider } from "./state/hopper-store-context";
 vi.mock("./hooks/use-runtime-status", () => ({
 	useRuntimeStatus: () => ({ refresh: async () => {}, refreshing: false }),
@@ -159,6 +160,29 @@ afterEach(async () => {
 	container.remove();
 	vi.unstubAllGlobals();
 	vi.useRealTimers();
+});
+it.each(["archive_conversation", "delete_conversation"] as const)("stays connected after a real %s receipt", async action => {
+	const journal = new TaskJournal(":memory:");
+	try {
+		const { conversationId } = journal.createConversation("create", "First");
+		await act(async () => socket.receive({ type: "shared_snapshot", snapshot: {
+			...snapshot, conversations: [{ id: conversationId, title: "First", sequence: 1 }],
+			sessions: [{ id: "session", conversation_id: conversationId }],
+		} }));
+		const label = action === "archive_conversation" ? "Archive First" : "Delete First";
+		await act(async () => container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!.click());
+		if (action === "delete_conversation") {
+			await act(async () => [...document.querySelectorAll("button")].find(button => button.textContent === "Delete thread")!.click());
+		}
+		const command = socket.sent.find(command => command.type === action);
+		expect(command.conversationId).toBe(conversationId);
+		const close = vi.spyOn(socket, "close");
+		await act(async () => socket.receive({ type: "command_accepted", requestId: command.requestId,
+			result: journal.manageConversation(command.requestId, conversationId, action) }));
+		expect(close).not.toHaveBeenCalled();
+		expect(document.body.textContent).not.toContain("Hopper sent an unreadable message.");
+		expect(document.body.textContent).toContain(action === "archive_conversation" ? "Thread archived" : "Thread deleted");
+	} finally { journal.close(); }
 });
 it("sends image-only input with the existing image limit and retains it on rejection", async () => {
 	await upload("plan.png");

@@ -41,7 +41,7 @@ export function validateSharedSnapshot(value: unknown): SharedSnapshot {
 	if (source.historyStorage !== undefined) fields({ journalPath: string, sessionsPath: string })(source.historyStorage);
 	return value as SharedSnapshot;
 }
-const commandResult = fields({ conversationId: optional(string), admissionError: optional(string), cleanupPending: optional(boolean) });
+const commandResult = fields({ conversationId: optional(string), admissionError: optional(string), cleanupPending: optional(number) });
 export type CommandAccepted = { type: "command_accepted"; requestId?: string; result?: (ReturnType<typeof commandResult> & Record<string, unknown>) | null };
 export type SharedServerMessage =
 	| { type: "shared_snapshot"; snapshot: SharedSnapshot }

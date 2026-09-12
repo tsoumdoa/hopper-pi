@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TaskJournal, type Submission } from "./journal.js";
+import { parseSharedServerMessage } from "../../protocol/browser-messages.js";
 
 vi.mock("node:fs", async (original) => {
 	const fs = await original<typeof import("node:fs")>();
@@ -332,7 +333,10 @@ it("deletes child logs and session files without deleting other threads or repla
 		return original(path, options);
 	});
 	try {
-		expect(j.purgeArchivedConversations("delete", ["conversation"], null).cleanupPending).toBe(1);
+		const result = j.purgeArchivedConversations("delete", ["conversation"], null);
+		expect(result.cleanupPending).toBe(1);
+		expect(parseSharedServerMessage(JSON.stringify({ type: "command_accepted", result })))
+			.toMatchObject({ result: { conversationIds: ["conversation"], cleanupPending: 1 } });
 		expect(f.reopen().getTask(root.taskId)).toBeUndefined();
 		expect(existsSync(folder)).toBe(true);
 	} finally { remove.mockImplementation(original); }
