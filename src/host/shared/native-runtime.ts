@@ -20,6 +20,7 @@ import {
 } from "../../infra/runtime-rpc.js";
 import { ToolPolicyDenied, withToolDispatchContext } from "../../services/tool-policy-context.js";
 import { SubscriberStatusEventSource } from "../../infra/status-event-source.js";
+import { GrasshopperReadinessCoordinator } from "../../infra/grasshopper-readiness.js";
 import {
 	classifyOperation,
 	type OperationName,
@@ -880,6 +881,36 @@ export class SharedNativeRuntime {
 		const instance = this.instances.get(lifecycleId);
 		if (!instance) throw new Error(`Lifecycle ${lifecycleId} is not attached`);
 		return instance.client;
+	}
+	/** The document action holds the process lease while starting and inspecting Grasshopper. */
+	async ensureGrasshopperReadyForDocumentAction(lifecycleId: string, signal?: AbortSignal): Promise<void> {
+		const instance = this.instances.get(lifecycleId);
+		if (!instance) throw new Error(`Lifecycle ${lifecycleId} is not attached`);
+		const readiness = new GrasshopperReadinessCoordinator({
+			lifecycleInstanceId: lifecycleId,
+			events: new SubscriberStatusEventSource(instance.connection.pubEndpoint),
+			readStatus: async (timeoutMs) => data(await instance.client.call("getRuntimeStatus", {}, {
+				signal,
+				completionTimeoutMs: timeoutMs,
+				startDeadlineMs: Math.min(30_000, timeoutMs),
+			})),
+			startGrasshopper: async (timeoutMs) => {
+				data(await instance.client.call("startGrasshopper", {}, {
+					signal,
+					completionTimeoutMs: timeoutMs,
+					startDeadlineMs: Math.min(30_000, timeoutMs),
+				}));
+			},
+		});
+		const cancel = () => readiness.close();
+		signal?.addEventListener("abort", cancel, { once: true });
+		if (signal?.aborted) cancel();
+		try {
+			// New/open must also work when loading Grasshopper leaves no active canvas.
+			await readiness.ensureReady(false);
+		} finally {
+			signal?.removeEventListener("abort", cancel);
+		}
 	}
 	async close(): Promise<void> {
 		const instances = [...this.instances.values()];

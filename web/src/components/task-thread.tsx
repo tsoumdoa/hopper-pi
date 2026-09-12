@@ -194,6 +194,11 @@ function TaskReply({ task, snapshot, labelFor, commands }: {
 		return { messages, liveMessages, tools };
 	}, [snapshot.events, task.id]);
 	const running = state === "running" || state === "suspending";
+	// The resumed turn owns the ready canvas before planning or tool arguments
+	// begin streaming. Keep graph progress visible through that whole turn.
+	const generatingGraph = running && snapshot.turns.some((turn) =>
+		turn.task_id === task.id && turn.state === "running" && readOwner(turn.owner)?.binding?.kind === "grasshopper");
+	const activeTool = tools.some((tool) => tool.status === "running");
 	const questions = snapshot.questions.filter((question) => question.task_id === task.id);
 	const recovered = snapshot.recoveries?.some((record) => record.task_id === task.id) ?? false;
 	const captures = useMemo(() => messages
@@ -257,20 +262,24 @@ function TaskReply({ task, snapshot, labelFor, commands }: {
 								<MessageMarkdown text={message.text} />
 								{message.streaming && <span aria-hidden="true" className="ml-0.5 inline-block h-[1.1em] w-[2px] translate-y-[3px] bg-accent animate-blink" />}
 							</div>
-						) : !message.thinking ? (
+						) : !message.thinking && message.streaming && running && !activeTool && !generatingGraph ? (
 							<p className="flex items-center gap-2 text-[13px] text-muted" role="status">
 								<Loader2 className="size-3.5 animate-spin" />
-								Getting started…
+								Generating…
 							</p>
 						) : null}
 					</div>
 				))}
-				{idle && (
+				{idle && !generatingGraph && (
 					<p className="flex items-center gap-2 text-[13px] text-muted" role="status">
 						<Loader2 className="size-3.5 animate-spin" />
 						Getting started…
 					</p>
 				)}
+				{generatingGraph && <p role="status" aria-live="polite" className="flex items-center gap-2 text-[13px] text-accent">
+					<Loader2 className="size-3.5 animate-spin" />
+					Generating graph…
+				</p>}
 				{tools.length > 0 && <ToolHistory tools={tools} />}
 				<ImageGallery images={captures.map((capture: { image: ImageAttachment; tool: string }) => ({ image: capture.image, label: `Capture from ${capture.tool}` }))} />
 				{questions.map((question) => (
