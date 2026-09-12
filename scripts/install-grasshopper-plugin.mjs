@@ -67,10 +67,10 @@ function hasDotnet() {
 }
 
 function targetFramework() {
-	if (packageTarget === "mac-arm64") return "net7.0";
-	if (packageTarget === "win-x64") return "net7.0-windows";
+	if (packageTarget === "mac-arm64") return "net8.0";
+	if (packageTarget === "win-x64") return "net8.0-windows";
 	if (packageTarget) fail("--target requires mac-arm64 or win-x64");
-	return platform() === "win32" ? "net7.0-windows" : "net7.0";
+	return platform() === "win32" ? "net8.0-windows" : "net8.0";
 }
 
 function ghaOutputDir(configuration = "Release") {
@@ -339,7 +339,7 @@ function main() {
 
 	if (!hasDotnet()) {
 		warn(
-			".NET SDK not found. Install .NET 7 SDK, then run: node scripts/install-grasshopper-plugin.mjs --build-only"
+			".NET SDK not found. Install .NET 8 SDK, then run: node scripts/install-grasshopper-plugin.mjs --build-only"
 		);
 		return;
 	}

@@ -1,6 +1,6 @@
 # Local development
 
-Use Node.js 22.19.0 or newer and pnpm 11.5.3. Building native plugins also requires Rhino 8 and the .NET 7 SDK.
+Use Node.js 22.19.0 or newer and pnpm 11.5.3. Building native plugins also requires Rhino 8.20 or newer running .NET 8 and the .NET 8 SDK.
 
 ```bash
 git clone https://github.com/tsoumdoa/hoppercode.git

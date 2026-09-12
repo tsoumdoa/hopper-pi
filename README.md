@@ -6,9 +6,9 @@ Before 0.2.0, Hopper was a Pi extension. The 0.2.0 workflow uses the native plug
 
 ## Install
 
-Supported platforms are macOS Apple Silicon and Windows x64, with Rhino 8. Install stable Node.js 22.19.0 or newer; Node is not bundled.
+Supported platforms are macOS Apple Silicon and Windows x64, with Rhino 8.20 or newer running .NET 8. On Windows, use `SetDotNetRuntime` to select .NET Core and restart Rhino if it is configured for .NET Framework. Install stable Node.js 22.19.0 or newer; Node is not bundled.
 
-To build and install from source, you also need Git, pnpm 11.5.3, and the .NET 7 SDK. Quit Rhino, then run these commands in Terminal or PowerShell:
+To build and install from source, you also need Git, pnpm 11.5.3, and the .NET 8 SDK. Quit Rhino, then run these commands in Terminal or PowerShell:
 
 ```sh
 git clone https://github.com/tsoumdoa/hoppercode.git

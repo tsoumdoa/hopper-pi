@@ -14,7 +14,7 @@
 - **Grasshopper did not open:** `HopperCode` intentionally leaves Grasshopper unloaded. Submit a `gh_*` request in the browser. Hopper warns before opening Grasshopper and waits for its active definition. Run `HopperCodeStatus` for a typed startup or document error.
 - **Invalid connection token:** Run `HopperCodeStop`, then `HopperCode` to create a new instance profile and authenticated host connection.
 - **Grasshopper shows offline in Rhino.Inside.Revit:** Keep Grasshopper visible while the agent is working and inspect `HopperCodeStatus` after refocusing Rhino. Older Rhino.Inside.Revit versions may still limit background Grasshopper work.
-- **Plugin did not install:** Install [.NET 7 SDK](https://dotnet.microsoft.com/download), quit Rhino, then run `pnpm build:install`.
+- **Plugin did not install:** Install [.NET 8 SDK](https://dotnet.microsoft.com/download), quit Rhino, then run `pnpm build:install`.
 - **Stale plugin after `git pull`:** Quit Rhino, then run `pnpm build:install --open-rhino`.
 
 ## Export a conversation for debugging

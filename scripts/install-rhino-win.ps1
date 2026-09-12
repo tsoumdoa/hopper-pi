@@ -12,7 +12,7 @@ Set-StrictMode -Version Latest
 if ($Help) {
     Write-Output @'
 Build, verify, smoke-test, and install Hopper for Rhino 8 on Windows x64.
-Requires stable Node 22.19.0+, pnpm, a .NET SDK, and Rhino 8. Node is not bundled.
+Requires stable Node 22.19.0+, pnpm, the .NET 8 SDK, and Rhino 8.20 or newer running .NET 8. Node is not bundled.
 
 Usage: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-rhino-win.ps1 [options]
   -Yes        Replace an existing hopper-pi package without prompting.

@@ -2,7 +2,7 @@
 
 The `rh_document` and `gh_document` tools support native document inventory, settings inspection, directory browsing, new/open/activate/save/saveAs/close. Each tool performs one lifecycle action. Rhino script calls can bind execution to a specific document and settings revision through `expectedDocument`.
 
-The implementation compiles against RhinoCommon and Grasshopper `8.0.23304.9001` for `net7.0` and `net7.0-windows`. The platform branches use the pinned APIs below. Runtime verification on each platform remains separate from compilation.
+The implementation compiles against RhinoCommon and Grasshopper `8.0.23304.9001` for `net8.0` and `net8.0-windows`. The platform branches use the pinned APIs below. Runtime verification on each platform remains separate from compilation.
 
 | Operation | Rhino | Grasshopper |
 | --- | --- | --- |

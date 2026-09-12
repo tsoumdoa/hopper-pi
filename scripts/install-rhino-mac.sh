@@ -15,7 +15,7 @@ usage() {
 	cat <<'EOF'
 Build and install the local Hopper Rhino package on macOS.
 
-Requires macOS arm64, Rhino 8, stable Node 22.19.0 or newer, pnpm, and the .NET 7 SDK.
+Requires macOS arm64, Rhino 8.20 or newer running .NET 8, stable Node 22.19.0 or newer, pnpm, and the .NET 8 SDK.
 The Yak package does not bundle Node.
 HopperCode validates the Node executable and version when Rhino starts Hopper.
 
