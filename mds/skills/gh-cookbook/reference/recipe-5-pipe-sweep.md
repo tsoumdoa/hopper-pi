@@ -1,41 +1,14 @@
-# Recipe 5 — Pipe / Sweep
+# Recipe 5: Pipe and sweep
 
-**What:** Tubular radius around curves (pipe) or custom section swept along a rail.
+Create circular tubes or sweep a custom section along a rail.
 
-**Zone Map:**
-- **5a:** `[Curves][R_slider] → [Pipe]`
-- **5b:** `[Section][Rail] → [Sweep1]`
-
-## Pipeline (5a — Simple Pipe)
-
-```
-[Curves]          [R: 0.1→5 slider]
-(rail curves)        (pipe radius)
-    │                     │
-    └─────────────────────┤
-                          ▼
-                       [Pipe]
-                          │
-                          ▼
-              → closed brep pipes per curve
+```text
+Rail curves, radius -> Pipe -> Breps
+Rail, sections -----> Sweep1 -> Surface/Brep
 ```
 
-## Pipeline (5b — Custom Sweep)
+For pipes, set a positive radius and choose the cap mode explicitly when closed ends are required. Closure depends on the rail and caps.
 
-```
-[Section]          [Rail]
-(cross-section)    (path curve)
-    │                  │
-    └──────────────────┤
-                       ▼
-                   [Sweep1]
-                       │
-                       ▼
-            → swept surface/brep
-```
+For sweeps, position and orient each section relative to its rail. Keep separate rail/section sets in the intended branches. Check the resulting geometry before treating it as solid.
 
-## Output
-**5a:** Closed brep pipes · **5b:** Swept surface/brep.
-
-## Next Steps
-→ After **Recipe 2**: pipe edges for structural framing · After **Recipe 1+2**: piped grid/mesh look · Sweep L-channels, T-beams for architectural detailing
+After [edge extraction](./recipe-2-extract-edges.md), remove coincident rails if each shared edge should produce only one pipe.

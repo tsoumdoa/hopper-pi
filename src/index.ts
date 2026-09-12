@@ -5,24 +5,23 @@
  * a Grasshopper canvas running in Rhino via ZeroMQ.
  *
  * Architecture:
- *   - infra/        → ZMQ transport (REQ/REP, PUSH, SUB sockets)
- *   - types/        → Message & domain schemas
- *   - services/     → XML parser (Grasshopper archive → JSON)
- *   - tools/        → Pi extension tool definitions (rh_run_script + GH tools)
+ *   - web/          → Browser UI connected to the shared Node host
+ *   - host/         → Session coordination, persistence, and agent runtime
+ *   - infra/        → Authenticated RPC to native plugins over ZeroMQ
+ *   - types/        → Message and domain schemas
+ *   - services/     → Modeling operations and script preparation
+ *   - tools/        → Pi tool definitions and result presentation
  *
- * Backend ports (configurable via env vars):
- *   - PUB  :5555  (event publishing)
- *   - PUSH :5556  (command submission)
- *   - REQ  :5557  (query/response)
+ * Native plugins advertise lifecycle-specific RPC endpoints during discovery.
  */
 
+import { RuntimeSessionContext } from "./infra/runtime-session-context.js";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
-	beginTransactionPair,
-	cancelTransactionPair,
-	commitTransactionPair,
-} from "./services/transaction-lifecycle.js";
-import { probeBackend } from "./infra/backend-status.js";
+	beginRuntimeAgentTurn,
+	cancelRuntimeAgentTurn,
+	commitRuntimeAgentTurn,
+} from "./infra/runtime-rpc.js";
 import { registerBackendStatusUI } from "./ui/backend-status.js";
 import { registerToolSchemasUI } from "./ui/tool-schemas.js";
 import {
@@ -32,21 +31,67 @@ import {
 } from "./tools/index.js";
 import {
 	createHopperSearchToolsTool,
-	resetProgressiveActiveTools,
-	shouldResetProgressiveTools,
 } from "./tools/hopper-search-tools.js";
-import { withBackendGuard } from "./tools/with-backend-guard.js";
 import { ENV, isProgressiveToolsEnvEnabled } from "./config.js";
 import {
 	createRhinoCaptureModelController,
 	promptWantsVisualCapture,
-	rhinoCaptureUnavailableGuidance,
 } from "./services/rhino-capture-model.js";
+import { promptTargetsRhino } from "./services/prompt-routing.js";
+
+import { RhinoScriptWorkspace } from "./services/rhino-script-workspace.js";
+import { RhinoScriptExecution } from "./services/rhino-script-execution.js";
 import {
-	promptTargetsGrasshopper,
-	promptTargetsRhino,
-	rhinoRoutingGuidance,
-} from "./services/prompt-routing.js";
+	createRhScriptTool,
+	type ScriptToolContext,
+} from "./tools/rh-script.js";
+import { createRhRunScriptTool } from "./tools/rh-run-script.js";
+import { ToolPolicyRuntime, type ToolExecutionScope } from "./services/tool-policy-runtime.js";
+import { registerToolControlsCommand } from "./ui/tool-controls.js";
+
+export type HopperExtensionOptions = {
+	toolPolicy?: ToolPolicyRuntime;
+	/** Coordinators expose host/plugin tools without registering native geometry tools. */
+	nativeTools?: boolean;
+	/** Shared settings sessions have no native attachment to poll. */
+	backendStatusUI?: boolean;
+	runtimeSession?: RuntimeSessionContext;
+	runTool?: ToolExecutionScope;
+	documentTools?: ReturnType<typeof import("./tools/document-tools.js").createDocumentTool>[];
+	scriptWorkspaceDir?: string;
+	scriptWorkspaceQuotaBytes?: number;
+	sessionId?: () => string;
+};
+export function createHopperPiExtension(options: HopperExtensionOptions = {}) {
+	return (pi: ExtensionAPI) => registerHopperPiExtension(
+		options.runtimeSession ? withRuntimeSession(pi, options.runtimeSession) : pi, options,
+	);
+}
+/** Bind every hook and tool, including tools registered later by model selection. */
+function withRuntimeSession(pi: ExtensionAPI, session: RuntimeSessionContext): ExtensionAPI {
+	return new Proxy(pi, {
+		get(target, property) {
+			if (property === "on") {
+				return (event: string, handler: (...args: unknown[]) => unknown) =>
+					Reflect.apply(target.on, target, [event, (...args: unknown[]) => session.run(() => handler(...args))]);
+			}
+			if (property === "registerCommand") {
+				return (name: string, command: Parameters<ExtensionAPI["registerCommand"]>[1]) => target.registerCommand(name, {
+					...command,
+					handler: (...args) => session.run(() => command.handler(...args)),
+				});
+			}
+			if (property === "registerTool") {
+				return (tool: Parameters<ExtensionAPI["registerTool"]>[0]) => target.registerTool({
+					...tool,
+					execute: (...args) => session.run(() => tool.execute(...args)),
+				});
+			}
+			const value = Reflect.get(target, property, target);
+			return typeof value === "function" ? value.bind(target) : value;
+		},
+	});
+}
 
 const PROGRESSIVE_TOOLS_FLAG = "hopper-progressive-tools";
 
@@ -57,6 +102,53 @@ function isProgressiveToolsEnabled(pi: ExtensionAPI): boolean {
 }
 
 export default function hopperPiExtension(pi: ExtensionAPI) {
+	return registerHopperPiExtension(pi, {});
+}
+function registerHopperPiExtension(
+	pi: ExtensionAPI,
+	options: HopperExtensionOptions,
+) {
+	pi.registerFlag("hopper-config-dir", { type: "string", description: "Absolute Hopper tool settings profile directory" });
+	const policy = options.toolPolicy ?? new ToolPolicyRuntime();
+	let profileConfigured = false;
+
+	registerToolControlsCommand(pi, policy);
+	let scriptContext: ScriptToolContext | undefined;
+	const bindWorkspace = (directory: string, sessionId: string) => {
+		const workspace = new RhinoScriptWorkspace(
+			options.scriptWorkspaceDir ??
+				process.env.HOPPER_SCRIPT_WORKSPACE ??
+				directory,
+			options.scriptWorkspaceQuotaBytes ??
+				(process.env.HOPPER_SCRIPT_WORKSPACE_QUOTA_BYTES
+					? Number(process.env.HOPPER_SCRIPT_WORKSPACE_QUOTA_BYTES)
+					: undefined),
+		);
+		scriptContext = {
+			workspace,
+			execution: new RhinoScriptExecution(workspace),
+			sessionId,
+		};
+	};
+	const getScriptContext = () => {
+		if (!scriptContext) {
+			if (!options.sessionId)
+				throw new Error(
+					"Script workspace is not bound to a persistent session yet",
+				);
+			bindWorkspace(process.cwd(), options.sessionId());
+		}
+		return scriptContext!;
+	};
+	const registeredCatalog = (options.nativeTools === false ? HOPPER_REGISTERED_CATALOG.filter(entry => options.documentTools?.some(tool => tool.name === entry.tool.name)) : HOPPER_REGISTERED_CATALOG).map((entry) => ({
+		...entry,
+		tool:
+			options.documentTools?.find(tool => tool.name === entry.tool.name) ?? (entry.tool.name === "rh_script"
+				? createRhScriptTool(getScriptContext)
+				: entry.tool.name === "rh_run_script"
+					? createRhRunScriptTool(getScriptContext)
+					: entry.tool),
+	}));
 	pi.registerFlag(PROGRESSIVE_TOOLS_FLAG, {
 		type: "boolean",
 		default: isProgressiveToolsEnvEnabled(),
@@ -67,94 +159,90 @@ export default function hopperPiExtension(pi: ExtensionAPI) {
 
 	// ── Register Grasshopper/Rhino tools + progressive loader ───────
 
-	for (const entry of HOPPER_REGISTERED_CATALOG) {
-		pi.registerTool(entry.requires === "backend" ? withBackendGuard(entry.tool) : entry.tool);
-	}
-
-	let catalog: readonly HopperToolCatalogEntry[] = HOPPER_REGISTERED_CATALOG;
+	let catalog: readonly HopperToolCatalogEntry[] = registeredCatalog;
 	const getCatalog = () => catalog;
-	const progressive = isProgressiveToolsEnabled(pi);
-
-	const searchTool = createHopperSearchToolsTool(pi, getCatalog);
-	if (progressive) {
-		pi.registerTool(searchTool);
-	}
+	const searchTool = createHopperSearchToolsTool(pi, getCatalog, policy);
 
 	catalog = [
-		...HOPPER_REGISTERED_CATALOG,
+		...registeredCatalog,
 		{
 			tool: searchTool,
 			group: "interaction",
 			keywords: ["search tools", "activate", "discover"],
 			alwaysActive: true,
 		},
-		RH_CAPTURE_VIEW_CATALOG_ENTRY,
+		...(options.nativeTools === false ? [] : [RH_CAPTURE_VIEW_CATALOG_ENTRY]),
+		...policy.pluginCatalog,
 	];
 
-	registerBackendStatusUI(pi);
+	if (options.backendStatusUI !== false) registerBackendStatusUI(pi);
 	registerToolSchemasUI(pi, getCatalog);
 
 	const captureModel = createRhinoCaptureModelController(pi);
 
 	// ── Lifecycle: notify on load ──────────────────────────────────
 
-	pi.on("session_start", (event, ctx) => {
-		const progressive = isProgressiveToolsEnabled(pi);
-		if (progressive && shouldResetProgressiveTools(event.reason)) {
-			resetProgressiveActiveTools(pi, catalog);
+	pi.on("session_start", async (_event, ctx) => {
+		if (!profileConfigured && !options.toolPolicy) {
+			const configured = pi.getFlag("hopper-config-dir");
+			if (typeof configured === "string") policy.configureDirectory(configured);
+			profileConfigured = true;
 		}
-
-		// Compose with rh_capture_view after core reset so image gating stays authoritative.
-		captureModel.syncCaptureToolForModel(ctx.model);
-		void probeBackend();
-		ctx.ui.notify(
-			progressive
-				? "🦘 Hopper Pi: progressive tools on (core + hopper_search_tools); specialists load on demand"
-				: "🦘 Hopper Pi: rh_run_script (Rhino doc) + Grasshopper canvas tools loaded",
-			"info",
-		);
+		if (ctx.sessionManager) bindWorkspace(ctx.cwd, ctx.sessionManager.getSessionId());
+		policy.bind(pi, ctx, isProgressiveToolsEnabled(pi));
+		for (const entry of registeredCatalog) {
+			policy.register(pi, entry.tool, options.documentTools?.some(tool => tool.name === entry.tool.name) ? undefined : options.runTool);
+		}
+		policy.register(pi, searchTool);
+		if (options.nativeTools !== false) policy.register(pi, RH_CAPTURE_VIEW_CATALOG_ENTRY.tool, options.runTool);
+		policy.registerPlugins(pi);
+		await policy.reconcile();
 	});
+
+	pi.on("turn_end", async (_event, ctx) => {
+		policy.setContext(ctx);
+		await policy.reconcile(true);
+	});
+	pi.on("session_compact", async (_event, ctx) => { policy.setContext(ctx); await policy.reconcile(true); });
+	pi.on("session_compact_failed", async (_event, ctx) => { policy.setContext(ctx); await policy.reconcile(true); });
 
 	pi.on("before_agent_start", async (event, ctx) => {
-		const prompt = event.prompt ?? "";
-		if (!promptTargetsRhino(prompt)) return;
-
-		const wantsVisualCapture = promptWantsVisualCapture(prompt);
-		if (wantsVisualCapture) {
+		policy.setBusy(true);
+		policy.setContext(ctx);
+		await policy.reconcile(true);
+		if (options.nativeTools !== false && promptTargetsRhino(event.prompt ?? "") && promptWantsVisualCapture(event.prompt ?? "")
+			&& (await policy.allowedToolNames()).has("rh_capture_view")) {
 			await captureModel.maybeSwitchToMultimodalFallback(ctx);
+			await policy.reconcile(true);
 		}
-
-		const captureGuidance = wantsVisualCapture && !captureModel.isCaptureToolActive()
-			? rhinoCaptureUnavailableGuidance(ctx.model)
-			: "";
-		const guidance = [
-			rhinoRoutingGuidance(promptTargetsGrasshopper(prompt)),
-			captureGuidance,
-		].filter(Boolean).join(" ");
-
-		// Keep per-request routing out of conversation history; otherwise every Rhino
-		// turn adds another hidden message that persists for the rest of the session.
-		return { systemPrompt: `${event.systemPrompt}\n\n${guidance}` };
+		// Let Pi rebuild its prompt from the current tool list at every boundary.
+		// A systemPrompt override here would freeze stale tool/skill guidance for the turn.
 	});
 
-	pi.on("model_select", (event) => {
-		captureModel.syncCaptureToolForModel(event.model);
+	pi.on("model_select", async (event, ctx) => {
+		policy.setContext({ ...ctx, model: event.model });
+		if (!policy.isBusy()) await policy.reconcile();
 	});
 
-	// ── Agent undo (one GH undo step + one Rhino undo step per prompt) ─
+	// Owned-child sessions keep a prompt-wide undo segment. Shared task tools
+	// finish their own segments before releasing the process to another agent.
 
-	pi.on("agent_start", async () => {
-		await beginTransactionPair();
+	pi.on("agent_start", () => {
+		policy.setBusy(true);
+		beginRuntimeAgentTurn();
 	});
 
 	pi.on("agent_end", async (event) => {
 		if ("willRetry" in event && event.willRetry) {
 			return;
 		}
-		await commitTransactionPair();
+		await commitRuntimeAgentTurn();
+		policy.setBusy(false);
+		await policy.reconcile();
 	});
 
 	pi.on("session_shutdown", async () => {
-		await cancelTransactionPair();
+		await policy.close();
+		await cancelRuntimeAgentTurn();
 	});
 }

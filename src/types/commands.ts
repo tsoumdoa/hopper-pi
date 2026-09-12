@@ -245,12 +245,6 @@ export type RemoveScriptOutputParams = {
 	name: string;
 };
 
-export type EditScriptAccessParams = {
-	targetId: string;
-	name: string;
-	access: "item" | "list" | "tree";
-};
-
 export type ListScriptParamsParams = {
 	targetId: string;
 };
@@ -382,17 +376,3 @@ export const COMMAND_ACTIONS = [
 	"cancelRhinoAgentTransaction",
 	"setParamRhinoGeometry",
 ] as const satisfies readonly CommandAction[];
-
-export type Command<A extends CommandAction = CommandAction> = {
-	action: A;
-	params: CommandMap[A];
-};
-
-export type CommandParams = CommandMap[CommandAction];
-
-export type SubmitJobRequest = {
-	type: "submitJob";
-	token?: string;
-	jobId: string;
-	command: Command;
-};

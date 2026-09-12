@@ -1,4 +1,5 @@
 import { withRequester } from "../infra/request-helpers.js";
+import { RpcOperationError } from "../infra/runtime-rpc.js";
 import type { RunRhinoScriptResponse } from "../types/messages.js";
 
 export type RhRunScriptItem = {
@@ -14,6 +15,18 @@ export async function runRhinoScript(item: RhRunScriptItem): Promise<string> {
 			mode: item.mode,
 			source: item.source,
 			echo: item.echo ?? false,
+		}).catch((error: unknown) => {
+			if (!(error instanceof RpcOperationError)) throw error;
+			const data = error.result.data;
+			// Native failures carry stdout separately from the exception message.
+			// Preserve both in the tool text recorded by session exports.
+			if (!data || typeof data !== "object" || Array.isArray(data) ||
+				data.type !== "runRhinoScript.response") throw error;
+			return {
+				ok: false,
+				error: typeof data.error === "string" ? data.error : error.message,
+				output: typeof data.output === "string" ? data.output : "",
+			};
 		});
 
 		if (!res.ok) {

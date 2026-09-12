@@ -1,24 +1,4 @@
-export type JobState = "queued" | "running" | "completed" | "failed" | "cancelled";
-
-export type GhJobStatus = {
-	type: "gh.job.status";
-	timestamp: number;
-	jobId: string;
-	commandId: string;
-	state: JobState;
-	progress: number;
-	error: string | null;
-};
-
-export type GhEventXml = {
-	type: "gh.event.xml";
-	timestamp: number;
-	docName: string;
-	xml: string;
-};
-
-export type GhMessage = GhJobStatus | GhEventXml;
-
+import type { DocumentSettings } from "./document-management.js";
 export type GhComponentInfo = {
 	name: string;
 	typeGuid: string;
@@ -36,6 +16,8 @@ export type ListAllComponentsResponse = {
 };
 
 export type GetCurrentCanvasResponse = {
+	documentId?: string;
+	settings?: DocumentSettings | null;
 	type: "getCurrentCanvas.response";
 	timestamp: number;
 	docName: string;
@@ -79,17 +61,6 @@ export type GetCanvasErrorsResponse = {
 	errors: CanvasError[];
 };
 
-export type PingResponse = {
-	type: "ping.response";
-	timestamp: number;
-};
-
-export type AuthErrorResponse = {
-	type: "auth.error";
-	timestamp: number;
-	error: string;
-};
-
 export type RunRhinoScriptResponse = {
 	type: "runRhinoScript.response";
 	timestamp: number;
@@ -106,6 +77,8 @@ export type RhinoObjectInfo = {
 };
 
 export type QueryRhinoObjectsResponse = {
+	documentId?: string;
+	settings?: DocumentSettings | null;
 	type: "queryRhinoObjects.response";
 	timestamp: number;
 	objects: RhinoObjectInfo[];
@@ -126,10 +99,10 @@ export type RhinoViewMetadata = {
 	cameraDirection: RhinoPoint3d;
 	cameraUp: RhinoPoint3d;
 	lensLength: number;
-	cplaneName: string;
-	cplaneOrigin: RhinoPoint3d;
-	width?: number;
-	height?: number;
+	cPlaneName: string;
+	cPlaneOrigin: RhinoPoint3d;
+	width?: number | null;
+	height?: number | null;
 };
 
 export type CaptureRhinoViewResponse = {

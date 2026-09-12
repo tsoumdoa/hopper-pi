@@ -1,28 +1,11 @@
-# Recipe 8 — Project Points
+# Recipe 8: Project points
 
-**What:** Ray-cast points onto a surface/brep along a direction vector (usually Z-down).
+Project points onto target geometry along a specified direction.
 
-**Zone Map:** `[Points][Geometry] → [Project Point]`
-
-## Pipeline
-
-```
-[Points]          [Geometry]          [Direction / Unit Z]
-(source)          (target surface)      (ray direction)
-    │                  │                    │
-    └──────────────────┼────────────────────┘
-                       ▼
-                [Project Point]
-                     │   │
-                     P   I
-                     │   │
-                     ▼   ▼
-              projected  index of face
-              on surface  hit (-1 = miss)
+```text
+Points, target geometry, direction -> Project Point -> Projected points
 ```
 
-## Output
-3D points lying on the target geometry surface(s).
+For downward projection, use `{0,0,-1}`. Verify the selected component's supported geometry, direction behavior, and outputs. A point can miss or produce multiple intersections; inspect output counts and source correspondence rather than assuming one hit per point or a particular missing-value index.
 
-## Next Steps
-→ After **Recipe 7**: generate points above → project onto wavy surface for terrain-following · **Pull Point** for closest-point params · **Evaluate Surface** for normal-aligned objects on complex surfaces
+Use Pull Point for a closest-point operation. If downstream geometry needs UV coordinates or normals, obtain them from the hit surface after projection.

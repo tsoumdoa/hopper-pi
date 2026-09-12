@@ -1,9 +1,9 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { throwNoUi } from "./ui-helpers.js";
+import { throwNoUi, type SuspendQuestion } from "./ui-helpers.js";
 
-export function registerAskUserTool(pi: ExtensionAPI): void {
+export function registerAskUserTool(pi: ExtensionAPI, suspend?: SuspendQuestion): void {
 	pi.registerTool({
 		name: "ask_user",
 		label: "Ask User",
@@ -19,6 +19,7 @@ export function registerAskUserTool(pi: ExtensionAPI): void {
 		}),
 
 		async execute(_id, params, signal, _onUpdate, ctx) {
+			if (suspend) return suspend(_id, params);
 			if (!ctx.hasUI) {
 				throwNoUi("ask_user");
 			}

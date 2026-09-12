@@ -9,7 +9,6 @@ export const DEFAULT_LIMIT = 10;
 export const MAX_LIMIT = 50;
 
 function isSubsequence(word: string, token: string): boolean {
-	if (token.length < MIN_TOKEN_LENGTH) return false;
 	let i = 0;
 	for (const ch of word) {
 		if (ch === token[i]) i++;
@@ -49,16 +48,8 @@ export function scoreComponent(c: GhComponentInfo, token: string): number {
 	if (name === query) return 100;
 	if (name.startsWith(query)) return 90;
 	if (name.includes(query)) return 80;
-	if (query.length >= MIN_TOKEN_LENGTH) {
-		for (const word of nameWords) {
-			if (word.startsWith(query)) return 75;
-		}
-		for (const word of nameWords) {
-			if (word.includes(query)) return 65;
-		}
-		for (const word of nameWords) {
-			if (isSubsequence(word, query)) return 62;
-		}
+	for (const word of nameWords) {
+		if (isSubsequence(word, query)) return 62;
 	}
 	if (subcategory === query) return 70;
 	if (subcategory.includes(query)) return 60;

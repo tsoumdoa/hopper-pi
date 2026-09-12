@@ -1,0 +1,1 @@
+Create three new Rhino documents. Delegate a twisting tower, radial pavilion, and Möbius sculpture to separate workers in parallel. Give each a named layer and verify its object count. Don’t save or close the documents.

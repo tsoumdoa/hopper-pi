@@ -1,3 +1,4 @@
+import { getRuntimeSessionContext } from "./runtime-session-context.js";
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import { formatEndpoint, resolveConnection } from "./connection.js";
 
@@ -6,30 +7,38 @@ export type BackendStatus = {
 	error?: string;
 };
 
-let cachedStatus: BackendStatus | null = null;
+const backendStatusKey = Symbol("backendStatus");
+function backendState() {
+	return getRuntimeSessionContext().get(backendStatusKey, () => ({ status: null as BackendStatus | null }));
+}
 
 export function getCachedBackendStatus(): BackendStatus | null {
-	return cachedStatus;
+	return backendState().status;
 }
 
 export function setCachedBackendStatus(status: BackendStatus): void {
-	cachedStatus = status;
+	backendState().status = status;
 }
 
 /** True when the last probe reported the backend unreachable. */
 export function isBackendKnownOffline(): boolean {
-	return cachedStatus !== null && !cachedStatus.online;
+	const status = backendState().status;
+	return status !== null && !status.online;
 }
 
 export function formatBackendEndpoint(): string {
-	return formatEndpoint(resolveConnection().reqEndpoint);
+	try {
+		return formatEndpoint(resolveConnection().rpcEndpoint);
+	} catch {
+		return "RPC v2 profile unavailable";
+	}
 }
 
 export function backendOfflineMessage(): string {
 	const endpoint = formatBackendEndpoint();
 	return (
-		`Grasshopper backend is offline (${endpoint}). ` +
-		"Please check that Rhino is running, Grasshopper is open, and the Hopper connection profile/token is current."
+		`Hopper/Rhino runtime is offline (${endpoint}). ` +
+		"Please check that Rhino and HopperCode are running and that the connection profile is current."
 	);
 }
 

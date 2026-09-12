@@ -1,37 +1,14 @@
-# Recipe 6 — Dispatch / Pattern
+# Recipe 6: Dispatch pattern
 
-**What:** Split a list into A/B outputs using a boolean pattern — checkerboards, alternation, skip-N.
+Split an ordered list into A and B using a repeating Boolean pattern.
 
-**Zone Map:**
-```
-[List_in][Pattern] → [Dispatch] ──→ [Swatch_A][Preview_A]
-                                   └─→ [Swatch_B][Preview_B]
-```
-
-## Pipeline
-
-```
-[Input List]        [Pattern panel: oneItemPerLine]
-(e.g. SubSrf.S)          true
-                         false
-       │                     │
-       └─────────────────────┤
-                             ▼
-                        [Dispatch]
-                          │    │
-              ┌───────────┘    └───────────┐
-              ▼                           ▼
-      (items where true)           (items where false)
-              │                           │
-              ▼                           ▼
-     [Swatch: colour]  → [CustomPreview]   [Swatch: colour]  → [CustomPreview]
-          (A)                              (B)
+```text
+Input list -----------------> Dispatch list
+Boolean panel --------------> Dispatch pattern
+Dispatch A, Colour Swatch A -> Custom Preview A
+Dispatch B, Colour Swatch B -> Custom Preview B
 ```
 
-Set the Panel's `textOutput` to `oneItemPerLine`; put one Boolean on each line. Common repeating lists: `true`/`false` = ABAB · `true`/`true`/`false`/`false` = AABB · `true`/`false`/`false`/`false` = every fourth item in A.
+Set the panel's `textOutput` to `oneItemPerLine`. Put `true` and `false` on separate lines for alternating items; `true, true, false, false` gives pairs when entered one value per line.
 
-## Output
-Two lists partitioned by the pattern.
-
-## Next Steps
-→ Two **Custom Preview** nodes with different swatches = checkerboard facade · **Recipe 4** extrude only group A for projecting panels · **Cull Index** / **Cull N** for simpler removal patterns
+The outputs contain items matching true and false within each input branch. A 2D checkerboard needs row/column parity, such as `(row + column) % 2 == 0`; a repeating AB list alone can produce stripes depending on row length and branch structure.

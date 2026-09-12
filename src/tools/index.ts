@@ -5,8 +5,6 @@ export {
 	RH_CAPTURE_VIEW_CATALOG_ENTRY,
 	buildCatalogSizeReport,
 	formatCatalogSizeReport,
-	getAlwaysActiveToolNames,
-	getManagedHopperToolNames,
 	type CatalogSizeReport,
 	type HopperToolCatalogEntry,
 	type HopperToolGroup,

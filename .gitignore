@@ -67,6 +67,7 @@ venv/
 # Build / dist outputs (adjust to your project)
 # ------------------------------------------------------------
 dist/
+artifacts/
 build/
 out/
 target/
@@ -96,3 +97,8 @@ temp/
 *.tar.gz
 *.tgz
 /terminal-tui/all.json
+
+# Yak release archives and local authentication files
+*.yak
+.mcneel/
+yak.yml

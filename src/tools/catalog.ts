@@ -1,8 +1,13 @@
+import { TOOL_PLUGINS } from "../plugins/registry.js";
+import { rhDocumentTool } from "./rh-document.js";
+import { ghDocumentTool } from "./gh-document.js";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { createRhScriptTool } from "./rh-script.js";
 import { rhRunScriptTool } from "./rh-run-script.js";
 import { rhQueryObjectsTool } from "./rh-query-objects.js";
 import { rhViewControlTool } from "./rh-view-control.js";
 import { rhCaptureViewTool } from "./rh-capture-view.js";
+import { ghInspectDataTool } from "./gh-inspect-data.js";
 import { ghParamRhinoTool } from "./gh-param-rhino.js";
 import {
 	ghGetCanvasTool,
@@ -17,8 +22,6 @@ import { ghCreateWidgetTool } from "./edit-tools/gh-create-widget.js";
 import { ghMutateWidgetTool } from "./edit-tools/gh-mutate-widget.js";
 import { ghEditScriptTool } from "./edit-tools/gh-edit-script.js";
 import { ghApplyGraphTool } from "./gh-apply-graph.js";
-import { ghQuickScaffoldTool } from "./gh-quick-scaffold.js";
-import { hopperDelegateTool } from "./hopper-delegate.js";
 
 export const HOPPER_TOOL_GROUPS = [
 	"rhino",
@@ -26,6 +29,7 @@ export const HOPPER_TOOL_GROUPS = [
 	"gh-edit",
 	"gh-script",
 	"interaction",
+	...TOOL_PLUGINS.map(plugin => `plugin:${plugin.id}`),
 ] as const;
 
 export type HopperToolGroup = (typeof HOPPER_TOOL_GROUPS)[number];
@@ -57,6 +61,14 @@ type PromptTool = ToolDefinition & {
  * `hopper_search_tools` (factory that needs ExtensionAPI).
  */
 export const HOPPER_REGISTERED_CATALOG: readonly HopperToolCatalogEntry[] = [
+	{ tool: ghInspectDataTool, group: "gh-read", keywords: ["inspect data", "input values", "output values", "data tree", "branches", "pagination"], requires: "backend" },
+	{ tool: rhDocumentTool, group: "rhino", keywords: ["file", "open", "close", "save", "save as", "units", "tolerance", "3dm", "document settings"], requires: "backend" },
+	{ tool: ghDocumentTool, group: "gh-read", keywords: ["file", "open", "close", "save", "save as", "units", "tolerance", "ghx", "document settings"], requires: "backend" },
+    {
+        tool: createRhScriptTool(() => { throw new Error("Script workspace must be bound by the extension factory"); }),
+        group: "rhino",
+        keywords: ["saved script", "virtual edit", "patch", "revision", "rhino python", "rhino csharp", "history", "units", "tolerances"],
+    },
 	{
 		tool: rhRunScriptTool,
 		group: "rhino",
@@ -76,19 +88,6 @@ export const HOPPER_REGISTERED_CATALOG: readonly HopperToolCatalogEntry[] = [
 		group: "rhino",
 		keywords: ["viewport", "camera", "named view", "cplane", "zoom"],
 		requires: "backend",
-	},
-	{
-		tool: ghQuickScaffoldTool,
-		group: "gh-edit",
-		keywords: ["quick scaffold", "early preview", "placeholder", "time to first visible"],
-		alwaysActive: true,
-		requires: "backend",
-	},
-	{
-		tool: hopperDelegateTool,
-		group: "interaction",
-		keywords: ["subagent", "delegate", "parallel planning", "review"],
-		alwaysActive: true,
 	},
 	{
 		tool: ghApplyGraphTool,
@@ -177,18 +176,6 @@ export const RH_CAPTURE_VIEW_CATALOG_ENTRY: HopperToolCatalogEntry = {
 /** Tools registered eagerly (backend-guarded) in registration order. */
 export const ALL_TOOLS = HOPPER_REGISTERED_CATALOG.map((entry) => entry.tool);
 
-export function getAlwaysActiveToolNames(
-	catalog: readonly HopperToolCatalogEntry[],
-): string[] {
-	return catalog.filter((entry) => entry.alwaysActive).map((entry) => entry.tool.name);
-}
-
-export function getManagedHopperToolNames(
-	catalog: readonly HopperToolCatalogEntry[],
-): ReadonlySet<string> {
-	return new Set(catalog.map((entry) => entry.tool.name));
-}
-
 export type ToolSchemaSize = {
 	name: string;
 	group: HopperToolGroup;
@@ -215,13 +202,7 @@ function utf8Bytes(value: string): number {
 }
 
 function emptyGroupTotals(): Record<HopperToolGroup, { count: number; totalBytes: number }> {
-	return {
-		rhino: { count: 0, totalBytes: 0 },
-		"gh-read": { count: 0, totalBytes: 0 },
-		"gh-edit": { count: 0, totalBytes: 0 },
-		"gh-script": { count: 0, totalBytes: 0 },
-		interaction: { count: 0, totalBytes: 0 },
-	};
+	return Object.fromEntries(HOPPER_TOOL_GROUPS.map(id => [id, { count: 0, totalBytes: 0 }]));
 }
 
 export function measureToolSchemaSize(entry: HopperToolCatalogEntry): ToolSchemaSize {
@@ -254,7 +235,7 @@ export function buildCatalogSizeReport(
 	});
 	const byGroup = emptyGroupTotals();
 	for (const tool of tools) {
-		const row = byGroup[tool.group];
+		const row = byGroup[tool.group] ??= { count: 0, totalBytes: 0 };
 		row.count += 1;
 		row.totalBytes += tool.totalBytes;
 	}
@@ -275,7 +256,7 @@ export function formatCatalogSizeReport(report: CatalogSizeReport): string {
 		"",
 		"By group:",
 	];
-	for (const group of HOPPER_TOOL_GROUPS) {
+	for (const group of Object.keys(report.byGroup)) {
 		const row = report.byGroup[group];
 		lines.push(`  ${group}: ${row.count} tools, ${row.totalBytes} bytes`);
 	}

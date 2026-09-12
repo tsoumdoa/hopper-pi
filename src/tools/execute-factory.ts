@@ -33,10 +33,6 @@ export function createExecute<P>(
 		for (const p of params.items) {
 			const actions = normalizeMapped(mapParams(p));
 
-			if (actions.length === 0) {
-				continue;
-			}
-
 			for (const mapped of actions) {
 				const summary = progressMsg?.(p) ?? `Executing ${mapped.action}...`;
 
@@ -51,8 +47,7 @@ export function createExecute<P>(
 					const job = await submitCommand(mapped.action, mapped.params);
 					results.push(formatMessage(p, job));
 				} catch (err) {
-					results.push(`${summary} → ERROR: ${err instanceof Error ? err.message : String(err)}`);
-					results.push(formatMessage(p, { jobId: `failed: ${err instanceof Error ? err.message : String(err)}` }));
+					results.push(formatToolError(mapped.action, err));
 				}
 			}
 		}

@@ -23,7 +23,7 @@ function formatMetadata(metadata?: RhinoViewMetadata | null): string {
 		`Captured Rhino viewport "${metadata.viewName}" (${metadata.width ?? "?"}x${metadata.height ?? "?"}).`,
 		`Projection: ${metadata.projection}`,
 		`Camera: location=${formatPoint(metadata.cameraLocation)} target=${formatPoint(metadata.cameraTarget)} lens=${metadata.lensLength.toFixed(1)}mm`,
-		`CPlane: ${metadata.cplaneName || "(unnamed)"} origin=${formatPoint(metadata.cplaneOrigin)}`,
+		`CPlane: ${metadata.cPlaneName || "(unnamed)"} origin=${formatPoint(metadata.cPlaneOrigin)}`,
 	].join("\n");
 }
 
@@ -88,12 +88,13 @@ export const rhCaptureViewTool = defineTool({
 			};
 		}
 
+		const displayMode = params.displayMode?.trim();
 		const request = {
 			type: "captureRhinoView",
 			view: params.view?.trim() || "active",
 			width: clampDimension(params.width, DEFAULT_WIDTH),
 			height: clampDimension(params.height, DEFAULT_HEIGHT),
-			displayMode: params.displayMode?.trim() || undefined,
+			...(displayMode ? { displayMode } : {}),
 			transparentBackground: params.transparentBackground === true,
 			restoreView: params.restoreView !== false,
 		};

@@ -1,6 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { createExecute, formatDefaultResult, defaultProgressMsg } from "../edit-handlers.js";
+import { createExecute } from "../execute-factory.js";
+import { formatDefaultResult, defaultProgressMsg } from "../result-formatters.js";
 import { resolveInstanceGuid, resolveTypeGuid } from "../../services/guid-shortener.js";
 import type { CommandAction } from "../../types/commands.js";
 

@@ -1,33 +1,14 @@
-# Recipe 4 — Extrude
+# Recipe 4: Extrude
 
-**What:** Linear extrusion of curves or surfaces along a direction vector.
+Extrude geometry along a vector whose length sets the distance.
 
-**Zone Map:** `[Geometry][Dist_slider] → [Extrude]`
-
-## Pipeline
-
-```
-[Geometry]        [Dist: 0→50 slider]
-(curve/surface)     (extrusion distance)
-    │                     │
-    │    [Unit Z] ──→ [Amplitude] ─┘
-    │                           │
-    └───────────────────────────┤
-                                ▼
-                           [Extrude]
-                                │
-                                ▼
-              → extruded surface (curve) or polysurface (surface)
+```text
+Unit Z -------> Amplitude vector
+Distance -----> Amplitude length
+Geometry -----> Extrude base
+Amplitude ----> Extrude direction
 ```
 
-**Shortcut for simple Z-extrude:**
-```
-[Geometry] ──→ [Extrude].B
-[Unit Z]   ──→ [Extrude].D   (distance via Amplitude on vector)
-```
+For another direction, replace Unit Z with the intended vector. Preserve branches when matching separate objects to different distances.
 
-## Output
-Extruded surface or polysurface.
-
-## Next Steps
-→ After **Recipe 1**: extrude each patch at different heights (facade screen) · **Cap Holes** for solids · Boolean ops (**Solid Difference**, **Union**)
+The output is extruded geometry. Curve extrusion generally leaves openings; cap planar boundaries when a solid is required and verify closure. Use surface inputs when the intended result includes the base region.

@@ -5,7 +5,6 @@ export interface PickOption {
 }
 
 export const OTHER_OPTION_LABEL = "Other";
-export const OTHER_OPTION_VALUE = "__other__";
 
 export interface PickOptionResult {
 	question: string;
@@ -32,4 +31,15 @@ export function appendOtherOptionLabels(labels: string[]): string[] {
 
 export function isOtherChoice(choice: string): boolean {
 	return choice.trim().toLowerCase() === OTHER_OPTION_LABEL.toLowerCase();
+}
+
+/** Decode a durable browser answer into the same result returned by the original picker. */
+export function resolvePickOptionAnswer(question: string, options: PickOption[], answer: string | null): PickOptionResult {
+	if (answer === null) return { question, choice: null, value: null, label: null };
+	if (answer.startsWith("Other: ")) {
+		const customAnswer = answer.slice("Other: ".length);
+		return { question, choice: OTHER_OPTION_LABEL, value: customAnswer, label: OTHER_OPTION_LABEL, customAnswer };
+	}
+	const selected = resolvePickOption(options, answer);
+	return { question, choice: answer, value: selected?.value ?? answer, label: selected?.label ?? answer };
 }

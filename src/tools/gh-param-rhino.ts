@@ -1,6 +1,6 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { createHybridExecute } from "./edit-handlers.js";
+import { createHybridExecute } from "./execute-factory.js";
 import { withRequester } from "../infra/request-helpers.js";
 import {
 	resolveInstanceGuid,

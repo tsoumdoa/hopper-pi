@@ -1,21 +1,21 @@
 ---
 name: gh-reference
-description: Shared Grasshopper and Rhino reference docs — layout, script boilerplates, data types, canvas navigation. Load only what the task needs.
+description: Reference lookup for Hopper graph APIs, layout, data types, and Rhino/GH scripting. Load only the file needed for the current operation.
 ---
 
-# Agent reference index
+# Reference index
 
-Load only what the task needs. Workflow rules → [gh-modeling-expert](../skills/gh-modeling-expert/SKILL.md).
+Workflows live in [gh-modeling-expert](../skills/gh-modeling-expert/SKILL.md) and [rhino-document](../skills/rhino-document/SKILL.md).
 
-| File | Path | Load when |
-|------|------|-----------|
-| [apply-graph.md](./apply-graph.md) | `mds/reference/apply-graph.md` | Creating a complete new subgraph with `gh_apply_graph` |
-| [layout-system.md](./layout-system.md) | `mds/reference/layout-system.md` | Tier 3 builds, bounds/preview placement, layout bugs |
-| [canvas-navigation.md](./canvas-navigation.md) | `mds/reference/canvas-navigation.md` | Sub-graph or `selectionOnly` filters on existing canvas |
-| [data-type-guide.md](./data-type-guide.md) | `mds/reference/data-type-guide.md` | Type mismatches, panel input formats |
-| [script-component-lifecycle.md](./script-component-lifecycle.md) | `mds/reference/script-component-lifecycle.md` | Create/rename GH script component ports |
-| [csharp-boilerplate.md](./csharp-boilerplate.md) | `mds/reference/csharp-boilerplate.md` | C# script node code template |
-| [python-boilerplate.md](./python-boilerplate.md) | `mds/reference/python-boilerplate.md` | Python script node code template |
-| [rhino-script-boilerplate.md](./rhino-script-boilerplate.md) | `mds/reference/rhino-script-boilerplate.md` | `rh_run_script` (Rhino document, not GH canvas) |
+| Read when | Reference |
+|-----------|-----------|
+| Creating a new subgraph | [apply-graph.md](./apply-graph.md) |
+| Planning layout or fixing overlaps | [layout-system.md](./layout-system.md) |
+| Inspecting existing canvas structure | [canvas-navigation.md](./canvas-navigation.md) |
+| Resolving casts or panel data formats | [data-type-guide.md](./data-type-guide.md) |
+| Creating scripts or changing their ports | [script-component-lifecycle.md](./script-component-lifecycle.md) |
+| Writing or patching GH C# | [csharp-boilerplate.md](./csharp-boilerplate.md) |
+| Writing GH Python or handling trees | [python-boilerplate.md](./python-boilerplate.md) |
+| Writing, saving, or diagnosing Rhino scripts | [rhino-script-boilerplate.md](./rhino-script-boilerplate.md) |
 
-Recipes → [gh-cookbook](../skills/gh-cookbook/SKILL.md). Benchmarks → [docs/gh-cookbook-benchmarks.md](../../docs/gh-cookbook-benchmarks.md).
+Common modeling patterns: [gh-cookbook](../skills/gh-cookbook/SKILL.md).
