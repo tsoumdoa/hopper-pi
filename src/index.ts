@@ -5,15 +5,14 @@
  * a Grasshopper canvas running in Rhino via ZeroMQ.
  *
  * Architecture:
- *   - infra/        → ZMQ transport (REQ/REP, PUSH, SUB sockets)
- *   - types/        → Message & domain schemas
- *   - services/     → XML parser (Grasshopper archive → JSON)
- *   - tools/        → Pi extension tool definitions (rh_run_script + GH tools)
+ *   - web/          → Browser UI connected to the shared Node host
+ *   - host/         → Session coordination, persistence, and agent runtime
+ *   - infra/        → Authenticated RPC to native plugins over ZeroMQ
+ *   - types/        → Message and domain schemas
+ *   - services/     → Modeling operations and script preparation
+ *   - tools/        → Pi tool definitions and result presentation
  *
- * Backend ports (configurable via env vars):
- *   - PUB  :5555  (event publishing)
- *   - PUSH :5556  (command submission)
- *   - REQ  :5557  (query/response)
+ * Native plugins advertise lifecycle-specific RPC endpoints during discovery.
  */
 
 import { RuntimeSessionContext } from "./infra/runtime-session-context.js";
