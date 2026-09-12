@@ -2,7 +2,7 @@
 
 Keep the release scripts and this guide in Git. Keep built `.yak` files and their build records in ignored `artifacts/` folders. `pnpm release` publishes the binaries to Yak and attaches the same files to a GitHub Release. Yak stores login credentials outside the repo; never commit or share them. The package documentation links to `https://github.com/tsoumdoa/hoppercode`, the hoppercode repository.
 
-The native package is private on npm. Publish 0.2.0 through Yak and GitHub only; `hopper-pi` remains the legacy 0.1 extension package. The `stable/0.1` branch preserves its final release and setup instructions. Marking published npm versions deprecated is a separate registry action when 0.2.0 is publicly available.
+Publish 0.2.0 through Yak and GitHub only. npm publishing is disabled. The `stable/0.1` branch preserves the final `hopper-pi` extension release and its setup instructions.
 
 Run the local checks in [TESTING.md](../TESTING.md) before preparing a release. This repository intentionally does not run CI.
 

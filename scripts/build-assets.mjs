@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Compile release assets for npm packing and Rhino packaging.
+// Compile host and web assets for development and Rhino packaging.
 import { spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
