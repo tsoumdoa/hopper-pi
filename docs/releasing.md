@@ -1,6 +1,10 @@
 # Versioning and publishing Hopper to Yak and GitHub
 
-Keep the release scripts and this guide in Git. Keep built `.yak` files and their build records in ignored `artifacts/` folders. `pnpm release` publishes the binaries to Yak and attaches the same files to a GitHub Release. Yak stores login credentials outside the repo; never commit or share them. The package documentation links to `https://github.com/tsoumdoa/hopper-pi`, the current origin repository. Update that URL in the packaging script if you rename the repository.
+Keep the release scripts and this guide in Git. Keep built `.yak` files and their build records in ignored `artifacts/` folders. `pnpm release` publishes the binaries to Yak and attaches the same files to a GitHub Release. Yak stores login credentials outside the repo; never commit or share them. The package documentation links to `https://github.com/tsoumdoa/hoppercode`, the hoppercode repository.
+
+The native package is private on npm. Publish 0.2.0 through Yak and GitHub only; `hopper-pi` remains the legacy 0.1 extension package. The `stable/0.1` branch preserves its final release and setup instructions. Marking published npm versions deprecated is a separate registry action when 0.2.0 is publicly available.
+
+Run the local checks in [TESTING.md](../TESTING.md) before preparing a release. This repository intentionally does not run CI.
 
 ## Version and release shortcuts
 
@@ -126,18 +130,18 @@ Finally, find `hoppercode` in Rhino's `PackageManager` on each OS, install it, r
 The combined command stops at the first failure. It never overwrites an existing remote tag. Inspect the draft and Yak uploads before retrying:
 
 ```sh
-gh release view v0.2.0 --repo tsoumdoa/hopper-pi
+gh release view v0.2.0 --repo tsoumdoa/hoppercode
 pnpm yak search public
 ```
 
 Replace the example version for later releases. A Yak search alone does not prove both distributions are present; use the upload output and test installation on both OSes.
 
-If GitHub draft creation or asset upload failed, inspect the draft and attach any missing archives with `gh release upload v0.2.0 <file> --repo tsoumdoa/hopper-pi`. Do not replace already uploaded assets with different builds.
+If GitHub draft creation or asset upload failed, inspect the draft and attach any missing archives with `gh release upload v0.2.0 <file> --repo tsoumdoa/hoppercode`. Do not replace already uploaded assets with different builds.
 
 If Yak failed, upload only the missing distributions with `yak push --source https://yak.rhino3d.com <file>`. Use the same tested archives. Once both Yak distributions and both GitHub assets are present, finish the existing draft:
 
 ```sh
-gh release edit v0.2.0 --repo tsoumdoa/hopper-pi --draft=false --latest
+gh release edit v0.2.0 --repo tsoumdoa/hoppercode --draft=false --latest
 ```
 
 If only the final GitHub publication failed, that same edit command completes it. Do not rerun the combined command against an existing draft or published tag. For code or metadata fixes, bump the version and rebuild instead.

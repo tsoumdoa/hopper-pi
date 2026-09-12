@@ -1,3 +1,4 @@
+import { connect as connectTcp } from "node:net";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -551,4 +552,21 @@ describe("Hopper loopback server", () => {
 			headers: { Authorization: "Bearer runtime-token" },
 		})).resolves.toMatchObject({ status: 405 });
 	});
+});
+
+it.each([false, true])("survives malformed request URLs, upgrade=%s", async (upgrade) => {
+	const server = await startHopperServer({ runtime: fakeRuntime(), staticDir: await staticDirectory(), protocolHandshake, getRuntimeStatus });
+	servers.push(server);
+	const response = await new Promise<string>((resolve, reject) => {
+		const socket = connectTcp(server.port, "127.0.0.1", () => {
+			socket.write(`GET http://[ HTTP/1.1\r\nHost: localhost\r\n${upgrade ? "Connection: Upgrade\r\nUpgrade: websocket" : "Connection: close"}\r\n\r\n`);
+		});
+		let text = "";
+		socket.setEncoding("utf8");
+		socket.on("data", chunk => { text += chunk; });
+		socket.on("end", () => resolve(text));
+		socket.on("error", reject);
+	});
+	expect(response).toContain("400 Bad Request");
+	expect((await fetch(`http://127.0.0.1:${server.port}/health`)).status).toBe(200);
 });

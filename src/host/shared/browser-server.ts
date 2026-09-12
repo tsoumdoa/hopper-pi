@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
-import { serveStatic, validateStaticDirectory, handleUiApi } from "../server.js";
+import { serveStatic, validateStaticDirectory, handleUiApi, parseRequestUrl } from "../server.js";
 import { MAX_IMAGES, MAX_IMAGE_BASE64 } from "../protocol.js";
 import {
 	parseSharedBrowserCommand,
@@ -37,7 +37,9 @@ export function createSharedBrowserServer(options: {
 		Buffer.byteLength(a) === Buffer.byteLength(b) &&
 		timingSafeEqual(Buffer.from(a), Buffer.from(b));
 	const server = createServer((request, response) => {
-		const pathname = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+		const url = parseRequestUrl(request, response);
+		if (!url) return;
+		const pathname = url.pathname;
 		if (pathname === "/health" || pathname === "/api/shared/health") {
 			response.writeHead(200, {
 				"Content-Type": "application/json",

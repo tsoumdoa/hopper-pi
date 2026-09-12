@@ -1,3 +1,4 @@
+import { connect as connectTcp } from "node:net";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -244,4 +245,25 @@ it("routes tool context only after authenticating the browser request", async ()
 	expect(runtime.getToolSettings).not.toHaveBeenCalled();
 	await fetch(url, { method: "POST", headers: { Authorization: "Bearer secret" }, body: JSON.stringify({ type: "check-connection" }) });
 	expect(target.updateToolSettings).toHaveBeenCalledWith({ type: "check-connection" });
+});
+
+it("rejects malformed unauthenticated URLs and continues serving authenticated clients", async () => {
+	const f = await fixture();
+	const response = await new Promise<string>((resolve, reject) => {
+		const socket = connectTcp(f.port, "127.0.0.1", () => {
+			socket.write("GET http://[ HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+		});
+		let text = "";
+		socket.setEncoding("utf8");
+		socket.on("data", chunk => { text += chunk; });
+		socket.on("end", () => resolve(text));
+		socket.on("error", reject);
+	});
+	expect(response).toContain("400 Bad Request");
+	expect((await fetch(`http://127.0.0.1:${f.port}/health`)).status).toBe(200);
+	const socket = await f.connect();
+	const snapshot = next(socket);
+	socket.send(JSON.stringify({ type: "authenticate", token: "secret" }));
+	expect((await snapshot).type).toBe("shared_snapshot");
+	expect(f.command).not.toHaveBeenCalled();
 });

@@ -2,7 +2,7 @@
 
 Hopper is a native Rhino 8 plugin for working on Rhino models and Grasshopper definitions with AI. It serves a local web UI for chatting with the agent, choosing models, and managing conversations. Under the hood, it uses Pi for the agent runtime and authentication across multiple model providers, including provider sign-in and API keys. You do not need to install the Pi CLI separately.
 
-Before 0.2.0, Hopper was a Pi extension. The 0.2.0 workflow uses the native plugin and browser UI. The earlier extension is still available on the [stable/0.1 branch](https://github.com/tsoumdoa/hoppercode/tree/stable/0.1), with its own setup instructions.
+Before 0.2.0, Hopper was a Pi extension. The 0.2.0 workflow uses the native plugin and browser UI. The 0.1 extension is deprecated in favor of the native plugin and remains available on the [stable/0.1 branch](https://github.com/tsoumdoa/hoppercode/tree/stable/0.1), with its own setup instructions.
 
 ## Install
 

@@ -310,7 +310,7 @@ writeFileSync(join(output, "manifest.yml"), [
 	"  Requires Rhino 8.20 or newer running .NET 8 and separately installed stable Node.js 22.19.0 or newer.",
 	"  Supports macOS Apple Silicon and Windows x64. Intel Macs are not supported.",
 	"  Run HopperCode in Rhino to start and connect a model provider.",
-	"url: https://github.com/tsoumdoa/hopper-pi",
+	"url: https://github.com/tsoumdoa/hoppercode",
 	"keywords:",
 	"  - grasshopper",
 	"  - rhino",

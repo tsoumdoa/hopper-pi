@@ -28,7 +28,7 @@ The main commands are:
 | `pnpm release` | Publish the tested packages to Yak and create the GitHub tag and release |
 | `pnpm test` | Run the test suite |
 
-Release builds require .NET and Rhino 8's Yak executable. `pnpm build` builds both platforms sequentially and writes to `artifacts/hopper-pi-<version>-<target>`. It refuses a nonempty output directory. Use `pnpm build --output artifacts/my-release` for another destination; each target gets its own `mac-arm64` or `win-x64` subfolder. `--target mac-arm64` and `--target win-x64` remain available for a single target. Cross-built packages still need runtime testing on their target OS.
+Release builds require .NET and Rhino 8's Yak executable. `pnpm build` builds both platforms sequentially and writes to `artifacts/hoppercode-<version>-<target>`. It refuses a nonempty output directory. Use `pnpm build --output artifacts/my-release` for another destination; each target gets its own `mac-arm64` or `win-x64` subfolder. `--target mac-arm64` and `--target win-x64` remain available for a single target. Cross-built packages still need runtime testing on their target OS.
 
 See [publishing to Yak](releasing.md) for release preparation and the `pnpm yak` install, test-server, and public upload commands.
 

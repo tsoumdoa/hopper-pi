@@ -24,4 +24,3 @@ export function WorkingTime({ streaming, startedAt, finishedAt, inline = false }
 		</Tag>
 	);
 }
-

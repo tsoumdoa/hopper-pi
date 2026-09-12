@@ -1,14 +1,12 @@
 {
-	"name": "hopper-pi",
+	"name": "hoppercode",
+	"private": true,
 	"license": "MIT",
 	"version": "0.2.0",
 	"packageManager": "pnpm@11.5.3",
 	"engines": {
 		"node": ">=22.19.0"
 	},
-	"keywords": [
-		"pi-package"
-	],
 	"type": "module",
 	"files": [
 		"dist",

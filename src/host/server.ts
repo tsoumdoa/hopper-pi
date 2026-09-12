@@ -69,6 +69,15 @@ function writeJson(response: ServerResponse, status: number, body: unknown): voi
 	response.end(JSON.stringify(body));
 }
 
+export function parseRequestUrl(request: IncomingMessage, response: ServerResponse): URL | undefined {
+	try {
+		return new URL(request.url ?? "/", "http://127.0.0.1");
+	} catch {
+		writeJson(response, 400, { error: "Invalid URL" });
+		return undefined;
+	}
+}
+
 function setPageHeaders(response: ServerResponse, contentType: string): void {
 	response.setHeader("Content-Type", contentType);
 	response.setHeader("X-Content-Type-Options", "nosniff");
@@ -158,7 +167,9 @@ export function handleUiApi(request: IncomingMessage, response: ServerResponse, 
 	tools?: (query: URLSearchParams) => Pick<HostRuntime, "getToolSettings" | "updateToolSettings">;
 }): boolean {
 	const token = options.token;
-	const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+	const url = parseRequestUrl(request, response);
+	if (!url) return true;
+	const pathname = url.pathname;
 	if (pathname === "/api/session/export") {
 		const authorization = request.headers.authorization ?? "";
 		if (!safeEqual(authorization.startsWith("Bearer ") ? authorization.slice(7) : "", token)) {
@@ -170,7 +181,7 @@ export function handleUiApi(request: IncomingMessage, response: ServerResponse, 
 			return true;
 		}
 		try {
-			const body = JSON.stringify((options.exportSession ? options.exportSession(new URL(request.url ?? "/", "http://localhost").searchParams.get("conversationId")) : options.runtime.exportSession()), null, 2);
+			const body = JSON.stringify((options.exportSession ? options.exportSession(url.searchParams.get("conversationId")) : options.runtime.exportSession()), null, 2);
 			setPageHeaders(response, "application/json; charset=utf-8");
 			response.setHeader("Content-Disposition", 'attachment; filename="hopper-session-debug.json"');
 			response.end(body);
@@ -191,7 +202,7 @@ export function handleUiApi(request: IncomingMessage, response: ServerResponse, 
 		}
 		void (async () => {
 			if (pathname === "/api/tools") {
-				const tools = options.tools?.(new URL(request.url ?? "/", "http://localhost").searchParams) ?? options.runtime;
+				const tools = options.tools?.(url.searchParams) ?? options.runtime;
 				if (request.method === "GET") {
 					writeJson(response, 200, await tools.getToolSettings());
 				} else {
@@ -220,7 +231,7 @@ export function handleUiApi(request: IncomingMessage, response: ServerResponse, 
 				writeJson(response, 200, updated);
 				return true;
 			}
-			const file = new URL(request.url ?? "/", "http://localhost").searchParams.get("file");
+			const file = url.searchParams.get("file");
 			if (request.method === "GET" && file) {
 				writeJson(response, 200, { content: options.runtime.readSkill(file) });
 			} else {
@@ -238,7 +249,9 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 	const staticDir = validateStaticDirectory(options.staticDir);
 	const token = options.token ?? randomBytes(32).toString("base64url");
 	const httpServer = createHttpServer((request, response) => {
-		const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+		const url = parseRequestUrl(request, response);
+		if (!url) return;
+		const pathname = url.pathname;
 		if (handleUiApi(request, response, { runtime: options.runtime, token })) return;
 		if (pathname === "/health") {
 			// Rhino's health monitor has a two-second HTTP deadline. Leave room for
@@ -309,7 +322,14 @@ export async function startHopperServer(options: HopperServerOptions): Promise<H
 		const address = httpServer.address();
 		const port = typeof address === "object" && address ? address.port : undefined;
 		const expectedOrigin = port ? `http://${LOOPBACK_HOST}:${port}` : "";
-		const url = new URL(request.url ?? "/", expectedOrigin || "http://localhost");
+		let url: URL;
+		try {
+			url = new URL(request.url ?? "/", expectedOrigin || "http://localhost");
+		} catch {
+			socket.write("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+			socket.destroy();
+			return;
+		}
 		const suppliedOrigin = request.headers.origin;
 		const allowedOrigin = suppliedOrigin === expectedOrigin
 			|| (options.allowedDevOrigin !== undefined && suppliedOrigin === options.allowedDevOrigin);
