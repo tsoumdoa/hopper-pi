@@ -3,10 +3,12 @@ import { defineTool } from "@earendil-works/pi-coding-agent";
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import { executeGhEditScript } from "../../services/gh-edit-script-executor.js";
 import {
+	presentGhEditScriptExecution,
 	renderGhEditScriptCall,
 	renderGhEditScriptResult,
 	type GhEditScriptDetails,
 } from "./gh-edit-script-render.js";
+import { sanitizeGhEditScriptItem, summarizeGhEditScriptItem } from "../../services/gh-edit-script-log.js";
 import { ScriptIOFields } from "./shared-types.js";
 import type { GhEditScriptItem } from "../../types/gh-edit-script.js";
 
@@ -130,10 +132,14 @@ export const ghEditScriptTool = defineTool({
 	}),
 	execute: async (_toolCallId, params, _signal, onUpdate) => {
 		const items = params.items as GhEditScriptItem[];
-		const progressFn = typeof onUpdate === "function"
-			? onUpdate as (msg: { content: import("@earendil-works/pi-ai").TextContent[]; details: unknown }) => void
-			: undefined;
-		return executeGhEditScript(items, progressFn);
+		const execution = await executeGhEditScript(items, (item) => {
+			if (typeof onUpdate !== "function") return;
+			onUpdate({
+				content: [{ type: "text", text: summarizeGhEditScriptItem(item) }],
+				details: { item: sanitizeGhEditScriptItem(item) },
+			});
+		});
+		return presentGhEditScriptExecution(execution);
 	},
 
 	renderCall: (args, theme) => renderGhEditScriptCall(args as { items: GhEditScriptItem[] }, theme),

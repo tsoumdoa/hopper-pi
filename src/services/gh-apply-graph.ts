@@ -1,5 +1,5 @@
 import { assembleCsharpScript } from "./csharp-script-assembler.js";
-import { getCachedOrFetchComponents, fetchCanvasErrors, fetchCurrentCanvas } from "../tools/canvas-fetch.js";
+import { getCachedOrFetchComponents, fetchCanvasErrors, fetchCurrentCanvas } from "../infra/canvas-fetch.js";
 import { checkCanvasOverlaps } from "../tools/canvas-checks.js";
 import { withRequester } from "../infra/request-helpers.js";
 import { toShortInstanceGuid } from "./guid-shortener.js";

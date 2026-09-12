@@ -91,7 +91,7 @@ function seedScenario(snapshot, scenario, conversationId) {
 
 	snapshot.tasks.push(task("t2", "completed", { kind: "follow_up", text: "Add a 600mm parapet along the top of every wall.", bindings: [facade] }, { created_at: now - 500_000, updated_at: now - 420_000 }));
 	snapshot.turns.push({ id: "turn-2", task_id: "t2", state: "completed", started_at: now - 500_000, ended_at: now - 420_000 });
-	snapshot.questions.push({ id: "q1", task_id: "t2", answer: JSON.stringify("Meters"), payload: JSON.stringify({ question: "Which units does this document use?", options: ["Millimeters", "Meters"] }) });
+	snapshot.questions.push({ id: "q1", task_id: "t2", turn_id: "turn-2", answer: JSON.stringify("Meters"), payload: JSON.stringify({ question: "Which units does this document use?", options: ["Millimeters", "Meters"] }) });
 	snapshot.inputs.push({ id: 1, task_id: "t2", turn_id: "turn-2", state: "applied", payload: JSON.stringify({ text: "Keep the parapet on the Walls layer." }) });
 	snapshot.inputs.push({ id: 2, task_id: "t2", turn_id: "turn-2", state: "not_applied", payload: JSON.stringify({ text: "Actually make it 900mm." }) });
 	snapshot.events.push(messagesEvent("t2", "turn-2", [{ role: "assistant", content: [{ type: "text", text: "Added 12 parapet extrusions (0.6 m tall) on the `Walls` layer. The document is in meters, so I converted the height." }] }]));
@@ -114,7 +114,7 @@ function seedScenario(snapshot, scenario, conversationId) {
 	if (scenario === "question") {
 		snapshot.tasks.push(task("t3", "awaiting_user", { kind: "prompt", text: "Rebuild the mullions as a parametric grid.", bindings: [roof] }, { created_at: now - 40_000, updated_at: now - 20_000 }));
 		snapshot.turns.push({ id: "turn-3", task_id: "t3", state: "running", started_at: now - 38_000 });
-		snapshot.questions.push({ id: "q2", task_id: "t3", answer: null, payload: JSON.stringify({ question: "Which spacing should the mullion grid use?", options: ["1.2 m", "1.5 m", "Match existing"] }) });
+		snapshot.questions.push({ id: "q2", task_id: "t3", turn_id: "turn-3", answer: null, payload: JSON.stringify({ question: "Which spacing should the mullion grid use?", options: ["1.2 m", "1.5 m", "Match existing"] }) });
 	}
 	if (scenario === "failed") {
 		snapshot.tasks.push(task("t3", "failed", { kind: "prompt", text: "Launch a second Rhino for the roof.", bindings: [] }, { created_at: now - 40_000, updated_at: now - 20_000 }));

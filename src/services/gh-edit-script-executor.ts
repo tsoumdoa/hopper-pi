@@ -1,10 +1,6 @@
-import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
-import type { TextContent } from "@earendil-works/pi-ai";
 import { submitCommand } from "../infra/command-dispatch.js";
 import { withRequester } from "../infra/request-helpers.js";
-import { lineCount } from "../lib/line-count.js";
-import { fetchScriptCode } from "../tools/canvas-fetch.js";
-import { formatDefaultResult, formatToolError } from "../tools/result-formatters.js";
+import { fetchScriptCode } from "../infra/canvas-fetch.js";
 import { resolveInstanceGuid } from "./guid-shortener.js";
 import {
 	assembleCsharpScript,
@@ -17,14 +13,23 @@ import {
 	looksLikeGrasshopperCsharpScript,
 	validateCsharpScript,
 } from "./csharp-script-validator.js";
-import {
-	sanitizeGhEditScriptItem,
-	summarizeGhEditScriptItem,
-} from "./gh-edit-script-log.js";
 import type { CommandAction } from "../types/commands.js";
 import type { CsharpScriptPartsInput, PatchScope } from "../types/csharp-script.js";
 import type { GhEditScriptItem, ResolvedGhEditScriptItem } from "../types/gh-edit-script.js";
-import type { GhEditScriptDetails } from "../tools/edit-tools/gh-edit-script-render.js";
+
+export type GhEditScriptOutcome =
+	| { kind: "query"; item: GhEditScriptItem; output: string }
+	| { kind: "queryError"; item: GhEditScriptItem; error: unknown }
+	| { kind: "mutation"; item: GhEditScriptItem; jobId: string };
+
+export type GhEditScriptExecution = {
+	items: GhEditScriptItem[];
+	outcomes: GhEditScriptOutcome[];
+	queryCount: number;
+	mutationCount: number;
+	error?: string;
+	validationErrors?: string[];
+};
 
 const CSHARP_ONLY_PATCH_SCOPES = new Set([
 	"runScriptBody",
@@ -228,26 +233,14 @@ async function executeQueryItem(item: Extract<GhEditScriptItem, { action: "getCo
 
 export async function executeGhEditScript(
 	items: GhEditScriptItem[],
-	onUpdate?: (msg: { content: TextContent[]; details: unknown }) => void,
-): Promise<AgentToolResult<GhEditScriptDetails>> {
-	const summaries = items.map(summarizeGhEditScriptItem);
-
+	onUpdate?: (item: GhEditScriptItem) => void,
+): Promise<GhEditScriptExecution> {
 	let preparedMutations: ResolvedGhEditScriptItem[] = [];
 	try {
 		preparedMutations = await prepareMutationItems(items);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
-		return {
-			content: [{ type: "text" as const, text: message }],
-			details: {
-				summaries,
-				results: [`prepare failed: ${message}`],
-				items: items.map(sanitizeGhEditScriptItem),
-				queryCount: 0,
-				mutationCount: 0,
-				error: message,
-			} satisfies GhEditScriptDetails,
-		};
+		return { items, outcomes: [], queryCount: 0, mutationCount: 0, error: message };
 	}
 
 	const validationErrors = items
@@ -263,72 +256,32 @@ export async function executeGhEditScript(
 		.filter((msg): msg is string => msg != null);
 
 	if (validationErrors.length > 0) {
-		return {
-			content: [{ type: "text" as const, text: validationErrors.join("\n\n") }],
-			details: {
-				summaries,
-				results: validationErrors.map((e) => `validation: ${e}`),
-				items: items.map(sanitizeGhEditScriptItem),
-				queryCount: 0,
-				mutationCount: 0,
-				validationErrors,
-			} satisfies GhEditScriptDetails,
-		};
+		return { items, outcomes: [], queryCount: 0, mutationCount: 0, validationErrors };
 	}
 
 	const queryActions = new Set(["getCode", "getCodeParts"]);
 	const queryItems = items.filter((item) => queryActions.has(item.action));
 	const mutationItems = preparedMutations;
 
-	const outcomeResults: string[] = [];
-	const results: string[] = [];
+	const outcomes: GhEditScriptOutcome[] = [];
 
 	for (const item of queryItems) {
 		if (item.action !== "getCode" && item.action !== "getCodeParts") continue;
-		const summary = summarizeGhEditScriptItem(item);
-		onUpdate?.({
-			content: [{ type: "text" as const, text: summary }],
-			details: { item: sanitizeGhEditScriptItem(item) },
-		});
+		onUpdate?.(item);
 		try {
-			const output = await executeQueryItem(item);
-			results.push(output);
-			outcomeResults.push(`${summary} → ${lineCount(output)} lines`);
-		} catch (err) {
-			const message = formatToolError(item.action, err);
-			results.push(message);
-			outcomeResults.push(`${summary} → failed`);
+			outcomes.push({ kind: "query", item, output: await executeQueryItem(item) });
+		} catch (error) {
+			outcomes.push({ kind: "queryError", item, error });
 		}
 	}
 
-	if (mutationItems.length > 0) {
-		for (const item of mutationItems) {
-			const summary = summarizeGhEditScriptItem(item);
-			onUpdate?.({
-				content: [{ type: "text" as const, text: summary }],
-				details: { item: sanitizeGhEditScriptItem(item) },
-			});
-
-			const mapped = mapGhEditScriptMutation(item);
-			if (!mapped) continue;
-
-			const job = await submitCommand(mapped.action, mapped.params);
-			outcomeResults.push(`${summary} → ${job.jobId}`);
-			results.push(formatDefaultResult(
-				{ action: item.action, targetId: "targetId" in item ? item.targetId : undefined },
-				job,
-			));
-		}
+	for (const item of mutationItems) {
+		onUpdate?.(item);
+		const mapped = mapGhEditScriptMutation(item);
+		if (!mapped) continue;
+		const job = await submitCommand(mapped.action, mapped.params);
+		outcomes.push({ kind: "mutation", item, jobId: job.jobId });
 	}
 
-	return {
-		content: [{ type: "text" as const, text: results.join("\n") }],
-		details: {
-			summaries,
-			results: outcomeResults,
-			items: items.map(sanitizeGhEditScriptItem),
-			queryCount: queryItems.length,
-			mutationCount: mutationItems.length,
-		} satisfies GhEditScriptDetails,
-	};
+	return { items, outcomes, queryCount: queryItems.length, mutationCount: mutationItems.length };
 }

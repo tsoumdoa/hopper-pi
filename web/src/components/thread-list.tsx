@@ -6,13 +6,13 @@ import {
 	Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { TargetBinding } from "../../../src/protocol/shared-execution";
+import { readBinding } from "../../../src/protocol/browser-snapshot.js";
+import { readJson, nullable } from "../../../src/protocol/browser-schema.js";
 import { ExportSessionButton } from "./export-session-button";
 import { cn } from "../lib/utils";
 import {
 	bindingLabeler,
-	decode,
-	type Row,
+	type ConversationSnapshot,
 	type SharedSnapshot,
 } from "../state/shared-snapshot";
 
@@ -31,8 +31,8 @@ export function ThreadList({
 	selectedId: string;
 	connected: boolean;
 	onSelect(id: string): void;
-	onArchive(row: Row): void;
-	onDelete(row: Row): void;
+	onArchive(row: ConversationSnapshot): void;
+	onDelete(row: ConversationSnapshot): void;
 	onManageArchived(): void;
 }) {
 	const [now, setNow] = useState(Date.now);
@@ -55,7 +55,7 @@ export function ThreadList({
 	yesterday.setDate(today.getDate() - 1);
 	const week = new Date(today);
 	week.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-	const group = (row: Row) => {
+	const group = (row: ConversationSnapshot) => {
 		const time = Number(row.last_activity_at ?? row.created_at);
 		return time >= +today
 			? "Today"
@@ -65,7 +65,7 @@ export function ThreadList({
 					? "This week"
 					: "Older";
 	};
-	const renderRow = (row: Row) => {
+	const renderRow = (row: ConversationSnapshot) => {
 		const id = String(row.id),
 			live = Boolean(row.live_state),
 			waiting = row.live_state === "awaiting_user";
@@ -88,7 +88,7 @@ export function ThreadList({
 					: age < 86_400_000
 						? `${Math.floor(age / 3_600_000)}h`
 						: `${Math.floor(age / 86_400_000)}d`;
-		const target = decode<TargetBinding | null>(row.document_target, null);
+		const target = readJson(row.document_target, nullable(readBinding), null);
 		return (
 			<div
 				key={id}

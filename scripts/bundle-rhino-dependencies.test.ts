@@ -26,6 +26,7 @@ async function fixture() {
 	return modules;
 }
 
+// Bundles and imports the full dependency graph; allow for concurrent CI I/O.
 it("preserves public exports and shared schema/agent state across bundled entrypoints", async () => {
 	const modules = await fixture();
 	const exportsBefore = new Map<string, string[]>();
@@ -61,7 +62,7 @@ it("preserves public exports and shared schema/agent state across bundled entryp
 	const core = loaded.get("@earendil-works/pi-agent-core/index");
 	expect(loaded.get("@earendil-works/pi-agent-core/node").Agent).toBe(core.Agent);
 	expect(loaded.get("@earendil-works/pi-agent-core/harness/context").BACKGROUND_CONTEXT).toBe(core.BACKGROUND_CONTEXT);
-});
+}, 30_000);
 
 it.each(["version", "exports"])("rejects changed %s before replacing either package", async field => {
 	const modules = await fixture();

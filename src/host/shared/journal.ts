@@ -1,4 +1,6 @@
 import { browserConversationsQuery, browserRecoveryTasksQuery } from "./conversation-snapshot.js";
+import { journalSchemaVersion, migrateJournal } from "./journal-migrations.js";
+import { readBrowserSnapshot, readDelegationSnapshot, readSchedulingSnapshot, readConversationSnapshot, readSnapshot } from "./journal-reads.js";
 import { BrowserHistory } from "./browser-history.js";
 import { createHash, randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
@@ -12,19 +14,8 @@ import {
 	type TargetBinding,
 } from "../../protocol/shared-execution.js";
 
-// Keep the adapter local while the repository supports Node 20 type definitions.
-// The runtime minimum is Node 22.19, which includes node:sqlite without a flag.
-type Value = string | number | null;
-export type Row = Record<string, Value>;
-interface Database {
-	exec(sql: string): void;
-	prepare(sql: string): {
-		get(...values: Value[]): Row | undefined;
-		all(...values: Value[]): Row[];
-		run(...values: Value[]): { changes: number | bigint };
-	};
-	close(): void;
-}
+import type { Database, Row, Value } from "./journal-database.js";
+export type { Row } from "./journal-database.js";
 
 function canonical(value: unknown): string {
 	if (value === null || typeof value === "string" || typeof value === "boolean")
@@ -74,7 +65,7 @@ export interface Receipt {
 
 /** SQLite is the authority for accepted work, dispatch intent, and recovery. */
 export class TaskJournal {
-	static readonly schemaVersion = 6;
+	static readonly schemaVersion = journalSchemaVersion;
 	private readonly sessionDirectory: string | undefined;
 	conversationRevision = 0;
 	private readonly db: Database;
@@ -89,161 +80,7 @@ export class TaskJournal {
 			this.db.exec(
 				"PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA synchronous = FULL;",
 			);
-			this.transaction(() => {
-				const version = Number(
-					this.db.prepare("PRAGMA user_version").get()!.user_version,
-				);
-				if (version > TaskJournal.schemaVersion)
-					throw new Error(`Unsupported shared journal version ${version}`);
-				if (version >= 1) return;
-				this.db.exec(`
-CREATE TABLE identity (id TEXT PRIMARY KEY);
-CREATE TABLE conversations (id TEXT PRIMARY KEY);
-CREATE TABLE sessions (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id), UNIQUE(id, conversation_id));
-CREATE TABLE tasks (
- id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, session_id TEXT NOT NULL,
- payload TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('queued','running','suspending','awaiting_user','completed','cancelled','interrupted','uncertain')),
- FOREIGN KEY(session_id, conversation_id) REFERENCES sessions(id, conversation_id)
-);
-CREATE TABLE turns (
- id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id),
- state TEXT NOT NULL CHECK(state IN ('queued','running','suspended','completed','cancelled','interrupted','uncertain')),
- cleanup_confirmed INTEGER NOT NULL DEFAULT 0 CHECK(cleanup_confirmed IN (0,1)),
- UNIQUE(id, task_id)
-);
-CREATE UNIQUE INDEX one_active_turn ON turns(task_id) WHERE state IN ('queued','running');
-CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL REFERENCES tasks(id), kind TEXT NOT NULL, payload TEXT NOT NULL);
-CREATE TABLE requests (id TEXT PRIMARY KEY, hash TEXT NOT NULL, receipt TEXT NOT NULL);
-CREATE TABLE questions (
- id TEXT PRIMARY KEY, task_id TEXT NOT NULL, turn_id TEXT NOT NULL, tool_call_id TEXT NOT NULL,
- payload TEXT NOT NULL, answer TEXT, continuation_id TEXT UNIQUE REFERENCES turns(id),
- FOREIGN KEY(turn_id, task_id) REFERENCES turns(id, task_id), UNIQUE(turn_id, tool_call_id)
-);
-CREATE UNIQUE INDEX one_pending_question ON questions(task_id) WHERE answer IS NULL;
-CREATE TABLE inputs (
- id INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL, turn_id TEXT NOT NULL, payload TEXT NOT NULL,
- state TEXT NOT NULL CHECK(state IN ('accepted','delivering','applied','not_applied','unknown')),
- FOREIGN KEY(turn_id, task_id) REFERENCES turns(id, task_id)
-);
-PRAGMA user_version = 1;`);
-				this.db.prepare("INSERT INTO identity VALUES (?)").run(randomUUID());
-			});
-			this.transaction(() => {
-				if (
-					Number(this.db.prepare("PRAGMA user_version").get()!.user_version) >=
-					2
-				)
-					return;
-				this.db.exec(`
-ALTER TABLE tasks ADD COLUMN parent_task_id TEXT REFERENCES tasks(id);
-ALTER TABLE tasks ADD COLUMN root_task_id TEXT REFERENCES tasks(id);
-ALTER TABLE tasks ADD COLUMN cancellation_requested INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE turns ADD COLUMN owner TEXT;
-ALTER TABLE turns ADD COLUMN usage REAL NOT NULL DEFAULT 0;
-CREATE TABLE dependencies(task_id TEXT NOT NULL REFERENCES tasks(id), dependency_id TEXT NOT NULL REFERENCES tasks(id), PRIMARY KEY(task_id,dependency_id));
-CREATE TABLE operations(id TEXT PRIMARY KEY,task_id TEXT NOT NULL,turn_id TEXT NOT NULL,owner TEXT, name TEXT NOT NULL,class TEXT NOT NULL,arguments TEXT NOT NULL,hash TEXT NOT NULL,wire_id TEXT UNIQUE,deadline INTEGER NOT NULL,state TEXT NOT NULL,result TEXT, FOREIGN KEY(turn_id,task_id) REFERENCES turns(id,task_id));
-CREATE TABLE recovery_dispositions(id TEXT PRIMARY KEY,task_id TEXT NOT NULL REFERENCES tasks(id),payload TEXT NOT NULL);
-CREATE TABLE attachments(lifecycle_id TEXT PRIMARY KEY,payload TEXT NOT NULL);
-CREATE TABLE records(kind TEXT NOT NULL,id TEXT NOT NULL,task_id TEXT NOT NULL REFERENCES tasks(id),payload TEXT NOT NULL,state TEXT NOT NULL, PRIMARY KEY(kind,id));
-CREATE TABLE reservations(destination TEXT PRIMARY KEY,operation_id TEXT NOT NULL REFERENCES operations(id),baseline TEXT NOT NULL);
-PRAGMA user_version = 2;`);
-			});
-			this.transaction(() => {
-				if (
-					Number(this.db.prepare("PRAGMA user_version").get()!.user_version) >=
-					3
-				)
-					return;
-				this.db.exec(
-					"ALTER TABLE conversations ADD COLUMN title TEXT NOT NULL DEFAULT ''; ALTER TABLE conversations ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0; ALTER TABLE sessions ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0; PRAGMA user_version=3;",
-				);
-			});
-			if (
-				Number(this.db.prepare("PRAGMA user_version").get()!.user_version) < 4
-			) {
-				this.db.exec("PRAGMA foreign_keys=OFF");
-				try {
-					this.transaction(() => {
-						for (const table of ["tasks", "turns"]) {
-							const schema = String(
-								this.db
-									.prepare(
-										"SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
-									)
-									.get(table)!.sql,
-							);
-							this.db.exec(
-								schema
-									.replace(`CREATE TABLE ${table}`, `CREATE TABLE ${table}_v4`)
-									.replace(
-										"'interrupted','uncertain'",
-										"'interrupted','failed','uncertain'",
-									),
-							);
-							this.db.exec(
-								`INSERT INTO ${table}_v4 SELECT * FROM ${table}; DROP TABLE ${table}; ALTER TABLE ${table}_v4 RENAME TO ${table};`,
-							);
-						}
-						this.db.exec(
-							"CREATE UNIQUE INDEX one_active_turn ON turns(task_id) WHERE state IN ('queued','running'); PRAGMA user_version=4;",
-						);
-						if (this.db.prepare("PRAGMA foreign_key_check").all().length)
-							throw new Error("Journal migration foreign key check failed");
-					});
-				} finally {
-					this.db.exec("PRAGMA foreign_keys=ON");
-				}
-			}
-			this.transaction(() => {
-				if (
-					Number(this.db.prepare("PRAGMA user_version").get()!.user_version) >=
-					5
-				)
-					return;
-				this.db.exec(`
-ALTER TABLE tasks ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE tasks ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE turns ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE turns ADD COLUMN started_at INTEGER;
-ALTER TABLE turns ADD COLUMN ended_at INTEGER;
-ALTER TABLE operations ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE operations ADD COLUMN ended_at INTEGER;
-ALTER TABLE events ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0;
-CREATE TRIGGER task_created AFTER INSERT ON tasks BEGIN UPDATE tasks SET created_at=CAST((julianday('now')-2440587.5)*86400000 AS INTEGER),updated_at=CAST((julianday('now')-2440587.5)*86400000 AS INTEGER) WHERE id=NEW.id; END;
-CREATE TRIGGER task_updated AFTER UPDATE OF state,cancellation_requested ON tasks BEGIN UPDATE tasks SET updated_at=CAST((julianday('now')-2440587.5)*86400000 AS INTEGER) WHERE id=NEW.id; END;
-CREATE TRIGGER turn_created AFTER INSERT ON turns BEGIN UPDATE turns SET created_at=CAST((julianday('now')-2440587.5)*86400000 AS INTEGER),started_at=CASE WHEN NEW.state='running' THEN CAST((julianday('now')-2440587.5)*86400000 AS INTEGER) ELSE NULL END WHERE id=NEW.id; END;
-CREATE TRIGGER turn_updated AFTER UPDATE OF state ON turns BEGIN UPDATE turns SET started_at=CASE WHEN NEW.state='running' THEN COALESCE(started_at,CAST((julianday('now')-2440587.5)*86400000 AS INTEGER)) ELSE started_at END,ended_at=CASE WHEN NEW.state IN ('suspended','completed','failed','cancelled','interrupted','uncertain') THEN CAST((julianday('now')-2440587.5)*86400000 AS INTEGER) ELSE ended_at END WHERE id=NEW.id; END;
-CREATE TRIGGER operation_created AFTER INSERT ON operations BEGIN UPDATE operations SET created_at=CAST((julianday('now')-2440587.5)*86400000 AS INTEGER) WHERE id=NEW.id; END;
-CREATE TRIGGER operation_updated AFTER UPDATE OF state ON operations BEGIN UPDATE operations SET ended_at=CAST((julianday('now')-2440587.5)*86400000 AS INTEGER) WHERE id=NEW.id; END;
-CREATE TRIGGER event_created AFTER INSERT ON events BEGIN UPDATE events SET created_at=CAST((julianday('now')-2440587.5)*86400000 AS INTEGER) WHERE id=NEW.id; END;
-PRAGMA user_version=5;`);
-			});
-			this.transaction(() => {
-				if (Number(this.db.prepare("PRAGMA user_version").get()!.user_version) < 6)
-					this.db.exec(`ALTER TABLE conversations ADD COLUMN archived_at INTEGER;
-ALTER TABLE conversations ADD COLUMN document_label TEXT;
-CREATE TABLE conversation_sequence (value INTEGER NOT NULL);
-INSERT INTO conversation_sequence SELECT COALESCE(MAX(rowid),0) FROM conversations;
-CREATE TRIGGER conversation_created AFTER INSERT ON conversations BEGIN
- UPDATE conversations SET rowid=MAX(NEW.rowid,(SELECT value+1 FROM conversation_sequence)) WHERE id=NEW.id;
- UPDATE conversation_sequence SET value=(SELECT MAX(rowid) FROM conversations);
-END;
-CREATE TABLE deleted_conversation_files (id TEXT PRIMARY KEY);
-PRAGMA user_version=6;`);
-			});
-			this.db.exec(`
-CREATE INDEX IF NOT EXISTS tasks_by_state ON tasks(state);
-CREATE INDEX IF NOT EXISTS tasks_by_root ON tasks(root_task_id);
-CREATE INDEX IF NOT EXISTS tasks_by_parent ON tasks(parent_task_id);
-CREATE INDEX IF NOT EXISTS tasks_by_conversation ON tasks(conversation_id);
-CREATE INDEX IF NOT EXISTS recoveries_by_task ON recovery_dispositions(task_id);
-CREATE INDEX IF NOT EXISTS operations_by_task ON operations(task_id);
-CREATE INDEX IF NOT EXISTS turns_by_task ON turns(task_id);
-CREATE INDEX IF NOT EXISTS records_by_task ON records(task_id);
-CREATE INDEX IF NOT EXISTS questions_by_task ON questions(task_id);
-CREATE INDEX IF NOT EXISTS inputs_by_task ON inputs(task_id);
-CREATE INDEX IF NOT EXISTS events_by_task ON events(task_id);
-`);
+			migrateJournal(this.db, (work) => this.transaction(work));
 			this.browserHistory = new BrowserHistory(this.db);
 			this.cleanupDeletedConversationFiles();
 		} catch (error) {
@@ -1809,45 +1646,7 @@ CREATE INDEX IF NOT EXISTS events_by_task ON events(task_id);
 
 	/** Bounded display data, independent of the complete recovery/export journal. */
 	browserSnapshot(options: { conversationId?: string; before?: number; afterConversationSequence?: number } = {}) {
-		return this.transaction(() => {
-			const conversations = this.db.prepare(browserConversationsQuery).all().map(({ has_fixture, ...row }): Row => {
-				const first = String(row.first_user_text ?? "").trim().replace(/\s+/g," ");
-				const custom = !has_fixture && row.title && row.title !== "New chat" ? String(row.title) : "";
-				const text = custom || first;
-				const short = text.split(" ").slice(0,8).join(" ").slice(0,60);
-				return { ...row, title: short ? short + (short.length < text.length ? "…" : "") : "New thread" };
-			});
-			const conversationId = conversations.find(row => row.id === options.conversationId)?.id
-				?? conversations.find(row => !row.archived_at && Number(row.sequence) > (options.afterConversationSequence ?? 0))?.id ?? null;
-			const roots = conversationId === null ? [] : this.db.prepare(`SELECT sequence,id FROM browser_roots
-WHERE conversation_id=? AND NOT fixture AND sequence<? ORDER BY sequence DESC LIMIT 21`)
-				.all(conversationId, options.before ?? Number.MAX_SAFE_INTEGER);
-			const page = roots.slice(0, 20).reverse();
-			const active = conversationId === null ? [] : this.db.prepare(`SELECT sequence,id FROM browser_roots
-WHERE conversation_id=? AND NOT fixture AND state IN ('queued','running','suspending','awaiting_user') ORDER BY sequence`)
-				.all(conversationId);
-			const recoveryRoots = this.db.prepare(`SELECT DISTINCT browser_root_id AS id FROM (${browserRecoveryTasksQuery}) WHERE conversation_id=?`).all(conversationId);
-			const visibleRoots = [...page, ...recoveryRoots];
-			const rootIds = [...new Set([...visibleRoots, ...active].map(row => row.id))];
-			const marks = rootIds.map(() => "?").join(",") || "NULL";
-			const tasks = this.db.prepare(`SELECT rowid AS sequence,* FROM tasks WHERE id IN (${marks}) OR root_task_id IN (${marks}) OR parent_task_id IN (${marks}) ORDER BY rowid`)
-				.all(...rootIds, ...rootIds, ...rootIds);
-			const ids = tasks.map(row => row.id);
-			const selected = ids.map(() => "?").join(",") || "NULL";
-			const rows = (table: string) => this.db.prepare(`SELECT * FROM ${table} WHERE task_id IN (${selected}) ORDER BY rowid`).all(...ids);
-			const conversationIds = conversations.map(row => row.id);
-			return {
-				conversations,
-				sessions: this.db.prepare(`SELECT * FROM sessions WHERE conversation_id IN (${conversationIds.map(() => "?").join(",") || "NULL"}) AND id NOT LIKE 'worker-%' ORDER BY rowid`).all(...conversationIds),
-				tasks, turns: rows("turns"), questions: rows("questions"), inputs: rows("inputs"),
-				recoveries: rows("recovery_dispositions"),
-				records: this.db.prepare(`SELECT * FROM records WHERE task_id IN (${selected}) AND kind='scheduling' ORDER BY rowid`).all(...ids),
-				events: this.db.prepare(`SELECT id,task_id,kind,payload,created_at FROM browser_events WHERE task_id IN (${selected}) ORDER BY id`).all(...ids),
-				operations: [] as Row[], reservations: [] as Row[], attachments: [] as Row[], dependencies: [] as Row[],
-				history: { conversationId, before: options.before ?? null, hasOlder: roots.length > 20,
-					oldestSequence: page[0]?.sequence ?? null, pageTaskIds: tasks.filter(row => visibleRoots.some(root => root.id === row.id || root.id === row.root_task_id || root.id === row.parent_task_id)).map(row => row.id) },
-			};
-		});
+		return this.transaction(() => readBrowserSnapshot(this.db, options));
 	}
 
 	getOperation(operationId: string): Row | undefined {
@@ -1873,12 +1672,7 @@ WHERE conversation_id=? AND NOT fixture AND state IN ('queued','running','suspen
 			WHERE state IN ('dispatched','uncertain') ${includeRecovered ? "" : "AND NOT EXISTS (SELECT 1 FROM recovery_dispositions r WHERE r.task_id=o.task_id)"} ORDER BY rowid`).all();
 	}
 	delegationSnapshot(rootTaskId: string) {
-		return this.transaction(() => ({
-			tasks: this.db.prepare("SELECT * FROM tasks WHERE parent_task_id=? ORDER BY rowid").all(rootTaskId),
-			turns: this.db.prepare("SELECT * FROM turns WHERE task_id IN (SELECT id FROM tasks WHERE parent_task_id=?) ORDER BY rowid").all(rootTaskId),
-			events: this.db.prepare("SELECT * FROM events WHERE task_id IN (SELECT id FROM tasks WHERE parent_task_id=?) ORDER BY id").all(rootTaskId),
-			records: this.db.prepare("SELECT * FROM records WHERE kind='artifact' AND task_id IN (SELECT id FROM tasks WHERE parent_task_id=?) ORDER BY rowid").all(rootTaskId),
-		}));
+		return this.transaction(() => readDelegationSnapshot(this.db, rootTaskId));
 	}
 
 	getInputState(inputId: number): Value | undefined {
@@ -1890,80 +1684,15 @@ WHERE conversation_id=? AND NOT fixture AND state IN ('queued','running','suspen
 
 	/** Keep finished siblings for dependencies and usage, without reading saved payloads. */
 	schedulingSnapshot(taskIds: string[] = []) {
-		return this.transaction(() => {
-			const scope = `WITH RECURSIVE relevant(id) AS (
-				SELECT id FROM tasks WHERE state IN ('queued','running','suspending','awaiting_user')
-					OR (state='uncertain' AND NOT EXISTS (SELECT 1 FROM recovery_dispositions r WHERE r.task_id=tasks.id))
-					OR id IN (SELECT value FROM json_each(?))
-				UNION SELECT t.id FROM tasks t JOIN relevant r ON t.root_task_id=r.id
-				UNION SELECT t.root_task_id FROM tasks t JOIN relevant r ON t.id=r.id WHERE t.root_task_id IS NOT NULL
-				UNION SELECT d.dependency_id FROM dependencies d JOIN relevant r ON d.task_id=r.id
-			) `;
-			const query = (sql: string) => this.db.prepare(scope + sql).all(JSON.stringify(taskIds));
-			const selected = "SELECT id FROM relevant";
-			return {
-				conversations: query(`SELECT * FROM conversations WHERE id IN (SELECT conversation_id FROM tasks WHERE id IN (${selected})) ORDER BY rowid`),
-				tasks: query(`SELECT id,conversation_id,session_id,state,parent_task_id,root_task_id,cancellation_requested,
-					json_object('bindings',json_extract(payload,'$.bindings'),'messageTarget',json_extract(payload,'$.messageTarget')) AS payload
-					FROM tasks WHERE id IN (${selected}) ORDER BY rowid`),
-				turns: query(`SELECT id,task_id,state,owner,usage FROM turns WHERE task_id IN (${selected}) ORDER BY rowid`),
-				operations: query(`SELECT id,task_id,turn_id,owner,state FROM operations WHERE task_id IN (${selected}) ORDER BY rowid`),
-				recoveries: query(`SELECT id,task_id FROM recovery_dispositions WHERE task_id IN (${selected}) ORDER BY rowid`),
-				dependencies: query(`SELECT * FROM dependencies WHERE task_id IN (${selected}) ORDER BY rowid`),
-				questions: query(`SELECT id,task_id,turn_id,continuation_id FROM questions WHERE task_id IN (${selected}) ORDER BY rowid`),
-				records: query(`SELECT kind,id,task_id,state,
-					json_object('turnId',json_extract(payload,'$.turnId'),'continuationId',json_extract(payload,'$.continuationId'),
-					'binding',json_extract(payload,'$.binding'),'grantId',json_extract(payload,'$.grantId')) AS payload
-					FROM records WHERE task_id IN (${selected}) AND kind IN ('admission','handoff','scope','document-action') ORDER BY rowid`),
-				attachments: this.db.prepare("SELECT lifecycle_id,json_object('processId',json_extract(payload,'$.processId'),'processStartTime',json_extract(payload,'$.processStartTime')) AS payload FROM attachments ORDER BY rowid").all(),
-			};
-		});
+		return this.transaction(() => readSchedulingSnapshot(this.db, taskIds));
 	}
 
 	/** Filter in SQLite so an export never materializes other conversations. */
 	conversationSnapshot(conversationId: string | null) {
-		return this.transaction(() => {
-			const conversations = this.db.prepare("SELECT rowid AS sequence,* FROM conversations WHERE id=?").all(conversationId);
-			const rows = (table: string) => this.db.prepare(`SELECT * FROM ${table} WHERE task_id IN (SELECT id FROM tasks WHERE conversation_id=?) ORDER BY ${table === "events" || table === "inputs" ? "id" : "rowid"}`).all(conversationId);
-			return {
-				conversations,
-				sessions: this.db.prepare("SELECT * FROM sessions WHERE conversation_id=? ORDER BY rowid").all(conversationId),
-				tasks: this.db.prepare("SELECT * FROM tasks WHERE conversation_id=? ORDER BY rowid").all(conversationId),
-				turns: rows("turns"), inputs: rows("inputs"), questions: rows("questions"), events: rows("events"),
-				operations: rows("operations"), recoveries: rows("recovery_dispositions"), records: rows("records"), dependencies: rows("dependencies"),
-			};
-		});
+		return this.transaction(() => readConversationSnapshot(this.db, conversationId));
 	}
 
 	snapshot(options: { includeEvents?: boolean } = {}) {
-		return this.transaction(() => ({
-			conversations: this.db
-				.prepare("SELECT rowid AS sequence, * FROM conversations ORDER BY rowid")
-				.all(),
-			sessions: this.db.prepare("SELECT * FROM sessions ORDER BY rowid").all(),
-			operations: this.db
-				.prepare("SELECT * FROM operations ORDER BY rowid")
-				.all(),
-			recoveries: this.db
-				.prepare("SELECT * FROM recovery_dispositions ORDER BY rowid")
-				.all(),
-			reservations: this.db
-				.prepare("SELECT * FROM reservations ORDER BY destination")
-				.all(),
-			records: this.db.prepare("SELECT * FROM records ORDER BY rowid").all(),
-			attachments: this.db
-				.prepare("SELECT * FROM attachments ORDER BY rowid")
-				.all(),
-			dependencies: this.db
-				.prepare("SELECT * FROM dependencies ORDER BY rowid")
-				.all(),
-			tasks: this.db.prepare("SELECT * FROM tasks ORDER BY rowid").all(),
-			turns: this.db.prepare("SELECT * FROM turns ORDER BY rowid").all(),
-			questions: this.db
-				.prepare("SELECT * FROM questions ORDER BY rowid")
-				.all(),
-			inputs: this.db.prepare("SELECT * FROM inputs ORDER BY id").all(),
-			events: options.includeEvents === false ? [] : this.db.prepare("SELECT * FROM events ORDER BY id").all(),
-		}));
+		return this.transaction(() => readSnapshot(this.db, options));
 	}
 }

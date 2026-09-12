@@ -1,11 +1,12 @@
 import type { ToolCall } from "./hopper-types";
-import { decode, type Row } from "./shared-snapshot";
+import type { EventSnapshot } from "../../../src/protocol/browser-snapshot.js";
+import { readProgress, type BrowserMessage } from "../../../src/protocol/browser-payloads.js";
 
 /** Rebuild the PR #47 tool cards from both live journal events and saved Pi messages. */
-export function taskTools(events: Row[]): ToolCall[] {
+export function taskTools(events: EventSnapshot[]): ToolCall[] {
 	const tools = new Map<string, ToolCall>();
 	for (const row of events) {
-		const payload = decode<any>(row.payload, {});
+		const payload = readProgress(row.payload);
 		const turnId = String(payload.turnId ?? "");
 		const key = (id: unknown) => {
 			const raw = String(id ?? "tool");
@@ -37,7 +38,7 @@ export function taskTools(events: Row[]): ToolCall[] {
 				status: partial ? "running" : isError ? "error" : "complete",
 			});
 		};
-		const message = (item: any, running = false) => {
+		const message = (item: BrowserMessage | undefined, running = false) => {
 			if (item?.role === "assistant" && Array.isArray(item.content)) {
 				for (const part of item.content) if (part.type === "toolCall")
 					start(part.id ?? part.toolCallId, part.name, part.arguments, running);

@@ -1,8 +1,12 @@
 import type { AgentToolResult, ToolRenderResultOptions } from "@earendil-works/pi-coding-agent";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Text, type Component } from "@earendil-works/pi-tui";
-import { summarizeGhEditScriptItem } from "../../services/gh-edit-script-log.js";
+import { sanitizeGhEditScriptItem, summarizeGhEditScriptItem } from "../../services/gh-edit-script-log.js";
 import type { GhEditScriptItem } from "../../types/gh-edit-script.js";
+
+import { lineCount } from "../../lib/line-count.js";
+import type { GhEditScriptExecution } from "../../services/gh-edit-script-executor.js";
+import { formatDefaultResult, formatToolError } from "../result-formatters.js";
 
 export type GhEditScriptDetails = {
 	summaries: string[];
@@ -13,6 +17,43 @@ export type GhEditScriptDetails = {
 	error?: string;
 	validationErrors?: string[];
 };
+
+export function presentGhEditScriptExecution(execution: GhEditScriptExecution): AgentToolResult<GhEditScriptDetails> {
+	const { items, outcomes, queryCount, mutationCount, error, validationErrors } = execution;
+	const details: GhEditScriptDetails = {
+		summaries: items.map(summarizeGhEditScriptItem),
+		results: [],
+		items: items.map(sanitizeGhEditScriptItem),
+		queryCount,
+		mutationCount,
+	};
+	let text: string;
+	if (error !== undefined) {
+		text = error;
+		details.error = error;
+		details.results = [`prepare failed: ${error}`];
+	} else if (validationErrors?.length) {
+		text = validationErrors.join("\n\n");
+		details.validationErrors = validationErrors;
+		details.results = validationErrors.map((message) => `validation: ${message}`);
+	} else {
+		text = outcomes.map((outcome) => {
+			const summary = summarizeGhEditScriptItem(outcome.item);
+			switch (outcome.kind) {
+				case "query":
+					details.results.push(`${summary} → ${lineCount(outcome.output)} lines`);
+					return outcome.output;
+				case "queryError":
+					details.results.push(`${summary} → failed`);
+					return formatToolError(outcome.item.action, outcome.error);
+				case "mutation":
+					details.results.push(`${summary} → ${outcome.jobId}`);
+					return formatDefaultResult(outcome.item, { jobId: outcome.jobId });
+			}
+		}).join("\n");
+	}
+	return { content: [{ type: "text", text }], details };
+}
 
 function renderSummaryLines(summaries: string[], theme: Theme): string {
 	return summaries

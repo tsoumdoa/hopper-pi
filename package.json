@@ -15,7 +15,11 @@
 		"version:bump": "node scripts/version-bump.mjs",
 		"release": "node scripts/release.mjs",
 		"build:install": "node scripts/install-rhino.mjs --yes",
-		"test": "vitest run"
+		"test": "vitest run",
+		"test:benchmarks": "node --test scripts/benchmark-host-startup.test.mjs",
+		"typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.web.json",
+		"check": "pnpm typecheck && pnpm test && pnpm test:benchmarks",
+		"check:native": "dotnet test dotnet/Hopper.Core.Tests/Hopper.Core.Tests.csproj --configuration Release && pnpm exec tsx scripts/cross-language-rpc-smoke.ts"
 	},
 	"devDependencies": {
 		"@excalidraw/excalidraw": "^0.18.1",

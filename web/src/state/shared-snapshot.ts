@@ -1,44 +1,8 @@
-import type { HostSnapshot } from "../../../src/host/protocol.js";
 import type { TargetBinding } from "../../../src/protocol/shared-execution.js";
+import type { SharedSnapshot, SharedTarget } from "../../../src/protocol/browser-snapshot.js";
+export type { SharedSnapshot, SharedTarget, TaskSnapshot, ConversationSnapshot, TurnSnapshot, EventSnapshot, QuestionSnapshot } from "../../../src/protocol/browser-snapshot.js";
 
-/** One SQLite row from the shared host journal. */
-export type Row = Record<string, string | number | null>;
 
-export type SharedTarget = {
-	label: string;
-	lifecycleInstanceId: string;
-	processId: number;
-	admission: string;
-	documents: TargetBinding[];
-	documentLabels?: Record<string, string>;
-};
-
-export type SharedSnapshot = {
-	historyStorage?: { journalPath: string; sessionsPath: string };
-	history?: { conversationId: string | null; before: number | null; hasOlder: boolean; oldestSequence: number | null; pageTaskIds: string[] };
-	hostEpoch: string;
-	conversationSession?: { id: string; afterConversationSequence: number };
-	conversations: Row[];
-	sessions: Row[];
-	tasks: Row[];
-	turns: Row[];
-	events: Row[];
-	records?: Row[];
-	recoveries: Row[];
-	questions: Row[];
-	inputs?: Row[];
-	targets: SharedTarget[];
-	runtime: HostSnapshot;
-	eventCursor: number;
-};
-
-export function decode<T>(value: unknown, fallback: T): T {
-	try {
-		return JSON.parse(String(value)) as T;
-	} catch {
-		return fallback;
-	}
-}
 
 export function sameBinding(a: TargetBinding, b: TargetBinding): boolean {
 	if (a.lifecycleInstanceId !== b.lifecycleInstanceId || a.kind !== b.kind) return false;

@@ -3,11 +3,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
 import { MockBackend } from "./ui-mock-backend.mjs";
 import { TaskThread } from "../web/src/components/task-thread";
+import { parseSharedServerMessage, validateSharedSnapshot } from "../src/protocol/browser-messages.js";
 import { TooltipProvider } from "../web/src/components/ui/tooltip";
 
 const backends: MockBackend[] = [];
 function fixture(scenario = "empty") {
-	const backend = new MockBackend(scenario, () => {});
+	const backend = new MockBackend(scenario, (message: unknown) => {
+		expect(parseSharedServerMessage(JSON.stringify(message))).toBeDefined();
+	});
+	validateSharedSnapshot(backend.browserSnapshot());
 	backends.push(backend);
 	const { conversationId } = backend.command({ type: "create_conversation", title: "Test" });
 	return { backend, conversationId };
@@ -17,6 +21,22 @@ function submit(backend: MockBackend, conversationId: string, text = "Test messa
 }
 afterEach(() => { backends.splice(0).forEach(backend => backend.dispose()); vi.useRealTimers(); });
 describe("mock backend browser contract", () => {
+	it.each(["running", "question", "failed", "empty", "images"])("validates the %s seed and every emitted progress snapshot", async scenario => {
+		vi.useFakeTimers();
+		const { backend, conversationId } = fixture(scenario);
+		const snapshot = validateSharedSnapshot(backend.browserSnapshot());
+		for (const question of snapshot.questions) {
+			expect(snapshot.turns.some(turn => turn.id === question.turn_id && turn.task_id === question.task_id)).toBe(true);
+		}
+		if (scenario === "running") backend.command({ type: "cancel", conversationId, taskId: "t3" });
+		if (scenario === "question") backend.command({ type: "answer", conversationId, questionId: "q2", answer: "1.2 m" });
+		if (scenario === "failed") backend.command({ type: "recover", conversationId, taskId: "t5", acknowledgement: "Inspected" });
+		if (scenario === "empty" || scenario === "images") submit(backend, conversationId);
+		await vi.advanceTimersByTimeAsync(20_000);
+		const settled = validateSharedSnapshot(backend.browserSnapshot());
+		expect(settled.tasks.some(task => task.state === "running" || task.state === "queued")).toBe(false);
+		expect(settled.events.every(event => Number.isSafeInteger(event.id))).toBe(true);
+	});
 	it("supports archive, restore and purge with sidebar metadata", () => {
 		const { backend, conversationId } = fixture();
 		backend.command({ type: "archive_conversation", conversationId });

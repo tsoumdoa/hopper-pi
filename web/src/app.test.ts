@@ -73,6 +73,7 @@ const snapshot = {
 		},
 	],
 	runtime: {
+		sessionId: "session", isStreaming: false,
 		messages: [],
 		thinkingLevel: "off",
 		availableThinkingLevels: ["off"],
@@ -208,7 +209,7 @@ async function showPickQuestion() {
 		state: "awaiting_user", payload: JSON.stringify({ text: "Choose a size", bindings: [binding] }),
 	};
 	const next = { ...snapshot, tasks: [task], questions: [{
-		id: "pick-question", task_id: task.id, answer: null,
+		id: "pick-question", task_id: task.id, turn_id: "pick-turn", answer: null,
 		payload: JSON.stringify({ kind: "pick_option", question: "Which size?", options: [
 			{ label: "Small", value: "size-small", description: "Fits the courtyard" },
 			{ label: "Large", value: "size-large", description: "More seating" },
@@ -229,7 +230,7 @@ it("queues worker pickers with their captured targets and advances only after an
 	const secondQuestion = { ...firstQuestion, id: "second-question", task_id: secondWorker.id, turn_id: "second-turn" };
 	const otherTask = { ...firstWorker, id: "other-task", conversation_id: "other" };
 	const otherQuestion = { ...firstQuestion, id: "other-question", task_id: otherTask.id };
-	const next = { ...initial, tasks: [parent, firstWorker, secondWorker, otherTask], questions: [firstQuestion, secondQuestion, otherQuestion], turns: [{ id: "second-turn", task_id: secondWorker.id, owner: JSON.stringify({ binding: secondBinding }) }], targets: [
+	const next = { ...initial, tasks: [parent, firstWorker, secondWorker, otherTask], questions: [firstQuestion, secondQuestion, otherQuestion], turns: [{ id: "second-turn", task_id: secondWorker.id, state: "running", owner: JSON.stringify({ binding: secondBinding }) }], targets: [
 		...snapshot.targets,
 		{ ...snapshot.targets[0]!, lifecycleInstanceId: "second-life", processId: 43, documents: [secondBinding], documentLabels: { "second-model": "Garden.3dm" } },
 	] };
@@ -362,4 +363,135 @@ it("keeps drafts in their thread when hopping to a globally live thread and back
 	await act(async () => socket.receive({ type: "shared_snapshot", snapshot }));
 	await act(async () => sendButton().click());
 	expect(socket.sent.find(command => command.type === "submit")).toMatchObject({ text: "Draft for the first thread", messageTarget: binding });
+});
+
+it("acknowledges a submission in its original thread without clearing newer text", async () => {
+	await value("#composer-input", "Original request");
+	await upload("original.png");
+	await act(async () => sendButton().click());
+	const submitted = socket.sent.find(command => command.type === "submit");
+	await value("#composer-input", "Newer draft");
+	const thread = (title: string) => container.querySelector<HTMLButtonElement>(`nav[aria-label="Thread history"] button[title="${title}"]`)!;
+	await act(async () => thread("Second").click());
+	await value("#composer-input", "Other thread draft");
+	await act(async () => socket.receive({ type: "command_accepted", requestId: submitted.requestId, result: { taskId: "task" } }));
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Other thread draft");
+	await act(async () => thread("First").click());
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Newer draft");
+	expect(container.querySelectorAll("img")).toHaveLength(0);
+	await act(async () => sendButton().click());
+	expect(socket.sent.filter(command => command.type === "submit").at(-1)).toMatchObject({
+		text: "Newer draft", attachments: [],
+	});
+});
+
+it("starts fresh after a conversation session reset and ignores acknowledgements from the old session", async () => {
+	vi.useFakeTimers();
+	await value("#composer-input", "Old session request");
+	await act(async () => sendButton().click());
+	const submitted = socket.sent.find(command => command.type === "submit");
+	await act(async () => socket.onclose?.({ code: 1006, reason: "Host restart" }));
+	await act(async () => vi.advanceTimersByTimeAsync(1500));
+	const replacement = Socket.sockets.at(-1)!;
+	await act(async () => {
+		replacement.onopen?.();
+		replacement.receive({ type: "shared_snapshot", snapshot: {
+			...snapshot, conversationSession: { id: "new-session", afterConversationSequence: 2 },
+		} });
+	});
+	expect(replacement.sent.filter(command => command.type === "submit")).toHaveLength(0);
+	const created = replacement.sent.find(command => command.type === "create_conversation");
+	expect(created).toBeDefined();
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("");
+	await act(async () => replacement.receive({ type: "command_accepted", requestId: created.requestId, result: { conversationId: "other" } }));
+	await value("#composer-input", "New session draft");
+	await act(async () => replacement.receive({ type: "command_accepted", requestId: submitted.requestId, result: { taskId: "old-task" } }));
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("New session draft");
+});
+
+it.each(["snapshot", "acknowledgement", "JSON"])("reconnects after malformed %s without losing the pending draft", async kind => {
+	vi.useFakeTimers();
+	await value("#composer-input", "Keep this request");
+	await act(async () => sendButton().click());
+	const submitted = socket.sent.find(command => command.type === "submit");
+	await act(async () => {
+		if (kind === "snapshot") socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, conversations: [{ id: "conversation", title: 42 }] } });
+		else if (kind === "acknowledgement") socket.receive({ type: "command_accepted", requestId: submitted.requestId, result: "invalid" });
+		else socket.onmessage?.({ data: "{" });
+	});
+	expect(container.querySelector("h1")!.textContent).toBe("First");
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Keep this request");
+	expect(sendButton().disabled).toBe(true);
+	await act(async () => vi.advanceTimersByTimeAsync(1500));
+	const replacement = Socket.sockets.at(-1)!;
+	expect(replacement).not.toBe(socket);
+	await act(async () => { replacement.onopen?.(); replacement.receive({ type: "shared_snapshot", snapshot }); });
+	expect(replacement.sent.filter(command => command.type === "submit")).toEqual([submitted]);
+	await act(async () => replacement.receive({ type: "command_accepted", requestId: submitted.requestId, result: { taskId: "task" } }));
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("");
+});
+
+it("reconnects after a patch produces an invalid snapshot and replays pending work", async () => {
+	vi.useFakeTimers();
+	await value("#composer-input", "Retain through bad patch");
+	await act(async () => sendButton().click());
+	const submitted = socket.sent.find(command => command.type === "submit");
+	await act(async () => socket.receive({ type: "shared_patch", patch: {
+		baseCursor: 0, values: {}, changes: { conversations: { upsert: [{ id: "conversation", title: 42 }] } },
+	} }));
+	expect(container.querySelector("h1")!.textContent).toBe("First");
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.readOnly).toBe(true);
+	await act(async () => vi.advanceTimersByTimeAsync(1500));
+	const replacement = Socket.sockets.at(-1)!;
+	await act(async () => { replacement.onopen?.(); replacement.receive({ type: "shared_snapshot", snapshot }); });
+	expect(replacement.sent.filter(command => command.type === "submit")).toEqual([submitted]);
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Retain through bad patch");
+});
+
+it("retains a new-thread request when its acknowledgement omits the conversation ID", async () => {
+	vi.useFakeTimers();
+	await value("#composer-input", "Keep this draft");
+	await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="New thread"]')!.click());
+	const created = socket.sent.find(command => command.type === "create_conversation");
+	await act(async () => socket.receive({ type: "command_accepted", requestId: created.requestId, result: {} }));
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Keep this draft");
+	await act(async () => vi.advanceTimersByTimeAsync(1500));
+	const replacement = Socket.sockets.at(-1)!;
+	await act(async () => { replacement.onopen?.(); replacement.receive({ type: "shared_snapshot", snapshot }); });
+	expect(replacement.sent.filter(command => command.type === "create_conversation")).toEqual([created]);
+});
+
+it("reconnects after a malformed patch envelope despite continuing status messages", async () => {
+	vi.useFakeTimers();
+	await value("#composer-input", "Keep work through malformed patch");
+	await act(async () => sendButton().click());
+	const submitted = socket.sent.find(command => command.type === "submit");
+	await act(async () => socket.receive({ type: "shared_patch", patch: {
+		baseCursor: 0, values: { eventCursor: 1 }, changes: { conversations: { upsert: null } },
+	} }));
+	const { runtime, targets, hostEpoch, conversationSession } = snapshot;
+	// Even status frames that arrive before the retry must not revive the old socket.
+	await act(async () => {
+		await vi.advanceTimersByTimeAsync(1000);
+		socket.receive({ type: "shared_status", runtime, targets, hostEpoch, conversationSession });
+		await vi.advanceTimersByTimeAsync(500);
+	});
+	const replacement = Socket.sockets.at(-1)!;
+	expect(replacement).not.toBe(socket);
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.readOnly).toBe(true);
+	expect(replacement.sent.filter(command => command.type === "submit")).toEqual([]);
+	const fresh = { ...snapshot, eventCursor: 1, conversations: [{ ...snapshot.conversations[0], title: "Fresh history" }, snapshot.conversations[1]] };
+	await act(async () => { replacement.onopen?.(); replacement.receive({ type: "shared_snapshot", snapshot: fresh }); });
+	for (let i = 0; i < 5; i++) {
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(5000);
+			socket.receive({ type: "shared_status", runtime, targets, hostEpoch, conversationSession });
+			replacement.receive({ type: "shared_status", runtime, targets, hostEpoch, conversationSession });
+		});
+	}
+	expect(container.querySelector("h1")!.textContent).toBe("Fresh history");
+	expect(replacement.sent.filter(command => command.type === "submit")).toEqual([submitted]);
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Keep work through malformed patch");
+	await act(async () => replacement.receive({ type: "command_accepted", requestId: submitted.requestId, result: { taskId: "task" } }));
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("");
 });
