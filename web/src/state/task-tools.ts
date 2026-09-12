@@ -54,8 +54,14 @@ export function taskTools(events: EventSnapshot[]): ToolCall[] {
 		if (payload.type === "agent_event" && event) {
 			if (event.type === "message_start" || event.type === "message_end") message(event.message);
 			const update = event.assistantMessageEvent;
+			if (update?.type === "toolcall_start" && update.id) {
+				const toolId = key(update.id);
+				if (!tools.has(toolId)) tools.set(toolId, {
+					id: toolId, name: String(update.toolName ?? "Tool call"), detail: undefined, status: "generating",
+				});
+			}
 			if (update?.type === "toolcall_end" && update.toolCall)
-				start(update.toolCall.id, update.toolCall.name, update.toolCall.arguments, true);
+				start(update.toolCall.id, update.toolCall.name, update.toolCall.arguments, tools.get(key(update.toolCall.id))?.status !== "generating");
 		}
 		if (payload.type === "tool_progress") {
 			if (payload.phase === "started") {

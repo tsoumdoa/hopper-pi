@@ -36,7 +36,7 @@ const message = fields({
 });
 export type BrowserMessage = ReadValue<typeof message>;
 const toolCall = fields({ id: text, toolCallId: text, name: text, arguments: optional(unknownValue) });
-const update = fields({ type: text, delta: text, text, toolCall: optional(toolCall) });
+const update = fields({ type: text, delta: text, text, id: text, toolName: text, toolCall: optional(toolCall) });
 const event = fields({
 	type: text, message: optional(message), assistantMessageEvent: optional(update),
 	args: optional(unknownValue), partialResult: optional(unknownValue), result: optional(unknownValue),

@@ -13,10 +13,10 @@ const SUGGESTIONS = [
 ];
 
 function ToolStatusIcon({ status }: { status: ToolCall["status"] }) {
-	const icon = status === "running" ? <Loader2 className="size-3.5 animate-spin text-accent" />
+	const icon = status === "running" || status === "generating" ? <Loader2 className="size-3.5 animate-spin text-accent" />
 		: status === "error" ? <CircleAlert className="size-3.5 text-danger" />
 		: <CircleCheck className="size-3.5 text-muted" />;
-	return <span role="img" aria-label={status === "running" ? "Running" : status === "error" ? "Failed" : "Done"} className="flex shrink-0">{icon}</span>;
+	return <span role="img" aria-label={status === "generating" ? "Generating" : status === "running" ? "Running" : status === "error" ? "Failed" : "Done"} className="flex shrink-0">{icon}</span>;
 }
 
 export function ToolHistory({ tools }: { tools: ToolCall[] }) {
@@ -41,7 +41,9 @@ export function ToolCard({ tool }: { tool: ToolCall }) {
 		if (tool.status === "error") setOpen(true);
 	}, [tool.status]);
 	const hasResult = tool.args !== undefined && tool.detail !== tool.args;
-	const preview = summarizeValue(tool.status === "running" ? tool.args : tool.detail);
+	const preview = tool.status === "generating"
+		? tool.name === "gh_apply_graph" ? "Generating graph…" : "Generating…"
+		: summarizeValue(tool.status === "running" ? tool.args : tool.detail);
 	return (
 		<Collapsible
 			open={open}

@@ -59,15 +59,16 @@ function startTool(state: ConversationState, id: string, name: string, args: unk
 	return updateActiveAssistant(state, (message) => {
 		const existing = message.tools.find((tool) => tool.id === id);
 		if (existing) {
-			if (args === undefined || (!executing && existing.args !== undefined)) return message;
+			if (!executing && (args === undefined || existing.args !== undefined)) return message;
 			return { ...message, tools: message.tools.map((tool) => tool.id === id ? {
 				...tool,
-				args,
+				args: args ?? tool.args,
+				status: executing ? "running" : tool.status,
 				// Snapshot arguments may be incomplete. Keep any actual output already received.
 				detail: tool.detail === tool.args || tool.detail === undefined ? args : tool.detail,
 			} : tool) };
 		}
-		return { ...message, tools: [...message.tools, { id, name, args, detail: args, status: "running" }] };
+		return { ...message, tools: [...message.tools, { id, name, args, detail: args, status: executing ? "running" : "generating" }] };
 	});
 }
 
