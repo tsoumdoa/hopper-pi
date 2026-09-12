@@ -55,8 +55,8 @@ pnpm build
 This builds and verifies both distributions, including the public manifest, and applies the minimum Rhino version tag. For 0.2.0 the final files are:
 
 ```text
-artifacts/hopper-pi-0.2.0-mac-arm64/hopper-pi-0.2.0-rh8_20-mac.yak
-artifacts/hopper-pi-0.2.0-win-x64/hopper-pi-0.2.0-rh8_20-win.yak
+artifacts/hoppercode-0.2.0-mac-arm64/hoppercode-0.2.0-rh8_20-mac.yak
+artifacts/hoppercode-0.2.0-win-x64/hoppercode-0.2.0-rh8_20-win.yak
 ```
 
 Each build also writes a sibling `-release.json` record with the source commit, whether the checkout had changes, and the archive's SHA-256. Keep those records with the build folders when copying them to another machine. `pnpm release` checks that both archives came from the current clean commit and still match their hashes. Local development builds remain allowed with uncommitted changes, but cannot be published by this command. Archives built before these records were added need rebuilding.
@@ -75,9 +75,9 @@ The commands work in Mac Terminal and Windows PowerShell. Use `pnpm.cmd` if Powe
 pnpm yak install local
 ```
 
-Run this on each target machine. Copy the Windows build folder to the same relative path in the Windows checkout, or build there from the same revision. To test a downloaded archive without a checkout, use Rhino's Yak executable directly: `yak install --source <folder-containing-the-yak> hopper-pi 0.2.0`.
+Run this on each target machine. Copy the Windows build folder to the same relative path in the Windows checkout, or build there from the same revision. To test a downloaded archive without a checkout, use Rhino's Yak executable directly: `yak install --source <folder-containing-the-yak> hoppercode 0.2.0`.
 
-Use a clean test installation. Yak may skip installation if the same version is already installed. On a test machine, use `yak uninstall hopper-pi` before switching between local, test-server, and public copies of the same version. Remove old development plugin registrations or Grasshopper Libraries copies so they cannot mask a broken package.
+Use a clean test installation. Yak may skip installation if the same version is already installed. On a test machine, use `yak uninstall hoppercode` before switching between local, test-server, and public copies of the same version. Remove old development plugin registrations or Grasshopper Libraries copies so they cannot mask a broken package.
 
 Restart Rhino and run `HopperCode`. Check provider sign-in, send a message, perform a Rhino operation, and perform a Grasshopper operation. The command installs the package; these runtime checks still need a person on each OS.
 
@@ -108,7 +108,7 @@ Check the name before the first release:
 pnpm yak search public
 ```
 
-If `hopper-pi` already belongs to someone else, resolve ownership or choose a different package name before uploading. Use the Rhino Account that should own the package. The first successful upload establishes ownership.
+If `hoppercode` already belongs to someone else, resolve ownership or choose a different package name before uploading. Use the Rhino Account that should own the package. The first successful upload establishes ownership.
 
 After both platforms pass testing, publish the exact same files:
 
@@ -119,7 +119,7 @@ pnpm yak push public
 
 The script checks that both archives exist before login, then uploads them sequentially. If the second upload fails, the first remains published. Retry only the failed file with `yak push --source https://yak.rhino3d.com <file>` after resolving the error. An already published distribution cannot be overwritten. Code or metadata fixes need a new version; bump all three version fields and rebuild both targets.
 
-Finally, find `hopper-pi` in Rhino's `PackageManager` on each OS, install it, restart Rhino, and repeat the runtime checks. A normal Git push or build does not publish packages. Only `pnpm release` or an explicit Yak `push` command uploads files.
+Finally, find `hoppercode` in Rhino's `PackageManager` on each OS, install it, restart Rhino, and repeat the runtime checks. A normal Git push or build does not publish packages. Only `pnpm release` or an explicit Yak `push` command uploads files.
 
 ## Recover an interrupted combined release
 

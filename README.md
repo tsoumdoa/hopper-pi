@@ -17,7 +17,7 @@ pnpm install
 pnpm build:install --open-rhino
 ```
 
-This builds and verifies a native Yak package, replaces any installed `hopper-pi` package, and reopens Rhino. Saved conversations remain available. On Windows, use `pnpm.cmd` if PowerShell blocks the pnpm shim.
+This builds and verifies a native Yak package, replaces any installed `hoppercode` or legacy `hopper-pi` package, and reopens Rhino. Saved conversations remain available. On Windows, use `pnpm.cmd` if PowerShell blocks the pnpm shim.
 
 If you used the old Grasshopper installer, move its `hopper-pi` folder out of Grasshopper's Libraries before launching Rhino to avoid duplicate plugins.
 

@@ -56,7 +56,7 @@ function option(name) {
 }
 
 function fail(message) {
-	console.error(`[hopper-pi] ${message}`);
+	console.error(`[hoppercode] ${message}`);
 	process.exit(1);
 }
 
@@ -212,7 +212,7 @@ function pruneNativeDependencies(nodeModules, targetConfig) {
 const target = option("--target") ?? defaultTarget();
 const targetConfig = targets[target];
 if (!targetConfig) fail(`--target must be one of: ${Object.keys(targets).join(", ")}`);
-const defaultOutput = join(packageRoot, "artifacts", `hopper-pi-${packageJson.version}-${target}`);
+const defaultOutput = join(packageRoot, "artifacts", `hoppercode-${packageJson.version}-${target}`);
 const output = resolve(option("--output") ?? defaultOutput);
 validateOutput(output);
 mkdirSync(output, { recursive: true });
@@ -278,19 +278,19 @@ run("pnpm", ["install", "--prod", "--frozen-lockfile"], {
 const nodeModules = join(hostDirectory, "node_modules");
 // Consolidate SDK imports while original module paths are still available.
 const piBundle = await bundlePiRuntime(nodeModules);
-console.log(`[hopper-pi] Bundled Pi SDK: ${piBundle.inputs} modules -> ${piBundle.outputs} files`);
+console.log(`[hoppercode] Bundled Pi SDK: ${piBundle.inputs} modules -> ${piBundle.outputs} files`);
 removeBinDirectories(nodeModules);
 removeDependencyDevelopmentFiles(nodeModules);
 pruneNativeDependencies(nodeModules, targetConfig);
 await deduplicatePiBundle(nodeModules);
 await pruneAuditedDependencies(nodeModules);
 for (const bundle of await bundleRhinoDependencies(nodeModules)) {
-	console.log(`[hopper-pi] Bundled ${bundle.name}: ${bundle.inputFiles} modules -> ${bundle.outputFiles} files`);
+	console.log(`[hoppercode] Bundled ${bundle.name}: ${bundle.inputFiles} modules -> ${bundle.outputFiles} files`);
 }
 const dependencyLink = findSymbolicLink(nodeModules);
 if (dependencyLink) fail(`Production dependencies contain a non-portable link: ${dependencyLink}`);
 const startupSources = await packStartupSources(nodeModules);
-console.log(`[hopper-pi] Packed startup sources: ${startupSources.files} files, ${startupSources.bytes} compressed bytes`);
+console.log(`[hoppercode] Packed startup sources: ${startupSources.files} files, ${startupSources.bytes} compressed bytes`);
 rmSync(join(hostDirectory, "pnpm-lock.yaml"), { force: true });
 rmSync(join(hostDirectory, "pnpm-workspace.yaml"), { force: true });
 
@@ -301,10 +301,10 @@ writeFileSync(join(runtimeDirectory, "hopper-runtime.json"), JSON.stringify({
 }, null, 2) + "\n");
 
 writeFileSync(join(output, "manifest.yml"), [
-	"name: hopper-pi",
+	"name: hoppercode",
 	`version: ${packageJson.version}`,
 	"authors:",
-	"  - hoppercode contributors",
+	"  - aectooling",
 	"description: >",
 	"  Hopper is an AI assistant for Rhino models and Grasshopper definitions, with a browser chat UI.",
 	"  Requires Rhino 8.20 or newer running .NET 8 and separately installed stable Node.js 22.19.0 or newer.",
@@ -325,7 +325,7 @@ if (args.includes("--yak")) {
 	// Yak infers 8.0 from RhinoCommon, but Hopper requires Rhino 8.20 and .NET 8.
 	const archives = readdirSync(output).filter((name) => name.endsWith(".yak"));
 	if (archives.length !== 1) fail("Expected exactly one Yak archive after building");
-	const releaseName = `hopper-pi-${packageJson.version}-rh8_20-${targetConfig.yakPlatform}.yak`;
+	const releaseName = `hoppercode-${packageJson.version}-rh8_20-${targetConfig.yakPlatform}.yak`;
 	if (archives[0] !== releaseName) renameSync(join(output, archives[0]), join(output, releaseName));
 }
 
@@ -333,7 +333,7 @@ run(process.execPath, [verifier, "--target", target, "--web-manifest", webManife
 run(process.execPath, [sizeReporter, "--target", target, "--web-manifest", webManifest, "--output", join(output, "..", `${basename(output)}-size-report.json`), output]);
 if (args.includes("--yak")) {
 	const buildEnd = gitState();
-	const archive = join(output, `hopper-pi-${packageJson.version}-rh8_20-${targetConfig.yakPlatform}.yak`);
+	const archive = join(output, `hoppercode-${packageJson.version}-rh8_20-${targetConfig.yakPlatform}.yak`);
 	writeFileSync(`${output}-release.json`, JSON.stringify({
 		version: packageJson.version,
 		target,
@@ -342,4 +342,4 @@ if (args.includes("--yak")) {
 		sha256: sha256(archive),
 	}, null, 2) + "\n");
 }
-console.log(`[hopper-pi] Staged ${target} Rhino package at ${output}`);
+console.log(`[hoppercode] Staged ${target} Rhino package at ${output}`);

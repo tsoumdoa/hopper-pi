@@ -22,7 +22,7 @@ if (process.env.YAK_TEST_FAIL_PUSH && args[0] === 'push') process.exit(7);
 	function add(target: string, platform: string, direct = false) {
 		const folder = direct ? dir : join(dir, target);
 		if (!direct) mkdirSync(folder);
-		writeFileSync(join(folder, `hopper-pi-${version}-rh8_20-${platform}.yak`), "test archive");
+		writeFileSync(join(folder, `hoppercode-${version}-rh8_20-${platform}.yak`), "test archive");
 	}
 	return {
 		dir,
@@ -46,7 +46,7 @@ it.skipIf(process.platform !== "darwin" || process.arch !== "arm64")("installs l
 		const f = fixture(); f.add("mac-arm64", "mac", direct);
 		const result = f.run(["install", "local"]);
 		expect(result.status, result.stderr).toBe(0);
-		expect(f.calls()).toEqual([["install", "--source", direct ? f.dir : join(f.dir, "mac-arm64"), "hopper-pi", version]]);
+		expect(f.calls()).toEqual([["install", "--source", direct ? f.dir : join(f.dir, "mac-arm64"), "hoppercode", version]]);
 	}
 });
 

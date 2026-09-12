@@ -25,7 +25,7 @@ try {
   push public         Log in and publish both builds publicly
   search test|public  List published versions
 
-Defaults to artifacts/hopper-pi-${version}-<target>.
+Defaults to artifacts/hoppercode-${version}-<target>.
 Use --output with the same directory used by pnpm build --output.
 Local install also accepts the direct output of pnpm build --target <name> --output <dir>.
 --dry-run prints commands without running Yak. It still checks local files.
@@ -49,8 +49,8 @@ Set HOPPER_YAK to an absolute executable path for a custom Rhino installation.`)
 		if (result.status !== 0) throw new Error(`Yak failed with exit code ${result.status ?? "unknown"}. Stopping; earlier successful uploads remain on the server.`);
 	}
 	function archive(target, allowDirectOutput = false) {
-		const name = `hopper-pi-${version}-rh8_20-${target === "mac-arm64" ? "mac" : "win"}.yak`;
-		let folder = values.output ? resolve(root, values.output, target) : join(root, "artifacts", `hopper-pi-${version}-${target}`);
+		const name = `hoppercode-${version}-rh8_20-${target === "mac-arm64" ? "mac" : "win"}.yak`;
+		let folder = values.output ? resolve(root, values.output, target) : join(root, "artifacts", `hoppercode-${version}-${target}`);
 		if (allowDirectOutput && values.output && !existsSync(join(folder, name))) {
 			folder = resolve(root, values.output);
 		}
@@ -64,16 +64,16 @@ Set HOPPER_YAK to an absolute executable path for a custom Rhino installation.`)
 		const packages = [archive("mac-arm64"), archive("win-x64")];
 		run(["login", ...sourceArgs]);
 		for (const { file } of packages) run(["push", ...sourceArgs, file]);
-		run(["search", ...sourceArgs, "--all", "--prerelease", "hopper-pi"]);
+		run(["search", ...sourceArgs, "--all", "--prerelease", "hoppercode"]);
 	} else if (command === "install") {
 		if (source === "local") {
 			const target = process.platform === "darwin" && process.arch === "arm64" ? "mac-arm64"
 				: process.platform === "win32" && process.arch === "x64" ? "win-x64" : null;
 			if (!target) throw new Error("Local installation supports macOS arm64 and Windows x64 only.");
-			run(["install", "--source", archive(target, true).folder, "hopper-pi", version]);
-		} else run(["install", ...sourceArgs, "hopper-pi", version]);
+			run(["install", "--source", archive(target, true).folder, "hoppercode", version]);
+		} else run(["install", ...sourceArgs, "hoppercode", version]);
 		console.log("Restart Rhino, run HopperCode, and test provider sign-in, a Rhino operation, and a Grasshopper operation.");
-	} else run(["search", ...sourceArgs, "--all", "--prerelease", "hopper-pi"]);
+	} else run(["search", ...sourceArgs, "--all", "--prerelease", "hoppercode"]);
 } catch (error) {
 	console.error(error.message);
 	process.exitCode = 1;

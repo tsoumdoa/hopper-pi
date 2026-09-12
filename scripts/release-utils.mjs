@@ -35,8 +35,8 @@ export function versionEdits(root, requested) {
 
 export function releaseArchives(root, version, output) {
 	return ["mac-arm64", "win-x64"].map((target) => {
-		const folder = output ? resolve(root, output, target) : join(root, "artifacts", `hopper-pi-${version}-${target}`);
-		return { target, folder, file: join(folder, `hopper-pi-${version}-rh8_20-${target === "mac-arm64" ? "mac" : "win"}.yak`), provenance: `${folder}-release.json` };
+		const folder = output ? resolve(root, output, target) : join(root, "artifacts", `hoppercode-${version}-${target}`);
+		return { target, folder, file: join(folder, `hoppercode-${version}-rh8_20-${target === "mac-arm64" ? "mac" : "win"}.yak`), provenance: `${folder}-release.json` };
 	});
 }
 

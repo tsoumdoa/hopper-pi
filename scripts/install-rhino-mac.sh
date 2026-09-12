@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-PACKAGE_NAME="hopper-pi"
+PACKAGE_NAME="hoppercode"
 DEFAULT_YAK="/Applications/Rhino 8.app/Contents/Resources/bin/yak"
 YAK="${HOPPER_YAK:-$DEFAULT_YAK}"
 ASSUME_YES=0
@@ -23,7 +23,7 @@ Usage:
   ./scripts/install-rhino-mac.sh [options]
 
 Options:
-  --yes         Reinstall an existing hopper-pi package without prompting.
+  --yes         Reinstall an existing hoppercode package without prompting.
   --open-rhino  Open Rhino 8 after installation.
   --build-only  Build and smoke-test without installing or stopping the host.
   -h, --help    Show this help.
@@ -33,7 +33,7 @@ EOF
 }
 
 fail() {
-	echo "[hopper-pi] $*" >&2
+	echo "[hoppercode] $*" >&2
 	exit 1
 }
 
@@ -83,21 +83,21 @@ ARTIFACT_ROOT="$PROJECT_ROOT/artifacts"
 mkdir -p "$ARTIFACT_ROOT"
 STAGE_DIR="$(mktemp -d "$ARTIFACT_ROOT/${PACKAGE_NAME}-${PACKAGE_VERSION}-local.XXXXXX")"
 
-echo "[hopper-pi] Installing JavaScript dependencies"
+echo "[hoppercode] Installing JavaScript dependencies"
 HOPPER_SKIP_GH_PLUGIN=1 pnpm install --frozen-lockfile
 
-echo "[hopper-pi] Building a fresh Rhino package at $STAGE_DIR"
+echo "[hoppercode] Building a fresh Rhino package at $STAGE_DIR"
 pnpm build --target mac-arm64 --output "$STAGE_DIR"
 
-echo "[hopper-pi] Smoke-testing packaged host imports and native ZeroMQ"
+echo "[hoppercode] Smoke-testing packaged host imports and native ZeroMQ"
 node scripts/smoke-staged-host.mjs "$STAGE_DIR"
 
 if [[ "$BUILD_ONLY" -eq 1 ]]; then
-	echo "[hopper-pi] Build and smoke test passed. Package files: $STAGE_DIR"
+	echo "[hoppercode] Build and smoke test passed. Package files: $STAGE_DIR"
 	exit 0
 fi
 
-INSTALLED_LINE="$("$YAK" list | awk -v name="$PACKAGE_NAME" '$1 == name { print; exit }')"
+INSTALLED_LINE="$("$YAK" list | awk -v name="$PACKAGE_NAME" '$1 == name || $1 == "hopper-pi" { print }')"
 if [[ -n "$INSTALLED_LINE" ]]; then
 	if [[ "$ASSUME_YES" -ne 1 ]]; then
 		if [[ ! -t 0 ]]; then
@@ -109,7 +109,7 @@ if [[ -n "$INSTALLED_LINE" ]]; then
 			y|Y|yes|YES)
 				;;
 			*)
-				echo "[hopper-pi] Installation cancelled. The package remains at $STAGE_DIR"
+				echo "[hoppercode] Installation cancelled. The package remains at $STAGE_DIR"
 				exit 0
 				;;
 		esac
@@ -123,11 +123,13 @@ fi
 node scripts/stop-shared-host.mjs
 
 if [[ -n "$INSTALLED_LINE" ]]; then
-	echo "[hopper-pi] Removing the installed $PACKAGE_NAME package"
-	"$YAK" uninstall "$PACKAGE_NAME"
+	while read -r installed_name _; do
+		echo "[hoppercode] Removing the installed $installed_name package"
+		"$YAK" uninstall "$installed_name"
+	done <<< "$INSTALLED_LINE"
 fi
 
-echo "[hopper-pi] Installing $PACKAGE_NAME $PACKAGE_VERSION from the local package folder"
+echo "[hoppercode] Installing $PACKAGE_NAME $PACKAGE_VERSION from the local package folder"
 "$YAK" install --source="$STAGE_DIR" "$PACKAGE_NAME" "$PACKAGE_VERSION"
 
 if ! "$YAK" list | grep -Fq "$PACKAGE_NAME ($PACKAGE_VERSION)"; then
@@ -135,12 +137,12 @@ if ! "$YAK" list | grep -Fq "$PACKAGE_NAME ($PACKAGE_VERSION)"; then
 fi
 
 echo
-echo "[hopper-pi] Installed $PACKAGE_NAME $PACKAGE_VERSION"
-echo "[hopper-pi] Package files: $STAGE_DIR"
-echo "[hopper-pi] HopperCode will start a fresh background host using this installation."
-echo "[hopper-pi] In Rhino, run HopperCode. Grasshopper loads only when the first gh_* tool needs it."
+echo "[hoppercode] Installed $PACKAGE_NAME $PACKAGE_VERSION"
+echo "[hoppercode] Package files: $STAGE_DIR"
+echo "[hoppercode] HopperCode will start a fresh background host using this installation."
+echo "[hoppercode] In Rhino, run HopperCode. Grasshopper loads only when the first gh_* tool needs it."
 
 if [[ "$OPEN_RHINO" -eq 1 ]]; then
-	echo "[hopper-pi] Opening Rhino 8"
+	echo "[hoppercode] Opening Rhino 8"
 	open "/Applications/Rhino 8.app"
 fi
