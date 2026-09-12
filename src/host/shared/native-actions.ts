@@ -179,6 +179,9 @@ export function createNativeActionAdapters(
 		documents: {
 			preflight: async (grant) => {
 				native.pruneDeadAttachments();
+				if (grant.kind === "grasshopper")
+					await native.ensureGrasshopperReadyForDocumentAction(grant.lifecycleInstanceId);
+				// Startup can create an untitled canvas; capture capabilities and handles afterwards.
 				const state = await inventory(grant);
 				if (
 					!Array.isArray(state.documents) ||
