@@ -24,7 +24,8 @@ namespace Hopper.Rhino.Host
         GrasshopperCapabilityStatus Grasshopper,
         OperationDocumentStatus RhinoDocument,
         OperationDocumentStatus GrasshopperDocument,
-        RuntimeStatusV2 Runtime);
+        RuntimeStatusV2 Runtime,
+        Uri? WebUiAddress = null);
 
     public interface IHopperCommandCompletionSink
     {
@@ -73,6 +74,7 @@ namespace Hopper.Rhino.Host
         private readonly IHopperRunningObserver? _runningObserver;
         private readonly IHopperCommandCompletionSink? _completionSink;
         private readonly Action? _reopenBrowser;
+        private readonly Func<Uri?>? _getBrowserUri;
         private readonly IGrasshopperStartController _grasshopperStart;
         private readonly IHopperOperationCancellation _operationCancellation;
         private CancellationTokenSource? _pendingStart;
@@ -87,7 +89,8 @@ namespace Hopper.Rhino.Host
             IHopperOperationCancellation operationCancellation,
             IHopperRunningObserver? runningObserver = null,
             IHopperCommandCompletionSink? completionSink = null,
-            Action? reopenBrowser = null)
+            Action? reopenBrowser = null,
+            Func<Uri?>? getBrowserUri = null)
         {
             _lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
             _background = background ?? throw new ArgumentNullException(nameof(background));
@@ -99,6 +102,7 @@ namespace Hopper.Rhino.Host
             _runningObserver = runningObserver;
             _completionSink = completionSink;
             _reopenBrowser = reopenBrowser;
+            _getBrowserUri = getBrowserUri;
             _operations = new HostOperationRouter(rhino, grasshopper);
         }
 
@@ -173,11 +177,14 @@ namespace Hopper.Rhino.Host
         public HopperCommandReceipt RequestRestart()
         {
             CancelPendingStart();
-            var result = _lifecycle.RequestRestart();
-            SyncStatus();
             _runningObserver?.Reset();
-            _ = _background.Schedule(ObserveRestartCompletionAsync);
-            return FromLifecycle(result);
+            var completion = _lifecycle.RestartAsync();
+            SyncStatus();
+            _ = _background.Schedule(() => ObserveRestartCompletionAsync(completion));
+            return new HopperCommandReceipt(
+                true,
+                "HopperCode is reconnecting this Rhino instance. The shared host stays running.",
+                _lifecycle.Snapshot);
         }
 
         public HopperFacadeStatus GetStatus()
@@ -195,7 +202,19 @@ namespace Hopper.Rhino.Host
                 _grasshopper.Status,
                 rhinoDocument,
                 grasshopperDocument,
-                runtime);
+                runtime,
+                GetWebUiAddress(runtime));
+        }
+
+        private Uri? GetWebUiAddress(RuntimeStatusV2 runtime)
+        {
+            if (runtime.Lifecycle.State != Hopper.Core.Protocol.LifecycleState.running)
+                return null;
+            var browserUri = _getBrowserUri?.Invoke();
+            // The browser launch URL contains a credential. Status only needs the server address.
+            return browserUri is { IsAbsoluteUri: true }
+                ? new Uri(browserUri.GetLeftPart(UriPartial.Authority))
+                : null;
         }
 
         public OperationResultV2 Execute(RpcRequestV2 request)
@@ -346,9 +365,9 @@ namespace Hopper.Rhino.Host
             _completionSink?.Write(result.Message);
         }
 
-        private async Task ObserveRestartCompletionAsync()
+        private async Task ObserveRestartCompletionAsync(Task<LifecycleCommandResult> completion)
         {
-            var result = await _lifecycle.RestartAsync().ConfigureAwait(false);
+            var result = await completion.ConfigureAwait(false);
             SyncStatus();
             if (IsCurrentRunningInstance(result.Snapshot))
                 _runningObserver?.OnRunning();

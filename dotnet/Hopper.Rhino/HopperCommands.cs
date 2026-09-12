@@ -46,7 +46,7 @@ namespace rhino_zmq_poc
             }
 
             var status = facade.GetStatus();
-            foreach (var line in HopperStatusFormatter.Format(status.Runtime))
+            foreach (var line in HopperStatusFormatter.Format(status.Runtime, status.WebUiAddress))
                 RhinoApp.WriteLine(line);
             return Result.Success;
         }
