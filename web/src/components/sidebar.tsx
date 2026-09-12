@@ -6,6 +6,7 @@ import { useRuntimeStatus } from "../hooks/use-runtime-status";
 import { cn, providerLabel } from "../lib/utils";
 import type { SidebarState } from "../state/hopper-types";
 import { RuntimeStatusPanel, summarizeRuntimeStatus } from "./runtime-status";
+import { Tooltip } from "./ui/tooltip";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 
@@ -31,7 +32,7 @@ function connectionSummary(state: SidebarState) {
 function ConnectionCard({ state, onReconnect }: { state: SidebarState; onReconnect(): void }) {
 	const { tone, label, canRetry } = connectionSummary(state);
 	return (
-		<div className="rounded-md border border-line bg-surface p-2.5">
+		<div className="px-2.5 py-2">
 			<div className="flex items-start gap-2">
 				<span aria-hidden="true" className={cn("mt-[5px] size-1.5 shrink-0 rounded-full", toneClass(tone))} />
 				<div className="min-w-0 flex-1">
@@ -55,7 +56,7 @@ function ProviderCard({ state, connected, onManageProvider }: { state: SidebarSt
 	const selected = state.selectedModel?.provider ?? authenticated[0]?.id ?? null;
 	const selectedAuthenticated = state.providers.some((provider) => provider.id === selected && provider.authenticated);
 	return (
-		<div className="rounded-md border border-line bg-surface p-2.5">
+		<div className="px-2.5 py-2">
 			<div className="flex items-center justify-between gap-2">
 				<span className="text-[10px] font-medium uppercase tracking-wider text-muted">Provider</span>
 				<Badge variant={selectedAuthenticated ? "accent" : authenticated.length ? "neutral" : "warn"} dot>
@@ -140,10 +141,10 @@ export function Sidebar({
 	const panels = (
 		<>
 			<ProviderCard state={state} connected={connected} onManageProvider={onManageProvider} />
-			<Button variant="secondary" size="sm" className="justify-start" disabled={!connected} onClick={onManageSkills}>
+			<Button variant="ghost" size="sm" className="justify-start" disabled={!connected} onClick={onManageSkills}>
 				<BookOpen className="size-3.5" />Skills & Markdown
 			</Button>
-			<Button variant="secondary" size="sm" className="justify-start" disabled={!connected} onClick={onViewTools}>
+			<Button variant="ghost" size="sm" className="justify-start" disabled={!connected} onClick={onViewTools}>
 				<Wrench className="size-3.5" />Agent tools
 			</Button>
 			{rhino?.panel ?? <RuntimeStatusPanel status={state.runtimeStatus} error={state.runtimeStatusError} onRefresh={onRefreshRuntime} refreshing={runtimeRefreshing} />}
@@ -162,7 +163,7 @@ export function Sidebar({
 		>
 			{/* Mobile top bar */}
 			<div className="flex items-center gap-2 px-3 py-2 lg:hidden">
-				<span className="flex-1 text-[13px] font-semibold tracking-tight">HopperCode</span>
+				<span className="flex flex-1 items-center gap-2 text-[13px] font-semibold tracking-tight"><span><span className="text-accent-hover">Hopper</span>Code</span></span>
 				<Button size="sm" variant="secondary" disabled={!connected || newThreadDisabled} title={newThreadDisabled ? "Stop the running thread first" : "New thread"} onClick={onNewSession} aria-label="New thread">
 					<Plus className="size-3.5" />
 					<span className="max-sm:hidden">New thread</span>
@@ -209,15 +210,23 @@ export function Sidebar({
 					<Button size="icon-sm" variant="ghost" disabled={!connected} onClick={onViewTools} aria-label="Agent tools" title="Agent tools">
 						<Wrench className="size-4" />
 					</Button>
-					<div className="mt-auto grid gap-2.5 pb-2" aria-label="Status">
-						<span title={`${rhino ? "Hopper Code instances" : "Rhino runtime"} · ${runtime.text}`} aria-label={`${rhino ? "Hopper Code instances" : "Rhino runtime"}: ${runtime.text}`} role="img" className={cn("size-1.5 rounded-full", toneClass(runtime.tone))} />
-						<span title={`Connection · ${connection.label}`} aria-label={`Connection: ${connection.label}`} role="img" className={cn("size-1.5 rounded-full", toneClass(connection.tone))} />
+					<div className="mt-auto grid pb-2" aria-label="Status">
+						<Tooltip content={`${rhino ? "Rhino instances" : "Rhino runtime"}: ${runtime.text}`}>
+							<span tabIndex={0} role="img" aria-label={`${rhino ? "Rhino instances" : "Rhino runtime"}: ${runtime.text}`} className="flex size-7 items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+								<span aria-hidden="true" className={cn("size-1.5 rounded-full", toneClass(runtime.tone))} />
+							</span>
+						</Tooltip>
+						<Tooltip content={`Host connection: ${connection.label}`}>
+							<span tabIndex={0} role="img" aria-label={`Host connection: ${connection.label}`} className="flex size-7 items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+								<span aria-hidden="true" className={cn("size-1.5 rounded-full", toneClass(connection.tone))} />
+							</span>
+						</Tooltip>
 					</div>
 				</div>
 			) : (
 				<div className="hidden min-h-0 flex-1 flex-col lg:flex">
 					<div className="flex items-center gap-2 px-3 pb-2 pt-2.5">
-						<span className="flex-1 text-[13px] font-semibold tracking-tight">HopperCode</span>
+						<span className="flex flex-1 items-center gap-2 text-[13px] font-semibold tracking-tight"><span><span className="text-accent-hover">Hopper</span>Code</span></span>
 						<Button size="icon-sm" variant="ghost" className="-mr-1.5" onClick={() => onCollapsedChange(true)} aria-label="Collapse sidebar" title="Collapse sidebar">
 							<PanelLeftClose className="size-4" />
 						</Button>

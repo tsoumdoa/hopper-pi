@@ -9,7 +9,6 @@ import type { TargetBinding } from "../../src/protocol/shared-execution.js";
 import { Composer, type ComposerHandle } from "./components/composer";
 import { ConfirmDialog, type ConfirmRequest } from "./components/confirm-dialog";
 import { ConnectionBanner } from "./components/connection-banner";
-import { ExportSessionButton } from "./components/export-session-button";
 import { ModelControls, toolbarTriggerClass } from "./components/model-picker";
 import { ProviderDialog } from "./components/provider-dialog";
 import { RhinoInstancesPanel, summarizeInstances } from "./components/rhino-instances";
@@ -17,7 +16,7 @@ import { ArchivedThreadsDialog } from "./components/archived-threads-dialog";
 import { ThreadList } from "./components/thread-list";
 import { Sidebar } from "./components/sidebar";
 import { SkillsDialog } from "./components/skills-dialog";
-import { TaskThread, TaskWorkingTime } from "./components/task-thread";
+import { TaskThread } from "./components/task-thread";
 import { ToastRegion } from "./components/toasts";
 import { ToolsDialog } from "./components/tools-dialog";
 import { UiRequestDialog } from "./components/ui-request-dialog";
@@ -58,24 +57,17 @@ function readCredential(): string {
 	return raw || sessionStorage.getItem("hopper.token") || "";
 }
 
-function StatusPill({ status, activeRoot, turns }: { status: ConnectionStatus; activeRoot: Row | undefined; turns: Row[] }) {
+function StatusPill({ status, activeRoot }: { status: ConnectionStatus; activeRoot: Row | undefined }) {
 	if (status !== "connected") {
 		const label = { connecting: "Connecting", authenticating: "Authenticating", disconnected: "Offline", error: "Offline" }[status];
 		const lost = status === "disconnected" || status === "error";
-		return <Badge variant={lost ? "danger" : "warn"} dot pulse={!lost}>{label}</Badge>;
+		return <Badge className="h-7 gap-2 border-0 bg-transparent p-0 text-xs font-normal" variant={lost ? "neutral" : "warn"} dot pulse={!lost}><span className="text-ink">{label}</span></Badge>;
 	}
-	if (!activeRoot) return <Badge dot>Ready</Badge>;
-	if (activeRoot.state === "awaiting_user") return <Badge variant="warn" dot>Answer needed</Badge>;
-	return (
-		<Badge variant="accent" dot pulse className="max-w-[240px] [&>span:last-child]:truncate">
-			<span>
-				<span className="sm:hidden">Working</span>
-				<span className="max-sm:hidden">
-					{activeRoot.state === "suspending" ? "Finishing current operation…" : <TaskWorkingTime task={activeRoot} turns={turns} inline />}
-				</span>
-			</span>
-		</Badge>
-	);
+	if (!activeRoot) return <Badge variant="accent" className="h-7 gap-2 border-0 bg-transparent p-0 text-xs font-normal" dot><span className="text-ink">Ready</span></Badge>;
+	if (activeRoot.state === "awaiting_user") return <Badge variant="warn" className="h-7 gap-2 border-0 bg-transparent p-0 text-xs font-normal" dot><span className="text-ink">Answer needed</span></Badge>;
+	return <Badge variant="accent" dot pulse className="h-7 gap-2 border-0 bg-transparent p-0 text-xs font-normal">
+		<span className="text-ink">{activeRoot.state === "suspending" ? "Stopping" : "Working"}</span>
+	</Badge>;
 }
 
 export function App() {
@@ -517,7 +509,7 @@ export function App() {
 	const title = String(snapshot?.conversations.find((conversation) => conversation.id === conversationId)?.title ?? "New chat");
 
 	useEffect(() => {
-		document.title = conversationId ? `${title} · Hopper` : "Hopper";
+		document.title = conversationId ? `${title} · HopperCode` : "HopperCode";
 	}, [conversationId, title]);
 	// Focus each newly selected chat once, without stealing focus on reconnect.
 	useEffect(() => {
@@ -648,7 +640,7 @@ export function App() {
 				onMobileOpenChange={setMobileSettingsOpen}
 				onNewSession={newChat}
 				newThreadDisabled={Boolean(liveConversation)}
-				threads={<ThreadList snapshot={snapshot} connected={connected} selectedId={conversationId} onSelect={id => { selectConversation(id); setMobileSettingsOpen(false); }} onArchive={manageThread} onDelete={deleteThread} onManageArchived={() => { setMobileSettingsOpen(false); setArchiveManagerOpen(true); }} />}
+				threads={<ThreadList token={credential.current ?? ""} snapshot={snapshot} connected={connected} selectedId={conversationId} onSelect={id => { selectConversation(id); setMobileSettingsOpen(false); }} onArchive={manageThread} onDelete={deleteThread} onManageArchived={() => { setMobileSettingsOpen(false); setArchiveManagerOpen(true); }} />}
 				onManageProvider={openProvider}
 				onManageSkills={() => { setMobileSettingsOpen(false); setSkillsOpen(true); }}
 				onViewTools={() => { setMobileSettingsOpen(false); setToolsOpen(true); }}
@@ -662,11 +654,13 @@ export function App() {
 						selectConversation(recoveryReturnConversation);
 						setRecoveryReturnConversation("");
 					}}>Back to chat</Button>}
-					<ExportSessionButton token={credential.current ?? ""} conversationId={conversationId} disabled={!connected || !conversationId} />
-					{away ? <button type="button" onClick={() => selectConversation(String(liveConversation!.id))} title={String(liveConversation!.title)}><Badge variant={liveConversation!.live_state === "awaiting_user" ? "warn" : "accent"} dot pulse>{liveConversation!.live_state === "awaiting_user" ? "Answer needed" : "Working in another thread"}</Badge></button> : <StatusPill status={connection.status} activeRoot={cancellableRoot} turns={snapshot?.turns ?? []} />}
-					<Button size="icon-sm" variant="ghost" className="-mr-1.5" disabled={!connected || !snapshot} onClick={shutdown} aria-label="Shut down the Hopper host" title="Shut down the Hopper host">
-						<Power className="size-3.5" />
-					</Button>
+					<div className="-mr-1.5 flex shrink-0 items-center gap-2" role="group" aria-label="Host status and power">
+						{away ? <button type="button" onClick={() => selectConversation(String(liveConversation!.id))} className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40" title={`View working thread: ${String(liveConversation!.title)}`}><Badge className="h-7 gap-2 border-0 bg-transparent p-0 text-xs font-normal" variant={liveConversation!.live_state === "awaiting_user" ? "warn" : "accent"} dot pulse><span className="text-ink">{liveConversation!.live_state === "awaiting_user" ? "Answer needed" : "Working"}</span></Badge></button> : <StatusPill status={connection.status} activeRoot={cancellableRoot} />}
+						<span aria-hidden="true" className="mx-0.5 h-3 w-px bg-line" />
+						<Button size="icon-sm" variant="ghost" className={cn("hover:bg-transparent disabled:opacity-100", connected ? "text-accent hover:text-accent-hover" : "text-muted hover:text-muted")} disabled={!connected || !snapshot} onClick={shutdown} aria-label={connected ? "Shut down the Hopper host" : "Hopper host is offline"} title={connected ? "Shut down the Hopper host" : "Hopper host is offline"}>
+							<Power className="size-4" strokeWidth={1.75} />
+						</Button>
+					</div>
 					<ConnectionBanner connection={connection} reconnecting={Boolean(snapshot) && !blocked.current} onReconnect={reconnect} />
 				</header>
 				{recoveryChats.slice(0, 1).map(chat => (

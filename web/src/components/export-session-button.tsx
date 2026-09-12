@@ -37,11 +37,10 @@ export function ExportSessionButton({ token, disabled, conversationId }: { token
 	};
 
 	return (
-		<Button size="sm" variant="ghost" disabled={disabled || exporting} onClick={() => void download()}
+		<Button size="icon-sm" variant="ghost" className="size-[22px] rounded p-1 text-ink-soft hover:bg-white hover:text-black" disabled={disabled || exporting} onClick={() => void download()}
 			aria-label={exporting ? "Exporting session" : "Export session"} aria-busy={exporting}
-			title="Download the current session, including tool calls and results, as JSON">
+			title="Export session as JSON, including tool calls and results">
 			{exporting ? <LoaderCircle className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-			<span className="max-sm:hidden">{exporting ? "Exporting…" : "Export session"}</span>
 		</Button>
 	);
 }
