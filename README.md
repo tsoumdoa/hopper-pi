@@ -110,17 +110,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-rhino-win.ps
 
 The command installs dependencies, builds and verifies a fresh `win-x64` Yak package, smoke-tests the packaged host (including native ZeroMQ, SQLite, and esbuild), stops the previous Hopper host, and installs through Rhino 8's Yak. Use `-Yes` to replace an existing Hopper package without prompting. Set `HOPPER_YAK` to the absolute Yak executable path if Rhino is installed elsewhere.
 
-To build and test without installing, replace `-OpenRhino` with `-BuildOnly`. After dependencies are installed, the shorthand is `pnpm install:rhino:win -OpenRhino` (or `-BuildOnly`). Use the direct PowerShell command for the first run: pnpm can auto-install dependencies before running scripts, triggering the legacy Grasshopper postinstall. The PowerShell installer suppresses that legacy install. If pnpm's PowerShell shim is blocked by execution policy, use `pnpm.cmd` instead.
+To build and test without installing, replace `-OpenRhino` with `-BuildOnly`. After dependencies are installed, use `pnpm build:install --open-rhino` or `pnpm build:install --build-only`. If pnpm's PowerShell shim is blocked by execution policy, use `pnpm.cmd` instead.
 
 For a Windows acceptance check, run `HopperCode` in an empty Rhino document and confirm the browser UI opens. Connect a second Rhino instance with `HopperCode`, confirm both appear in the picker, and ask Hopper to create one box in each document. Check that each box lands in the intended document, reload the browser to check conversation restoration, then close all Rhino instances and confirm the shared host exits. Use disposable documents for this check.
 
 If you previously used the legacy Grasshopper installer, move `%APPDATA%\Grasshopper\Libraries\hopper-pi` to a backup location outside Grasshopper's Libraries before launching Rhino with the Yak package, to avoid loading duplicate Hopper plugins.
 
-To build a target without creating a `.yak`, omit `--yak`:
+To stage a target without creating a `.yak`, call the packaging script directly:
 
 ```bash
-HOPPER_SKIP_GH_PLUGIN=1 pnpm install
-pnpm package:rhino -- --target mac-arm64
+pnpm install
+node scripts/package-rhino.mjs --target mac-arm64
 ```
 
 Rhino packaging uses a separate minified host build with tree shaking and code splitting. Pi session modules remain lazy. Pi dependencies keep their original runtime asset paths; packaging removes declaration files and shares Pi's duplicate SDK bundle through its unbundled implementation. Pi upgrades must pass the version/layout check in `scripts/prune-rhino-host.mjs`. The standalone Pi extension keeps its existing TypeScript build.
@@ -130,9 +130,9 @@ Packaged hosts read startup dependency sources from one compressed archive to re
 Packaging writes `<stage>-host-metafile.json`, `<stage>-web-manifest.json`, and `<stage>-size-report.json` beside the stage. Reports stay out of the installer. The verifier enforces total and category size limits in `scripts/rhino-package-rules.mjs`; inspect clean before/after reports and record measurements in the PR before changing a limit.
 
 ```bash
-pnpm ui:analyze --output artifacts/web-bundle-report.json
-pnpm build:rhino-host --output artifacts/rhino-host/dist --report artifacts/host-metafile.json
-pnpm size:rhino-package --target mac-arm64 --web-manifest artifacts/package-mac-web-manifest.json artifacts/package-mac
+node scripts/analyze-web-bundle.mjs --output artifacts/web-bundle-report.json
+node scripts/build-rhino-host.mjs --output artifacts/rhino-host/dist --report artifacts/host-metafile.json
+node scripts/report-rhino-package-size.mjs --target mac-arm64 --web-manifest artifacts/package-mac-web-manifest.json artifacts/package-mac
 node scripts/smoke-staged-host.mjs artifacts/package-mac
 ```
 
@@ -252,31 +252,53 @@ The GHZMQ component preserves old definitions, but it does not start the transpo
 ```bash
 git clone https://github.com/tsoumdoa/hoppercode.git
 cd hoppercode
-pnpm install          # builds & installs the GH plugin unless skipped
-pnpm run pi           # run Pi with this extension loaded
+pnpm install
+pnpm dev
 ```
 
-Skip the plugin build when iterating on TypeScript only:
+`pnpm install` installs dependencies without building or installing Rhino plugins. `pnpm dev` opens the web UI at `http://localhost:5174/#mock-running` with an in-memory mock host. It needs no Rhino, .NET, model credentials, or real backend. Messages receive canned replies. Reload with `#mock-question`, `#mock-failed`, or `#mock-empty` to try the other fixtures. Threads and settings stay in memory until you stop development with Ctrl+C. Tabs using the same fixture share threads, and reconnecting preserves them. Restart `pnpm dev` to reset the fixtures.
+
+The mock supports thread archive/delete, questions, cancellation, recovery, image attachments, provider sign-in simulation, tool settings, skills, and conversation export. It uses the real request validators. Provider sign-in and plugin keys are simulated; submitted keys are discarded. It does not run Rhino operations or model calls, and stopping the host remains a terminal action.
+
+The main commands are:
+
+| Command | Purpose |
+| ------- | ------- |
+| `pnpm install` | Install dependencies |
+| `pnpm dev` | Open the UI with mock data and hot reload |
+| `pnpm build` | Build and verify macOS arm64 and Windows x64 Yak packages |
+| `pnpm build --dev` | Compile host and UI into `dist` with source maps, without packaging |
+| `pnpm build:install` | Build, verify, and replace the local Rhino 8 installation |
+| `pnpm test` | Run the test suite |
+
+Release builds require .NET and Rhino 8's Yak executable. `pnpm build` builds both platforms sequentially and writes to `artifacts/hopper-pi-<version>-<target>`. It refuses a nonempty output directory. Use `pnpm build --output artifacts/my-release` for another destination; each target gets its own `mac-arm64` or `win-x64` subfolder. `--target mac-arm64` and `--target win-x64` remain available for a single target. Cross-built packages still need runtime testing on their target OS.
+
+For local development, quit Rhino and run `pnpm build:install`. It builds only the current platform, verifies and smoke-tests a fresh package, stops the old Hopper host, and replaces the installed package without prompting. Each run uses a new staging directory, so repeated local builds need no output cleanup. Saved conversations remain available. Both platforms accept the same options:
 
 ```bash
-export HOPPER_SKIP_GH_PLUGIN=1
-pnpm install
-pnpm run dev
+pnpm build:install --open-rhino  # Install, then reopen Rhino
+pnpm build:install --build-only # Build and smoke-test without changing the installation
 ```
+
+
+`pnpm build --dev` is useful for debugging the compiled host or checking the built UI. It requires only JavaScript dependencies and writes source maps for both. For UI iteration with hot reload, use `pnpm dev`.
+
+`pnpm pack` runs the automatic `prepack` hook to compile the npm extension and web assets. It does not build a Yak package.
 
 ### Develop the browser UI against Hopper
 
-Run `pnpm host:dev`, then `pnpm ui:dev` in a second terminal. Vite reads the host endpoint from `~/.hopper/shared-control/control.json`. Start the host before Vite so the endpoint is available. `HOPPER_UI_PROXY_TARGET` can override it. If another host is already running, stop it through its browser UI before `pnpm host:dev` so the rebuilt host starts with development-origin access.
+For real backend work, compile the assets and start the host:
+
+```bash
+pnpm build --dev
+node dist/host/index.js --ensure-host --explicit-start --ui-dev-origin http://localhost:5173
+```
+
+Run `pnpm exec vite` in a second terminal. Vite reads the host endpoint from `~/.hopper/shared-control/control.json`. Start the host before Vite so the endpoint is available. `HOPPER_UI_PROXY_TARGET` can override it. If another host is already running, stop it through its browser UI before starting the rebuilt host with development-origin access.
 
 Run `HopperCode` in Rhino to attach its documents. To authenticate the development page, open the private `~/.hopper/shared-control/control.json` locally and copy its `browserCredential` value into `http://localhost:5173/#<browserCredential>`. The browser removes the fragment after reading it. Keep this credential private; do not paste it into logs, screenshots, issues, or chat. The normal HopperCode workflow opens an authenticated link automatically and needs none of these development steps.
 
-Rebuild or reinstall the plugin manually:
-
-```bash
-pnpm run build:gh-plugin
-# or force a full rebuild + copy:
-node scripts/install-grasshopper-plugin.mjs --force
-```
+Diagnostic utilities remain available directly, for example `node scripts/verify-rhino-package.mjs` and `pnpm exec tsx scripts/cross-language-rpc-smoke.ts`. To load the external Pi extension, use `pnpm exec pi -e .`.
 
 ## Architecture
 
@@ -388,14 +410,14 @@ Docs cover [shared host architecture and operation](docs/shared-host.md), [docum
 
 | Variable | Effect |
 | -------- | ------ |
-| `HOPPER_SKIP_GH_PLUGIN=1` | Skip plugin build/install on `pnpm install` |
+| `HOPPER_SKIP_GH_PLUGIN=1` | Skip the legacy `install-grasshopper-plugin.mjs` installer |
 | `HOPPER_GH_LIBRARIES` | Override Grasshopper Libraries install path |
 | `HOPPER_GH_PLUGIN_DIR` | Subfolder under Libraries (default: `hopper-pi`) |
 | `HOPPER_GH_STRICT=1` | Fail install on build/copy errors (default: warn and continue) |
 | `HOPPER_CONNECTION_PROFILE` | Connection profile path override |
 | `HOPPER_PI_AUTH_PATH` | Override the auth file; defaults to the global Pi `auth.json` |
 | `HOPPER_PROGRESSIVE_TOOLS=1` | Opt in to a small Hopper core + `hopper_search_tools` (specialists activate on demand). Off by default. Also `--hopper-progressive-tools`. |
-| `HOPPER_YAK` | Absolute Yak path when `package:rhino -- --target mac-arm64 --yak` or `--target win-x64 --yak` cannot find Rhino 8 |
+| `HOPPER_YAK` | Absolute Yak path when `pnpm build` cannot find Rhino 8 |
 | `HOPPER_NODE_EXECUTABLE` | Absolute Node executable path; highest resolver priority |
 
 ## Troubleshooting
@@ -409,8 +431,8 @@ Docs cover [shared host architecture and operation](docs/shared-host.md), [docum
 - **Tools fail in external Pi mode:** Use the normal `HopperCode` browser UI. Standalone Pi connections cannot acquire shared task ownership.
 - **Invalid connection token:** Run `HopperCodeStop`, then `HopperCode` to create a new instance profile and authenticated host connection.
 - **Grasshopper shows offline in Rhino.Inside.Revit:** Keep Grasshopper visible while the agent is working and inspect `HopperCodeStatus` after refocusing Rhino. Older Rhino.Inside.Revit versions may still limit background Grasshopper work.
-- **Plugin did not install:** Install [.NET 7 SDK](https://dotnet.microsoft.com/download), then run `pnpm run build:gh-plugin`. On Windows, set `HOPPER_GH_LIBRARIES` if auto-detect fails.
-- **Stale plugin after `git pull`:** `node scripts/install-grasshopper-plugin.mjs --force`, then restart Rhino.
+- **Plugin did not install:** Install [.NET 7 SDK](https://dotnet.microsoft.com/download), quit Rhino, then run `pnpm build:install`.
+- **Stale plugin after `git pull`:** Quit Rhino, then run `pnpm build:install --open-rhino`.
 
 ### Export the current conversation for debugging
 

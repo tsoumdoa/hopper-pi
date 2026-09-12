@@ -9,6 +9,7 @@ DEFAULT_YAK="/Applications/Rhino 8.app/Contents/Resources/bin/yak"
 YAK="${HOPPER_YAK:-$DEFAULT_YAK}"
 ASSUME_YES=0
 OPEN_RHINO=0
+BUILD_ONLY=0
 
 usage() {
 	cat <<'EOF'
@@ -24,9 +25,10 @@ Usage:
 Options:
   --yes         Reinstall an existing hopper-pi package without prompting.
   --open-rhino  Open Rhino 8 after installation.
+  --build-only  Build and smoke-test without installing or stopping the host.
   -h, --help    Show this help.
 
-Rhino must be fully quit before running this script.
+Rhino must be fully quit before installation. --build-only can run while Rhino is open.
 EOF
 }
 
@@ -44,6 +46,9 @@ while [[ $# -gt 0 ]]; do
 		--yes)
 			ASSUME_YES=1
 			;;
+		--build-only)
+			BUILD_ONLY=1
+			;;
 		--open-rhino)
 			OPEN_RHINO=1
 			;;
@@ -58,6 +63,8 @@ while [[ $# -gt 0 ]]; do
 	shift
 done
 
+[[ "$BUILD_ONLY" -ne 1 || "$OPEN_RHINO" -ne 1 ]] || fail "--build-only cannot be combined with --open-rhino."
+
 [[ "$(uname -s)" == "Darwin" ]] || fail "This installer only supports macOS."
 [[ -x "$YAK" ]] || fail "Rhino 8 Yak was not found at $YAK"
 
@@ -66,7 +73,7 @@ require_command pnpm
 require_command dotnet
 require_command pgrep
 
-if pgrep -x "Rhinoceros" >/dev/null 2>&1; then
+if [[ "$BUILD_ONLY" -ne 1 ]] && pgrep -x "Rhinoceros" >/dev/null 2>&1; then
 	fail "Rhino is running. Quit Rhino fully, then run this script again."
 fi
 
@@ -80,10 +87,15 @@ echo "[hopper-pi] Installing JavaScript dependencies"
 HOPPER_SKIP_GH_PLUGIN=1 pnpm install --frozen-lockfile
 
 echo "[hopper-pi] Building a fresh Rhino package at $STAGE_DIR"
-pnpm package:rhino -- --output "$STAGE_DIR" --yak
+pnpm build --target mac-arm64 --output "$STAGE_DIR"
 
 echo "[hopper-pi] Smoke-testing packaged host imports and native ZeroMQ"
 node scripts/smoke-staged-host.mjs "$STAGE_DIR"
+
+if [[ "$BUILD_ONLY" -eq 1 ]]; then
+	echo "[hopper-pi] Build and smoke test passed. Package files: $STAGE_DIR"
+	exit 0
+fi
 
 INSTALLED_LINE="$("$YAK" list | awk -v name="$PACKAGE_NAME" '$1 == name { print; exit }')"
 if [[ -n "$INSTALLED_LINE" ]]; then

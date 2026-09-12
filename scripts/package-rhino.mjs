@@ -209,7 +209,7 @@ const output = resolve(option("--output") ?? defaultOutput);
 validateOutput(output);
 mkdirSync(output, { recursive: true });
 
-run("pnpm", ["build:release"]);
+run(process.execPath, [join(scriptDirectory, "build-assets.mjs")]);
 run(process.execPath, [installer, "--force", "--target", target], {
 	env: {
 		HOPPER_GH_LIBRARIES: output,
