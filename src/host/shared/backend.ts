@@ -41,6 +41,8 @@ export class SharedBackend implements SharedBrowserBackend {
 					event.type === "tool_settings" ||
 					event.type === "ui_request" ||
 					event.type === "auth_event" ||
+					event.type === "ui_request_cancelled" ||
+					(event.type === "status" && event.scope === "auth") ||
 					event.type === "error" ||
 					event.type === "ui_notification"
 				)
@@ -239,6 +241,17 @@ export class SharedBackend implements SharedBrowserBackend {
 				return null;
 			case "logout":
 				await this.configure(() => this.admin.logout(command.provider));
+				this.publish();
+				return null;
+			case "cancel_auth":
+				this.admin.cancelAuth();
+				return null;
+			case "refresh_providers":
+				await this.configure(() => this.admin.refreshProviders());
+				this.publish();
+				return null;
+			case "add_provider":
+				await this.configure(() => this.admin.addProvider(command.config));
 				this.publish();
 				return null;
 			case "login":

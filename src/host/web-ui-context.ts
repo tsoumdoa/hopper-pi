@@ -65,7 +65,7 @@ export class BrowserUiContext {
 			? prompt.options.map((option) => ({ ...option, value: option.id }))
 			: undefined;
 		return this.request({
-			kind: prompt.type === "select" ? "select" : "input",
+			kind: "auth",
 			title: prompt.message,
 			options,
 			placeholder: "placeholder" in prompt ? prompt.placeholder : undefined,
@@ -93,10 +93,11 @@ export class BrowserUiContext {
 			if (signal) {
 				const onAbort = () => {
 					this.pending.delete(requestId);
-				reject(new Error("UI request aborted"));
-			};
-			signal.addEventListener("abort", onAbort, { once: true });
-			pending.removeAbort = () => signal.removeEventListener("abort", onAbort);
+					this.bus.publish({ type: "ui_request_cancelled", requestId });
+					reject(new Error("UI request aborted"));
+				};
+				signal.addEventListener("abort", onAbort, { once: true });
+				pending.removeAbort = () => signal.removeEventListener("abort", onAbort);
 			}
 			this.pending.set(requestId, pending);
 			this.bus.publish(message);

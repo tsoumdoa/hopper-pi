@@ -66,6 +66,7 @@
 		"@lickle/lock": "0.0.1",
 		"@napi-rs/keyring": "2.0.0",
 		"fast-xml-parser": "^5.11.1",
+		"jsonc-parser": "3.3.1",
 		"ws": "8.21.3",
 		"zeromq": "6.5.0"
 	},
