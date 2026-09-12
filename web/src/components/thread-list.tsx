@@ -128,7 +128,7 @@ export function ThreadList({
 						{when}
 					</span>
 				</button>
-				<span className="absolute right-1 flex gap-0.5 rounded bg-surface opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:opacity-100">
+				<span className="absolute inset-y-0 right-0 flex items-center gap-0.5 rounded-r-md bg-surface pr-1 opacity-0 before:pointer-events-none before:absolute before:inset-y-0 before:right-full before:w-6 before:bg-linear-to-r before:from-transparent before:to-surface before:backdrop-blur-sm before:[mask-image:linear-gradient(to_right,transparent,black)] group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:opacity-100 [@media(hover:none)]:before:hidden">
 					<ExportSessionButton token={token} conversationId={id} disabled={!connected} />
 					<button
 						type="button"
