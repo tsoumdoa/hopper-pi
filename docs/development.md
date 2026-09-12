@@ -61,7 +61,7 @@ Run `pnpm exec vite` in a second terminal. Vite reads the host endpoint from `~/
 
 Run `HopperCode` in Rhino to attach its documents. To authenticate the development page, open the private `~/.hopper/shared-control/control.json` locally and copy its `browserCredential` value into `http://localhost:5173/#<browserCredential>`. The browser removes the fragment after reading it. Keep this credential private; do not paste it into logs, screenshots, issues, or chat. The normal HopperCode workflow opens an authenticated link automatically and needs none of these development steps.
 
-Diagnostic utilities remain available directly, for example `node scripts/verify-rhino-package.mjs` and `pnpm exec tsx scripts/cross-language-rpc-smoke.ts`.
+See the [script inventory](../scripts/README.md) for build helpers, tests, and manual diagnostics. Diagnostic utilities remain available directly, for example `node scripts/verify-rhino-package.mjs` and `pnpm exec tsx scripts/cross-language-rpc-smoke.ts`.
 
 ## Source layout
 
@@ -69,7 +69,8 @@ Diagnostic utilities remain available directly, for example `node scripts/verify
 | --- | --- |
 | `web/` | React browser UI |
 | `src/host/` | Embedded Pi runtime and local server |
-| `src/protocol/` | Browser contracts and native RPC schemas |
+| `src/protocol/` | TypeScript browser contracts and native RPC validators |
+| `protocol/v2/` | Shared native RPC specification, metadata, and fixtures used by TypeScript and C# tests |
 | `src/tools/` | Agent tools |
 | `dotnet/` | Native Rhino and Grasshopper plugins |
 | `mds/` | Bundled skills and references |

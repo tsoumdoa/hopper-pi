@@ -1,5 +1,7 @@
 # Hopper RPC protocol v2
 
+This is the shared contract for the current Node-to-Rhino RPC connection. The TypeScript implementation lives in `src/protocol/v2.ts`; the C# implementation lives in `dotnet/Hopper.Core`. Both `src/protocol/v2.test.ts` and `dotnet/Hopper.Core.Tests/RpcProtocolV2Tests.cs` read the metadata and fixtures here to check compatibility. These files are maintained alongside the implementations, not generated build output.
+
 `hopper-rpc.schema.json` defines the JSON request, operation response, protocol-error response, runtime status, and retained mutation-result shapes. `metadata.json` repeats the wire framing, operation classes, result classes, and reason codes in a form that C# and TypeScript tests can read without parsing schema annotations. `fixtures.json` contains the shared valid and invalid examples.
 
 The Node DEALER sends one UTF-8 JSON payload frame. The Rhino ROUTER receives the stable Node routing identity followed by that payload. Replies reverse the path: ROUTER sends the routing identity and one payload frame, while DEALER receives the payload. Neither side adds an empty delimiter frame. The routing identity is opaque transport data and never appears in JSON.
