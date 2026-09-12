@@ -4,7 +4,7 @@
 //   node scripts/ui-mock-host.mjs    start the mock host and Vite on http://localhost:5174/#mock-running
 //   node scripts/ui-mock-host.mjs --no-vite --port 19788
 //
-// The URL fragment picks the fixture: #mock-running, #mock-question, #mock-failed, #mock-empty.
+// The URL fragment picks the fixture: #mock-running, #mock-question, #mock-failed, #mock-empty, #mock-images.
 // Sending a message queues a task that streams a canned answer and completes a few seconds later.
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
@@ -28,7 +28,7 @@ const flag = (name) => {
 const PORT = Number(flag("--port") ?? process.env.HOPPER_MOCK_PORT ?? 19788);
 const UI_PORT = Number(flag("--ui-port") ?? 5174);
 const START_VITE = !args.includes("--no-vite");
-const SCENARIOS = ["running", "question", "failed", "empty"];
+const SCENARIOS = ["running", "question", "failed", "empty", "images"];
 
 function json(response, status, body) {
 	response.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });

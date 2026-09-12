@@ -103,3 +103,47 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* The mask fades the blur itself, as well as the tint, into the image. */
+.image-chrome {
+  isolation: isolate;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+.image-chrome::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--color-surface) 48%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  mask-image: linear-gradient(to bottom, black, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, black, transparent);
+}
+.image-chrome-bottom::before {
+  mask-image: linear-gradient(to top, black, transparent);
+  -webkit-mask-image: linear-gradient(to top, black, transparent);
+}
+@media (hover: hover) {
+  .image-view:hover .image-chrome { opacity: 1; pointer-events: auto; }
+}
+.image-view[data-controls="true"] .image-chrome,
+.image-view:has(button:focus-visible) .image-chrome {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Touch devices stay full-screen in both portrait and landscape. */
+@media (min-width: 768px) and (hover: hover) and (pointer: fine) {
+  .image-gallery-dialog {
+    left: 50%;
+    top: 50%;
+    width: min(1200px, 92vw);
+    height: 90dvh;
+    max-height: 90dvh;
+    translate: -50% -50%;
+  }
+}

@@ -121,8 +121,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 			>
 				<input ref={fileInput} type="file" accept={IMAGE_ACCEPT} multiple={!replaceId.current} className="sr-only" tabIndex={-1} aria-label="Choose images" disabled={disabled || loading}
 					onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; const replacement = replaceId.current; replaceId.current = null; void addImages(files, replacement); }} />
-				{images.length > 0 && <div className="flex flex-wrap gap-2 px-3 pt-3" aria-label="Image attachments">
-					{images.map((image) => <div key={image.id} className="w-36 overflow-hidden rounded-sm border border-line bg-panel">
+				{images.length > 0 && <div className="flex gap-2 overflow-x-auto px-3 pt-3 pb-2" aria-label="Image attachments">
+					{images.map((image) => <div key={image.id} className="w-36 shrink-0 overflow-hidden rounded-sm border border-line bg-panel">
 						<button type="button" className="block w-full" disabled={disabled || loading} onClick={() => setEditor({ kind: "existing", id: image.id })} aria-label={`Annotate ${image.name}`}>
 							<img src={imageUrl(image.image)} alt={image.name} className="h-20 w-full object-contain" />
 						</button>

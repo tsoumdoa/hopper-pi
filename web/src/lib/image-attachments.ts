@@ -1,3 +1,4 @@
+import { randomId } from "./random-id";
 import type { AppState, BinaryFiles } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import { MAX_IMAGE_BYTES, parseImages, type ImageAttachment } from "../../../src/host/protocol";
@@ -42,5 +43,5 @@ export async function readImage(file: File): Promise<DraftImage> {
 		element.onerror = () => reject(new Error("This image could not be opened. Try another file."));
 		element.src = imageUrl(image);
 	});
-	return { id: crypto.randomUUID(), name: file.name || "Pasted image", ...dimensions, image, original: image };
+	return { id: randomId(), name: file.name || "Pasted image", ...dimensions, image, original: image };
 }

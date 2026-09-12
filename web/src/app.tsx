@@ -1,3 +1,6 @@
+import { randomId } from "./lib/random-id";
+import { MAX_IMAGES } from "../../src/host/protocol";
+import { ImageAttachmentContext } from "./components/image-gallery";
 import { applySnapshotPatch } from "../../src/host/shared/snapshot-patch.js";
 import { Box, Loader2, Power } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -279,7 +282,7 @@ export function App() {
 									if (target) { selectionExplicit.current = true; setSelected([target]); }
 								}
 							} else {
-								const command: SharedBrowserCommand = { type: "create_conversation", requestId: crypto.randomUUID(), title: "New chat" };
+								const command: SharedBrowserCommand = { type: "create_conversation", requestId: randomId(), title: "New chat" };
 								pending.current.set(command.requestId, command);
 							}
 						}
@@ -524,29 +527,29 @@ export function App() {
 				toast("There is no running turn to steer. Send it as a follow-up instead.", "warning");
 				return;
 			}
-			send({ type: "steer", requestId: crypto.randomUUID(), conversationId, sessionId: String(task.session_id), taskId: String(task.id), turnId: String(turn.id), text: draft, attachments });
+			send({ type: "steer", requestId: randomId(), conversationId, sessionId: String(task.session_id), taskId: String(task.id), turnId: String(turn.id), text: draft, attachments });
 			return;
 		}
-		send({ type: "submit", requestId: crypto.randomUUID(), conversationId, sessionId, kind: sendMode, text: draft, bindings: accessibleBindings, ...(selected[0] ? { messageTarget: selected[0] } : {}), attachments });
+		send({ type: "submit", requestId: randomId(), conversationId, sessionId, kind: sendMode, text: draft, bindings: accessibleBindings, ...(selected[0] ? { messageTarget: selected[0] } : {}), attachments });
 	};
 
-	const cancelTask = (taskId: string) => send({ type: "cancel", requestId: crypto.randomUUID(), conversationId, taskId });
+	const cancelTask = (taskId: string) => send({ type: "cancel", requestId: randomId(), conversationId, taskId });
 	const commands = {
 		enabled: connected && !readOnly,
 		recoveryEnabled: connected && !archived,
-		answer: (questionId: string, answer: string | null) => connected && !readOnly && send({ type: "answer", requestId: crypto.randomUUID(), conversationId, questionId, answer }),
-		recover: (taskId: string, acknowledgement: string) => connected && !archived && send({ type: "recover", requestId: crypto.randomUUID(), conversationId, taskId, acknowledgement }),
+		answer: (questionId: string, answer: string | null) => connected && !readOnly && send({ type: "answer", requestId: randomId(), conversationId, questionId, answer }),
+		recover: (taskId: string, acknowledgement: string) => connected && !archived && send({ type: "recover", requestId: randomId(), conversationId, taskId, acknowledgement }),
 	};
 
-	const manageThread = (row: Row) => send({ type: row.archived_at ? "unarchive_conversation" : "archive_conversation", requestId: crypto.randomUUID(), conversationId: String(row.id) });
+	const manageThread = (row: Row) => send({ type: row.archived_at ? "unarchive_conversation" : "archive_conversation", requestId: randomId(), conversationId: String(row.id) });
 	const deleteThread = (row: Row) => setConfirm({
 		title: `Delete '${row.title}'?`,
 		description: "This permanently removes the thread's saved log. Export first if you want a copy.",
 		confirmLabel: "Delete thread", destructive: true,
-		action: () => send({ type: "delete_conversation", requestId: crypto.randomUUID(), conversationId: String(row.id) }),
+		action: () => send({ type: "delete_conversation", requestId: randomId(), conversationId: String(row.id) }),
 	});
 	const newChat = () => {
-		if (!liveConversation) send({ type: "create_conversation", requestId: crypto.randomUUID(), title: "New chat" });
+		if (!liveConversation) send({ type: "create_conversation", requestId: randomId(), title: "New chat" });
 	};
 	const shutdown = () =>
 		setConfirm({
@@ -555,7 +558,7 @@ export function App() {
 			confirmLabel: "Shut down",
 			destructive: true,
 			action: () => {
-				if (snapshot) send({ type: "stop_host", requestId: crypto.randomUUID(), hostEpoch: snapshot.hostEpoch });
+				if (snapshot) send({ type: "stop_host", requestId: randomId(), hostEpoch: snapshot.hostEpoch });
 			},
 		});
 	const requestLogout = (provider: string) =>
@@ -654,7 +657,12 @@ export function App() {
 						<Loader2 className="size-5 animate-spin" />
 						<p>Starting Hopper…</p>
 					</div>
-				) : <TaskThread
+				) : <ImageAttachmentContext.Provider value={{
+					attach: readOnly || !sessionId || !connected || !historyReady || submitting || taskBlocksComposer || images.length >= MAX_IMAGES ? undefined : (image) => {
+						setImages((current) => current.length < MAX_IMAGES ? [...current, image] : current);
+					},
+					unavailable: images.length >= MAX_IMAGES ? `Attach up to ${MAX_IMAGES} images` : readOnly ? "This chat is read-only" : !sessionId || !connected || !historyReady || submitting || taskBlocksComposer ? "Chat attachments are temporarily unavailable" : undefined,
+				}}><TaskThread
 					snapshot={snapshot}
 					tasks={orderedTasks}
 					connected={connected}
@@ -664,7 +672,7 @@ export function App() {
 					onHistoryPage={loadHistory}
 					controlTasks={tasks}
 					onSuggestion={useSuggestion}
-				/>}
+				/></ImageAttachmentContext.Provider>}
 				{readOnly ? <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-panel px-6 py-4 text-xs" role="status">
 					<span>{away ? `Hopper is working in '${liveConversation!.title}'. This thread is read-only for now.` : "This thread is archived. Unarchive to continue."}</span>
 					<Button size="sm" variant="secondary" disabled={!connected} onClick={() => away ? selectConversation(String(liveConversation!.id)) : manageThread(selectedConversation!)}>{away ? "Jump back" : "Unarchive"}</Button>
@@ -718,9 +726,9 @@ export function App() {
 			{skillsOpen && <SkillsDialog token={credential.current ?? ""} connected={connected} streaming={Boolean(activeRoot)} onOpenChange={setSkillsOpen} />}
 			{toolsOpen && <ToolsDialog key={`${sessionId}:${toolsContextQuery}`} contextQuery={toolsContextQuery} token={credential.current ?? ""} connected={connected} onOpenChange={setToolsOpen} />}
 			<UiRequestDialog send={(message) => message.type === "ui_response" && send({ type: "auth_response", requestId: message.requestId, value: message.value })} />
-			{archiveManagerOpen && <ArchivedThreadsDialog snapshot={snapshot} connected={connected} busy={[...pending.current.values()].some(command => command.type === "purge_archived_conversations")} onClose={() => setArchiveManagerOpen(false)} onPurge={(conversationIds, before) => send({ type: "purge_archived_conversations", requestId: crypto.randomUUID(), conversationIds, before })} />}
+			{archiveManagerOpen && <ArchivedThreadsDialog snapshot={snapshot} connected={connected} busy={[...pending.current.values()].some(command => command.type === "purge_archived_conversations")} onClose={() => setArchiveManagerOpen(false)} onPurge={(conversationIds, before) => send({ type: "purge_archived_conversations", requestId: randomId(), conversationIds, before })} />}
 			<ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
-			{archiveUndo && <div role="status" className="fixed bottom-4 right-4 z-[60] flex items-center gap-4 rounded-md border border-line bg-surface p-3 text-sm shadow-pop">Thread archived<Button size="xs" variant="ghost" disabled={!connected} onClick={() => send({ type: "unarchive_conversation", requestId: crypto.randomUUID(), conversationId: archiveUndo })}>Undo</Button><button aria-label="Dismiss archive notification" onClick={() => setArchiveUndo(null)}>×</button></div>}
+			{archiveUndo && <div role="status" className="fixed bottom-4 right-4 z-[60] flex items-center gap-4 rounded-md border border-line bg-surface p-3 text-sm shadow-pop">Thread archived<Button size="xs" variant="ghost" disabled={!connected} onClick={() => send({ type: "unarchive_conversation", requestId: randomId(), conversationId: archiveUndo })}>Undo</Button><button aria-label="Dismiss archive notification" onClick={() => setArchiveUndo(null)}>×</button></div>}
 			<ToastRegion />
 		</div>
 	);

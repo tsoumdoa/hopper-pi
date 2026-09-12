@@ -124,6 +124,8 @@ async function upload(name: string) {
 beforeEach(async () => {
 	vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 	vi.stubGlobal("WebSocket", Socket);
+	// Remote HTTP previews have getRandomValues but no randomUUID.
+	vi.stubGlobal("crypto", { getRandomValues: crypto.getRandomValues.bind(crypto) });
 	Socket.sockets = [];
 	history.replaceState(null, "", "/#credential");
 	sessionStorage.clear();

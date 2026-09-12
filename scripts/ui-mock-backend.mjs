@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 const facade = { kind: "rhino", lifecycleInstanceId: "life-1", rhinoDocumentId: "doc-facade" };
 const roof = { kind: "rhino", lifecycleInstanceId: "life-2", rhinoDocumentId: "doc-roof" };
 const untitled = { kind: "rhino", lifecycleInstanceId: "life-2", rhinoDocumentId: "doc-untitled" };
-const PNG_1PX = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+const CAPTURE_IMAGES = ["facade", "roof", "detail", "plan"].map((name) => ({
+	type: "image", mimeType: "image/png",
+	data: readFileSync(new URL(`./fixtures/chat-images/${name}.png`, import.meta.url)).toString("base64"),
+}));
 
 const progressEvent = (taskId, turnId, payload) => ({ task_id: taskId, kind: "progress", payload: JSON.stringify({ turnId, ...payload }) });
 const messagesEvent = (taskId, turnId, messages) => progressEvent(taskId, turnId, { type: "messages", messages });
@@ -56,17 +60,23 @@ function seedScenario(snapshot, scenario, conversationId) {
 	const task = (id, state, payload, extra = {}) => ({ id, conversation_id: conversationId, parent_task_id: null, state, session_id: `${conversationId}-session`, created_at: now - 600_000, updated_at: now - 540_000, payload: JSON.stringify(payload), ...extra });
 	if (scenario === "empty") return;
 
-	snapshot.tasks.push(task("t1", "completed", { kind: "prompt", text: "Check the facade model and tell me what geometry is present.", bindings: [facade] }));
+	snapshot.tasks.push(task("t1", "completed", { kind: "prompt", text: "Check the facade model and tell me what geometry is present.", bindings: [facade], attachments: scenario === "images" ? CAPTURE_IMAGES.slice(0, 3) : undefined }));
 	snapshot.turns.push({ id: "turn-1", task_id: "t1", state: "completed", started_at: now - 600_000, ended_at: now - 540_000 });
 	snapshot.events.push(
 		messagesEvent("t1", "turn-1", [
 			{ role: "assistant", content: [{ type: "thinking", thinking: "The user wants an inventory of the active Rhino document. Query objects grouped by layer first." }, { type: "toolCall", id: "call-1", name: "rh_query_objects", arguments: { groupBy: "layer" } }] },
 			{ role: "toolResult", toolCallId: "call-1", toolName: "rh_query_objects", content: [{ type: "text", text: "Walls: 12 polysurfaces\nGlazing: 48 surfaces\nMullions: 96 curves" }], isError: false },
-			{ role: "toolResult", toolCallId: "call-2", toolName: "rh_capture_view", content: [{ type: "image", mimeType: "image/png", data: PNG_1PX }], isError: false },
+			{ role: "toolResult", toolCallId: "call-2", toolName: "rh_capture_view", content: CAPTURE_IMAGES, isError: false },
 			{ role: "assistant", content: [{ type: "text", text: "The **Facade.3dm** document has three populated layers:\n\n- `Walls`: 12 closed polysurfaces\n- `Glazing`: 48 planar surfaces\n- `Mullions`: 96 curves\n\nNothing is on the default layer, and there are no blocks." }] },
 		]),
 		toolProgress("t1", "turn-1", "rh_query_objects", "call-1", "completed"),
 	);
+
+	if (scenario === "images") {
+		const calls = ["rh_get_document_info", "rh_get_layers", "rh_query_objects", "rh_get_bounding_box", "rh_capture_view", "rh_capture_detail"];
+		snapshot.events.push(...calls.map((name, index) => toolProgress("t1", "turn-1", name, `image-demo-${index}`, "completed")));
+		return;
+	}
 
 	snapshot.tasks.push(task("t2", "completed", { kind: "follow_up", text: "Add a 600mm parapet along the top of every wall.", bindings: [facade] }, { created_at: now - 500_000, updated_at: now - 420_000 }));
 	snapshot.turns.push({ id: "turn-2", task_id: "t2", state: "completed", started_at: now - 500_000, ended_at: now - 420_000 });

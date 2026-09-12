@@ -2,7 +2,7 @@ import { ArrowDown, Box, ChevronRight, CircleAlert, Loader2 } from "lucide-react
 import { useEffect, useMemo, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { parseImages, type ImageAttachment } from "../../../src/host/protocol";
 import type { TargetBinding } from "../../../src/protocol/shared-execution.js";
-import { imageUrl } from "../lib/image-attachments";
+import { ImageGallery } from "./image-gallery";
 import { cn } from "../lib/utils";
 import type { SendMode } from "../state/hopper-types";
 import { decode, type Row, type SharedSnapshot } from "../state/shared-snapshot";
@@ -10,7 +10,7 @@ import { taskTools } from "../state/task-tools";
 import { RequestDialog } from "./ui-request-dialog";
 import type { UiRequest } from "../state/hopper-types";
 import { OTHER_OPTION_LABEL, formatPickOptionLabels, type PickOption } from "../../../src/types/choices";
-import { ThinkingBlock, ToolCard, Welcome } from "./conversation";
+import { ThinkingBlock, ToolHistory, Welcome } from "./conversation";
 import { MessageMarkdown } from "./message-markdown";
 import { Button } from "./ui/button";
 import { WorkingTime } from "./working-time";
@@ -92,15 +92,11 @@ function UserBubble({ text, attachments, kind, status }: { text: string; attachm
 	const images = safeImages(attachments);
 	return (
 		<div className="flex justify-end animate-slide-up" aria-label="Your message">
-			<div className="max-w-[min(85%,560px)]">
+			<div className="min-w-0 max-w-[min(85%,560px)]">
 				{label && <p className="mb-1 text-right text-[11px] font-medium text-muted">{label}</p>}
 				<div className="whitespace-pre-wrap break-words rounded-md bg-surface-muted px-3.5 py-2 text-[14px] leading-6 text-ink">
 					{text}
-					{images.map((image, index) => (
-						<a key={index} href={imageUrl(image)} download={`attachment-${index + 1}`} className={cn("block", (text || index > 0) && "mt-2")} title="Download image">
-							<img src={imageUrl(image)} alt="Attached image" className="max-h-72 rounded-sm object-contain" />
-						</a>
-					))}
+					{images.length > 0 && <div className={cn("min-w-0", text && "mt-2")}><ImageGallery images={images.map((image, index) => ({ image, label: `Attachment ${index + 1}` }))} /></div>}
 				</div>
 				{status && <p className="mt-1 text-right text-[11px] text-muted" role="status">{status}</p>}
 			</div>
@@ -273,17 +269,8 @@ function TaskReply({ task, snapshot, labelFor, commands }: {
 						Getting started…
 					</p>
 				)}
-				{tools.length > 0 && (
-					<div className="grid gap-1">
-						{tools.map((tool) => <ToolCard key={tool.id} tool={tool} />)}
-					</div>
-				)}
-				{captures.map((capture: { key: string; image: ImageAttachment; tool: string }) => (
-					<figure key={capture.key} className="min-w-0">
-						<img className="max-w-full rounded-sm border border-line" src={imageUrl(capture.image)} alt={`Capture from ${capture.tool}`} />
-						<figcaption className="mt-1 text-[11px] text-muted">{capture.tool}</figcaption>
-					</figure>
-				))}
+				{tools.length > 0 && <ToolHistory tools={tools} />}
+				<ImageGallery images={captures.map((capture: { image: ImageAttachment; tool: string }) => ({ image: capture.image, label: `Capture from ${capture.tool}` }))} />
 				{questions.map((question) => (
 					<Question
 						key={String(question.id)}
