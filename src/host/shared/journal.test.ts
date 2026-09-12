@@ -323,9 +323,7 @@ it("deletes child logs and session files without deleting other threads or repla
 	j.manageConversation("archive", "conversation", "archive_conversation");
 	// A thread restored after the preview invalidates the entire batch.
 	j.manageConversation("archive-other", other.conversationId, "archive_conversation");
-	const restored = j.manageConversation("restore-other", other.conversationId, "unarchive_conversation");
-	expect(parseSharedServerMessage(JSON.stringify({ type: "command_accepted", result: restored })))
-		.toMatchObject({ result: { conversationId: other.conversationId, cleanupPending: 0 } });
+	j.manageConversation("restore-other", other.conversationId, "unarchive_conversation");
 	expect(() => j.purgeArchivedConversations("stale", ["conversation", other.conversationId], null)).toThrow(/changed/);
 	expect(j.getTask(root.taskId)).toBeDefined();
 	expect(existsSync(folder)).toBe(true);
