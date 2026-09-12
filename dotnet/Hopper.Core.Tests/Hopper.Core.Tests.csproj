@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../Hopper.Core/Hopper.Core.csproj" />
+    <Compile Include="../Hopper.Rhino/HopperHostFacade.cs" Link="Host/HopperHostFacade.cs" />
   </ItemGroup>
 
   <ItemGroup>

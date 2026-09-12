@@ -8,31 +8,45 @@ namespace Hopper.Rhino.Host;
 
 public static class HopperStatusFormatter
 {
-    public static IReadOnlyList<string> Format(RuntimeStatusV2 status)
+    public static IReadOnlyList<string> Format(RuntimeStatusV2 status, Uri? webUiAddress = null)
     {
         ArgumentNullException.ThrowIfNull(status);
 
-        return new[]
+        var lines = new List<string>
         {
-            $"Hopper lifecycle: {status.Lifecycle.State}; reason: {Error(status.Lifecycle.Reason)}",
-            $"Host: {status.Host.State}; PID: {Value(status.Host.ProcessId)}; handshake: {status.Host.Handshake}; health failures: {status.Host.HealthFailureCount}",
-            $"Transport: {(status.Transport.Ready ? "ready" : "stopped")}; lifecycle instance: {Value(status.Transport.LifecycleInstanceId)}",
-            $"Rhino document: {Document(status.Rhino)}",
-            $"Grasshopper: {status.Grasshopper.State}; document: {Document(status.Grasshopper)}",
-            $"Dispatcher: {(status.Dispatcher.AcceptingExternalWork ? "accepting" : "closed")}; depth: {status.Dispatcher.Depth}/{status.Dispatcher.Capacity}",
-            $"Node: path={Value(status.Host.NodePath)}; version={Value(status.Host.NodeVersion)}",
-            $"Latest errors: transport={Error(status.Errors.Transport)}; host={Error(status.Errors.Host)}; Rhino={Error(status.Errors.Rhino)}; Grasshopper={Error(status.Errors.Grasshopper)}; dispatcher={Error(status.Errors.Dispatcher)}",
+            status.Lifecycle.State switch
+            {
+                LifecycleState.running => "HopperCode: connected",
+                LifecycleState.starting => "HopperCode: connecting...",
+                LifecycleState.stopping => "HopperCode: disconnecting...",
+                LifecycleState.faulted => "HopperCode: connection failed. Run HopperCodeRestart to retry.",
+                _ => "HopperCode: stopped. Run HopperCode to connect.",
+            },
         };
+
+        if (status.Lifecycle.State == LifecycleState.running)
+            lines.Add(webUiAddress != null
+                ? $"Web UI: {webUiAddress.GetLeftPart(UriPartial.Authority)}"
+                : "Web UI: address unavailable. Run HopperCode to open it.");
+
+        var errors = new HashSet<string>(StringComparer.Ordinal);
+        AddError("Connection", status.Lifecycle.Reason);
+        AddError("Connection", status.Errors.Transport);
+        AddError("Host", status.Errors.Host);
+        AddError("Rhino", status.Errors.Rhino);
+        AddError("Grasshopper", status.Errors.Grasshopper);
+        AddError("Request queue", status.Errors.Dispatcher);
+        return lines;
+
+        void AddError(string component, RuntimeErrorV2? error)
+        {
+            if (error == null) return;
+            var message = SingleLine(error.Message);
+            if (errors.Add(message))
+                lines.Add($"{component} issue: {message}");
+        }
     }
 
-    private static string Document(DocumentStatusV2 document) =>
-        document.ActiveDocument ? document.DocumentName ?? "unnamed" : "none";
-
-    private static string Document(GrasshopperStatusV2 document) =>
-        document.ActiveDocument ? document.DocumentName ?? "unnamed" : "none";
-
-    private static string Error(RuntimeErrorV2? error) =>
-        error == null ? "none" : $"{error.Code}: {error.Message}";
-
-    private static string Value(object? value) => value?.ToString() ?? "none";
+    private static string SingleLine(string value) =>
+        string.Join(" ", value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 }
