@@ -94,7 +94,13 @@ export function useSharedConnection(options: ConnectionOptions) {
 			if (!isCurrent()) return;
 			let message: SharedServerMessage | undefined;
 			try { message = parseSharedServerMessage(String(event.data)); }
-			catch { toast("Hopper sent an unreadable message."); return; }
+			catch {
+				toast("Hopper sent an unreadable message.");
+				// We may have missed a history update. Retire this socket so status
+				// frames cannot keep stale history alive while we await a full snapshot.
+				retry();
+				return;
+			}
 			if (!message || typeof message !== "object") return;
 			if (message.type === "shared_patch") {
 				try {

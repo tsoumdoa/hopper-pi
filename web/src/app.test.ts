@@ -409,18 +409,25 @@ it("starts fresh after a conversation session reset and ignores acknowledgements
 	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("New session draft");
 });
 
-it("rejects malformed snapshots and acknowledgements without losing the pending draft", async () => {
+it.each(["snapshot", "acknowledgement", "JSON"])("reconnects after malformed %s without losing the pending draft", async kind => {
+	vi.useFakeTimers();
 	await value("#composer-input", "Keep this request");
 	await act(async () => sendButton().click());
 	const submitted = socket.sent.find(command => command.type === "submit");
 	await act(async () => {
-		socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, conversations: [{ id: "conversation", title: 42 }] } });
-		socket.receive({ type: "command_accepted", requestId: submitted.requestId, result: "invalid" });
+		if (kind === "snapshot") socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, conversations: [{ id: "conversation", title: 42 }] } });
+		else if (kind === "acknowledgement") socket.receive({ type: "command_accepted", requestId: submitted.requestId, result: "invalid" });
+		else socket.onmessage?.({ data: "{" });
 	});
 	expect(container.querySelector("h1")!.textContent).toBe("First");
 	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Keep this request");
 	expect(sendButton().disabled).toBe(true);
-	await act(async () => socket.receive({ type: "command_accepted", requestId: submitted.requestId, result: { taskId: "task" } }));
+	await act(async () => vi.advanceTimersByTimeAsync(1500));
+	const replacement = Socket.sockets.at(-1)!;
+	expect(replacement).not.toBe(socket);
+	await act(async () => { replacement.onopen?.(); replacement.receive({ type: "shared_snapshot", snapshot }); });
+	expect(replacement.sent.filter(command => command.type === "submit")).toEqual([submitted]);
+	await act(async () => replacement.receive({ type: "command_accepted", requestId: submitted.requestId, result: { taskId: "task" } }));
 	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("");
 });
 
@@ -452,4 +459,39 @@ it("retains a new-thread request when its acknowledgement omits the conversation
 	const replacement = Socket.sockets.at(-1)!;
 	await act(async () => { replacement.onopen?.(); replacement.receive({ type: "shared_snapshot", snapshot }); });
 	expect(replacement.sent.filter(command => command.type === "create_conversation")).toEqual([created]);
+});
+
+it("reconnects after a malformed patch envelope despite continuing status messages", async () => {
+	vi.useFakeTimers();
+	await value("#composer-input", "Keep work through malformed patch");
+	await act(async () => sendButton().click());
+	const submitted = socket.sent.find(command => command.type === "submit");
+	await act(async () => socket.receive({ type: "shared_patch", patch: {
+		baseCursor: 0, values: { eventCursor: 1 }, changes: { conversations: { upsert: null } },
+	} }));
+	const { runtime, targets, hostEpoch, conversationSession } = snapshot;
+	// Even status frames that arrive before the retry must not revive the old socket.
+	await act(async () => {
+		await vi.advanceTimersByTimeAsync(1000);
+		socket.receive({ type: "shared_status", runtime, targets, hostEpoch, conversationSession });
+		await vi.advanceTimersByTimeAsync(500);
+	});
+	const replacement = Socket.sockets.at(-1)!;
+	expect(replacement).not.toBe(socket);
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.readOnly).toBe(true);
+	expect(replacement.sent.filter(command => command.type === "submit")).toEqual([]);
+	const fresh = { ...snapshot, eventCursor: 1, conversations: [{ ...snapshot.conversations[0], title: "Fresh history" }, snapshot.conversations[1]] };
+	await act(async () => { replacement.onopen?.(); replacement.receive({ type: "shared_snapshot", snapshot: fresh }); });
+	for (let i = 0; i < 5; i++) {
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(5000);
+			socket.receive({ type: "shared_status", runtime, targets, hostEpoch, conversationSession });
+			replacement.receive({ type: "shared_status", runtime, targets, hostEpoch, conversationSession });
+		});
+	}
+	expect(container.querySelector("h1")!.textContent).toBe("Fresh history");
+	expect(replacement.sent.filter(command => command.type === "submit")).toEqual([submitted]);
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Keep work through malformed patch");
+	await act(async () => replacement.receive({ type: "command_accepted", requestId: submitted.requestId, result: { taskId: "task" } }));
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("");
 });
