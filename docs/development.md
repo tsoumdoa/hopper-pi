@@ -22,9 +22,17 @@ The main commands are:
 | `pnpm build` | Build and verify macOS arm64 and Windows x64 Yak packages |
 | `pnpm build --dev` | Compile host and UI into `dist` with source maps, without packaging |
 | `pnpm build:install` | Build, verify, and replace the local Rhino 8 installation |
+| `pnpm version:bump patch\|minor\|major` | Update the package and both native plugin versions together; choose one increment |
+| `pnpm version:bump 0.3.0` | Set an explicit higher release version |
+| `pnpm release --dry-run` | Validate and preview publishing the existing release |
+| `pnpm release` | Publish the tested packages to Yak and create the GitHub tag and release |
 | `pnpm test` | Run the test suite |
 
 Release builds require .NET and Rhino 8's Yak executable. `pnpm build` builds both platforms sequentially and writes to `artifacts/hopper-pi-<version>-<target>`. It refuses a nonempty output directory. Use `pnpm build --output artifacts/my-release` for another destination; each target gets its own `mac-arm64` or `win-x64` subfolder. `--target mac-arm64` and `--target win-x64` remain available for a single target. Cross-built packages still need runtime testing on their target OS.
+
+See [publishing to Yak](releasing.md) for release preparation and the `pnpm yak` install, test-server, and public upload commands.
+
+Use `pnpm version:bump patch` to update all release versions together. After committing, building, and testing, `pnpm release` publishes both packages to Yak and creates the matching GitHub tag and release. See the [release guide](releasing.md) for dry-run and recovery options.
 
 For local development, quit Rhino and run `pnpm build:install`. It builds only the current platform, verifies and smoke-tests a fresh package, stops the old Hopper host, and replaces the installed package without prompting. Each run uses a new staging directory, so repeated local builds need no output cleanup. Saved conversations remain available. Both platforms accept the same options:
 

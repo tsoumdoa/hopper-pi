@@ -1,7 +1,7 @@
 {
 	"name": "hopper-pi",
 	"license": "MIT",
-	"version": "0.1.90",
+	"version": "0.2.0",
 	"packageManager": "pnpm@11.5.3",
 	"engines": {
 		"node": ">=22.19.0"
@@ -22,6 +22,9 @@
 	"scripts": {
 		"dev": "node scripts/ui-mock-host.mjs",
 		"build": "node scripts/build.mjs",
+		"yak": "node scripts/yak.mjs",
+		"version:bump": "node scripts/version-bump.mjs",
+		"release": "node scripts/release.mjs",
 		"build:install": "node scripts/install-rhino.mjs --yes",
 		"test": "vitest run",
 		"prepack": "node scripts/build-assets.mjs"

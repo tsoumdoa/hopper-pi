@@ -5,6 +5,7 @@ import { buildRhinoHost } from "./build-rhino-host.mjs";
 import { bundleRhinoDependencies } from "./bundle-rhino-dependencies.mjs";
 import { bundlePiRuntime } from "./bundle-pi-runtime.mjs";
 import { packStartupSources } from "./pack-startup-sources.mjs";
+import { sha256 } from "./release-utils.mjs";
 import { deduplicatePiBundle, pruneAuditedDependencies } from "./prune-rhino-host.mjs";
 import {
 	cpSync,
@@ -12,6 +13,7 @@ import {
 	lstatSync,
 	mkdirSync,
 	readdirSync,
+	renameSync,
 	readFileSync,
 	rmSync,
 	writeFileSync,
@@ -23,6 +25,12 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDirectory, "..");
 const packageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
+function gitState() {
+	const commit = spawnSync("git", ["rev-parse", "HEAD"], { cwd: packageRoot, encoding: "utf8" });
+	const status = spawnSync("git", ["status", "--porcelain"], { cwd: packageRoot, encoding: "utf8" });
+	return { commit: commit.status === 0 ? commit.stdout.trim() : null, dirty: status.status !== 0 || Boolean(status.stdout.trim()) };
+}
+const buildStart = gitState();
 const installer = join(scriptDirectory, "install-grasshopper-plugin.mjs");
 const verifier = join(scriptDirectory, "verify-rhino-package.mjs");
 const sizeReporter = join(scriptDirectory, "report-rhino-package-size.mjs");
@@ -297,8 +305,12 @@ writeFileSync(join(output, "manifest.yml"), [
 	`version: ${packageJson.version}`,
 	"authors:",
 	"  - hoppercode contributors",
-	"description: Private, browser-based Hopper agent for Rhino 8 and Grasshopper.",
-	"url: https://github.com/tsoumdoa/hoppercode",
+	"description: >",
+	"  Hopper is an AI assistant for Rhino models and Grasshopper definitions, with a browser chat UI.",
+	"  Requires Rhino 8.20 or newer running .NET 8 and separately installed stable Node.js 22.19.0 or newer.",
+	"  Supports macOS Apple Silicon and Windows x64. Intel Macs are not supported.",
+	"  Run HopperCode in Rhino to start and connect a model provider.",
+	"url: https://github.com/tsoumdoa/hopper-pi",
 	"keywords:",
 	"  - grasshopper",
 	"  - rhino",
@@ -310,8 +322,24 @@ if (args.includes("--yak")) {
 	const yak = findYak();
 	if (!yak) fail("Yak was not found. Set HOPPER_YAK to its absolute executable path.");
 	run(yak, ["build", "--platform", targetConfig.yakPlatform], { cwd: output });
+	// Yak infers 8.0 from RhinoCommon, but Hopper requires Rhino 8.20 and .NET 8.
+	const archives = readdirSync(output).filter((name) => name.endsWith(".yak"));
+	if (archives.length !== 1) fail("Expected exactly one Yak archive after building");
+	const releaseName = `hopper-pi-${packageJson.version}-rh8_20-${targetConfig.yakPlatform}.yak`;
+	if (archives[0] !== releaseName) renameSync(join(output, archives[0]), join(output, releaseName));
 }
 
 run(process.execPath, [verifier, "--target", target, "--web-manifest", webManifest, output]);
 run(process.execPath, [sizeReporter, "--target", target, "--web-manifest", webManifest, "--output", join(output, "..", `${basename(output)}-size-report.json`), output]);
+if (args.includes("--yak")) {
+	const buildEnd = gitState();
+	const archive = join(output, `hopper-pi-${packageJson.version}-rh8_20-${targetConfig.yakPlatform}.yak`);
+	writeFileSync(`${output}-release.json`, JSON.stringify({
+		version: packageJson.version,
+		target,
+		commit: buildStart.commit,
+		dirty: buildStart.dirty || buildEnd.dirty || buildStart.commit !== buildEnd.commit,
+		sha256: sha256(archive),
+	}, null, 2) + "\n");
+}
 console.log(`[hopper-pi] Staged ${target} Rhino package at ${output}`);
