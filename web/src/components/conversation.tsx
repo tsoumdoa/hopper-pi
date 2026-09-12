@@ -26,10 +26,9 @@ export function ToolHistory({ tools }: { tools: ToolCall[] }) {
 	const label = expanded ? "Show recent tool calls" : `Show ${hidden} earlier tool call${hidden === 1 ? "" : "s"}`;
 	return <section aria-label="Tool calls" className="min-w-0">
 		{hidden > 0 && <Tooltip content={label}>
-			<button type="button" aria-expanded={expanded} aria-controls={id} aria-label={label} onClick={() => setExpanded(!expanded)} className="tool-reveal group -mb-3 relative z-10 flex h-9 w-full cursor-pointer items-center justify-center rounded-t-[5px] outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
-				<span className="flex size-6 items-center justify-center rounded-full text-muted transition-colors group-hover:bg-ink/[.05] group-hover:text-ink">
-					{expanded ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
-				</span>
+			<button type="button" aria-expanded={expanded} aria-controls={id} aria-label={label} onClick={() => setExpanded(!expanded)} className="mb-1 flex min-h-7 w-full items-center justify-center gap-1 rounded-sm text-[11px] text-ink-soft transition-colors hover:text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+				{expanded ? <ChevronDown className="size-3.5" /> : <ChevronUp className="size-3.5" />}
+				<span>{expanded ? "Show recent calls" : `${hidden} earlier tool call${hidden === 1 ? "" : "s"}`}</span>
 			</button>
 		</Tooltip>}
 		<div id={id} className="grid gap-1">{(expanded ? tools : tools.slice(-3)).map((tool) => <ToolCard key={tool.id} tool={tool} />)}</div>
@@ -52,13 +51,13 @@ export function ToolCard({ tool }: { tool: ToolCall }) {
 				tool.status === "error" ? "border-danger/30" : "border-line hover:border-line-strong",
 			)}
 		>
-			<Tooltip content="Details"><CollapsibleTrigger className="group flex w-full items-center gap-1.5 px-2 py-1 text-left outline-none transition-colors hover:bg-surface-muted focus-visible:bg-surface-muted">
+			<CollapsibleTrigger className="group flex w-full items-center gap-1.5 px-2 py-1 text-left outline-none transition-colors focus-visible:bg-surface-muted">
 				<ChevronRight className="size-3 shrink-0 text-muted transition-transform group-data-[state=open]:rotate-90" />
 				<Wrench className="size-3 shrink-0 text-muted" />
 				<span className="shrink-0 font-mono text-[11px] font-medium text-ink">{tool.name}</span>
 				{preview && <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">{preview}</span>}
 				<ToolStatusIcon status={tool.status} />
-			</CollapsibleTrigger></Tooltip>
+			</CollapsibleTrigger>
 			<CollapsibleContent className="border-t border-line bg-surface-muted">
 				{hasResult && (
 					<div className="border-b border-line px-2 py-1.5">

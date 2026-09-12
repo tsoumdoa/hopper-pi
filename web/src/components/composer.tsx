@@ -29,6 +29,7 @@ export type ComposerHandle = { focus(): void };
 
 export type ComposerProps = {
 	draft: string;
+	atBottom?: boolean;
 	images: DraftImage[];
 	onImagesChange(images: DraftImage[]): void;
 	imagesSupported: boolean;
@@ -53,7 +54,7 @@ export type ComposerProps = {
 };
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-	{ draft, onDraftChange, images, onImagesChange, imagesSupported, mode, onModeChange, disabled, streaming, canAbort = streaming, abortDisabled = false, onSubmit, onAbort, controls, submitDisabled, alert, placeholder },
+	{ draft, atBottom = true, onDraftChange, images, onImagesChange, imagesSupported, mode, onModeChange, disabled, streaming, canAbort = streaming, abortDisabled = false, onSubmit, onAbort, controls, submitDisabled, alert, placeholder },
 	ref,
 ) {
 	const fileInput = useRef<HTMLInputElement>(null);
@@ -82,15 +83,17 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 		finally { if (generation === loadGeneration.current) setLoading(false); }
 	};
 	const textarea = useRef<HTMLTextAreaElement>(null);
+	const [focused, setFocused] = useState(false);
+	const expanded = atBottom || focused;
 	useImperativeHandle(ref, () => ({ focus: () => textarea.current?.focus() }), []);
 
 	useLayoutEffect(() => {
 		const node = textarea.current;
 		if (!node) return;
 		node.style.height = "auto";
-		node.style.height = `${Math.max(88, Math.min(node.scrollHeight, MAX_HEIGHT))}px`;
-		node.style.overflowY = node.scrollHeight > MAX_HEIGHT ? "auto" : "hidden";
-	}, [draft]);
+		node.style.height = expanded ? `${Math.max(88, Math.min(node.scrollHeight, MAX_HEIGHT))}px` : "40px";
+		node.style.overflowY = expanded && node.scrollHeight > MAX_HEIGHT ? "auto" : "hidden";
+	}, [draft, expanded]);
 
 	const submit = (event?: FormEvent) => {
 		event?.preventDefault();
@@ -122,7 +125,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 				<input ref={fileInput} type="file" accept={IMAGE_ACCEPT} multiple={!replaceId.current} className="sr-only" tabIndex={-1} aria-label="Choose images" disabled={disabled || loading}
 					onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; const replacement = replaceId.current; replaceId.current = null; void addImages(files, replacement); }} />
 				{images.length > 0 && <div className="flex gap-2 overflow-x-auto px-3 pt-3 pb-2" aria-label="Image attachments">
-					{images.map((image) => <div key={image.id} className="w-36 shrink-0 overflow-hidden rounded-sm border border-line bg-panel">
+					{images.map((image) => <div key={image.id} className="w-36 shrink-0 overflow-hidden rounded-[2px] border border-line bg-panel">
 						<button type="button" className="block w-full" disabled={disabled || loading} onClick={() => setEditor({ kind: "existing", id: image.id })} aria-label={`Annotate ${image.name}`}>
 							<img src={imageUrl(image.image)} alt={image.name} className="h-20 w-full object-contain" />
 						</button>
@@ -142,15 +145,17 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 				<textarea
 					id="composer-input"
 					ref={textarea}
-					rows={3}
+					rows={1}
 					value={draft}
 					disabled={disabled}
 					autoComplete="off"
 					onChange={(event) => onDraftChange(event.target.value)}
+					onFocus={() => setFocused(true)}
+					onBlur={() => setFocused(false)}
 					onKeyDown={onKeyDown}
 					onPaste={(event) => { const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/")); if (files.length) { event.preventDefault(); void addImages(files); } }}
 					placeholder={disabled ? placeholder ?? "Waiting for the Hopper host…" : "Ask Hopper…"}
-					className="block min-h-[88px] max-h-[220px] w-full resize-none bg-transparent pb-1 pl-3.5 pr-11 pt-3 text-[14px] leading-6 outline-none placeholder:text-muted disabled:cursor-not-allowed"
+					className="block min-h-[40px] max-h-[220px] w-full resize-none bg-transparent pb-1 pl-3.5 pr-11 pt-3 text-[14px] leading-6 outline-none placeholder:text-muted disabled:cursor-not-allowed"
 				/>
 				<div className="flex flex-wrap items-center gap-1 px-1.5 pb-1.5 pr-11 pt-0.5">
 					<Button type="button" variant="ghost" size="icon-sm" disabled={disabled || loading || images.length >= MAX_IMAGES} aria-label="Attach images" title="Attach images, or paste a screenshot" onClick={() => { replaceId.current = null; if (fileInput.current) { fileInput.current.multiple = true; fileInput.current.click(); } }}><ImagePlus className="size-4" /></Button>

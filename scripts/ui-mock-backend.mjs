@@ -72,11 +72,12 @@ function seedScenario(snapshot, scenario, conversationId) {
 		toolProgress("t1", "turn-1", "rh_query_objects", "call-1", "completed"),
 	);
 
-	if (scenario === "images") {
+	// Exercise collapsed tool history in the default dev fixture too.
+	if (scenario === "images" || scenario === "running") {
 		const calls = ["rh_get_document_info", "rh_get_layers", "rh_query_objects", "rh_get_bounding_box", "rh_capture_view", "rh_capture_detail"];
-		snapshot.events.push(...calls.map((name, index) => toolProgress("t1", "turn-1", name, `image-demo-${index}`, "completed")));
-		return;
+		snapshot.events.push(...calls.map((name, index) => toolProgress("t1", "turn-1", name, `history-demo-${index}`, "completed")));
 	}
+	if (scenario === "images") return;
 
 	snapshot.tasks.push(task("t2", "completed", { kind: "follow_up", text: "Add a 600mm parapet along the top of every wall.", bindings: [facade] }, { created_at: now - 500_000, updated_at: now - 420_000 }));
 	snapshot.turns.push({ id: "turn-2", task_id: "t2", state: "completed", started_at: now - 500_000, ended_at: now - 420_000 });

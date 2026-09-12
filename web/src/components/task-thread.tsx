@@ -1,5 +1,5 @@
 import { ArrowDown, Box, ChevronRight, CircleAlert, Loader2 } from "lucide-react";
-import { useEffect, useMemo, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { parseImages, type ImageAttachment } from "../../../src/host/protocol";
 import type { TargetBinding } from "../../../src/protocol/shared-execution.js";
 import { ImageGallery } from "./image-gallery";
@@ -352,7 +352,7 @@ function ChildTask({ task, snapshot, labelFor, commands }: {
 	);
 }
 
-export function TaskThread({ snapshot, tasks, connected, conversationId, labelFor, commands, onSuggestion, onHistoryPage, controlTasks = tasks }: {
+export function TaskThread({ snapshot, tasks, connected, conversationId, labelFor, commands, onSuggestion, onHistoryPage, onBottomChange, controlTasks = tasks }: {
 	snapshot: SharedSnapshot | undefined;
 	/** Root tasks in order, each followed by its child tasks. */
 	tasks: Row[];
@@ -362,6 +362,7 @@ export function TaskThread({ snapshot, tasks, connected, conversationId, labelFo
 	commands: TaskThreadCommands;
 	onSuggestion(prompt: string): void;
 	onHistoryPage?(before?: number): void;
+	onBottomChange?(atBottom: boolean): void;
 	controlTasks?: Row[];
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
@@ -389,13 +390,15 @@ export function TaskThread({ snapshot, tasks, connected, conversationId, labelFo
 		const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 		node.scrollTo({ top: node.scrollHeight, behavior: reducedMotion ? "auto" : behavior });
 	};
-	const onScroll = () => {
+	const onScroll = useCallback(() => {
 		const node = scroller.current;
 		if (!node) return;
 		const distance = node.scrollHeight - node.scrollTop - node.clientHeight;
-		stickToBottom.current = distance < 80;
+		// Separate thresholds prevent the composer resizing from toggling this state back.
+		stickToBottom.current = distance < (stickToBottom.current ? 80 : 16);
+		onBottomChange?.(stickToBottom.current && snapshot?.history?.before == null);
 		setShowJump(distance > 240);
-	};
+	}, [onBottomChange, snapshot?.history?.before]);
 	// A question always reveals itself; otherwise follow only while the reader is near the bottom.
 	useLayoutEffect(() => {
 		if (activeQuestionId) stickToBottom.current = true;
@@ -409,7 +412,20 @@ export function TaskThread({ snapshot, tasks, connected, conversationId, labelFo
 			stickToBottom.current = true;
 			scrollToLatest("auto");
 		}
-	}, [snapshot?.history?.before]);
+		onScroll();
+	}, [conversationId, snapshot?.history?.before, onScroll]);
+
+	useLayoutEffect(() => {
+		const node = scroller.current;
+		if (!node || typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(() => {
+			if (stickToBottom.current && snapshot?.history?.before == null) node.scrollTop = node.scrollHeight;
+			onScroll();
+		});
+		observer.observe(node);
+		if (node.firstElementChild) observer.observe(node.firstElementChild);
+		return () => observer.disconnect();
+	}, [onScroll, snapshot?.history?.before]);
 
 	return (
 		<div className="relative min-h-0 flex-1">
@@ -446,6 +462,8 @@ export function TaskThread({ snapshot, tasks, connected, conversationId, labelFo
 					size="sm"
 					variant="secondary"
 					className="absolute bottom-3 left-1/2 -translate-x-1/2 shadow-pop animate-pop-in"
+					// Keep the composer from collapsing and moving this button before pointer-up.
+					onPointerDown={(event) => { if (event.button === 0) event.preventDefault(); }}
 					onClick={() => {
 						stickToBottom.current = true;
 						scrollToLatest();

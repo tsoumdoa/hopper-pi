@@ -86,7 +86,7 @@
     & th, & td { border: 1px solid var(--color-line); padding: 0.4em 0.75em; }
     & th { background: var(--color-surface-muted); font-weight: 600; }
     & hr { border-color: var(--color-line); }
-    & img { max-width: 100%; height: auto; border-radius: 4px; }
+    & img { max-width: 100%; height: auto; border-radius: 2px; }
   }
 }
 
@@ -104,9 +104,11 @@
   }
 }
 
-/* Overlay chrome: a tight blur slab whose tint and blur dissolve into the image. */
+/* Keep image controls legible with a short fade and no blur over the artwork. */
 .image-chrome {
+  --image-fade-direction: to bottom;
   isolation: isolate;
+  color: #fff;
   opacity: 0;
   pointer-events: none;
   transition: opacity 150ms ease;
@@ -117,15 +119,10 @@
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: color-mix(in srgb, var(--color-canvas) 38%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  mask-image: linear-gradient(to bottom, black, rgb(0 0 0 / 55%) 45%, transparent 95%);
-  -webkit-mask-image: linear-gradient(to bottom, black, rgb(0 0 0 / 55%) 45%, transparent 95%);
+  background: linear-gradient(var(--image-fade-direction), rgb(0 0 0 / 72%), rgb(0 0 0 / 48%) 65%, transparent);
 }
-.image-chrome-bottom::before {
-  mask-image: linear-gradient(to top, black, rgb(0 0 0 / 55%) 45%, transparent 95%);
-  -webkit-mask-image: linear-gradient(to top, black, rgb(0 0 0 / 55%) 45%, transparent 95%);
+.image-chrome-bottom {
+  --image-fade-direction: to top;
 }
 @media (hover: hover) {
   .image-view:hover .image-chrome { opacity: 1; pointer-events: auto; }
@@ -136,27 +133,8 @@
   pointer-events: auto;
 }
 
-/* Full-width strip that blurs and fades the tool rows tucked underneath it. */
-.tool-reveal {
-  isolation: isolate;
-}
-.tool-reveal::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--color-canvas) 82%, transparent));
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  mask-image: linear-gradient(to bottom, transparent, rgb(0 0 0 / 60%) 45%, black);
-  -webkit-mask-image: linear-gradient(to bottom, transparent, rgb(0 0 0 / 60%) 45%, black);
-  opacity: 0.7;
-  transition: opacity 150ms ease;
-}
-.tool-reveal:hover::before,
-.tool-reveal:focus-visible::before {
-  opacity: 1;
+@media (hover: none) {
+  .image-view:not([data-controls]) .image-chrome { opacity: 1; pointer-events: auto; }
 }
 
 /* Touch devices stay full-screen in both portrait and landscape. */
@@ -168,9 +146,9 @@
     height: min(720px, 86dvh);
     max-height: 86dvh;
     translate: -50% -50%;
-    border-radius: 12px;
-    border: 1px solid var(--color-line);
-    background: var(--color-canvas);
+    border-radius: 2px;
+    border: 0;
+    background: #18181b;
     box-shadow: 0 32px 90px -20px rgb(18 18 20 / 40%), 0 8px 24px -12px rgb(18 18 20 / 25%);
     overflow: hidden;
   }

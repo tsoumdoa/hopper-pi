@@ -108,6 +108,7 @@ export function App() {
 	const [modeOverride, setModeOverride] = useState<SendMode | null>(null);
 	const [nonce, setNonce] = useState(0);
 	const composer = useRef<ComposerHandle>(null);
+	const [atChatBottom, setAtChatBottom] = useState(true);
 	const historyBefore = useRef<number | undefined>(undefined);
 	const currentConversation = useRef(conversationId);
 	currentConversation.current = conversationId;
@@ -670,6 +671,7 @@ export function App() {
 					labelFor={labelFor}
 					commands={commands}
 					onHistoryPage={loadHistory}
+					onBottomChange={setAtChatBottom}
 					controlTasks={tasks}
 					onSuggestion={useSuggestion}
 				/></ImageAttachmentContext.Provider>}
@@ -679,6 +681,7 @@ export function App() {
 				</div> : <Composer
 					key={conversationId}
 					ref={composer}
+					atBottom={atChatBottom}
 					draft={draft}
 					onDraftChange={setDraft}
 					images={images}
