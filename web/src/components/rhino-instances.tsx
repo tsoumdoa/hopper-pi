@@ -23,7 +23,7 @@ export function RhinoInstancesPanel({ snapshot, connected }: { snapshot: SharedS
 	const summary = summarizeInstances(snapshot, connected);
 	const ready = readyTargets(snapshot);
 	return (
-		<Collapsible open={open} onOpenChange={setOpen} className="rounded-md border border-line bg-surface">
+		<Collapsible open={open} onOpenChange={setOpen} className="rounded-md">
 			<CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md py-2 pl-2.5 pr-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
 				<span
 					aria-hidden="true"

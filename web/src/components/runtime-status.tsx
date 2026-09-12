@@ -58,7 +58,7 @@ export function RuntimeStatusPanel({
 		: [];
 
 	return (
-		<Collapsible open={open} onOpenChange={setOpen} className="rounded-md border border-line bg-surface">
+		<Collapsible open={open} onOpenChange={setOpen} className="rounded-md">
 			<div className="flex items-center gap-1 py-1 pl-2.5 pr-1">
 				<CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-2 rounded-sm py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
 					<span

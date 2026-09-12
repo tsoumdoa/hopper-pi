@@ -7,16 +7,16 @@ import { imageUrl, type DraftImage } from "../lib/image-attachments";
 import { cn } from "../lib/utils";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
-import { Tooltip } from "./ui/tooltip";
+import { Tooltip, TooltipProvider } from "./ui/tooltip";
 
 export const ImageAttachmentContext = createContext<{ attach?: (image: DraftImage) => void; unavailable?: string }>({ unavailable: "Open an editable chat to attach images" });
 type GalleryImage = { image: ImageAttachment; label: string };
 
-const thumbOverlay = "image-chrome image-chrome-bottom absolute inset-x-0 bottom-0 z-10 flex items-end justify-between gap-2 px-2 pb-1.5 pt-3";
+const thumbOverlay = "image-chrome image-chrome-bottom absolute inset-x-0 bottom-0 z-10 flex items-center justify-between gap-2 px-2 pb-1.5 pt-3";
 const modalTopOverlay = "image-chrome absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 pb-3 pt-1.5";
 const modalBottomOverlay = "image-chrome image-chrome-bottom absolute inset-x-0 bottom-0 z-10 flex items-center justify-center gap-2 pt-3";
 
-const overlayButton = "text-white hover:bg-white/15 hover:text-white focus-visible:ring-white/70 focus-visible:ring-offset-0";
+const overlayButton = "bg-transparent text-inherit hover:bg-transparent hover:text-inherit focus-visible:ring-current focus-visible:ring-offset-0";
 
 function OverlayLabel({ children }: { children: string }) {
 	return <span className="flex min-w-0 flex-1 items-center"><span className="truncate text-[11px] font-medium">{children}</span></span>;
@@ -69,16 +69,16 @@ export function ImageGallery({ images }: { images: GalleryImage[] }) {
 	}
 	function actions(item: GalleryImage) {
 		return <div className="flex items-center gap-0.5">
-			<Button variant="ghost" size="icon-sm" className={cn("size-7", overlayButton)} aria-label="Copy image" disabled={copying} onClick={() => void copy(item.image)}><Copy className="size-3.5" /></Button>
-			<Button variant="ghost" size="icon-sm" className={cn("size-7", overlayButton)} aria-label="Attach to chat" title={unavailable ?? undefined} disabled={!attach} onClick={() => {
+			<Button variant="ghost" size="icon-sm" className={cn("h-4 w-7", overlayButton)} aria-label="Copy image" disabled={copying} onClick={() => void copy(item.image)}><Copy className="size-3" /></Button>
+			<Button variant="ghost" size="icon-sm" className={cn("h-4 w-7", overlayButton)} aria-label="Attach to chat" title={unavailable ?? undefined} disabled={!attach} onClick={() => {
 				const size = dimensions.current.get(imageUrl(item.image));
 				if (!size) { setNotice("Wait for the image to load before attaching it."); return; }
 				attach?.({ id: randomId(), name: item.label, image: item.image, original: item.image, ...size });
 				setNotice("Image attached to chat");
-			}}><ImagePlus className="size-3.5" /></Button>
+			}}><ImagePlus className="size-3" /></Button>
 		</div>;
 	}
-	return <div className="min-w-0 max-w-full space-y-2 whitespace-normal">
+	return <TooltipProvider delayDuration={900} skipDelayDuration={0}><div className="min-w-0 max-w-full space-y-2 whitespace-normal">
 		<div className="flex items-start snap-x snap-proximity gap-3 overflow-x-auto pb-2" role="region" aria-label="Images" tabIndex={0}>
 			{images.map((item, index) => <figure key={index} className="image-view relative max-w-full shrink-0 snap-start overflow-hidden rounded-[2px]">
 				<Tooltip content="Expand"><button type="button" className="block max-w-full cursor-zoom-in outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label={`Expand ${item.label}`} onClick={(event) => { opener.current = event.currentTarget; setNotice(""); setControlsVisible(false); setSelected(index); }}>
@@ -128,5 +128,5 @@ export function ImageGallery({ images }: { images: GalleryImage[] }) {
 				</figure>
 			</DialogContent>}
 		</Dialog>
-	</div>;
+	</div></TooltipProvider>;
 }

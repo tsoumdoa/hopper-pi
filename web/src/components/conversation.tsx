@@ -93,7 +93,7 @@ export function Welcome({ connected, onSuggestion }: { connected: boolean; onSug
 	return (
 		<section className="mx-auto mt-[max(14vh,2rem)] w-full max-w-[560px] animate-slide-up" aria-labelledby="welcome-title">
 			<h2 id="welcome-title" className="text-[22px] font-semibold leading-tight tracking-[-.02em]">
-				HopperCode
+				<span className="text-accent-hover">Hopper</span>Code
 			</h2>
 			<p className="mt-1.5 text-[13px] text-muted">
 				{connected ? "Describe a change to the active Grasshopper canvas or Rhino document." : "Connecting to the local Hopper host…"}

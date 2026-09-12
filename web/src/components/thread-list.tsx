@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { TargetBinding } from "../../../src/protocol/shared-execution";
+import { ExportSessionButton } from "./export-session-button";
 import { cn } from "../lib/utils";
 import {
 	bindingLabeler,
@@ -16,6 +17,7 @@ import {
 } from "../state/shared-snapshot";
 
 export function ThreadList({
+	token,
 	snapshot,
 	selectedId,
 	connected,
@@ -24,6 +26,7 @@ export function ThreadList({
 	onDelete,
 	onManageArchived,
 }: {
+	token: string;
 	snapshot?: SharedSnapshot;
 	selectedId: string;
 	connected: boolean;
@@ -90,8 +93,8 @@ export function ThreadList({
 			<div
 				key={id}
 				className={cn(
-					"group relative flex items-center rounded-md border border-transparent hover:bg-surface focus-within:bg-surface",
-					selectedId === id && "border-line bg-surface shadow-sm",
+					"group relative flex items-center rounded-md hover:bg-surface focus-within:bg-surface",
+					selectedId === id && "bg-surface",
 				)}
 			>
 				<button
@@ -126,6 +129,7 @@ export function ThreadList({
 					</span>
 				</button>
 				<span className="absolute right-1 flex gap-0.5 rounded bg-surface opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:opacity-100">
+					<ExportSessionButton token={token} conversationId={id} disabled={!connected} />
 					<button
 						type="button"
 						disabled={!connected || live}
@@ -138,7 +142,7 @@ export function ThreadList({
 						}
 						aria-label={`${row.archived_at ? "Unarchive" : "Archive"} ${row.title}`}
 						onClick={() => onArchive(row)}
-						className="rounded p-1 text-muted hover:bg-surface-muted hover:text-ink disabled:opacity-30"
+						className="rounded p-1 text-ink-soft hover:bg-white hover:text-black disabled:opacity-50"
 					>
 						{row.archived_at ? (
 							<ArchiveRestore className="size-3.5" />
@@ -154,7 +158,7 @@ export function ThreadList({
 						}
 						aria-label={`Delete ${row.title}`}
 						onClick={() => onDelete(row)}
-						className="rounded p-1 text-muted hover:bg-danger-soft hover:text-danger disabled:opacity-30"
+						className="rounded p-1 text-ink-soft hover:bg-white hover:text-black disabled:opacity-50"
 					>
 						<Trash2 className="size-3.5" />
 					</button>
