@@ -76,7 +76,11 @@ namespace rhino_zmq_poc
 
     internal sealed class RhinoGrasshopperStartController : IGrasshopperStartController
     {
-        public bool StartGrasshopper() => RhinoApp.RunScript("_Grasshopper", echo: false);
+        // The interactive command can leave startup waiting on its loading UI.
+        // Disable the banner before loading, show the editor, and finish the
+        // command prompt so subsequent agent requests can use the dispatcher.
+        public bool StartGrasshopper() => RhinoApp.RunScript(
+            "_-Grasshopper _Banner _Disable _Window _Show _Enter", echo: false);
     }
 
     internal sealed class GuidLifecycleInstanceIdSource : ILifecycleInstanceIdSource

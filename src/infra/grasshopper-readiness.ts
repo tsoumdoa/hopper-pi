@@ -72,7 +72,7 @@ export class GrasshopperReadinessCoordinator {
 		if (!requireActiveDocument) return this.inFlight;
 		if (!this.activeInFlight) {
 			const pending = this.inFlight.then((status) => {
-				if (!status.grasshopper.activeDocument) throw new GrasshopperReadinessError("NO_ACTIVE_GRASSHOPPER_DOCUMENT", status, "Grasshopper is ready but has no active document.");
+				if (!status.grasshopper.activeDocument) throw new GrasshopperReadinessError("NO_ACTIVE_GRASSHOPPER_DOCUMENT", status, 'Grasshopper is ready but has no active document. Use gh_document with action "new" or "open", then retry.');
 				return status;
 			});
 			this.activeInFlight = pending;
