@@ -44,10 +44,12 @@ export function ProviderDialog(props: ProviderDialogProps) {
 	const selectedModel = useHopperStore((s) => s.selectedModel);
 	const auth = useHopperStore((s) => s.auth);
 	const request = useHopperStore((s) => s.activeUiRequest);
+	// Reconnecting resets auth state, but Pi can still be waiting for this prompt.
+	const setupPending = auth.busy || request?.kind === "auth";
 	const resolveRequest = useHopperStore((s) => s.actions.resolveUiRequest);
 	const resetAuth = useHopperStore((s) => s.actions.resetAuth);
 	const [view, setView] = useState<"overview" | "catalog" | "setup" | "custom" | "success">(
-		auth.busy ? "setup" : (props.initialView ?? "overview"),
+		setupPending ? "setup" : (props.initialView ?? "overview"),
 	);
 	const [providerId, setProviderId] = useState(auth.provider ?? "");
 	const [search, setSearch] = useState("");
@@ -66,7 +68,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 	const [reasoning, setReasoning] = useState(false);
 	const [images, setImages] = useState(false);
 	const completed = useRef(auth.completedCount);
-	const submitted = useRef(auth.busy);
+	const submitted = useRef(setupPending);
 	const provider = providers.find((p) => p.id === providerId);
 	const providerModels = models.filter((m) => m.provider === providerId);
 	const chosenModel = providerModels.some((m) => m.id === modelId) ? modelId : (providerModels[0]?.id ?? "");
@@ -84,12 +86,14 @@ export function ProviderDialog(props: ProviderDialogProps) {
 	}, [auth.completedCount]);
 
 	const navigate = (next: typeof view) => {
+		if (setupPending) return;
 		setApiKey("");
 		setError(null);
 		resetAuth();
 		setView(next);
 	};
 	const chooseProvider = (p: ProviderSummary) => {
+		if (setupPending) return;
 		navigate("setup");
 		setProviderId(p.id);
 		setModelId("");
@@ -101,7 +105,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 		props.onRefresh(providerId);
 	};
 	const close = () => {
-		if (auth.busy) props.onCancel();
+		if (setupPending) props.onCancel();
 		props.onOpenChange(false);
 	};
 	const submit = (event: React.FormEvent) => {
@@ -164,7 +168,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 				</Select>
 				<Button
 					type="button"
-					disabled={auth.busy}
+					disabled={setupPending}
 					onClick={() => {
 						if (props.onSelectModel(providerId, chosenModel)) props.onOpenChange(false);
 					}}
@@ -192,7 +196,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 							variant="ghost"
 							size="sm"
 							className="mb-1 w-fit -ml-2"
-							disabled={auth.busy}
+							disabled={setupPending}
 							onClick={() => navigate(view === "setup" || view === "custom" ? "catalog" : "overview")}
 						>
 							<ArrowLeft className="size-3.5" />
@@ -251,10 +255,10 @@ export function ProviderDialog(props: ProviderDialogProps) {
 								<p className="mt-1 text-xs text-muted">Existing Pi credentials appear here automatically.</p>
 							</div>
 						)}
-						<Button variant="ghost" className="w-fit self-start px-0 font-semibold text-ink-soft hover:bg-transparent" onClick={() => navigate("catalog")} disabled={auth.busy}>
+						<Button variant="ghost" className="w-fit self-start px-0 font-semibold text-ink-soft hover:bg-transparent" onClick={() => navigate("catalog")} disabled={setupPending}>
 							Add provider
 						</Button>
-						<Button variant="ghost" size="sm" disabled={auth.busy} onClick={refresh}>
+						<Button variant="ghost" size="sm" disabled={setupPending} onClick={refresh}>
 							{auth.busy ? "Checking…" : "Refresh providers"}
 						</Button>
 					</>
@@ -323,7 +327,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 									No models are available yet. Check the provider credentials and model configuration, then
 									try again.
 								</p>
-								<Button variant="secondary" disabled={auth.busy} onClick={refresh}>
+								<Button variant="secondary" disabled={setupPending} onClick={refresh}>
 									Check again
 								</Button>
 								<Button variant="ghost" onClick={() => navigate("setup")}>
@@ -344,14 +348,14 @@ export function ProviderDialog(props: ProviderDialogProps) {
 							<div className="grid gap-3 rounded-md border border-line p-3">
 								<p className="text-xs text-muted">{credentialDescription(provider)}</p>
 								{modelPicker}
-								<Button variant="ghost" size="sm" disabled={auth.busy} onClick={refresh}>
+								<Button variant="ghost" size="sm" disabled={setupPending} onClick={refresh}>
 									Refresh models
 								</Button>
 								{provider.canLogout && (
 									<Button
 										variant="destructive"
 										size="sm"
-										disabled={auth.busy}
+										disabled={setupPending}
 										onClick={() => props.onLogout(provider.id)}
 									>
 										Remove saved credentials
@@ -369,7 +373,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 											required
 											maxLength={60}
 											value={name}
-											disabled={auth.busy}
+											disabled={setupPending}
 											onChange={(e) => setName(e.target.value)}
 											placeholder="My local server"
 										/>
@@ -381,14 +385,14 @@ export function ProviderDialog(props: ProviderDialogProps) {
 											type="url"
 											required
 											value={baseUrl}
-											disabled={auth.busy}
+											disabled={setupPending}
 											onChange={(e) => setBaseUrl(e.target.value)}
 											placeholder="http://localhost:11434/v1"
 										/>
 									</div>
 									<div className="grid gap-1.5">
 										<Label htmlFor="custom-api">API format</Label>
-										<Select value={api} onValueChange={(v) => setApi(v as typeof api)} disabled={auth.busy}>
+										<Select value={api} onValueChange={(v) => setApi(v as typeof api)} disabled={setupPending}>
 											<SelectTrigger id="custom-api">
 												<SelectValue />
 											</SelectTrigger>
@@ -406,7 +410,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 											id="custom-models"
 											required
 											value={modelIds}
-											disabled={auth.busy}
+											disabled={setupPending}
 											onChange={(e) => setModelIds(e.target.value)}
 											placeholder="One model ID per line"
 										/>
@@ -427,7 +431,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 													max={10000000}
 													step={1}
 													value={contextWindow}
-													disabled={auth.busy}
+													disabled={setupPending}
 													onChange={(e) => setContextWindow(e.target.value)}
 												/>
 											</div>
@@ -440,7 +444,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 													max={contextWindow ? Number(contextWindow) : 10000000}
 													step={1}
 													value={maxTokens}
-													disabled={auth.busy}
+													disabled={setupPending}
 													onChange={(e) => setMaxTokens(e.target.value)}
 												/>
 											</div>
@@ -448,7 +452,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 												<input
 													type="checkbox"
 													checked={reasoning}
-													disabled={auth.busy}
+													disabled={setupPending}
 													onChange={(e) => setReasoning(e.target.checked)}
 												/>
 												Supports reasoning
@@ -457,7 +461,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 												<input
 													type="checkbox"
 													checked={images}
-													disabled={auth.busy}
+													disabled={setupPending}
 													onChange={(e) => setImages(e.target.checked)}
 												/>
 												Accepts images
@@ -469,7 +473,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 											type="checkbox"
 											id="custom-no-auth"
 											checked={noAuth}
-											disabled={auth.busy}
+											disabled={setupPending}
 											onChange={(e) => {
 												setNoAuth(e.target.checked);
 												setApiKey("");
@@ -488,7 +492,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 											setAuthType(v as typeof authType);
 											setApiKey("");
 										}}
-										disabled={auth.busy}
+										disabled={setupPending}
 									>
 										<SelectTrigger id="provider-auth-method">
 											<SelectValue />
@@ -516,7 +520,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 										spellCheck={false}
 										required={view === "custom"}
 										value={apiKey}
-										disabled={auth.busy}
+										disabled={setupPending}
 										onChange={(e) => setApiKey(e.target.value)}
 										placeholder={
 											view === "custom" ? "Paste an API key" : "Paste a key, or continue for guided setup"
@@ -531,7 +535,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 										environment, then check again.
 										{provider?.credentialLabel ? ` Pi reports: ${provider.credentialLabel}.` : ""}
 									</p>
-									<Button type="button" variant="secondary" disabled={auth.busy} onClick={refresh}>
+									<Button type="button" variant="secondary" disabled={setupPending} onClick={refresh}>
 										Check again
 									</Button>
 								</div>
@@ -543,7 +547,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 											: "Credentials are saved to your shared Pi credentials."}
 										{view === "custom" && !noAuth ? " Endpoint configuration is saved in Hopper." : ""}
 									</p>
-									<Button type="submit" variant="ghost" className="w-fit self-start px-0 font-semibold text-ink-soft hover:bg-transparent" disabled={auth.busy}>
+									<Button type="submit" variant="ghost" className="w-fit self-start px-0 font-semibold text-ink-soft hover:bg-transparent" disabled={setupPending}>
 										{auth.busy && <Loader2 className="size-4 animate-spin" />}
 										{view === "setup" && authType === "oauth"
 											? `Sign in with ${provider?.name ?? "provider"}`
@@ -571,7 +575,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 						)}
 					</div>
 				)}
-				{auth.busy && request?.kind === "auth" && (
+				{request?.kind === "auth" && (
 					<RequestDialog
 						inline
 						request={request}
@@ -587,7 +591,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
 						{error ?? currentAuth?.error}
 					</p>
 				)}
-				{auth.busy && (
+				{setupPending && (
 					<DialogFooter>
 						<Button variant="secondary" onClick={props.onCancel}>
 							Cancel setup
