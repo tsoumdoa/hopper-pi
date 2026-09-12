@@ -192,6 +192,58 @@ it("late acceptance cannot erase a draft in a new session", async () => {
  expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Second task");
 });
 
+it("shows graph generation as soon as the task resumes on a ready Grasshopper document", async () => {
+	const task = { id: "graph-task", conversation_id: "conversation", parent_task_id: null, state: "running", payload: JSON.stringify({ text: "Create a graph", bindings: [binding] }) };
+	const grasshopper = { kind: "grasshopper", lifecycleInstanceId: "life", grasshopperDocumentId: "canvas", associatedRhinoDocumentId: "model" };
+	const before = { id: "before", task_id: task.id, state: "suspended", owner: JSON.stringify({ binding }) };
+	const ready = { id: "ready", task_id: task.id, state: "running", owner: JSON.stringify({ binding: grasshopper }) };
+	const narrative = { id: 1, task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "messages", turnId: "before", messages: [{ role: "assistant", content: [{ type: "text", text: "Grasshopper isn't currently loaded, so there's no active canvas to edit." }] }] }) };
+	const next = { ...snapshot, tasks: [task], turns: [before], events: [narrative] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: next }));
+	expect(container.textContent).not.toContain("Generating graph…");
+	const resumed = { ...next, turns: [before, ready] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: resumed }));
+	expect(container.textContent).toContain("Generating graph…");
+	expect(container.querySelector('[role="status"][aria-live="polite"]')?.textContent).toContain("Generating graph…");
+	const planning = { ...resumed, events: [...resumed.events,
+		{ id: 2, task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "assistant_message", turnId: "ready", streaming: true, message: { role: "assistant", content: [] } }) },
+		{ id: 3, task_id: task.id, kind: "progress", payload: JSON.stringify({ type: "tool_progress", turnId: "ready", phase: "started", toolCallId: "read", toolName: "read", args: { path: "graph-instructions.md" } }) },
+	] };
+	await act(async () => socket.receive({ type: "shared_snapshot", snapshot: planning }));
+	expect(container.textContent).toContain("Generating graph…");
+	expect(container.textContent).not.toContain("Getting started…");
+	expect(container.textContent).not.toContain("Generating…");
+	for (const state of ["completed", "cancelled", "failed", "awaiting_user"]) {
+		await act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...planning, tasks: [{ ...task, state }] } }));
+		expect(container.textContent).not.toContain("Generating graph…");
+	}
+});
+
+it("shows generation after a document handoff without a competing startup placeholder", async () => {
+	const task = { id: "task", conversation_id: "conversation", parent_task_id: null, state: "running", payload: JSON.stringify({ text: "Create a graph", bindings: [binding] }) };
+	const row = (id: number, payload: unknown) => ({ id, task_id: task.id, kind: "progress", payload: JSON.stringify(payload) });
+	const messages = [
+		row(1, { type: "messages", turnId: "before", messages: [{ role: "assistant", content: [{ type: "text", text: "There's no active Grasshopper document, so I'll create one first." }] }] }),
+		row(2, { type: "assistant_message", turnId: "after", messageId: "reply", streaming: true, message: { role: "assistant", content: [] } }),
+	];
+	const show = async (events: typeof messages, state = "running") => act(async () => socket.receive({ type: "shared_snapshot", snapshot: { ...snapshot, tasks: [{ ...task, state }], events } }));
+	await show(messages);
+	expect(container.textContent).toContain("Generating…");
+	expect(container.textContent).not.toContain("Getting started…");
+	const progress = { type: "tool_progress", turnId: "after", toolCallId: "graph", toolName: "gh_apply_graph" };
+	await show([...messages, row(3, { ...progress, phase: "generating" })]);
+	expect(container.textContent).toContain("Generating graph…");
+	expect(container.textContent).not.toContain("Getting started…");
+	expect(container.textContent).not.toContain("Generating…");
+	await show([...messages, row(3, { ...progress, phase: "started", args: { components: [] } })]);
+	expect(container.querySelector('[aria-label="Running"]')).not.toBeNull();
+	expect(container.textContent).not.toContain("Generating");
+	expect(container.textContent).not.toContain("Getting started…");
+	await show(messages, "cancelled");
+	expect(container.textContent).not.toContain("Generating");
+	expect(container.textContent).not.toContain("Getting started…");
+});
+
 it("stops the active task before queued follow-ups and disables Stop while disconnected", async () => {
 	const queued = { id: "queued-task", conversation_id: "conversation", parent_task_id: null, state: "queued", payload: JSON.stringify({ text: "Follow-up", bindings: [binding] }) };
 	const running = { ...queued, id: "running-task", state: "running" };
