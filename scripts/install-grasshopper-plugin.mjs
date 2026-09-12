@@ -339,7 +339,7 @@ function main() {
 
 	if (!hasDotnet()) {
 		warn(
-			".NET SDK not found. Install .NET 7 SDK, then run: pnpm run build:gh-plugin"
+			".NET SDK not found. Install .NET 7 SDK, then run: node scripts/install-grasshopper-plugin.mjs --build-only"
 		);
 		return;
 	}

@@ -25,7 +25,7 @@ pnpm test
 pnpm exec tsc --noEmit
 pnpm exec tsc -p tsconfig.web.json
 dotnet test dotnet/Hopper.Core.Tests/Hopper.Core.Tests.csproj
-pnpm test:rpc-cross-language
+pnpm exec tsx scripts/cross-language-rpc-smoke.ts
 ```
 
 For native document or script changes, check these manually in Rhino using a

@@ -72,7 +72,7 @@ try {
     $env:HOPPER_SKIP_GH_PLUGIN = '1'
     Invoke-Checked pnpm @('install', '--frozen-lockfile')
     Write-Host "[hopper-pi] Building a fresh Rhino package at $stage"
-    Invoke-Checked pnpm @('package:rhino', '--', '--target', 'win-x64', '--output', $stage, '--yak')
+    Invoke-Checked pnpm @('build', '--target', 'win-x64', '--output', $stage)
     Invoke-Checked node @('scripts/smoke-staged-host.mjs', $stage)
     if ($BuildOnly) {
         Write-Host "[hopper-pi] Build and smoke test passed. Package files: $stage"

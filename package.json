@@ -20,27 +20,11 @@
 		"scripts"
 	],
 	"scripts": {
-		"dev": "tsx src/index.ts",
-		"ui:dev": "vite",
-		"ui:build": "tsc -p tsconfig.web.json && vite build",
-		"ui:analyze": "node scripts/analyze-web-bundle.mjs",
-		"build": "tsc -p tsconfig.json && pnpm ui:build",
-		"build:release": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.release.json && pnpm ui:build",
-		"build:rhino-host": "node scripts/build-rhino-host.mjs",
+		"dev": "node scripts/ui-mock-host.mjs",
+		"build": "node scripts/build.mjs",
+		"build:install": "node scripts/install-rhino.mjs --yes",
 		"test": "vitest run",
-		"test:rpc-cross-language": "tsx scripts/cross-language-rpc-smoke.ts",
-		"pi": "pi -e .",
-		"host:dev": "pnpm build && node dist/host/index.js --ensure-host --explicit-start --ui-dev-origin http://localhost:5173",
-		"host": "node dist/host/index.js",
-		"dump:components": "tsx src/scripts/dump-components.ts",
-		"postinstall": "node scripts/install-grasshopper-plugin.mjs",
-		"build:gh-plugin": "node scripts/install-grasshopper-plugin.mjs --build-only",
-		"install:rhino:mac": "bash scripts/install-rhino-mac.sh",
-		"install:rhino:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-rhino-win.ps1",
-		"package:rhino": "node scripts/package-rhino.mjs",
-		"verify:rhino-package": "node scripts/verify-rhino-package.mjs",
-		"size:rhino-package": "node scripts/report-rhino-package-size.mjs",
-		"prepack": "pnpm build:release"
+		"prepack": "node scripts/build-assets.mjs"
 	},
 	"devDependencies": {
 		"@excalidraw/excalidraw": "^0.18.1",

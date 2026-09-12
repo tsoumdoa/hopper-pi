@@ -56,4 +56,4 @@ Hosts from before schema version 2 cannot read the upgraded profile. Upgrade all
 
 `src/plugins/plugins.test.ts` adds an Example provider through the same interface and checks registration, discovery metadata, independent keys, cancellation, credential-free tools, settings migration, removal, and reinstalls. The web and terminal component tests exercise Example setup with its own label, notice, and plugin ID. Terminal groups with duplicate display names include their stable IDs so selecting one cannot target another provider. The existing Firecrawl and real Pi SDK tests cover request boundaries, races, and external tool collisions.
 
-Run `pnpm test` and `pnpm build` after changing the registry or shared interface. Provider adapter tests should inject responses and avoid real account charges.
+Run `pnpm test` and `node scripts/build-assets.mjs` after changing the registry or shared interface. Provider adapter tests should inject responses and avoid real account charges.
