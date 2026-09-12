@@ -287,7 +287,7 @@ it("ignores late messages, acknowledgements and opens from the replaced socket",
 		socket.receive({ type: "shared_snapshot", snapshot });
 	});
 	expect(socket.sent).toHaveLength(sent);
-	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.disabled).toBe(true);
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.readOnly).toBe(true);
 	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Keep this draft");
 	const replacement = Socket.sockets.at(-1)!;
 	await act(async () => { replacement.onopen?.(); replacement.receive({ type: "shared_snapshot", snapshot }); });
@@ -305,18 +305,20 @@ it("recovers a silently dead connection after wake and keeps the draft", async (
 	await act(async () => window.dispatchEvent(new Event("pageshow")));
 	expect(replacement.sent).toEqual([{ type: "snapshot", conversationId: "conversation" }]);
 	await act(async () => vi.advanceTimersByTimeAsync(10_000));
-	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.disabled).toBe(true);
+	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.readOnly).toBe(true);
 	await act(async () => vi.advanceTimersByTimeAsync(1500));
 	expect(Socket.sockets).toHaveLength(3);
 	expect(container.querySelector<HTMLTextAreaElement>("#composer-input")!.value).toBe("Preserved after sleep");
 });
 
 it("retains a durable command when WebSocket.send throws and retries the same request", async () => {
+	vi.useFakeTimers();
 	await value("#composer-input", "Keep the request");
 	const original = socket.send.bind(socket);
 	socket.send = (data) => { original(data); throw new Error("Socket closed"); };
 	await act(async () => sendButton().click());
 	const command = socket.sent.find((command) => command.type === "submit");
+	await act(async () => vi.advanceTimersByTimeAsync(1500));
 	const replacement = Socket.sockets.at(-1)!;
 	expect(replacement).not.toBe(socket);
 	await act(async () => { replacement.onopen?.(); replacement.receive({ type: "shared_snapshot", snapshot }); });

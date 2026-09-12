@@ -52,6 +52,9 @@ export function ImageGallery({ images }: { images: GalleryImage[] }) {
 	}, [selected]);
 	if (!images.length) return null;
 	const active = selected === null ? null : images[selected];
+	function moveSelection(delta: number) {
+		setSelected((current) => current === null ? null : Math.max(0, Math.min(images.length - 1, current + delta)));
+	}
 	async function copy(image: ImageAttachment) {
 		setNotice(""); setCopying(true);
 		try {
@@ -87,7 +90,7 @@ export function ImageGallery({ images }: { images: GalleryImage[] }) {
 		{notice && selected === null && <p role="status" className="text-xs text-muted">{notice}</p>}
 		<Dialog open={Boolean(active)} onOpenChange={(open) => { if (!open) setSelected(null); }}>
 			{active && <DialogContent hideClose overlayClassName="bg-ink/55 backdrop-blur-sm" onOpenAutoFocus={(event) => { event.preventDefault(); preview.current?.focus(); }} onCloseAutoFocus={(event) => { event.preventDefault(); opener.current?.focus(); }} className="image-gallery-dialog left-0 top-0 h-dvh max-h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 bg-[#18181b] p-0 shadow-none" onKeyDown={(event) => {
-				if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); setSelected(Math.max(0, Math.min(images.length - 1, selected! + (event.key === "ArrowLeft" ? -1 : 1)))); }
+				if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); moveSelection(event.key === "ArrowLeft" ? -1 : 1); }
 			}}>
 				<DialogTitle className="sr-only">{active.label}</DialogTitle>
 				<DialogDescription className="sr-only">Image preview. Swipe, use the arrow keys, or select a thumbnail to browse images. Tap the image to show or hide controls.</DialogDescription>
@@ -103,7 +106,7 @@ export function ImageGallery({ images }: { images: GalleryImage[] }) {
 						const dy = event.changedTouches[0].clientY - start.y;
 						if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5) {
 							swiped.current = true;
-							setSelected(Math.max(0, Math.min(images.length - 1, selected! + (dx < 0 ? 1 : -1))));
+							moveSelection(dx < 0 ? 1 : -1);
 						}
 					}} onClick={() => {
 						if (swiped.current) { swiped.current = false; return; }
@@ -117,9 +120,9 @@ export function ImageGallery({ images }: { images: GalleryImage[] }) {
 						<div className="flex items-center gap-0.5">{actions(active)}<Tooltip content="Close"><DialogClose className={cn("flex size-7 items-center justify-center rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2", overlayButton)} aria-label="Close"><X className="size-3.5" /></DialogClose></Tooltip></div>
 					</figcaption>
 					{images.length > 1 && <div className={cn(modalBottomOverlay, "pb-[max(.5rem,env(safe-area-inset-bottom))] pl-[max(.75rem,env(safe-area-inset-left))] pr-[max(.75rem,env(safe-area-inset-right))]")}>
-						<Button variant="ghost" size="icon-sm" className={overlayButton} aria-label="Previous image" disabled={selected === 0} onClick={() => setSelected(selected! - 1)}><ChevronLeft className="size-4" /></Button>
+						<Button variant="ghost" size="icon-sm" className={overlayButton} aria-label="Previous image" disabled={selected === 0} onClick={() => moveSelection(-1)}><ChevronLeft className="size-4" /></Button>
 						<div ref={thumbnails} className="flex min-w-0 gap-1.5 overflow-x-auto py-1" aria-label="Image previews">{images.map((item, index) => <Tooltip key={index} content={item.label}><button type="button" data-index={index} aria-label={`Preview ${item.label}`} aria-pressed={selected === index} onClick={() => setSelected(index)} className={cn("shrink-0 overflow-hidden rounded-[2px] outline-none transition-opacity focus-visible:ring-1 focus-visible:ring-white", selected === index ? "opacity-100 ring-1 ring-white/80" : "opacity-45 hover:opacity-85")}><img src={imageUrl(item.image)} alt="" className="block h-10 w-14 object-contain" /></button></Tooltip>)}</div>
-						<Button variant="ghost" size="icon-sm" className={overlayButton} aria-label="Next image" disabled={selected === images.length - 1} onClick={() => setSelected(selected! + 1)}><ChevronRight className="size-4" /></Button>
+						<Button variant="ghost" size="icon-sm" className={overlayButton} aria-label="Next image" disabled={selected === images.length - 1} onClick={() => moveSelection(1)}><ChevronRight className="size-4" /></Button>
 					</div>}
 					{notice && <p role="status" className="pointer-events-none absolute left-1/2 top-14 z-20 w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-md bg-black/75 px-3 py-2 text-center text-xs text-white">{notice}</p>}
 				</figure>

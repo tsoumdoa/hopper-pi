@@ -367,6 +367,7 @@ export function TaskThread({ snapshot, tasks, connected, conversationId, labelFo
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
 	const stickToBottom = useRef(true);
+	const scrollPosition = useRef<{ top: number; height: number; viewport: number } | undefined>(undefined);
 	const [showJump, setShowJump] = useState(false);
 	const [focusedQuestionId, setFocusedQuestionId] = useState<string>();
 	// Show one answerable question at a time, including questions from workers.
@@ -390,12 +391,17 @@ export function TaskThread({ snapshot, tasks, connected, conversationId, labelFo
 		const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 		node.scrollTo({ top: node.scrollHeight, behavior: reducedMotion ? "auto" : behavior });
 	};
-	const onScroll = useCallback(() => {
+	const onScroll = useCallback((trackIntent = false) => {
 		const node = scroller.current;
 		if (!node) return;
 		const distance = node.scrollHeight - node.scrollTop - node.clientHeight;
-		// Separate thresholds prevent the composer resizing from toggling this state back.
-		stickToBottom.current = distance < (stickToBottom.current ? 80 : 16);
+		const previous = scrollPosition.current;
+		// Resizing can clamp scrollTop and emit a scroll event. Only movement within
+		// unchanged geometry changes whether we follow new messages.
+		if (trackIntent && previous && previous.height === node.scrollHeight && previous.viewport === node.clientHeight && previous.top !== node.scrollTop) {
+			stickToBottom.current = distance < 80;
+		}
+		scrollPosition.current = { top: node.scrollTop, height: node.scrollHeight, viewport: node.clientHeight };
 		onBottomChange?.(stickToBottom.current && snapshot?.history?.before == null);
 		setShowJump(distance > 240);
 	}, [onBottomChange, snapshot?.history?.before]);
@@ -438,7 +444,7 @@ export function TaskThread({ snapshot, tasks, connected, conversationId, labelFo
 				queued={pendingQuestions.length - 1}
 				answer={(value) => commands.answer(String(activeQuestion.id), value)}
 			/>}
-			<div ref={scroller} onScroll={onScroll} className="h-full overflow-y-auto px-4 py-6 sm:px-6" aria-label="Conversation" aria-live="polite">
+			<div ref={scroller} onScroll={() => onScroll(true)} className="h-full overflow-y-auto px-4 py-6 sm:px-6" aria-label="Conversation" aria-live="polite">
 				<div className="mx-auto flex w-full max-w-[760px] flex-col gap-6 pb-4">
 					{snapshot?.history && onHistoryPage && <div className="flex justify-center gap-2">
 						{snapshot.history.hasOlder && <Button variant="ghost" size="sm" disabled={!connected} onClick={() => onHistoryPage(Number(snapshot.history!.oldestSequence))}>Older messages</Button>}
