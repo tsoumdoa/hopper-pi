@@ -31,6 +31,7 @@
 		"@radix-ui/react-collapsible": "^1.1.20",
 		"@radix-ui/react-dialog": "^1.1.23",
 		"@radix-ui/react-select": "^2.3.7",
+		"@radix-ui/react-tooltip": "^1.2.16",
 		"@tailwindcss/vite": "^4.3.3",
 		"@types/hast": "^3.0.5",
 		"@types/node": "^20.19.43",

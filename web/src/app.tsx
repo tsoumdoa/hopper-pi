@@ -1,6 +1,9 @@
+import { randomId } from "./lib/random-id";
+import { MAX_IMAGES } from "../../src/host/protocol";
+import { ImageAttachmentContext } from "./components/image-gallery";
 import { applySnapshotPatch } from "../../src/host/shared/snapshot-patch.js";
 import { Box, Loader2, Power } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { SharedBrowserCommand } from "../../src/host/shared/browser-protocol.js";
 import type { TargetBinding } from "../../src/protocol/shared-execution.js";
 import { Composer, type ComposerHandle } from "./components/composer";
@@ -21,7 +24,8 @@ import { UiRequestDialog } from "./components/ui-request-dialog";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
-import type { DraftImage } from "./lib/image-attachments";
+import { draftImagesReducer } from "./state/draft-images";
+import { TooltipProvider } from "./components/ui/tooltip";
 import { cn, providerLabel } from "./lib/utils";
 import { useHopperStore, useHopperStoreApi } from "./state/hopper-store-context";
 import type { ConnectionStatus, SendMode } from "./state/hopper-types";
@@ -32,6 +36,8 @@ import { bindingLabeler, decode, readyTargets, sameBinding, type Row, type Share
 const CONVERSATION_KEY = "hopper.conversation";
 const SIDEBAR_KEY = "hopper.sidebar.collapsed";
 const ACTIVE_ROOT_STATES = ["running", "suspending", "awaiting_user"];
+const INITIAL_RETRY_DELAY_MS = 1500;
+const MAX_RETRY_DELAY_MS = 5 * 60_000;
 
 function readCollapsed() {
 	try {
@@ -100,11 +106,13 @@ export function App() {
 	const [onlyThisInstance, setOnlyThisInstance] = useState(false);
 	const selectTargets = (bindings: TargetBinding[]) => { selectionExplicit.current = true; setSelected(bindings); };
 	const [draft, setDraft] = useState("");
-	const [images, setImages] = useState<DraftImage[]>([]);
+	const [{ images, error: attachmentError }, setImages] = useReducer(draftImagesReducer, { images: [] });
 	// Explicit delivery choice made while a task runs; null means the default for the current state.
 	const [modeOverride, setModeOverride] = useState<SendMode | null>(null);
 	const [nonce, setNonce] = useState(0);
 	const composer = useRef<ComposerHandle>(null);
+	const focusedComposer = useRef<string | undefined>(undefined);
+	const [atChatBottom, setAtChatBottom] = useState(true);
 	const historyBefore = useRef<number | undefined>(undefined);
 	const currentConversation = useRef(conversationId);
 	currentConversation.current = conversationId;
@@ -132,6 +140,8 @@ export function App() {
 	const socket = useRef<WebSocket>(undefined);
 	const credential = useRef<string>(undefined);
 	const ready = useRef(false);
+	const retryDelay = useRef(INITIAL_RETRY_DELAY_MS);
+	const retryConnection = useRef<() => void>(() => {});
 	const startupRequested = useRef(false);
 	const awaitingInitialRegistration = useRef(new URLSearchParams(window.location.search).get("starting") === "1");
 	const conversationSession = useRef<string | undefined>(undefined);
@@ -174,8 +184,11 @@ export function App() {
 			actions.setBackendDetail("Hopper Code instances unknown while offline");
 			actions.setConnection(starting ? "connecting" : "disconnected", starting ? "Starting Hopper…" : "Reconnecting to the local Hopper host…");
 			ws.close();
-			timer = setTimeout(() => setNonce((n) => n + 1), starting ? 250 : 1500);
+			const delay = retryDelay.current;
+			retryDelay.current = Math.min(delay * 2, MAX_RETRY_DELAY_MS);
+			timer = setTimeout(() => setNonce((n) => n + 1), delay);
 		};
+		retryConnection.current = retry;
 		const armDeadline = () => {
 			if (deadline) clearTimeout(deadline);
 			deadline = setTimeout(() => retry(), 10_000);
@@ -238,6 +251,7 @@ export function App() {
 					const available = readyTargets(next).length;
 					actions.setBackendDetail(`${available} Rhino ${available === 1 ? "instance" : "instances"} connected`);
 					actions.setConnection("connected", CONNECTED_DETAIL, 0);
+					retryDelay.current = INITIAL_RETRY_DELAY_MS;
 					const sessionId = next.conversationSession?.id;
 					const sessionChanged = conversationSession.current !== undefined && sessionId !== undefined && conversationSession.current !== sessionId;
 					conversationSession.current = sessionId ?? conversationSession.current;
@@ -279,7 +293,7 @@ export function App() {
 									if (target) { selectionExplicit.current = true; setSelected([target]); }
 								}
 							} else {
-								const command: SharedBrowserCommand = { type: "create_conversation", requestId: crypto.randomUUID(), title: "New chat" };
+								const command: SharedBrowserCommand = { type: "create_conversation", requestId: randomId(), title: "New chat" };
 								pending.current.set(command.requestId, command);
 							}
 						}
@@ -372,11 +386,17 @@ export function App() {
 		const wake = () => {
 			if (disposed || blocked.current) return;
 			if (socket.current === ws && ws.readyState === WebSocket.OPEN && ready.current) probe();
-			else setNonce((n) => n + 1);
+			else if (!timer && !socket.current) setNonce((n) => n + 1);
+		};
+		// A restored network can retry immediately; merely changing tabs must not bypass backoff.
+		const online = () => {
+			if (disposed || blocked.current) return;
+			if (!ready.current && !socket.current) setNonce((n) => n + 1);
+			else wake();
 		};
 		const visible = () => { if (document.visibilityState === "visible") wake(); };
 		const heartbeat = setInterval(probe, 15_000);
-		window.addEventListener("online", wake);
+		window.addEventListener("online", online);
 		window.addEventListener("pageshow", wake);
 		document.addEventListener("visibilitychange", visible);
 		return () => {
@@ -386,7 +406,7 @@ export function App() {
 			if (timer) clearTimeout(timer);
 			if (deadline) clearTimeout(deadline);
 			clearInterval(heartbeat);
-			window.removeEventListener("online", wake);
+			window.removeEventListener("online", online);
 			window.removeEventListener("pageshow", wake);
 			document.removeEventListener("visibilitychange", visible);
 			receivedSnapshot = undefined;
@@ -407,8 +427,7 @@ export function App() {
 		}
 		try { socket.current.send(JSON.stringify(command)); }
 		catch {
-			ready.current = false;
-			setNonce((n) => n + 1);
+			retryConnection.current();
 			toast("Connection lost. Your draft is retained while Hopper reconnects.", "warning");
 			return false;
 		}
@@ -416,6 +435,7 @@ export function App() {
 	};
 	const reconnect = () => {
 		blocked.current = false;
+		retryDelay.current = INITIAL_RETRY_DELAY_MS;
 		credential.current = readCredential();
 		setNonce((n) => n + 1);
 	};
@@ -499,9 +519,13 @@ export function App() {
 	useEffect(() => {
 		document.title = conversationId ? `${title} · Hopper` : "Hopper";
 	}, [conversationId, title]);
-	// Focus the composer when the host becomes ready or a new chat starts.
+	// Focus each newly selected chat once, without stealing focus on reconnect.
 	useEffect(() => {
-		if (connected && sessionId) composer.current?.focus();
+		const key = `${conversationId}:${sessionId}`;
+		if (connected && sessionId && composer.current && focusedComposer.current !== key) {
+			focusedComposer.current = key;
+			composer.current.focus();
+		}
 	}, [connected, conversationId, sessionId]);
 
 	const submit = () => {
@@ -524,29 +548,29 @@ export function App() {
 				toast("There is no running turn to steer. Send it as a follow-up instead.", "warning");
 				return;
 			}
-			send({ type: "steer", requestId: crypto.randomUUID(), conversationId, sessionId: String(task.session_id), taskId: String(task.id), turnId: String(turn.id), text: draft, attachments });
+			send({ type: "steer", requestId: randomId(), conversationId, sessionId: String(task.session_id), taskId: String(task.id), turnId: String(turn.id), text: draft, attachments });
 			return;
 		}
-		send({ type: "submit", requestId: crypto.randomUUID(), conversationId, sessionId, kind: sendMode, text: draft, bindings: accessibleBindings, ...(selected[0] ? { messageTarget: selected[0] } : {}), attachments });
+		send({ type: "submit", requestId: randomId(), conversationId, sessionId, kind: sendMode, text: draft, bindings: accessibleBindings, ...(selected[0] ? { messageTarget: selected[0] } : {}), attachments });
 	};
 
-	const cancelTask = (taskId: string) => send({ type: "cancel", requestId: crypto.randomUUID(), conversationId, taskId });
+	const cancelTask = (taskId: string) => send({ type: "cancel", requestId: randomId(), conversationId, taskId });
 	const commands = {
 		enabled: connected && !readOnly,
 		recoveryEnabled: connected && !archived,
-		answer: (questionId: string, answer: string | null) => connected && !readOnly && send({ type: "answer", requestId: crypto.randomUUID(), conversationId, questionId, answer }),
-		recover: (taskId: string, acknowledgement: string) => connected && !archived && send({ type: "recover", requestId: crypto.randomUUID(), conversationId, taskId, acknowledgement }),
+		answer: (questionId: string, answer: string | null) => connected && !readOnly && send({ type: "answer", requestId: randomId(), conversationId, questionId, answer }),
+		recover: (taskId: string, acknowledgement: string) => connected && !archived && send({ type: "recover", requestId: randomId(), conversationId, taskId, acknowledgement }),
 	};
 
-	const manageThread = (row: Row) => send({ type: row.archived_at ? "unarchive_conversation" : "archive_conversation", requestId: crypto.randomUUID(), conversationId: String(row.id) });
+	const manageThread = (row: Row) => send({ type: row.archived_at ? "unarchive_conversation" : "archive_conversation", requestId: randomId(), conversationId: String(row.id) });
 	const deleteThread = (row: Row) => setConfirm({
 		title: `Delete '${row.title}'?`,
 		description: "This permanently removes the thread's saved log. Export first if you want a copy.",
 		confirmLabel: "Delete thread", destructive: true,
-		action: () => send({ type: "delete_conversation", requestId: crypto.randomUUID(), conversationId: String(row.id) }),
+		action: () => send({ type: "delete_conversation", requestId: randomId(), conversationId: String(row.id) }),
 	});
 	const newChat = () => {
-		if (!liveConversation) send({ type: "create_conversation", requestId: crypto.randomUUID(), title: "New chat" });
+		if (!liveConversation) send({ type: "create_conversation", requestId: randomId(), title: "New chat" });
 	};
 	const shutdown = () =>
 		setConfirm({
@@ -555,7 +579,7 @@ export function App() {
 			confirmLabel: "Shut down",
 			destructive: true,
 			action: () => {
-				if (snapshot) send({ type: "stop_host", requestId: crypto.randomUUID(), hostEpoch: snapshot.hostEpoch });
+				if (snapshot) send({ type: "stop_host", requestId: randomId(), hostEpoch: snapshot.hostEpoch });
 			},
 		});
 	const requestLogout = (provider: string) =>
@@ -607,8 +631,13 @@ export function App() {
 		</>
 	);
 
+	const composerDisabled = !sessionId || !connected || !historyReady || submitting || taskBlocksComposer;
+	const attachmentUnavailable = readOnly ? "This chat is read-only"
+		: composerDisabled ? "Chat attachments are temporarily unavailable"
+		: images.length >= MAX_IMAGES ? `Attach up to ${MAX_IMAGES} images` : undefined;
+
 	return (
-		<div className="flex h-dvh flex-col overflow-hidden bg-canvas text-ink lg:flex-row">
+		<TooltipProvider><div className="flex h-dvh flex-col overflow-hidden bg-canvas text-ink lg:flex-row">
 			<a className="skip-link" href="#composer-input">Skip to message</a>
 			<Sidebar
 				token={credential.current ?? ""}
@@ -627,7 +656,7 @@ export function App() {
 				rhino={{ summary: summarizeInstances(snapshot, connected), panel: <RhinoInstancesPanel snapshot={snapshot} connected={connected} /> }}
 			/>
 			<main className="flex min-h-0 min-w-0 flex-1 flex-col">
-				<header className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-4 sm:px-6">
+				<header className="relative flex h-11 shrink-0 items-center gap-2 border-b border-line px-4 sm:px-6">
 					<h1 className="min-w-0 flex-1 truncate text-[13px] font-medium tracking-tight">{title}</h1>
 					{recoveryReturnConversation && recoveryReturnConversation !== conversationId && <Button size="sm" variant="ghost" disabled={!connected} onClick={() => {
 						selectConversation(recoveryReturnConversation);
@@ -638,8 +667,8 @@ export function App() {
 					<Button size="icon-sm" variant="ghost" className="-mr-1.5" disabled={!connected || !snapshot} onClick={shutdown} aria-label="Shut down the Hopper host" title="Shut down the Hopper host">
 						<Power className="size-3.5" />
 					</Button>
+					<ConnectionBanner connection={connection} reconnecting={Boolean(snapshot) && !blocked.current} onReconnect={reconnect} />
 				</header>
-				<ConnectionBanner connection={connection} onReconnect={reconnect} />
 				{recoveryChats.slice(0, 1).map(chat => (
 					<div key={String(chat.id)} className="flex items-center justify-between gap-3 border-b border-warn/30 bg-warn-soft px-4 py-2 text-sm sm:px-6" role="status">
 						<span>An interrupted task needs your review before more work can use this Rhino instance.</span>
@@ -654,7 +683,10 @@ export function App() {
 						<Loader2 className="size-5 animate-spin" />
 						<p>Starting Hopper…</p>
 					</div>
-				) : <TaskThread
+				) : <ImageAttachmentContext.Provider value={{
+					attach: attachmentUnavailable ? undefined : (image) => setImages((current) => [...current, image]),
+					unavailable: attachmentUnavailable,
+				}}><TaskThread
 					snapshot={snapshot}
 					tasks={orderedTasks}
 					connected={connected}
@@ -662,23 +694,26 @@ export function App() {
 					labelFor={labelFor}
 					commands={commands}
 					onHistoryPage={loadHistory}
+					onBottomChange={setAtChatBottom}
 					controlTasks={tasks}
 					onSuggestion={useSuggestion}
-				/>}
+				/></ImageAttachmentContext.Provider>}
 				{readOnly ? <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-panel px-6 py-4 text-xs" role="status">
 					<span>{away ? `Hopper is working in '${liveConversation!.title}'. This thread is read-only for now.` : "This thread is archived. Unarchive to continue."}</span>
 					<Button size="sm" variant="secondary" disabled={!connected} onClick={() => away ? selectConversation(String(liveConversation!.id)) : manageThread(selectedConversation!)}>{away ? "Jump back" : "Unarchive"}</Button>
 				</div> : <Composer
 					key={conversationId}
 					ref={composer}
+					atBottom={atChatBottom}
 					draft={draft}
 					onDraftChange={setDraft}
 					images={images}
 					onImagesChange={setImages}
+					attachmentError={attachmentError}
 					imagesSupported={imagesSupported}
 					mode={sendMode}
 					onModeChange={setModeOverride}
-					disabled={!sessionId || !connected || !historyReady || submitting || taskBlocksComposer}
+					disabled={composerDisabled}
 					placeholder={activeRoot?.state === "awaiting_user" ? "Answer the question above to continue" : activeRoot?.state === "suspending" ? "Finishing the current operation…" : undefined}
 					submitDisabled={needsTarget}
 					alert={unavailableSelected && sendMode !== "steer" ? "Selected document disconnected. Choose another document." : undefined}
@@ -718,10 +753,10 @@ export function App() {
 			{skillsOpen && <SkillsDialog token={credential.current ?? ""} connected={connected} streaming={Boolean(activeRoot)} onOpenChange={setSkillsOpen} />}
 			{toolsOpen && <ToolsDialog key={`${sessionId}:${toolsContextQuery}`} contextQuery={toolsContextQuery} token={credential.current ?? ""} connected={connected} onOpenChange={setToolsOpen} />}
 			<UiRequestDialog send={(message) => message.type === "ui_response" && send({ type: "auth_response", requestId: message.requestId, value: message.value })} />
-			{archiveManagerOpen && <ArchivedThreadsDialog snapshot={snapshot} connected={connected} busy={[...pending.current.values()].some(command => command.type === "purge_archived_conversations")} onClose={() => setArchiveManagerOpen(false)} onPurge={(conversationIds, before) => send({ type: "purge_archived_conversations", requestId: crypto.randomUUID(), conversationIds, before })} />}
+			{archiveManagerOpen && <ArchivedThreadsDialog snapshot={snapshot} connected={connected} busy={[...pending.current.values()].some(command => command.type === "purge_archived_conversations")} onClose={() => setArchiveManagerOpen(false)} onPurge={(conversationIds, before) => send({ type: "purge_archived_conversations", requestId: randomId(), conversationIds, before })} />}
 			<ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
-			{archiveUndo && <div role="status" className="fixed bottom-4 right-4 z-[60] flex items-center gap-4 rounded-md border border-line bg-surface p-3 text-sm shadow-pop">Thread archived<Button size="xs" variant="ghost" disabled={!connected} onClick={() => send({ type: "unarchive_conversation", requestId: crypto.randomUUID(), conversationId: archiveUndo })}>Undo</Button><button aria-label="Dismiss archive notification" onClick={() => setArchiveUndo(null)}>×</button></div>}
+			{archiveUndo && <div role="status" className="fixed bottom-4 right-4 z-[60] flex items-center gap-4 rounded-md border border-line bg-surface p-3 text-sm shadow-pop">Thread archived<Button size="xs" variant="ghost" disabled={!connected} onClick={() => send({ type: "unarchive_conversation", requestId: randomId(), conversationId: archiveUndo })}>Undo</Button><button aria-label="Dismiss archive notification" onClick={() => setArchiveUndo(null)}>×</button></div>}
 			<ToastRegion />
-		</div>
+		</div></TooltipProvider>
 	);
 }

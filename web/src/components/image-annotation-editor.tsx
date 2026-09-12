@@ -1,3 +1,4 @@
+import { randomId } from "../lib/random-id";
 import { CaptureUpdateAction, Excalidraw, MainMenu, convertToExcalidrawElements, exportToBlob, newElementWith } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import type { ExcalidrawImperativeAPI, ExcalidrawInitialDataState, DataURL } from "@excalidraw/excalidraw/types";
@@ -25,7 +26,7 @@ export default function ImageAnnotationEditor({ attachment, onSave, onCancel }: 
 	const mounted = useRef(true);
 	// A blank canvas should not jump or zoom when the user draws their first stroke.
 	const fitted = useRef(!attachment);
-	const [drawingId] = useState(() => crypto.randomUUID());
+	const [drawingId] = useState(() => randomId());
 	useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 	const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
 	const [saving, setSaving] = useState(false);
@@ -89,7 +90,7 @@ export default function ImageAnnotationEditor({ attachment, onSave, onCancel }: 
 	};
 
 	return <>
-		<div className="min-h-0 flex-1 overflow-hidden rounded-sm border border-line">
+		<div className="min-h-0 flex-1 overflow-hidden rounded-[2px] border border-line">
 			<Excalidraw langCode="en" initialData={initialData} excalidrawAPI={setApi} theme="light" autoFocus viewModeEnabled={saving}
 				onChange={(elements, state) => {
 					const image = elements.find((element) => element.id === sourceImage?.id && !element.isDeleted);

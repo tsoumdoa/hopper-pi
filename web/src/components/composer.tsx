@@ -1,10 +1,9 @@
 import { ArrowUp, ImagePlus, Pencil, RefreshCw, Square, X } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
-import type { FormEvent, KeyboardEvent, ReactNode } from "react";
+import type { Dispatch, FormEvent, KeyboardEvent, ReactNode, SetStateAction } from "react";
 import { MAX_IMAGES } from "../../../src/host/protocol";
 import { IMAGE_ACCEPT, imageUrl, readImage, type DraftImage } from "../lib/image-attachments";
 import { ImageAnnotationDialog } from "./image-annotation-dialog";
-import { cn } from "../lib/utils";
 import type { SendMode } from "../state/hopper-types";
 import { toolbarTriggerClass } from "./model-picker";
 import { Button } from "./ui/button";
@@ -29,8 +28,10 @@ export type ComposerHandle = { focus(): void };
 
 export type ComposerProps = {
 	draft: string;
+	atBottom?: boolean;
 	images: DraftImage[];
-	onImagesChange(images: DraftImage[]): void;
+	onImagesChange: Dispatch<SetStateAction<DraftImage[]>>;
+	attachmentError?: string;
 	imagesSupported: boolean;
 	onDraftChange(value: string): void;
 	mode: SendMode;
@@ -53,7 +54,7 @@ export type ComposerProps = {
 };
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-	{ draft, onDraftChange, images, onImagesChange, imagesSupported, mode, onModeChange, disabled, streaming, canAbort = streaming, abortDisabled = false, onSubmit, onAbort, controls, submitDisabled, alert, placeholder },
+	{ draft, atBottom = true, onDraftChange, images, onImagesChange, attachmentError, imagesSupported, mode, onModeChange, disabled, streaming, canAbort = streaming, abortDisabled = false, onSubmit, onAbort, controls, submitDisabled, alert, placeholder },
 	ref,
 ) {
 	const fileInput = useRef<HTMLInputElement>(null);
@@ -61,8 +62,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 	const [editor, setEditor] = useState<{ kind: "new" } | { kind: "existing"; id: string } | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [imageError, setImageError] = useState<string | null>(null);
-	const currentImages = useRef(images);
-	currentImages.current = images;
 	const loadGeneration = useRef(0);
 	useEffect(() => () => { loadGeneration.current++; }, []);
 	const editing = editor?.kind === "existing" ? images.find((image) => image.id === editor.id) : undefined;
@@ -76,21 +75,22 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 		try {
 			const loaded = await Promise.all((replacement ? files.slice(0, 1) : files).map(readImage));
 			if (generation !== loadGeneration.current) return;
-			const latest = currentImages.current;
-			onImagesChange(replacement ? latest.map((image) => image.id === replacement ? loaded[0] : image) : [...latest, ...loaded]);
+			onImagesChange((latest) => replacement ? latest.map((image) => image.id === replacement ? loaded[0] : image) : [...latest, ...loaded]);
 		} catch (cause) { if (generation === loadGeneration.current) setImageError(cause instanceof Error ? cause.message : "Could not open this image."); }
 		finally { if (generation === loadGeneration.current) setLoading(false); }
 	};
 	const textarea = useRef<HTMLTextAreaElement>(null);
+	const [focused, setFocused] = useState(false);
+	const expanded = atBottom || focused;
 	useImperativeHandle(ref, () => ({ focus: () => textarea.current?.focus() }), []);
 
 	useLayoutEffect(() => {
 		const node = textarea.current;
 		if (!node) return;
 		node.style.height = "auto";
-		node.style.height = `${Math.max(88, Math.min(node.scrollHeight, MAX_HEIGHT))}px`;
-		node.style.overflowY = node.scrollHeight > MAX_HEIGHT ? "auto" : "hidden";
-	}, [draft]);
+		node.style.height = expanded ? `${Math.max(88, Math.min(node.scrollHeight, MAX_HEIGHT))}px` : "40px";
+		node.style.overflowY = expanded && node.scrollHeight > MAX_HEIGHT ? "auto" : "hidden";
+	}, [draft, expanded]);
 
 	const submit = (event?: FormEvent) => {
 		event?.preventDefault();
@@ -114,15 +114,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 				onSubmit={submit}
 				onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
 				onDrop={(event) => { if (event.dataTransfer.files.length) { event.preventDefault(); void addImages(Array.from(event.dataTransfer.files)); } }}
-				className={cn(
-					"relative mx-auto w-full max-w-[760px] rounded-md border border-line bg-surface transition-colors focus-within:border-accent/60",
-					disabled && "opacity-70",
-				)}
+				className="relative mx-auto w-full max-w-[760px] rounded-md border border-line bg-surface transition-colors focus-within:border-accent/60"
 			>
 				<input ref={fileInput} type="file" accept={IMAGE_ACCEPT} multiple={!replaceId.current} className="sr-only" tabIndex={-1} aria-label="Choose images" disabled={disabled || loading}
 					onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; const replacement = replaceId.current; replaceId.current = null; void addImages(files, replacement); }} />
-				{images.length > 0 && <div className="flex flex-wrap gap-2 px-3 pt-3" aria-label="Image attachments">
-					{images.map((image) => <div key={image.id} className="w-36 overflow-hidden rounded-sm border border-line bg-panel">
+				{images.length > 0 && <div className="flex gap-2 overflow-x-auto px-3 pt-3 pb-2" aria-label="Image attachments">
+					{images.map((image) => <div key={image.id} className="w-36 shrink-0 overflow-hidden rounded-[2px] border border-line bg-panel">
 						<button type="button" className="block w-full" disabled={disabled || loading} onClick={() => setEditor({ kind: "existing", id: image.id })} aria-label={`Annotate ${image.name}`}>
 							<img src={imageUrl(image.image)} alt={image.name} className="h-20 w-full object-contain" />
 						</button>
@@ -130,27 +127,30 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 						<div className="flex items-center justify-between p-1">
 							<Button type="button" variant="ghost" size="icon-sm" disabled={disabled || loading} onClick={() => setEditor({ kind: "existing", id: image.id })} aria-label={`Edit annotations on ${image.name}`} title="Annotate"><Pencil className="size-3.5" /></Button>
 							<Button type="button" variant="ghost" size="icon-sm" disabled={disabled || loading} onClick={() => { replaceId.current = image.id; if (fileInput.current) { fileInput.current.multiple = false; fileInput.current.click(); } }} aria-label={`Replace ${image.name}`} title="Replace image"><RefreshCw className="size-3.5" /></Button>
-							<Button type="button" variant="ghost" size="icon-sm" disabled={disabled || loading} onClick={() => onImagesChange(images.filter((item) => item.id !== image.id))} aria-label={`Remove ${image.name}`} title="Remove image"><X className="size-3.5" /></Button>
+							<Button type="button" variant="ghost" size="icon-sm" disabled={disabled || loading} onClick={() => onImagesChange((latest) => latest.filter((item) => item.id !== image.id))} aria-label={`Remove ${image.name}`} title="Remove image"><X className="size-3.5" /></Button>
 						</div>
 					</div>)}
 				</div>}
 				{loading && <p role="status" className="px-3 pt-2 text-xs text-muted">Opening images…</p>}
-				{imageError && <p role="alert" className="px-3 pt-2 text-xs text-danger">{imageError}</p>}
+				{(imageError || attachmentError) && <p role="alert" className="px-3 pt-2 text-xs text-danger">{imageError || attachmentError}</p>}
 				{images.length > 0 && !imagesSupported && <p role="alert" className="px-3 pt-2 text-xs text-danger">Select a model that supports images to send these attachments.</p>}
 				{alert && <p role="alert" className="px-3 pt-2 text-xs text-danger">{alert}</p>}
 				<label className="sr-only" htmlFor="composer-input">Message Hopper</label>
 				<textarea
 					id="composer-input"
 					ref={textarea}
-					rows={3}
+					rows={1}
 					value={draft}
-					disabled={disabled}
+					readOnly={disabled}
+					aria-disabled={disabled}
 					autoComplete="off"
 					onChange={(event) => onDraftChange(event.target.value)}
+					onFocus={() => setFocused(true)}
+					onBlur={() => setFocused(false)}
 					onKeyDown={onKeyDown}
 					onPaste={(event) => { const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/")); if (files.length) { event.preventDefault(); void addImages(files); } }}
 					placeholder={disabled ? placeholder ?? "Waiting for the Hopper host…" : "Ask Hopper…"}
-					className="block min-h-[88px] max-h-[220px] w-full resize-none bg-transparent pb-1 pl-3.5 pr-11 pt-3 text-[14px] leading-6 outline-none placeholder:text-muted disabled:cursor-not-allowed"
+					className="block min-h-[40px] max-h-[220px] w-full resize-none bg-transparent pb-1 pl-3.5 pr-11 pt-3 text-[14px] leading-6 outline-none placeholder:text-muted aria-disabled:cursor-not-allowed"
 				/>
 				<div className="flex flex-wrap items-center gap-1 px-1.5 pb-1.5 pr-11 pt-0.5">
 					<Button type="button" variant="ghost" size="icon-sm" disabled={disabled || loading || images.length >= MAX_IMAGES} aria-label="Attach images" title="Attach images, or paste a screenshot" onClick={() => { replaceId.current = null; if (fileInput.current) { fileInput.current.multiple = true; fileInput.current.click(); } }}><ImagePlus className="size-4" /></Button>
@@ -184,8 +184,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 			{(editing || newDrawing) && <ImageAnnotationDialog key={editing?.id ?? "new-drawing"} attachment={editing}
 				onClose={() => setEditor(null)}
 				onSave={(updated) => {
-					const latest = currentImages.current;
-					onImagesChange(newDrawing ? [...latest, updated] : latest.map((image) => image.id === updated.id ? updated : image));
+					onImagesChange((latest) => newDrawing ? [...latest, updated] : latest.map((image) => image.id === updated.id ? updated : image));
 					setEditor(null);
 				}} />}
 		</footer>

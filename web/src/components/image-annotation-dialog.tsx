@@ -22,7 +22,7 @@ export function ImageAnnotationDialog({ attachment, onSave, onClose }: {
 	onClose(): void;
 }) {
 	return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-		<DialogContent className="h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-[1400px] gap-3 overflow-hidden p-3 sm:p-4"
+		<DialogContent className="h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-[1400px] gap-3 overflow-hidden rounded-[2px] p-3 sm:p-4"
 			onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>
 			<DialogHeader>
 				<DialogTitle>{attachment?.original ? "Annotate image" : attachment ? "Edit drawing" : "New drawing"}</DialogTitle>

@@ -86,7 +86,7 @@
     & th, & td { border: 1px solid var(--color-line); padding: 0.4em 0.75em; }
     & th { background: var(--color-surface-muted); font-weight: 600; }
     & hr { border-color: var(--color-line); }
-    & img { max-width: 100%; height: auto; border-radius: 4px; }
+    & img { max-width: 100%; height: auto; border-radius: 2px; }
   }
 }
 
@@ -101,5 +101,55 @@
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Keep image controls legible with a short fade and no blur over the artwork. */
+.image-chrome {
+  --image-fade-direction: to bottom;
+  isolation: isolate;
+  color: #fff;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+.image-chrome::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(var(--image-fade-direction), rgb(0 0 0 / 72%), rgb(0 0 0 / 48%) 65%, transparent);
+}
+.image-chrome-bottom {
+  --image-fade-direction: to top;
+}
+@media (hover: hover) {
+  .image-view:hover .image-chrome { opacity: 1; pointer-events: auto; }
+}
+.image-view[data-controls="true"] .image-chrome,
+.image-view:has(button:focus-visible) .image-chrome {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .image-view:not([data-controls]) .image-chrome { opacity: 1; pointer-events: auto; }
+}
+
+/* Touch devices stay full-screen in both portrait and landscape. */
+@media (min-width: 768px) and (hover: hover) and (pointer: fine) {
+  .image-gallery-dialog {
+    left: 50%;
+    top: 50%;
+    width: min(1080px, 90vw);
+    height: min(720px, 86dvh);
+    max-height: 86dvh;
+    translate: -50% -50%;
+    border-radius: 2px;
+    border: 0;
+    background: #18181b;
+    box-shadow: 0 32px 90px -20px rgb(18 18 20 / 40%), 0 8px 24px -12px rgb(18 18 20 / 25%);
+    overflow: hidden;
   }
 }

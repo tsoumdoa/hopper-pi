@@ -1,7 +1,8 @@
-import { Brain, ChevronRight, CircleAlert, CircleCheck, Loader2, Wrench } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Brain, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, Loader2, Wrench } from "lucide-react";
+import { useEffect, useId, useState } from "react";
 import { cn, formatValue, summarizeValue } from "../lib/utils";
 import type { ToolCall } from "../state/hopper-types";
+import { Tooltip } from "./ui/tooltip";
 import { Button } from "./ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 
@@ -12,9 +13,26 @@ const SUGGESTIONS = [
 ];
 
 function ToolStatusIcon({ status }: { status: ToolCall["status"] }) {
-	if (status === "running") return <Loader2 className="size-3.5 animate-spin text-accent" />;
-	if (status === "error") return <CircleAlert className="size-3.5 text-danger" />;
-	return <CircleCheck className="size-3.5 text-muted" />;
+	const icon = status === "running" ? <Loader2 className="size-3.5 animate-spin text-accent" />
+		: status === "error" ? <CircleAlert className="size-3.5 text-danger" />
+		: <CircleCheck className="size-3.5 text-muted" />;
+	return <span role="img" aria-label={status === "running" ? "Running" : status === "error" ? "Failed" : "Done"} className="flex shrink-0">{icon}</span>;
+}
+
+export function ToolHistory({ tools }: { tools: ToolCall[] }) {
+	const [expanded, setExpanded] = useState(false);
+	const id = useId();
+	const hidden = Math.max(0, tools.length - 3);
+	const label = expanded ? "Show recent tool calls" : `Show ${hidden} earlier tool call${hidden === 1 ? "" : "s"}`;
+	return <section aria-label="Tool calls" className="min-w-0">
+		{hidden > 0 && <Tooltip content={label}>
+			<button type="button" aria-expanded={expanded} aria-controls={id} aria-label={label} onClick={() => setExpanded(!expanded)} className="mb-1 flex min-h-7 w-full items-center justify-center gap-1 rounded-sm text-[11px] text-ink-soft transition-colors hover:text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+				{expanded ? <ChevronDown className="size-3.5" /> : <ChevronUp className="size-3.5" />}
+				<span>{expanded ? "Show recent calls" : `${hidden} earlier tool call${hidden === 1 ? "" : "s"}`}</span>
+			</button>
+		</Tooltip>}
+		<div id={id} className="grid gap-1">{(expanded ? tools : tools.slice(-3)).map((tool) => <ToolCard key={tool.id} tool={tool} />)}</div>
+	</section>;
 }
 
 export function ToolCard({ tool }: { tool: ToolCall }) {
@@ -29,29 +47,26 @@ export function ToolCard({ tool }: { tool: ToolCall }) {
 			open={open}
 			onOpenChange={setOpen}
 			className={cn(
-				"overflow-hidden rounded-sm border bg-surface text-xs transition-colors",
+				"overflow-hidden rounded-[5px] border bg-surface text-xs transition-colors",
 				tool.status === "error" ? "border-danger/30" : "border-line hover:border-line-strong",
 			)}
 		>
-			<CollapsibleTrigger className="group flex w-full items-center gap-2 px-2.5 py-1.5 text-left outline-none focus-visible:bg-surface-muted">
-				<ChevronRight className="size-3.5 shrink-0 text-muted transition-transform group-data-[state=open]:rotate-90" />
+			<CollapsibleTrigger className="group flex w-full items-center gap-1.5 px-2 py-1 text-left outline-none transition-colors focus-visible:bg-surface-muted">
+				<ChevronRight className="size-3 shrink-0 text-muted transition-transform group-data-[state=open]:rotate-90" />
 				<Wrench className="size-3 shrink-0 text-muted" />
-				<span className="shrink-0 font-mono text-[11.5px] font-medium text-ink">{tool.name}</span>
+				<span className="shrink-0 font-mono text-[11px] font-medium text-ink">{tool.name}</span>
 				{preview && <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">{preview}</span>}
-				<span className={cn("ml-auto flex shrink-0 items-center gap-1.5", tool.status === "error" ? "text-danger" : tool.status === "running" ? "text-accent" : "text-muted")}>
-					<span className="max-sm:hidden">{tool.status === "running" ? "Running" : tool.status === "error" ? "Failed" : "Done"}</span>
-					<ToolStatusIcon status={tool.status} />
-				</span>
+				<ToolStatusIcon status={tool.status} />
 			</CollapsibleTrigger>
 			<CollapsibleContent className="border-t border-line bg-surface-muted">
 				{hasResult && (
-					<div className="border-b border-line px-2.5 py-2">
-						<p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted">Input</p>
+					<div className="border-b border-line px-2 py-1.5">
+						<p className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-muted">Input</p>
 						<pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-ink-soft">{formatValue(tool.args)}</pre>
 					</div>
 				)}
-				<div className="px-2.5 py-2">
-					{hasResult && <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted">{tool.status === "error" ? "Error" : "Output"}</p>}
+				<div className="px-2 py-1.5">
+					{hasResult && <p className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-muted">{tool.status === "error" ? "Error" : "Output"}</p>}
 					<pre className={cn("max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed", tool.status === "error" ? "text-danger" : "text-ink-soft")}>
 						{formatValue(tool.detail)}
 					</pre>

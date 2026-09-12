@@ -1,9 +1,10 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ButtonHTMLAttributes } from "react";
+import { Tooltip } from "./tooltip";
 import { cn } from "../../lib/utils";
 
 const buttonVariants = cva(
-	"inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-1 focus-visible:ring-offset-canvas disabled:pointer-events-none disabled:opacity-50 [&_svg]:shrink-0",
+	"inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-1 focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:shrink-0",
 	{
 		variants: {
 			variant: {
@@ -28,6 +29,8 @@ const buttonVariants = cva(
 
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & VariantProps<typeof buttonVariants>;
 
-export function Button({ className, variant, size, type = "button", ...props }: ButtonProps) {
-	return <button className={cn(buttonVariants({ variant, size }), className)} type={type} {...props} />;
+export function Button({ className, variant, size, type = "button", title, ...props }: ButtonProps) {
+	const button = <button className={cn(buttonVariants({ variant, size }), className)} type={type} {...props} />;
+	const hint = title ?? props["aria-label"];
+	return hint ? <Tooltip content={hint}>{button}</Tooltip> : button;
 }

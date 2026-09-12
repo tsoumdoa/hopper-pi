@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
 import { MockBackend } from "./ui-mock-backend.mjs";
 import { TaskThread } from "../web/src/components/task-thread";
+import { TooltipProvider } from "../web/src/components/ui/tooltip";
 
 const backends: MockBackend[] = [];
 function fixture(scenario = "empty") {
@@ -62,7 +63,7 @@ describe("mock backend browser contract", () => {
 		const snapshot = backend.browserSnapshot();
 		const event = snapshot.events.map(row => JSON.parse(row.payload)).find(payload => payload.type === "assistant_message");
 		expect(event.message.content).toEqual(expect.arrayContaining([expect.objectContaining({ type: "text", text: expect.stringContaining("inspecting both models") })]));
-		const html = renderToStaticMarkup(createElement(TaskThread, { snapshot, tasks: snapshot.tasks, connected: true, conversationId, labelFor: () => "Facade", commands: { recoveryEnabled: true, answer: () => true, recover: () => true }, onSuggestion: () => {} }));
+		const html = renderToStaticMarkup(createElement(TooltipProvider, { children: createElement(TaskThread, { snapshot, tasks: snapshot.tasks, connected: true, conversationId, labelFor: () => "Facade", commands: { recoveryEnabled: true, answer: () => true, recover: () => true }, onSuggestion: () => {} }) }));
 		expect(html).toContain("inspecting both models");
 		expect(snapshot.conversations[0].live_state).toBe("running");
 		expect(snapshot.history.conversationId).toBe(conversationId);
