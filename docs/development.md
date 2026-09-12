@@ -69,9 +69,14 @@ Diagnostic utilities remain available directly, for example `node scripts/verify
 | --- | --- |
 | `web/` | React browser UI |
 | `src/host/` | Embedded Pi runtime and local server |
+| `src/protocol/` | Browser contracts and native RPC schemas |
 | `src/tools/` | Agent tools |
 | `dotnet/` | Native Rhino and Grasshopper plugins |
 | `mds/` | Bundled skills and references |
 | `scripts/` | Build, packaging, and development utilities |
 
 See [plugin development](plugins.md) to add a tool plugin and [shared host architecture](shared-host.md) for runtime details.
+
+Browser snapshots are declared in `src/protocol/browser-snapshot.ts`. The host maps journal rows into this contract; the browser validates incoming messages and assembled patches before applying them. Payloads stay serialized on the wire so unchanged rows compare by value. Use the validated readers in `browser-payloads.ts` to access their contents. Treat received rows as immutable: patch application replaces changed rows, and validation caches unchanged row identities.
+
+`web/src/hooks/use-shared-connection.ts` owns authentication, reconnection, and command replay. Drafts, conversation selection, and acknowledgement effects stay together in `App`. Journal migrations and snapshot reads live in `journal-migrations.ts` and `journal-reads.ts`; `TaskJournal` retains transaction ownership.

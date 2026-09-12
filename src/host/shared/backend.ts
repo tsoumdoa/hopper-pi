@@ -1,3 +1,5 @@
+import type { SharedServerMessage } from "../../protocol/browser-messages.js";
+import { readHistorySnapshot, readTarget, type HistorySnapshot, type SharedSnapshot } from "../../protocol/browser-snapshot.js";
 import type { HostRuntime } from "../pi-runtime.js";
 import type { SharedBrowserBackend } from "./browser-server.js";
 import type { SharedBrowserCommand } from "./browser-protocol.js";
@@ -12,7 +14,7 @@ export class SharedBackend implements SharedBrowserBackend {
 	private view: { conversationId?: string; before?: number } = {};
 	private historyKey = "";
 	private publishedHistoryKey = "";
-	private history?: ReturnType<SharedTaskService["journal"]["browserSnapshot"]>;
+	private history?: HistorySnapshot;
 	private publishTimer?: ReturnType<typeof setTimeout>;
 	stopAdmission(): void {
 		this.stopping = true;
@@ -50,12 +52,12 @@ export class SharedBackend implements SharedBrowserBackend {
 			}),
 		];
 	}
-	snapshot() {
+	snapshot(): SharedSnapshot {
 		const cursor = this.tasks.journal.eventCursor;
 		const session = this.registry.conversationSession;
 		const key = JSON.stringify([cursor, this.tasks.journal.conversationRevision, this.tasks.journal.lastConversationSequence, session, this.view]);
 		if (key !== this.historyKey || !this.history) {
-			this.history = this.tasks.journal.browserSnapshot({ ...this.view, afterConversationSequence: session.afterConversationSequence });
+			this.history = readHistorySnapshot(this.tasks.journal.browserSnapshot({ ...this.view, afterConversationSequence: session.afterConversationSequence }));
 			this.historyKey = key;
 		}
 		return {
@@ -63,7 +65,7 @@ export class SharedBackend implements SharedBrowserBackend {
 			historyStorage: this.tasks.journal.historyStorage,
 			hostEpoch: this.hostEpoch,
 			conversationSession: this.registry.conversationSession,
-			targets: this.registry.list(),
+			targets: this.registry.list().map(readTarget),
 			runtime: this.admin.snapshot(),
 			eventCursor: cursor,
 		};
@@ -96,7 +98,7 @@ export class SharedBackend implements SharedBrowserBackend {
 		this.listeners.add(listener);
 		return () => this.listeners.delete(listener);
 	}
-	private emit(event: unknown): void {
+	private emit(event: SharedServerMessage): void {
 		for (const listener of this.listeners) listener(event);
 	}
 	publish(): void {

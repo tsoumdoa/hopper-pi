@@ -5,11 +5,12 @@ import type { TargetBinding } from "../../../src/protocol/shared-execution.js";
 import { ImageGallery } from "./image-gallery";
 import { cn } from "../lib/utils";
 import type { SendMode } from "../state/hopper-types";
-import { decode, type Row, type SharedSnapshot } from "../state/shared-snapshot";
+import type { SharedSnapshot, TaskSnapshot, TurnSnapshot, EventSnapshot, QuestionSnapshot } from "../../../src/protocol/browser-snapshot.js";
+import { readTaskInput, readOwner, readQuestionPayload, readInputPayload, readRecordReason, readProgress, readAnswer, type BrowserMessage } from "../../../src/protocol/browser-payloads.js";
 import { taskTools } from "../state/task-tools";
 import { RequestDialog } from "./ui-request-dialog";
 import type { UiRequest } from "../state/hopper-types";
-import { OTHER_OPTION_LABEL, formatPickOptionLabels, type PickOption } from "../../../src/types/choices";
+import { OTHER_OPTION_LABEL, formatPickOptionLabels } from "../../../src/types/choices";
 import { ThinkingBlock, ToolHistory, Welcome } from "./conversation";
 import { MessageMarkdown } from "./message-markdown";
 import { Button } from "./ui/button";
@@ -18,11 +19,10 @@ import { WorkingTime } from "./working-time";
 const KIND_LABELS: Partial<Record<SendMode, string>> = { steer: "Steering note", follow_up: "Follow-up" };
 const SETTLED_STATES = ["completed", "cancelled", "failed", "interrupted", "uncertain"];
 
-type TaskInput = { text: string; bindings: TargetBinding[]; messageTarget?: TargetBinding; attachments?: unknown; kind?: SendMode };
 type LiveAssistantMessage = { id: string; turnId: string; text: string; thinking: string; streaming: boolean };
 
 /** Elapsed time for a task, taken from its saved turn timestamps so reconnects keep the clock. */
-export function TaskWorkingTime({ task, turns, inline = false }: { task: Row; turns: Row[]; inline?: boolean }) {
+export function TaskWorkingTime({ task, turns, inline = false }: { task: TaskSnapshot; turns: TurnSnapshot[]; inline?: boolean }) {
 	const timestamps = turns
 		.filter((turn) => turn.task_id === task.id)
 		.map((turn) => Number(turn.started_at))
@@ -34,20 +34,21 @@ export function TaskWorkingTime({ task, turns, inline = false }: { task: Row; tu
 }
 
 /** Assistant text that is still streaming: agent events for turns without a saved message list yet. */
-function liveAssistantMessages(events: Row[], completedTurns: Set<string>): LiveAssistantMessage[] {
+function liveAssistantMessages(events: EventSnapshot[], completedTurns: Set<string>): LiveAssistantMessage[] {
 	const messages: LiveAssistantMessage[] = [];
 	const current = new Map<string, LiveAssistantMessage>();
 	for (const row of events) {
-		const payload = decode<any>(row.payload, {});
+		const payload = readProgress(row.payload);
 		if (payload.type === "assistant_message") {
 			const content = (payload.message?.content ?? []).filter(Boolean);
-			messages.push({ id: payload.messageId, turnId: String(payload.turnId), streaming: Boolean(payload.streaming),
-				text: content.filter((part: any) => part.type === "text").map((part: any) => part.text).join("\n"),
-				thinking: content.filter((part: any) => part.type === "thinking").map((part: any) => part.thinking ?? part.text).join("\n") });
+			messages.push({ id: payload.messageId ?? `message:${row.id}`, turnId: String(payload.turnId), streaming: Boolean(payload.streaming),
+				text: content.filter((part) => part.type === "text").map((part) => part.text).join("\n"),
+				thinking: content.filter((part) => part.type === "thinking").map((part) => part.thinking ?? part.text).join("\n") });
 			continue;
 		}
 		if (payload.type !== "agent_event" || !payload.turnId) continue;
-		const event = payload.event ?? {};
+		const event = payload.event;
+		if (!event) continue;
 		const turnId = String(payload.turnId);
 		if (event.type === "message_start") {
 			if (event.message?.role === "assistant") {
@@ -62,7 +63,8 @@ function liveAssistantMessages(events: Row[], completedTurns: Set<string>): Live
 		const message = current.get(turnId);
 		if (!message) continue;
 		if (event.type === "message_update") {
-			const update = event.assistantMessageEvent ?? {};
+			const update = event.assistantMessageEvent;
+			if (!update) continue;
 			if (update.type === "text_delta") message.text += String(update.delta ?? update.text ?? "");
 			if (update.type === "thinking_delta") message.thinking += String(update.delta ?? update.text ?? "");
 			continue;
@@ -70,8 +72,8 @@ function liveAssistantMessages(events: Row[], completedTurns: Set<string>): Live
 		if (event.type === "message_end" && event.message?.role === "assistant") {
 			message.streaming = false;
 			const content = Array.isArray(event.message.content) ? event.message.content : [];
-			const text = content.filter((part: any) => part.type === "text").map((part: any) => String(part.text ?? "")).join("\n");
-			const thinking = content.filter((part: any) => part.type === "thinking").map((part: any) => String(part.thinking ?? part.text ?? "")).join("\n");
+			const text = content.filter((part) => part.type === "text").map((part) => String(part.text ?? "")).join("\n");
+			const thinking = content.filter((part) => part.type === "thinking").map((part) => String(part.thinking ?? part.text ?? "")).join("\n");
 			if (text) message.text = text;
 			if (thinking) message.thinking = thinking;
 		}
@@ -121,7 +123,7 @@ function Notice({ tone, children }: { tone: "danger" | "warn" | "muted"; childre
 }
 
 function Question({ question, enabled, inactive, waiting, target, queued = 0, answer }: {
-	question: Row;
+	question: QuestionSnapshot;
 	enabled: boolean;
 	inactive?: boolean;
 	waiting?: boolean;
@@ -130,7 +132,7 @@ function Question({ question, enabled, inactive, waiting, target, queued = 0, an
 	answer(value: string | null): boolean;
 }) {
 	const [other, setOther] = useState(false);
-	const payload = useMemo(() => decode<{ kind?: string; question?: string; placeholder?: string; options?: (string | PickOption)[] }>(question.payload, {}), [question.payload]);
+	const payload = useMemo(() => readQuestionPayload(question.payload), [question.payload]);
 	const prompt = payload.question ?? "Answer needed";
 	const request = useMemo<UiRequest>(() => {
 		const options = (payload.options ?? []).map((option) => typeof option === "string"
@@ -147,7 +149,7 @@ function Question({ question, enabled, inactive, waiting, target, queued = 0, an
 		};
 	}, [question.id, payload, prompt, other, target]);
 	if (question.answer !== null) {
-		const response = decode<unknown>(question.answer, question.answer);
+		const response = readAnswer(question.answer);
 		return (
 			<section aria-label="Answered question" className="rounded-md border border-line bg-surface p-3 text-[13px]">
 				<p className="text-[10px] font-medium uppercase tracking-wider text-muted">Input needed</p>
@@ -172,18 +174,18 @@ export type TaskThreadCommands = {
 };
 
 function TaskReply({ task, snapshot, labelFor, commands }: {
-	task: Row;
+	task: TaskSnapshot;
 	snapshot: SharedSnapshot;
 	labelFor(binding: TargetBinding): string;
 	commands: TaskThreadCommands;
 }) {
 	const state = String(task.state);
-	const input = decode<TaskInput>(task.payload, { text: "", bindings: [] });
+	const input = readTaskInput(task.payload);
 	const { messages, liveMessages, tools } = useMemo(() => {
 		const events = snapshot.events.filter((event) => event.task_id === task.id && event.kind === "progress");
-		const turnMessages = new Map<string, any[]>();
+		const turnMessages = new Map<string, BrowserMessage[]>();
 		for (const event of events) {
-			const payload = decode<any>(event.payload, {});
+			const payload = readProgress(event.payload);
 			if (payload.type === "messages") turnMessages.set(String(payload.turnId), payload.messages ?? []);
 		}
 		const messages = [...turnMessages.values()].flat();
@@ -198,16 +200,16 @@ function TaskReply({ task, snapshot, labelFor, commands }: {
 		.filter((message) => message.role === "toolResult" && Array.isArray(message.content))
 		.flatMap((message, i) =>
 			message.content
-				.filter((part: any) => part.type === "image")
-				.map((part: any, j: number) => ({ key: `capture-${i}-${j}`, image: safeImages([part])[0], tool: String(message.toolName ?? "Rhino") }))
-				.filter((capture: { image?: ImageAttachment }) => capture.image),
+				.filter((part) => part.type === "image")
+				.map((part, j) => ({ key: `capture-${i}-${j}`, image: safeImages([part])[0], tool: String(message.toolName ?? "Rhino") }))
+				.filter((capture): capture is typeof capture & { image: ImageAttachment } => capture.image !== undefined),
 		), [messages]);
-	const assistantMessages = messages.filter((message: any) => message.role === "assistant");
+	const assistantMessages = messages.filter((message) => message.role === "assistant");
 	const idle = running && !assistantMessages.length && !liveMessages.length && !tools.length;
 	const targets = (input.messageTarget ? [input.messageTarget] : input.bindings)?.map(labelFor) ?? [];
 	const block = (snapshot.records ?? []).find((record) =>
 		record.kind === "scheduling" && record.task_id === task.id && record.state === "blocked");
-	const reason = block ? decode<{ reason?: string }>(block.payload, {}).reason : undefined;
+	const reason = block ? readRecordReason(block.payload) : undefined;
 
 	if (state === "queued") {
 		return (
@@ -236,9 +238,9 @@ function TaskReply({ task, snapshot, labelFor, commands }: {
 				{state === "failed" && <Notice tone="danger">Something went wrong. Please try again.</Notice>}
 				{state === "interrupted" && <Notice tone="danger">The connection to Rhino was interrupted before this task finished.</Notice>}
 				{state === "cancelled" && <Notice tone="muted">Stopped.</Notice>}
-				{assistantMessages.map((message: any, i: number) => {
-					const thinking = message.content.filter((part: any) => part.type === "thinking").map((part: any) => part.thinking ?? part.text).join("\n");
-					const text = message.content.filter((part: any) => part.type === "text").map((part: any) => part.text).join("\n");
+				{assistantMessages.map((message, i) => {
+					const thinking = message.content.filter((part) => part.type === "thinking").map((part) => part.thinking ?? part.text).join("\n");
+					const text = message.content.filter((part) => part.type === "text").map((part) => part.text).join("\n");
 					if (!thinking && !text) return null;
 					return (
 						<div key={i} className="min-w-0">
@@ -298,18 +300,18 @@ function TaskReply({ task, snapshot, labelFor, commands }: {
 }
 
 function TaskCard({ task, snapshot, labelFor, commands }: {
-	task: Row;
+	task: TaskSnapshot;
 	snapshot: SharedSnapshot;
 	labelFor(binding: TargetBinding): string;
 	commands: TaskThreadCommands;
 }) {
-	const input = decode<TaskInput>(task.payload, { text: "", bindings: [] });
+	const input = readTaskInput(task.payload);
 	const inputs = snapshot.inputs?.filter((entry) => entry.task_id === task.id) ?? [];
 	return (
 		<article className="flex flex-col gap-6">
 			<UserBubble text={input.text} attachments={input.attachments} kind={input.kind === "follow_up" ? "follow_up" : undefined} />
 			{inputs.map((entry) => {
-				const payload = decode<{ text: string; attachments?: unknown }>(entry.payload, { text: "" });
+				const payload = readInputPayload(entry.payload);
 				return (
 					<UserBubble
 						key={String(entry.id)}
@@ -326,12 +328,12 @@ function TaskCard({ task, snapshot, labelFor, commands }: {
 }
 
 function ChildTask({ task, snapshot, labelFor, commands }: {
-	task: Row;
+	task: TaskSnapshot;
 	snapshot: SharedSnapshot;
 	labelFor(binding: TargetBinding): string;
 	commands: TaskThreadCommands;
 }) {
-	const input = decode<TaskInput>(task.payload, { text: "", bindings: [] });
+	const input = readTaskInput(task.payload);
 	const state = String(task.state);
 	return (
 		<details className="group ml-6 rounded-md border border-line bg-surface">
@@ -355,7 +357,7 @@ function ChildTask({ task, snapshot, labelFor, commands }: {
 export function TaskThread({ snapshot, tasks, connected, conversationId, labelFor, commands, onSuggestion, onHistoryPage, onBottomChange, controlTasks = tasks }: {
 	snapshot: SharedSnapshot | undefined;
 	/** Root tasks in order, each followed by its child tasks. */
-	tasks: Row[];
+	tasks: TaskSnapshot[];
 	connected: boolean;
 	conversationId: string;
 	labelFor(binding: TargetBinding): string;
@@ -363,7 +365,7 @@ export function TaskThread({ snapshot, tasks, connected, conversationId, labelFo
 	onSuggestion(prompt: string): void;
 	onHistoryPage?(before?: number): void;
 	onBottomChange?(atBottom: boolean): void;
-	controlTasks?: Row[];
+	controlTasks?: TaskSnapshot[];
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
 	const stickToBottom = useRef(true);
@@ -380,8 +382,8 @@ export function TaskThread({ snapshot, tasks, connected, conversationId, labelFo
 	}, [activeQuestionId]);
 	const questionTask = activeQuestion && waitingTasks.get(activeQuestion.task_id);
 	const questionTurn = snapshot?.turns.find((turn) => turn.id === activeQuestion?.turn_id);
-	const questionOwner = decode<{ binding?: TargetBinding } | null>(questionTurn?.owner, null);
-	const questionInput = decode<TaskInput>(questionTask?.payload, { text: "", bindings: [] });
+	const questionOwner = readOwner(questionTurn?.owner);
+	const questionInput = readTaskInput(questionTask?.payload);
 	const questionBindings = questionOwner?.binding ? [questionOwner.binding] : questionInput.messageTarget ? [questionInput.messageTarget] : questionInput.bindings;
 	const questionTarget = questionBindings.length ? `Target: ${questionBindings.map(labelFor).join(", ")}` : "Conversation";
 
