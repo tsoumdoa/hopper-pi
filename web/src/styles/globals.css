@@ -104,7 +104,7 @@
   }
 }
 
-/* The mask fades the blur itself, as well as the tint, into the image. */
+/* Overlay chrome: a tight blur slab whose tint and blur dissolve into the image. */
 .image-chrome {
   isolation: isolate;
   opacity: 0;
@@ -117,15 +117,15 @@
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: color-mix(in srgb, var(--color-surface) 48%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  mask-image: linear-gradient(to bottom, black, transparent);
-  -webkit-mask-image: linear-gradient(to bottom, black, transparent);
+  background: color-mix(in srgb, var(--color-canvas) 38%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  mask-image: linear-gradient(to bottom, black, rgb(0 0 0 / 55%) 45%, transparent 95%);
+  -webkit-mask-image: linear-gradient(to bottom, black, rgb(0 0 0 / 55%) 45%, transparent 95%);
 }
 .image-chrome-bottom::before {
-  mask-image: linear-gradient(to top, black, transparent);
-  -webkit-mask-image: linear-gradient(to top, black, transparent);
+  mask-image: linear-gradient(to top, black, rgb(0 0 0 / 55%) 45%, transparent 95%);
+  -webkit-mask-image: linear-gradient(to top, black, rgb(0 0 0 / 55%) 45%, transparent 95%);
 }
 @media (hover: hover) {
   .image-view:hover .image-chrome { opacity: 1; pointer-events: auto; }
@@ -136,14 +136,42 @@
   pointer-events: auto;
 }
 
+/* Full-width strip that blurs and fades the tool rows tucked underneath it. */
+.tool-reveal {
+  isolation: isolate;
+}
+.tool-reveal::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--color-canvas) 82%, transparent));
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  mask-image: linear-gradient(to bottom, transparent, rgb(0 0 0 / 60%) 45%, black);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, rgb(0 0 0 / 60%) 45%, black);
+  opacity: 0.7;
+  transition: opacity 150ms ease;
+}
+.tool-reveal:hover::before,
+.tool-reveal:focus-visible::before {
+  opacity: 1;
+}
+
 /* Touch devices stay full-screen in both portrait and landscape. */
 @media (min-width: 768px) and (hover: hover) and (pointer: fine) {
   .image-gallery-dialog {
     left: 50%;
     top: 50%;
-    width: min(1200px, 92vw);
-    height: 90dvh;
-    max-height: 90dvh;
+    width: min(1080px, 90vw);
+    height: min(720px, 86dvh);
+    max-height: 86dvh;
     translate: -50% -50%;
+    border-radius: 12px;
+    border: 1px solid var(--color-line);
+    background: var(--color-canvas);
+    box-shadow: 0 32px 90px -20px rgb(18 18 20 / 40%), 0 8px 24px -12px rgb(18 18 20 / 25%);
+    overflow: hidden;
   }
 }

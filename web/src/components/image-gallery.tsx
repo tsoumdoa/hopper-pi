@@ -12,7 +12,13 @@ import { Tooltip } from "./ui/tooltip";
 export const ImageAttachmentContext = createContext<{ attach?: (image: DraftImage) => void; unavailable?: string }>({ unavailable: "Open an editable chat to attach images" });
 type GalleryImage = { image: ImageAttachment; label: string };
 
-const imageOverlay = "image-chrome image-chrome-top absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 px-3 pb-8 pt-2 text-ink [&_button]:rounded-none";
+const thumbOverlay = "image-chrome image-chrome-bottom absolute inset-x-0 bottom-0 z-10 flex items-end justify-between gap-2 px-1.5 pb-1 pt-7 text-ink";
+const modalTopOverlay = "image-chrome absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 pb-7 pt-1.5 text-ink";
+const modalBottomOverlay = "image-chrome image-chrome-bottom absolute inset-x-0 bottom-0 z-10 flex items-center justify-center gap-2 pt-7";
+
+function OverlayLabel({ children }: { children: string }) {
+	return <span className="flex min-w-0 flex-1 items-center"><span className="truncate text-[11px] font-medium">{children}</span></span>;
+}
 
 async function pngBlob(image: ImageAttachment): Promise<Blob> {
 	const element = new Image();
@@ -57,9 +63,9 @@ export function ImageGallery({ images }: { images: GalleryImage[] }) {
 		finally { setCopying(false); }
 	}
 	function actions(item: GalleryImage) {
-		return <div className="flex items-center gap-1">
-			<Button variant="ghost" size="icon-sm" aria-label="Copy image to clipboard" disabled={copying} onClick={() => void copy(item.image)}><Copy className="size-3.5" /></Button>
-			<Button variant="ghost" size="icon-sm" aria-label="Attach image to chat" title={unavailable ?? "Attach image to chat"} disabled={!attach} onClick={() => {
+		return <div className="flex items-center gap-0.5">
+			<Button variant="ghost" size="icon-sm" className="size-6" aria-label="Copy image" disabled={copying} onClick={() => void copy(item.image)}><Copy className="size-3.5" /></Button>
+			<Button variant="ghost" size="icon-sm" className="size-6" aria-label="Attach to chat" title={unavailable ?? undefined} disabled={!attach} onClick={() => {
 				const size = dimensions.current.get(imageUrl(item.image));
 				if (!size) { setNotice("Wait for the image to load before attaching it."); return; }
 				attach?.({ id: randomId(), name: item.label, image: item.image, original: item.image, ...size });
@@ -69,16 +75,16 @@ export function ImageGallery({ images }: { images: GalleryImage[] }) {
 	}
 	return <div className="min-w-0 max-w-full space-y-2 whitespace-normal">
 		<div className="flex items-start snap-x snap-proximity gap-3 overflow-x-auto pb-2" role="region" aria-label="Images" tabIndex={0}>
-			{images.map((item, index) => <figure key={index} className="image-view relative max-w-full shrink-0 snap-start">
-				<Tooltip content="Expand image"><button type="button" className="block max-w-full cursor-zoom-in outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label={`Expand ${item.label}`} onClick={(event) => { opener.current = event.currentTarget; setNotice(""); setControlsVisible(false); setSelected(index); }}>
+			{images.map((item, index) => <figure key={index} className="image-view relative max-w-full shrink-0 snap-start overflow-hidden rounded-md">
+				<Tooltip content="Expand"><button type="button" className="block max-w-full cursor-zoom-in outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label={`Expand ${item.label}`} onClick={(event) => { opener.current = event.currentTarget; setNotice(""); setControlsVisible(false); setSelected(index); }}>
 					<img src={imageUrl(item.image)} alt={item.label} className="block h-auto max-h-48 w-auto max-w-full" onLoad={(event) => dimensions.current.set(imageUrl(item.image), { width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} />
 				</button></Tooltip>
-				<figcaption className={imageOverlay}><span className="min-w-0 truncate pt-1.5 text-[11px]">{item.label}</span>{actions(item)}</figcaption>
+				<figcaption className={thumbOverlay}><OverlayLabel>{item.label}</OverlayLabel>{actions(item)}</figcaption>
 			</figure>)}
 		</div>
 		{notice && selected === null && <p role="status" className="text-xs text-muted">{notice}</p>}
 		<Dialog open={Boolean(active)} onOpenChange={(open) => { if (!open) setSelected(null); }}>
-			{active && <DialogContent hideClose overlayClassName="bg-canvas/35 backdrop-blur-xl" onOpenAutoFocus={(event) => { event.preventDefault(); preview.current?.focus(); }} onCloseAutoFocus={(event) => { event.preventDefault(); opener.current?.focus(); }} className="image-gallery-dialog left-0 top-0 h-dvh max-h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 bg-transparent p-0 shadow-none animate-none" onKeyDown={(event) => {
+			{active && <DialogContent hideClose overlayClassName="bg-ink/55 backdrop-blur-sm" onOpenAutoFocus={(event) => { event.preventDefault(); preview.current?.focus(); }} onCloseAutoFocus={(event) => { event.preventDefault(); opener.current?.focus(); }} className="image-gallery-dialog left-0 top-0 h-dvh max-h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 bg-transparent p-0 shadow-none" onKeyDown={(event) => {
 				if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); setSelected(Math.max(0, Math.min(images.length - 1, selected! + (event.key === "ArrowLeft" ? -1 : 1)))); }
 			}}>
 				<DialogTitle className="sr-only">{active.label}</DialogTitle>
@@ -103,16 +109,17 @@ export function ImageGallery({ images }: { images: GalleryImage[] }) {
 					}}>
 						<img src={imageUrl(active.image)} alt={active.label} className="block h-full w-full select-none object-contain" draggable={false} />
 					</button>
-					<figcaption className={cn(imageOverlay, "pt-[max(.5rem,env(safe-area-inset-top))] pl-[max(.75rem,env(safe-area-inset-left))] pr-[max(.75rem,env(safe-area-inset-right))]")}>
-						<span className="min-w-0 truncate pt-1.5 text-xs">{active.label}</span>
-						<div className="flex items-center gap-1">{actions(active)}<Tooltip content="Close preview"><DialogClose className="flex size-7 items-center justify-center text-ink-soft hover:text-ink focus-visible:outline focus-visible:outline-accent" aria-label="Close preview"><X className="size-3.5" /></DialogClose></Tooltip></div>
+					<figcaption className={cn(modalTopOverlay, "items-center pl-[max(.75rem,env(safe-area-inset-left))] pr-[max(.5rem,env(safe-area-inset-right))] pt-[max(.5rem,env(safe-area-inset-top))]")}>
+						<OverlayLabel>{active.label}</OverlayLabel>
+						{images.length > 1 && <span className="shrink-0 text-[11px] tabular-nums text-muted">{selected! + 1} / {images.length}</span>}
+						<div className="flex items-center gap-0.5">{actions(active)}<Tooltip content="Close"><DialogClose className="flex size-6 items-center justify-center rounded-sm text-ink-soft transition-colors hover:bg-ink/[.08] hover:text-ink focus-visible:outline focus-visible:outline-accent" aria-label="Close"><X className="size-3.5" /></DialogClose></Tooltip></div>
 					</figcaption>
-					{images.length > 1 && <div className="image-chrome image-chrome-bottom absolute inset-x-0 bottom-0 z-10 flex items-center justify-center gap-2 px-3 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-8 [&_button]:rounded-none">
+					{images.length > 1 && <div className={cn(modalBottomOverlay, "pb-[max(.5rem,env(safe-area-inset-bottom))] pl-[max(.75rem,env(safe-area-inset-left))] pr-[max(.75rem,env(safe-area-inset-right))]")}>
 						<Button variant="ghost" size="icon-sm" aria-label="Previous image" disabled={selected === 0} onClick={() => setSelected(selected! - 1)}><ChevronLeft className="size-4" /></Button>
-						<div ref={thumbnails} className="flex min-w-0 gap-2 overflow-x-auto py-1" aria-label="Image previews">{images.map((item, index) => <Tooltip key={index} content={`Preview ${item.label}`}><button type="button" data-index={index} aria-label={`Preview ${item.label}`} aria-pressed={selected === index} onClick={() => setSelected(index)} className={cn("shrink-0 outline-none transition-opacity focus-visible:ring-1 focus-visible:ring-accent", selected === index ? "opacity-90" : "opacity-40 hover:opacity-80")}><img src={imageUrl(item.image)} alt="" className="h-10 w-14 object-contain sm:h-12 sm:w-16" /></button></Tooltip>)}</div>
+						<div ref={thumbnails} className="flex min-w-0 gap-1.5 overflow-x-auto py-1" aria-label="Image previews">{images.map((item, index) => <Tooltip key={index} content={item.label}><button type="button" data-index={index} aria-label={`Preview ${item.label}`} aria-pressed={selected === index} onClick={() => setSelected(index)} className={cn("shrink-0 overflow-hidden rounded-sm outline-none transition-opacity focus-visible:ring-1 focus-visible:ring-accent", selected === index ? "opacity-100 ring-1 ring-ink/40" : "opacity-45 hover:opacity-85")}><img src={imageUrl(item.image)} alt="" className="block h-10 w-14 object-contain" /></button></Tooltip>)}</div>
 						<Button variant="ghost" size="icon-sm" aria-label="Next image" disabled={selected === images.length - 1} onClick={() => setSelected(selected! + 1)}><ChevronRight className="size-4" /></Button>
 					</div>}
-					{notice && <p role="status" className="pointer-events-none absolute inset-x-0 top-12 z-20 text-center text-xs text-ink">{notice}</p>}
+					{notice && <p role="status" className="pointer-events-none absolute inset-x-0 top-10 z-20 text-center text-xs text-ink">{notice}</p>}
 				</figure>
 			</DialogContent>}
 		</Dialog>
