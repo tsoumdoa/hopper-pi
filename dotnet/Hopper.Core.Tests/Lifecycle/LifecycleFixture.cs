@@ -5,8 +5,9 @@ namespace Hopper.Core.Tests.Lifecycle;
 
 internal sealed class LifecycleFixture
 {
-    public LifecycleFixture()
+    public LifecycleFixture(ILifecycleBackgroundScheduler? background = null)
     {
+        Background = background ?? new ThreadPoolLifecycleBackgroundScheduler();
         Controller = new LifecycleController(
             Node,
             Transport,
@@ -31,8 +32,7 @@ internal sealed class LifecycleFixture
     public FakeLifecycleDispatcher Dispatcher { get; } = new();
     public FakeTransactionCleanup Transactions { get; } = new();
     public FakeInstanceIdSource InstanceIds { get; } = new();
-    public ILifecycleBackgroundScheduler Background { get; } =
-        new ThreadPoolLifecycleBackgroundScheduler();
+    public ILifecycleBackgroundScheduler Background { get; }
     public LifecycleController Controller { get; }
 
     private void AttachCallLog()

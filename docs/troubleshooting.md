@@ -3,15 +3,17 @@
 | Rhino command | Purpose |
 | --- | --- |
 | `HopperCode` | Start Hopper or reopen the browser |
-| `HopperCodeStatus` | Show startup, Node, and connection diagnostics |
+| `HopperCodeStatus` | Show connection state, web UI address, and any errors |
 | `HopperCodeStop` | Detach this Rhino process, leaving the shared host running |
-| `HopperCodeRestart` | Detach and reconnect this Rhino process |
+| `HopperCodeRestart` | Reconnect this Rhino process and reopen the browser |
+
+`HopperCodeRestart` disconnects this Rhino instance, cleans up its connection, then connects it again. If Hopper is stopped, it starts the connection. The shared Node host keeps running, and other Rhino instances stay connected. It does not restart Rhino or reload plugin code. Wait for active modeling work to finish before restarting.
 
 - **`HopperCode` is unknown:** Install the generated `.yak`, rather than copying only the `.gha` to Grasshopper Libraries, then restart Rhino. A Rhino `.rhp` must be loaded for the command to exist.
 - **Browser tab closed:** Run `HopperCode` again in the same Rhino instance to reopen the current conversation.
-- **Browser host does not open:** Run `HopperCodeStatus`. It reports lifecycle state, host PID, Node resolution, handshake health, and startup errors without printing the secret URL.
+- **Browser host does not open:** Run `HopperCodeStatus`. It shows whether this Rhino instance is connected, where the web UI is served, and any reported errors.
 - **Node is missing or unsupported:** Run `node --version` in a terminal. If Rhino cannot see the same installation, add its absolute path to Hopper's `config.json` as shown in [Choosing Node](#choosing-node), then run `HopperCodeRestart`.
-- **Grasshopper did not open:** `HopperCode` intentionally leaves Grasshopper unloaded. Submit a `gh_*` request in the browser. Hopper warns before opening Grasshopper and waits for its active definition. Run `HopperCodeStatus` for a typed startup or document error.
+- **Grasshopper did not open:** `HopperCode` intentionally leaves Grasshopper unloaded. Submit a `gh_*` request in the browser. Hopper warns before opening Grasshopper and waits for its active definition. Run `HopperCodeStatus` for a startup or document error.
 - **Invalid connection token:** Run `HopperCodeStop`, then `HopperCode` to create a new instance profile and authenticated host connection.
 - **Grasshopper shows offline in Rhino.Inside.Revit:** Keep Grasshopper visible while the agent is working and inspect `HopperCodeStatus` after refocusing Rhino. Older Rhino.Inside.Revit versions may still limit background Grasshopper work.
 - **Plugin did not install:** Install [.NET 8 SDK](https://dotnet.microsoft.com/download), quit Rhino, then run `pnpm build:install`.
@@ -57,4 +59,4 @@ Windows example:
 }
 ```
 
-The configured file must exist and be executable. Hopper runs `node --version` with a three-second timeout and rejects malformed, prerelease, or older versions. `HopperCodeStatus` prints the resolved path, version, or exact resolution error.
+The configured file must exist and be executable. Hopper runs `node --version` with a three-second timeout and rejects malformed, prerelease, or older versions. `HopperCodeStatus` shows the resolution error if Node cannot be started.

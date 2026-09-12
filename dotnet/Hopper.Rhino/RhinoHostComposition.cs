@@ -223,7 +223,8 @@ namespace rhino_zmq_poc
                 transport,
                 browser,
                 new RhinoCommandCompletionSink(dispatcher),
-                reopenBrowser: browser.Reopen);
+                reopenBrowser: browser.Reopen,
+                getBrowserUri: () => child.IsAlive ? child.ReadyUri : null);
             deferredOperations.SetTarget(facade);
 
             HostDocumentStatusCoordinator documentStatus = null;
