@@ -119,6 +119,9 @@ export type ProviderSummary = {
 	name: string;
 	authenticated: boolean;
 	authMethods: ProviderAuthMethod[];
+	credentialSource?: string;
+	credentialLabel?: string;
+	canLogout?: boolean;
 };
 
 export type HostSnapshot = {
@@ -145,6 +148,7 @@ export type ServerMessage =
 	| { type: "ui_notification"; message: string; level: "info" | "warning" | "error" }
 	| { type: "ui_status"; key: string; text?: string }
 	| { type: "ui_widget"; key: string; lines?: string[]; placement?: string }
+	| { type: "ui_request_cancelled"; requestId: string }
 	| { type: "auth_event"; event: JsonValue }
 	| { type: "status"; status: string; message?: string; scope?: string; provider?: string; streaming?: boolean }
 	| { type: "session_replaced"; session: HostSnapshot }

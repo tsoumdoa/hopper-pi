@@ -31,6 +31,7 @@ import { ToolPolicyRuntime, type ToolExecutionScope } from "../../services/tool-
 export interface PiDriverOptions {
 	dataDirectory: string;
 	authPath: string;
+	modelConfigDir?: string;
 	toolConfigDir?: string;
 	model?: { provider: string; id: string };
 	thinkingLevel?: string;
@@ -132,8 +133,8 @@ export async function createPiTaskDriver(
 				agentDir: join(sessionRoot, "agent"),
 				modelRuntime: await ModelRuntime.create({
 					authPath: options.authPath,
-					modelsPath: join(sessionRoot, "agent", "models.json"),
-					modelsStorePath: join(sessionRoot, "agent", "models-store.json"),
+					modelsPath: join(options.modelConfigDir ?? join(options.dataDirectory, "agent"), "models.json"),
+					modelsStorePath: join(options.modelConfigDir ?? join(options.dataDirectory, "agent"), "models-store.json"),
 				}),
 				resourceLoaderOptions: {
 					noExtensions: true,

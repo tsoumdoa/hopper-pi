@@ -208,6 +208,7 @@ export async function startSharedHost(
 				createPiTaskDriver(context, {
 					dataDirectory: state.dataDirectory,
 					authPath: config.paths.authPath,
+					modelConfigDir: config.paths.agentDir,
 					toolConfigDir: config.paths.toolConfigDir,
 					model: admin!.snapshot().model,
 					thinkingLevel: admin!.snapshot().thinkingLevel,

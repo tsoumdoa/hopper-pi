@@ -37,9 +37,9 @@ export function ModelControls({ connected, onSelectModel, onSelectThinking, onMa
 
 	if (connected && !state.models.length) {
 		return (
-			<Button size="sm" variant="ghost" className="text-accent hover:text-accent" onClick={onManageProvider}>
+			<Button size="sm" variant="ghost" className="font-semibold text-ink-soft" onClick={onManageProvider}>
 				<KeyRound className="size-3.5" />
-				Connect a provider
+				Connect your first provider
 			</Button>
 		);
 	}
@@ -72,7 +72,7 @@ export function ModelControls({ connected, onSelectModel, onSelectThinking, onMa
 						</SelectGroup>
 					))}
 					<SelectSeparator />
-					<SelectItem value={MANAGE} className="text-ink-soft">Manage providers…</SelectItem>
+					<SelectItem value={MANAGE} className="font-semibold text-ink-soft">Add provider…</SelectItem>
 				</SelectContent>
 			</Select>
 			{showThinking && (

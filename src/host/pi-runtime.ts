@@ -1,3 +1,4 @@
+import { addCustomProvider, type CustomProviderInput } from "./provider-config.js";
 import { RuntimeSessionContext } from "../infra/runtime-session-context.js";
 import { closeRuntimeRpc } from "../infra/runtime-rpc.js";
 import { mkdir } from "node:fs/promises";
@@ -177,6 +178,7 @@ export class EmbeddedPiHost {
 		host = new EmbeddedPiHost(runtime, bus, ui, skills, options.onShutdownRequest, () => currentPolicy, runtimeSession);
 		runtime.setRebindSession(async (session) => host!.bindSession(session, true));
 		await host.bindSession(runtime.session, false);
+		host.modelsPath = join(paths.agentDir, "models.json");
 		return host;
 	}
 
@@ -330,20 +332,57 @@ export class EmbeddedPiHost {
 		await this.authRefresh;
 	}
 
+	private authController?: AbortController;
+	private modelsPath?: string;
+
+	cancelAuth(): void { this.authController?.abort(); }
+
+	async refreshProviders(): Promise<void> {
+		await this.refreshAuth();
+		const error = this.runtime.services.modelRuntime.getError();
+		if (error) throw new Error(error);
+		this.bus.publish({ type: "status", status: "authenticated", scope: "auth" });
+	}
+
+	async addProvider(config: CustomProviderInput): Promise<void> {
+		this.assertUsable();
+		if (!this.modelsPath) throw new Error("Model configuration is unavailable");
+		if (this.runtime.services.modelRuntime.getProvider(config.id)) throw new Error("A provider with this name already exists");
+		await addCustomProvider(this.modelsPath, config);
+		await this.refreshAuth();
+		const error = this.runtime.services.modelRuntime.getError();
+		if (error) throw new Error("Provider definition was saved but could not be loaded. Check model configuration.");
+		if (config.apiKey) {
+			try { await this.login(config.id, "api_key", config.apiKey); }
+			catch { throw new Error("Provider definition saved, but credentials were not saved. Find this provider in Add provider and retry its setup."); }
+		}
+		else {
+			this.bus.publish({ type: "status", status: "authenticated", scope: "auth", provider: config.id });
+			this.publishSnapshot();
+		}
+	}
+
 	async login(provider: string, authType: AuthType, apiKey?: string): Promise<void> {
 		this.assertUsable();
+		if (this.authController) throw new Error("A sign-in is already in progress");
+		const controller = new AbortController();
+		this.authController = controller;
+		const timeout = setTimeout(() => controller.abort(), 300_000);
 		let suppliedApiKey = apiKey;
-		await this.runtime.services.modelRuntime.login(provider, authType, {
-			prompt: (prompt) => {
-				if (prompt.type === "secret" && suppliedApiKey) {
-					const value = suppliedApiKey;
-					suppliedApiKey = undefined;
-					return Promise.resolve(value);
-				}
-				return this.ui.requestAuthPrompt(prompt);
-			},
-			notify: (event) => this.ui.notifyAuth(event),
-		});
+		try {
+			await this.runtime.services.modelRuntime.login(provider, authType, {
+				signal: controller.signal,
+				prompt: (prompt) => {
+					if (prompt.type === "secret" && suppliedApiKey) {
+						const value = suppliedApiKey;
+						suppliedApiKey = undefined;
+						return Promise.resolve(value);
+					}
+					return this.ui.requestAuthPrompt({ ...prompt, signal: prompt.signal ? AbortSignal.any([prompt.signal, controller.signal]) : controller.signal });
+				},
+				notify: (event) => this.ui.notifyAuth(event),
+			});
+		} finally { clearTimeout(timeout); this.authController = undefined; }
 		this.bus.publish({ type: "status", status: "authenticated", scope: "auth", provider });
 		this.publishSnapshot();
 	}
@@ -372,9 +411,12 @@ export class EmbeddedPiHost {
 			models: this.runtime.services.modelRuntime.getAvailableSnapshot().map(modelSummary),
 			providers: this.runtime.services.modelRuntime.getProviders().map((provider) => ({
 				id: provider.id,
-				name: provider.name,
+				name: provider.id.startsWith("custom-") ? provider.id.slice(7).replace(/-/g, " ").replace(/^./, c => c.toUpperCase()) : provider.name,
 				authenticated: this.runtime.services.modelRuntime.hasConfiguredAuth(provider.id),
 				authMethods: providerAuthMethods(provider.auth),
+				credentialSource: this.runtime.services.modelRuntime.getProviderAuthStatus(provider.id).source,
+				credentialLabel: this.runtime.services.modelRuntime.getProviderAuthStatus(provider.id).label,
+				canLogout: this.runtime.services.modelRuntime.getProviderAuthStatus(provider.id).source === "stored",
 			})),
 		};
 	}
@@ -386,6 +428,7 @@ export class EmbeddedPiHost {
 	async dispose(): Promise<void> {
 		if (this.disposed) return;
 		this.disposed = true;
+		this.cancelAuth();
 		await this.authRefresh?.catch(() => {});
 		if (this.skillUpdate) await this.skillUpdate.catch(() => {});
 		this.unsubscribe?.();
@@ -457,6 +500,9 @@ export type HostRuntime = Pick<
 	| "dispose"
 	| "followUp"
 	| "login"
+	| "addProvider"
+	| "refreshProviders"
+	| "cancelAuth"
 	| "logout"
 	| "newSession"
 	| "prompt"

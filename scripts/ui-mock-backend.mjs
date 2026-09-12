@@ -1,3 +1,4 @@
+import { builtinProviders, getBuiltinModels, getBuiltinProviders } from "@earendil-works/pi-ai/providers/all";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 
@@ -14,6 +15,9 @@ const messagesEvent = (taskId, turnId, messages) => progressEvent(taskId, turnId
 const toolProgress = (taskId, turnId, toolName, toolCallId, phase, isError = false) => progressEvent(taskId, turnId, { type: "tool_progress", toolName, toolCallId, phase, isError });
 const agentEvent = (taskId, turnId, event) => progressEvent(taskId, turnId, { type: "agent_event", event });
 
+// Use Pi's real catalog and sign-in capabilities, without reading credentials or making requests.
+const catalog = builtinProviders();
+const staticProviderIds = new Set(getBuiltinProviders());
 function baseSnapshot() {
 	return {
 		hostEpoch: "mock-epoch",
@@ -44,10 +48,16 @@ function baseSnapshot() {
 				{ provider: "anthropic", id: "claude-opus-4", name: "Claude Opus 4", input: ["text", "image"] },
 				{ provider: "openai", id: "gpt-5", name: "GPT-5", input: ["text", "image"] },
 			],
-			providers: [
-				{ id: "anthropic", name: "Anthropic", authenticated: true, authMethods: [{ type: "api_key", label: "API key" }, { type: "oauth", label: "Sign in" }] },
-				{ id: "openai", name: "OpenAI", authenticated: false, authMethods: [{ type: "api_key", label: "API key" }] },
-			],
+			providers: catalog.map(provider => ({
+				id: provider.id,
+				name: provider.name,
+				authenticated: provider.id === "anthropic",
+				...(provider.id === "anthropic" ? { credentialSource: "stored", canLogout: true } : {}),
+				authMethods: [
+					...(provider.auth.apiKey?.login ? [{ type: "api_key", label: provider.auth.apiKey.name }] : []),
+					...(provider.auth.oauth ? [{ type: "oauth", label: provider.auth.oauth.loginLabel ?? provider.auth.oauth.name }] : []),
+				],
+			})),
 			pendingUiRequests: [],
 		},
 		eventCursor: 0,
@@ -137,6 +147,7 @@ export class MockBackend {
 			if (publish) this.publish();
 		}, ms);
 		this.timers.add(timer);
+		return timer;
 	}
 	dispose() {
 		for (const timer of this.timers) clearTimeout(timer);
@@ -328,15 +339,39 @@ export class MockBackend {
 			case "login": {
 				const provider = snapshot.runtime.providers.find((provider) => provider.id === command.provider);
 				if (!provider) throw new Error("Unknown provider");
-				this.later(600, () => {
+				this.authTimer = this.later(600, () => {
 					provider.authenticated = true;
-					this.send({ type: "auth_event", event: { type: "success", provider: provider.id, message: `${provider.name} connected.` } });
+					provider.credentialSource = "stored";
+					provider.canLogout = true;
+					if (!snapshot.runtime.models.some(model => model.provider === provider.id) && staticProviderIds.has(provider.id)) {
+						snapshot.runtime.models.push(...getBuiltinModels(provider.id).map(({ id, name, input }) => ({ provider: provider.id, id, name, input })));
+					}
+					this.publish();
+					this.send({ type: "status", status: "authenticated", scope: "auth", provider: provider.id });
 				});
+				return null;
+			}
+			case "refresh_providers":
+				this.publish();
+				this.send({ type: "status", status: "authenticated", scope: "auth" });
+				return null;
+			case "cancel_auth":
+				clearTimeout(this.authTimer);
+				this.send({ type: "error", requestType: "login", message: "Authentication was cancelled" });
+				return null;
+			case "add_provider": {
+				const c = command.config;
+				if (snapshot.runtime.providers.some(p => p.id === c.id)) throw new Error("Provider already exists");
+				snapshot.runtime.providers.push({ id: c.id, name: c.id, authenticated: true, credentialSource: c.noAuth ? "models_json_key" : "stored", canLogout: !c.noAuth, authMethods: [{ type: "api_key", label: "API key" }] });
+				snapshot.runtime.models.push(...c.modelIds.map(id => ({ id, provider: c.id, name: id })));
+				this.publish();
+				this.send({ type: "status", status: "authenticated", scope: "auth", provider: c.id });
 				return null;
 			}
 			case "logout": {
 				const provider = snapshot.runtime.providers.find((provider) => provider.id === command.provider);
-				if (provider) provider.authenticated = false;
+				if (provider) { provider.authenticated = false; provider.canLogout = false; }
+				this.send({ type: "status", status: "logged_out", scope: "auth", provider: command.provider });
 				this.publish();
 				return null;
 			}

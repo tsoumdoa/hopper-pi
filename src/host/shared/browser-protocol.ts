@@ -1,3 +1,4 @@
+import { parseCustomProvider, type CustomProviderInput } from "../provider-config.js";
 import { parseImages, type ImageAttachment } from "../protocol.js";
 import {
 	validateTargetBinding,
@@ -55,6 +56,8 @@ export type SharedBrowserCommand =
 	| { type: "set_model"; provider: string; modelId: string }
 	| { type: "set_thinking"; level: string }
 	| { type: "logout"; provider: string }
+	| { type: "refresh_providers" | "cancel_auth" }
+	| { type: "add_provider"; config: CustomProviderInput }
 	| {
 			type: "login";
 			provider: string;
@@ -103,6 +106,8 @@ export function parseSharedBrowserCommand(raw: string): SharedBrowserCommand {
 			modelId: string(v, "modelId"),
 		};
 	if (type === "set_thinking") return { type, level: string(v, "level") };
+	if (type === "refresh_providers" || type === "cancel_auth") return { type };
+	if (type === "add_provider") return { type, config: parseCustomProvider(v.config) };
 	if (type === "logout") return { type, provider: string(v, "provider") };
 	if (type === "login") {
 		if (v.authType !== "api_key" && v.authType !== "oauth")

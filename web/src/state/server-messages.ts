@@ -23,6 +23,13 @@ export function handleServerMessage(store: HopperStore, message: ServerMessage) 
 		case "agent_event":
 			actions.applyAgentEvent(message.event as Record<string, unknown>);
 			break;
+		case "ui_request_cancelled": {
+			store.setState(state => ({
+				activeUiRequest: state.activeUiRequest?.requestId === message.requestId ? state.pendingUiRequests[0] ?? null : state.activeUiRequest,
+				pendingUiRequests: state.activeUiRequest?.requestId === message.requestId ? state.pendingUiRequests.slice(1) : state.pendingUiRequests.filter(item => item.requestId !== message.requestId),
+			}));
+			break;
+		}
 		case "ui_request": {
 			const { type: _type, ...request } = message;
 			actions.queueUiRequest(request);
@@ -81,7 +88,7 @@ export function handleServerMessage(store: HopperStore, message: ServerMessage) 
 				const name = providerLabel(typeof message.provider === "string" ? message.provider : undefined, store.getState().providers);
 				if (["authenticated", "connected", "ready", "logged_in"].includes(status)) {
 					actions.completeAuth();
-					toast(`${name} connected.`, "success");
+					if (message.provider) toast(`${name} credentials saved.`, "success");
 				} else if (["logged_out", "disconnected"].includes(status)) {
 					actions.resetAuth();
 					toast(`${name} logged out.`, "info");
@@ -92,7 +99,7 @@ export function handleServerMessage(store: HopperStore, message: ServerMessage) 
 		case "error": {
 			const text = message.message;
 			const requestType = message.requestType ?? "";
-			if (["login", "logout"].includes(requestType)) actions.failAuth(text);
+			if (["login", "logout", "add_provider", "refresh_providers"].includes(requestType)) actions.failAuth(text);
 			// The host follows rejected messages with its authoritative session snapshot.
 			toast(text, "error");
 			break;

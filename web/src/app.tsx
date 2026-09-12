@@ -73,10 +73,10 @@ function StatusPill({ status, activeRoot }: { status: ConnectionStatus; activeRo
 export function App() {
 	const store = useHopperStoreApi();
 	const connection = useHopperStore((state) => state.connection);
-	const authCompletedCount = useHopperStore((state) => state.auth.completedCount);
 	const connected = connection.status === "connected";
 
 	const [providerOpen, setProviderOpen] = useState(false);
+	const [providerView, setProviderView] = useState<"overview" | "catalog">("overview");
 	const [skillsOpen, setSkillsOpen] = useState(false);
 	const [toolsOpen, setToolsOpen] = useState(false);
 	const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
@@ -151,10 +151,6 @@ export function App() {
 		}
 	}, [sidebarCollapsed]);
 
-	// A completed sign-in closes the provider dialog.
-	useEffect(() => {
-		if (authCompletedCount > 0) setProviderOpen(false);
-	}, [authCompletedCount]);
 
 	useEffect(() => {
 		const actions = store.getState().actions;
@@ -343,8 +339,9 @@ export function App() {
 				}
 				case "auth_event":
 					handleServerMessage(store, message);
-					if (message.event?.type === "success") setProviderOpen(false);
 					break;
+				case "status":
+				case "ui_request_cancelled":
 				case "tool_settings":
 				case "ui_request":
 				case "ui_notification":
@@ -409,6 +406,7 @@ export function App() {
 
 	const send = (command: SharedBrowserCommand) => {
 		if (!ready.current || socket.current?.readyState !== WebSocket.OPEN) {
+			if (["login", "add_provider", "refresh_providers"].includes(command.type)) store.getState().actions.failAuth("Hopper is still connecting. Try again in a moment.");
 			toast("Hopper is still connecting. Try again in a moment.", "warning");
 			return false;
 		}
@@ -419,6 +417,7 @@ export function App() {
 		}
 		try { socket.current.send(JSON.stringify(command)); }
 		catch {
+			if (["login", "add_provider", "refresh_providers"].includes(command.type)) store.getState().actions.failAuth("Connection lost. Please try again.");
 			retryConnection.current();
 			toast("Connection lost. Your draft is retained while Hopper reconnects.", "warning");
 			return false;
@@ -576,13 +575,14 @@ export function App() {
 		});
 	const requestLogout = (provider: string) =>
 		setConfirm({
-			title: `Log out of ${providerLabel(provider, store.getState().providers)}?`,
-			description: "Hopper forgets the saved credential for this provider. Models from it stop being available until you sign in again.",
-			confirmLabel: "Log out",
+			title: `Remove saved credentials for ${providerLabel(provider, store.getState().providers)}?`,
+			description: "This removes the credential from the shared Pi store, affecting Pi and other apps that use it. Environment or model configuration credentials may still provide access.",
+			confirmLabel: "Remove credentials",
 			destructive: true,
 			action: () => send({ type: "logout", provider }),
 		});
 	const openProvider = useCallback(() => {
+		setProviderView("overview");
 		setMobileSettingsOpen(false);
 		setProviderOpen(true);
 	}, []);
@@ -725,7 +725,7 @@ export function App() {
 									if (provider && id.length) send({ type: "set_model", provider, modelId: id.join("/") });
 								}}
 								onSelectThinking={(level) => send({ type: "set_thinking", level })}
-								onManageProvider={openProvider}
+								onManageProvider={() => { setProviderView("catalog"); setProviderOpen(true); }}
 							/>
 							{rhinoPicker}
 						</>
@@ -736,17 +736,29 @@ export function App() {
 
 			{providerOpen && (
 				<ProviderDialog
+					initialView={providerView}
 					onOpenChange={setProviderOpen}
 					onLogin={(provider, authType, apiKey) => {
 						store.getState().actions.startAuth(provider, "Signing in");
 						return send({ type: "login", provider, authType, ...(apiKey ? { apiKey } : {}) });
 					}}
 					onLogout={requestLogout}
+					onAddProvider={config => {
+						store.getState().actions.startAuth(config.id, "Saving provider");
+						return send({ type: "add_provider", config });
+					}}
+					onRefresh={provider => {
+						store.getState().actions.startAuth(provider, "Checking provider configuration");
+						return send({ type: "refresh_providers" });
+					}}
+					onCancel={() => send({ type: "cancel_auth" })}
+					onSelectModel={(provider, modelId) => send({ type: "set_model", provider, modelId })}
+					onAuthResponse={(requestId, value) => send({ type: "auth_response", requestId, value })}
 				/>
 			)}
 			{skillsOpen && <SkillsDialog token={credential.current ?? ""} connected={connected} streaming={Boolean(activeRoot)} onOpenChange={setSkillsOpen} />}
 			{toolsOpen && <ToolsDialog key={`${sessionId}:${toolsContextQuery}`} contextQuery={toolsContextQuery} token={credential.current ?? ""} connected={connected} onOpenChange={setToolsOpen} />}
-			<UiRequestDialog send={(message) => message.type === "ui_response" && send({ type: "auth_response", requestId: message.requestId, value: message.value })} />
+			<UiRequestDialog suppressAuth={providerOpen} send={(message) => message.type === "ui_response" && send({ type: "auth_response", requestId: message.requestId, value: message.value })} />
 			{archiveManagerOpen && <ArchivedThreadsDialog snapshot={snapshot} connected={connected} busy={[...pending.current.values()].some(command => command.type === "purge_archived_conversations")} onClose={() => setArchiveManagerOpen(false)} onPurge={(conversationIds, before) => send({ type: "purge_archived_conversations", requestId: randomId(), conversationIds, before })} />}
 			<ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
 			{archiveUndo && <div role="status" className="fixed bottom-4 right-4 z-[60] flex items-center gap-4 rounded-md border border-line bg-surface p-3 text-sm shadow-pop">Thread archived<Button size="xs" variant="ghost" disabled={!connected} onClick={() => send({ type: "unarchive_conversation", requestId: randomId(), conversationId: archiveUndo })}>Undo</Button><button aria-label="Dismiss archive notification" onClick={() => setArchiveUndo(null)}>×</button></div>}
