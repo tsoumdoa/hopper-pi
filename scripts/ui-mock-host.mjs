@@ -166,7 +166,7 @@ sockets.on("connection", (ws) => {
 				send(response);
 			}
 		} catch (error) {
-			send({ type: "error", requestId: command?.requestId, message: error instanceof Error ? error.message : String(error) });
+			send({ type: "error", requestType: command?.type, requestId: command?.requestId, message: error instanceof Error ? error.message : String(error) });
 		}
 	});
 });

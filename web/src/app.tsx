@@ -333,7 +333,7 @@ export function App() {
 				case "error": {
 					pending.current.delete(message.requestId);
 					refreshPending((value) => value + 1);
-					if (store.getState().auth.busy) actions.failAuth(message.message);
+					if (store.getState().auth.busy && ["login", "logout", "add_provider", "refresh_providers"].includes(message.requestType)) actions.failAuth(message.message);
 					toast(message.message);
 					break;
 				}

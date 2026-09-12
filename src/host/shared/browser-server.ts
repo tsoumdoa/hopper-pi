@@ -164,13 +164,16 @@ export function createSharedBrowserServer(options: {
 				command = parseSharedBrowserCommand(raw.toString());
 			} catch (error) {
 				let requestId: string | undefined;
+				let requestType: string | undefined;
 				try {
 					const rawCommand = JSON.parse(raw.toString());
+					if (["login", "logout", "add_provider", "refresh_providers"].includes(rawCommand?.type)) requestType = rawCommand.type;
 					if (typeof rawCommand?.requestId === "string")
 						requestId = rawCommand.requestId;
 				} catch {}
 				send(socket, {
 					type: "error",
+					requestType,
 					requestId,
 					message: error instanceof Error ? error.message : "Invalid command",
 				});
@@ -216,6 +219,7 @@ export function createSharedBrowserServer(options: {
 				(error) =>
 					send(socket, {
 						type: "error",
+						requestType: command.type,
 						requestId,
 						message: error instanceof Error ? error.message : "Command failed",
 						...(error && typeof error === "object" && "code" in error ? { code: error.code } : {}),

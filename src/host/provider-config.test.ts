@@ -27,18 +27,20 @@ it("loads a keyless endpoint in a fresh task runtime without changing other defi
 	const path = join(dir, "models.json");
 	await writeFile(
 		path,
-		JSON.stringify({
-			providers: {
-				existing: {
-					baseUrl: "http://localhost:1234/v1",
-					api: "openai-completions",
-					apiKey: "dummy",
-					models: [{ id: "other" }],
+		"\uFEFF// Existing Pi provider configuration\n" +
+			JSON.stringify({
+				providers: {
+					existing: {
+						baseUrl: "http://localhost:1234/v1",
+						api: "openai-completions",
+						apiKey: "dummy",
+						models: [{ id: "other" }],
+					},
 				},
-			},
-		}),
+			}),
 	);
 	await addCustomProvider(path, config);
+	expect(await readFile(path, "utf8")).toContain("// Existing Pi provider configuration");
 	const runtime = await ModelRuntime.create({
 		authPath: join(dir, "auth.json"),
 		modelsPath: path,

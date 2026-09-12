@@ -349,6 +349,8 @@ export class EmbeddedPiHost {
 		if (!this.modelsPath) throw new Error("Model configuration is unavailable");
 		if (this.runtime.services.modelRuntime.getProvider(config.id)) throw new Error("A provider with this name already exists");
 		await addCustomProvider(this.modelsPath, config);
+		// A periodic refresh may have read the file before this write. Wait for it, then reload.
+		await this.authRefresh;
 		await this.refreshAuth();
 		const error = this.runtime.services.modelRuntime.getError();
 		if (error) throw new Error("Provider definition was saved but could not be loaded. Check model configuration.");

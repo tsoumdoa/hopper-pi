@@ -1,3 +1,4 @@
+import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -81,13 +82,20 @@ export async function addCustomProvider(path: string, input: CustomProviderInput
 	const guard = await openLock(`${path}.lock`, Lock.Exclusive, { timeout: 5000 });
 	const temporary = `${path}.${randomUUID()}.tmp`;
 	try {
-		let config: Record<string, any> = {};
+		let content = "{}";
+		let config: Record<string, any>;
 		try {
-			config = JSON.parse(await readFile(path, "utf8"));
+			content = await readFile(path, "utf8");
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code !== "ENOENT")
 				throw new Error("Could not read existing model configuration. Repair it before adding a provider.");
 		}
+		const bom = content.startsWith("\uFEFF") ? "\uFEFF" : "";
+		content = content.slice(bom.length);
+		const errors: ParseError[] = [];
+		config = parse(content, errors);
+		if (errors.length)
+			throw new Error("Could not parse existing model configuration. Repair it before adding a provider.");
 		if (
 			!config ||
 			typeof config !== "object" ||
@@ -98,23 +106,26 @@ export async function addCustomProvider(path: string, input: CustomProviderInput
 			throw new Error("Invalid existing model configuration");
 		if (Object.hasOwn(config.providers ?? {}, provider.id))
 			throw new Error("A provider with this name already exists. Choose another name.");
-		config.providers = {
-			...config.providers,
-			[provider.id]: {
-				baseUrl: provider.baseUrl,
-				api: provider.api,
-				// Pi requires configured auth even for servers that ignore credentials.
-				...(provider.noAuth ? { apiKey: "hopper-local-no-auth" } : {}),
-				models: provider.modelIds.map((id) => ({
-					id,
-					...(provider.contextWindow === undefined ? {} : { contextWindow: provider.contextWindow }),
-					...(provider.maxTokens === undefined ? {} : { maxTokens: provider.maxTokens }),
-					...(provider.reasoning === undefined ? {} : { reasoning: provider.reasoning }),
-					...(provider.images === undefined ? {} : { input: provider.images ? ["text", "image"] : ["text"] }),
-				})),
-			},
+		const definition = {
+			baseUrl: provider.baseUrl,
+			api: provider.api,
+			// Pi requires configured auth even for servers that ignore credentials.
+			...(provider.noAuth ? { apiKey: "hopper-local-no-auth" } : {}),
+			models: provider.modelIds.map((id) => ({
+				id,
+				...(provider.contextWindow === undefined ? {} : { contextWindow: provider.contextWindow }),
+				...(provider.maxTokens === undefined ? {} : { maxTokens: provider.maxTokens }),
+				...(provider.reasoning === undefined ? {} : { reasoning: provider.reasoning }),
+				...(provider.images === undefined ? {} : { input: provider.images ? ["text", "image"] : ["text"] }),
+			})),
 		};
-		await writeFile(temporary, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+		const updated = applyEdits(
+			content,
+			modify(content, ["providers", provider.id], definition, {
+				formattingOptions: { insertSpaces: true, tabSize: 2 },
+			}),
+		);
+		await writeFile(temporary, bom + updated, { mode: 0o600, flag: "wx" });
 		await rename(temporary, path);
 	} finally {
 		try {
